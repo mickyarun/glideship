@@ -30,6 +30,11 @@ prefix declares who may read it:
 ``engineering`` marks topics that carry engineering-workspace data and so
 need ``workspace:engineering``. Adding a new publisher means adding its
 prefix here, or no client will ever receive it.
+
+Scopes in :data:`REVOCABLE_SCOPES` can lose access while a socket is open
+(a board member is removed). Their services publish on the topic's
+:func:`access_topic`, which no client can subscribe to, and the socket
+re-runs the scope check for its live subscription.
 """
 
 from dataclasses import dataclass
@@ -45,6 +50,11 @@ class TopicRule:
     scope: Scope
     engineering: bool
 
+
+# Control topics: ``access:<topic>`` asks sockets holding ``<topic>`` to
+# re-check it. The prefix is not in ``TOPIC_RULES``, so clients can't join.
+ACCESS_TOPIC_PREFIX = "access"
+REVOCABLE_SCOPES: frozenset[Scope] = frozenset({"board"})
 
 TOPIC_RULES: dict[str, TopicRule] = {
     "notifications": TopicRule(scope="user", engineering=False),
@@ -124,3 +134,11 @@ def bud_id_of(topic: str) -> str | None:
 def board_id_of(topic: str) -> str | None:
     """The board id a ``board``-scoped topic names, for the role check."""
     return _id_in_scope(topic, "board")
+
+
+def access_topic(topic: str) -> str | None:
+    """The control topic that re-checks ``topic``, when its scope can be revoked."""
+    scope = scope_of(topic)
+    if scope is None or scope not in REVOCABLE_SCOPES:
+        return None
+    return f"{ACCESS_TOPIC_PREFIX}:{topic}"

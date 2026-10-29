@@ -28,6 +28,7 @@ Protocol:
         {"topic": "job:abc-123", "data": {...}}
         {"type": "pong"}
         {"error": "unauthorized"}
+        {"topic": "board:abc-123", "error": "revoked"}   (access was lost)
 """
 
 import asyncio
@@ -39,13 +40,13 @@ import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.api.v1.ws_scope_checks import passes_scope_check
+from app.api.v1.ws_subscriptions import ConnectionSubscriptions
 from app.config import settings
 from app.core.permission_deps import member_permission_set
 from app.core.permissions import ALL_PERMISSION_IDS, WORKSPACE_ENGINEERING
 from app.core.security import verify_token
 from app.database import AsyncSessionLocal
 from app.repositories.user import UserRepository
-from app.services.event_bus import subscribe, unsubscribe
 from app.services.ws_topic_policy import Subscriber, may_subscribe
 
 logger = structlog.get_logger(__name__)
@@ -109,24 +110,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     logger.debug("ws_connected", user_id=user_id, org_id=who.org_id)
 
     # ── State per connection ──────────────────────────────
-    # topic → (event_bus queue, reader task)
-    subscriptions: dict[str, tuple[asyncio.Queue[dict[str, Any]], asyncio.Task[None]]] = {}
     send_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=settings.ws.max_send_queue)
-
-    async def _topic_reader(topic: str, bus_queue: asyncio.Queue[dict[str, Any]]) -> None:
-        """Read from an event bus queue and forward into the send queue."""
-        try:
-            while True:
-                envelope = await bus_queue.get()
-                if "agent_activity" in topic:
-                    evt = envelope.get("data", {}).get("event_type", "")
-                    logger.info("ws_forwarding_agent_event", topic=topic, event_type=evt)
-                try:
-                    send_queue.put_nowait(envelope)
-                except asyncio.QueueFull:
-                    logger.warning("ws_send_queue_full", user_id=user_id, topic=topic)
-        except asyncio.CancelledError:
-            pass
+    subscriptions = ConnectionSubscriptions(who, send_queue, passes_scope_check)
 
     async def _receiver() -> None:
         """Read client messages and handle subscribe/unsubscribe/ping."""
@@ -145,22 +130,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     if not may_subscribe(topic, who) or not await passes_scope_check(topic, who):
                         await websocket.send_json({"error": "forbidden", "topic": topic})
                         continue
-
-                    if topic not in subscriptions:
-                        bus_queue = subscribe(topic)
-                        task = asyncio.create_task(
-                            _topic_reader(topic, bus_queue),
-                            name=f"ws-reader-{topic}",
-                        )
-                        subscriptions[topic] = (bus_queue, task)
-                        # Subscription logged at trace level only (too verbose for debug)
+                    subscriptions.add(topic)
 
                 elif action == "unsubscribe" and topic:
-                    sub = subscriptions.pop(topic, None)
-                    if sub:
-                        bus_queue, task = sub
-                        task.cancel()
-                        unsubscribe(topic, bus_queue)
+                    if subscriptions.remove(topic):
                         logger.debug("ws_unsubscribed", user_id=user_id, topic=topic)
 
                 elif action == "ping":
@@ -191,10 +164,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             sender_task.cancel()
         if receiver_task and not receiver_task.done():
             receiver_task.cancel()
-        for topic, (bus_queue, task) in subscriptions.items():
-            task.cancel()
-            unsubscribe(topic, bus_queue)
-        subscriptions.clear()
+        subscriptions.close()
         logger.info("ws_disconnected", user_id=user_id)
 
 
