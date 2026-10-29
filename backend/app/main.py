@@ -28,6 +28,7 @@ from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.api.router import api_router
+from app.api.v1._board_errors import register_board_errors
 from app.api.v1._hr_errors import register_hr_errors
 from app.api.v1._leave_errors import register_leave_errors
 from app.core.body_limit import BodySizeLimitMiddleware
@@ -416,6 +417,7 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=_block_cors_on_mcp)
 app.include_router(api_router)
 register_leave_errors(app)
 register_hr_errors(app)
+register_board_errors(app)
 
 
 @app.get("/")

@@ -28,10 +28,16 @@ from app.models.bud import BUDStatus
 BOARD_KEY_MIN_LENGTH: Final = 2
 BOARD_KEY_MAX_LENGTH: Final = 10
 
-# Card keys are ``{board key}-{number}``; these prefixes already name BUDs and bugs.
-RESERVED_BOARD_KEYS: Final = frozenset({"BUD", "BUG"})
+# Card keys are ``{board key}-{number}``; BUD and BUG already name BUDs and
+# bugs. The others are path segments under ``/api/v1/boards`` that a board
+# key would otherwise share.
+RESERVED_BOARD_KEYS: Final = frozenset({"BUD", "BUG", "CARDS", "SWITCHER", "TEMPLATES"})
 
 BOARD_KEY_PATTERN: Final = re.compile(rf"^[A-Z]{{{BOARD_KEY_MIN_LENGTH},{BOARD_KEY_MAX_LENGTH}}}$")
+
+# The BUD board, listed beside team boards for members of the engineering workspace.
+DELIVERY_BOARD_NAME: Final = "Delivery"
+DELIVERY_BOARD_PATH: Final = "/buds"
 
 # A handed-over card lands as a BUD before development starts; send-back
 # accepts BUDs still at one of these statuses.

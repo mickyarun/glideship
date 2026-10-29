@@ -47,6 +47,9 @@ class UserRead(BaseModel):
     # As stored: a Slack CDN URL, or a root-relative path to a photo
     # uploaded here (see ``services.avatars``). The browser loads either.
     avatar_url: str | None = None
+    # Whether they can open at least one board; people outside the
+    # engineering workspace land on the boards area when they can.
+    has_boards: bool = False
     created_at: datetime
     updated_at: datetime
 

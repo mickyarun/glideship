@@ -24,9 +24,14 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import WORKSPACE_ENGINEERING
 from app.models.board import Board
+from app.models.board_card import BoardCard
 from app.models.board_enums import BoardMemberRole, BoardStatus
 from app.repositories.board_access import BoardAccessRepository, PermissionChecker
+from app.repositories.board_card import BoardCardRepository
+from app.repositories.board_card_key import BoardCardKeyRepository
+from app.services.boards.errors import BoardItemNotFoundError
 
 
 class BoardNotFoundError(Exception):
@@ -49,6 +54,31 @@ class BoardAccess:
     role: BoardMemberRole
     user_id: uuid.UUID
     org_id: uuid.UUID
+
+
+@dataclass(frozen=True)
+class BoardCaller:
+    """Who is calling a boards route that doesn't name a board."""
+
+    user_id: uuid.UUID
+    org_id: uuid.UUID
+    perms: PermissionChecker
+
+    @property
+    def has_engineering(self) -> bool:
+        """Whether the caller can open the engineering workspace, and so the BUD board."""
+        return self.perms.has(WORKSPACE_ENGINEERING)
+
+
+@dataclass(frozen=True)
+class CardAccess:
+    """A card on a board the caller may act on."""
+
+    access: BoardAccess
+    card: BoardCard
+
+
+CARD_NOT_FOUND = "Card not found."
 
 
 async def resolve_board_access(
@@ -80,3 +110,38 @@ async def resolve_board_access(
     if writable and board.status is BoardStatus.ARCHIVED:
         raise BoardArchivedError(key)
     return BoardAccess(board=board, role=role, user_id=user_id, org_id=org_id)
+
+
+async def resolve_card(access: BoardAccess, db: AsyncSession, number: int) -> CardAccess:
+    """The card numbered ``number`` on the caller's board.
+
+    Raises:
+        BoardItemNotFoundError: The board has no such card.
+    """
+    repo = BoardCardRepository(db, org_id=access.org_id)
+    card = await repo.get_by_number(access.board.id, number)
+    if card is None:
+        raise BoardItemNotFoundError(CARD_NOT_FOUND)
+    return CardAccess(access=access, card=card)
+
+
+async def resolve_card_by_key(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    org_id: uuid.UUID,
+    perms: PermissionChecker,
+    key: str,
+) -> CardAccess:
+    """The card a live or old key names, with the caller's role on its current board.
+
+    Raises:
+        BoardItemNotFoundError: No such key, or the caller holds no role on
+            the card's current board.
+    """
+    found = await BoardCardKeyRepository(db, org_id=org_id).resolve(key, user_id, perms)
+    if found is None:
+        raise BoardItemNotFoundError(CARD_NOT_FOUND)
+    card, board, role = found
+    access = BoardAccess(board=board, role=role, user_id=user_id, org_id=org_id)
+    return CardAccess(access=access, card=card)

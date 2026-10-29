@@ -62,5 +62,5 @@ def _no_permissions(monkeypatch: pytest.MonkeyPatch) -> None:
     ],
 )
 async def test_me_returns_the_stored_photo(stored: str | None) -> None:
-    result = await routes.get_me(current_user=_me(stored), db=None)  # type: ignore[arg-type]
+    result = await routes.get_me(current_user=_me(stored), db=None, has_boards=False)  # type: ignore[arg-type]
     assert result.avatar_url == stored

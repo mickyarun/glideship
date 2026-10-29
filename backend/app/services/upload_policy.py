@@ -58,6 +58,20 @@ BUG_ATTACHMENT_EXTENSIONS: Mapping[str, str] = {
 }
 
 
+# Board cards: everything a bug takes, plus the formats design, content
+# and ops teams hand each other (animated mockups, copy drafts, decks).
+CARD_ATTACHMENT_EXTENSIONS: Mapping[str, str] = {
+    **BUG_ATTACHMENT_EXTENSIONS,
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".csv": "text/csv",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+
 class UploadPolicyError(ValueError):
     """Raised when a file violates the policy of the surface it targets.
 
@@ -233,5 +247,19 @@ def bug_attachment_policy(*, max_file_mb: int, max_files: int) -> UploadPolicy:
         label="Bug attachment",
         max_bytes=max_file_mb * 1024 * 1024,
         extensions=BUG_ATTACHMENT_EXTENSIONS,
+        max_files=max_files,
+    )
+
+
+def card_attachment_policy(*, max_file_mb: int, max_files: int) -> UploadPolicy:
+    """Build the board-card attachment policy from ``BoardsConfig``.
+
+    ``max_files`` counts stored files only; links attached to a card
+    don't use up the cap.
+    """
+    return UploadPolicy.for_extensions(
+        label="Card attachment",
+        max_bytes=max_file_mb * 1024 * 1024,
+        extensions=CARD_ATTACHMENT_EXTENSIONS,
         max_files=max_files,
     )

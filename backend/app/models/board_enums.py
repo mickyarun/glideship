@@ -69,6 +69,10 @@ class BoardStageCategory(StrEnum):
     CANCELED = "canceled"
 
 
+# Categories a card is finished in; moving out of them reopens it.
+COMPLETED_CATEGORIES = frozenset({BoardStageCategory.DONE, BoardStageCategory.CANCELED})
+
+
 class BoardLabelColor(StrEnum):
     """Label colours, rendered through the ``label-*`` theme colours."""
 

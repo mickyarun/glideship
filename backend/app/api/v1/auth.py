@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.board_deps import caller_has_boards
 from app.core.deps import (
     get_current_user,
     get_current_user_pending_password,
@@ -199,15 +200,17 @@ async def refresh(
 async def get_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    has_boards: bool = Depends(caller_has_boards),
 ) -> UserRead:
     """Return the currently authenticated user's profile with permissions.
 
     Args:
         current_user: The authenticated user resolved from the JWT token.
         db: The async database session.
+        has_boards: Whether the user can open at least one board.
 
     Returns:
-        UserRead with role_name and permissions populated.
+        UserRead with role_name, permissions and has_boards populated.
     """
     perms = await get_user_permissions(current_user, db)
     role_name = current_user.role_ref.name if current_user.role_ref else None
@@ -224,6 +227,7 @@ async def get_me(
         github_username=current_user.github_username,
         character_model=current_user.character_model,
         avatar_url=current_user.avatar_url,
+        has_boards=has_boards,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
     )

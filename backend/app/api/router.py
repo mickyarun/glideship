@@ -19,6 +19,8 @@ Routers are split into two groups:
 * **Shared** — reachable by every authenticated member regardless of
   workspace: auth, setup, membership, notifications, and transports that
   authenticate themselves (webhooks, MCP tokens, the Colyseus bridge).
+* **Boards** — team boards, behind ``boards:view`` and a per-board role
+  rather than the engineering workspace.
 * **Engineering** — everything else, mounted under one parent router that
   requires ``workspace:engineering``. A people-only role such as ``sales``
   gets 403 on all of it.
@@ -37,6 +39,7 @@ from app.api.v1.ai_settings import router as ai_settings_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.backlash import internal_router as backlash_internal_router
 from app.api.v1.backlash import router as backlash_router
+from app.api.v1.boards import router as boards_router
 from app.api.v1.bud import router as bud_router
 from app.api.v1.bug_attachments import router as bug_attachments_router
 from app.api.v1.bug_comments import router as bug_comments_router
@@ -175,6 +178,9 @@ api_router.include_router(mcp_remote_router)
 api_router.include_router(internal_colyseus_router, prefix="/api/v1")
 api_router.include_router(backlash_internal_router, prefix="/api/v1")
 api_router.include_router(races_internal_router, prefix="/api/v1")
+# Team boards: open to every member holding ``boards:view``, including
+# people-only roles. Each route then checks the caller's role on its board.
+api_router.include_router(boards_router)
 
 # ── Engineering workspace ───────────────────────────────────────────────
 # Sub-routers must be included into the parent *before* the parent is

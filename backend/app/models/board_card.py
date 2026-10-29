@@ -46,6 +46,8 @@ from app.models.bud import BUDPriority
 
 CARD_TITLE_LENGTH = 500
 CARD_KEY_LENGTH = 32
+# Card numbers and document versions are int4 columns.
+INT4_MAX = 2**31 - 1
 
 
 class BoardCard(BaseModel):
