@@ -26,6 +26,7 @@ from app.models.bug_attachment import BugAttachment
 from app.models.bug_comment import BugComment
 from app.repositories.bug_attachment import BugAttachmentRepository
 from app.repositories.bug_comment import BugCommentRepository
+from app.repositories.thread import is_comment_author
 from tests.integration.scan_features_bugs_support import Factory, new_member, new_org
 
 pytestmark = pytest.mark.integration
@@ -105,3 +106,25 @@ async def test_attachments_list_oldest_first_and_count_per_org(
         stranger = BugAttachmentRepository(db, org_id=await new_org(pg_session_factory))
         assert await stranger.count_for_bug(bug) == 0
         assert await stranger.list_for_bug(bug) == []
+
+
+async def test_rows_are_fetched_only_through_their_own_parent(
+    pg_session_factory: Factory,
+) -> None:
+    org, author, bug = await _bug(pg_session_factory)
+    async with pg_session_factory() as db:
+        other = Bug(org_id=org, bug_number=2, title="Other", reporter_id=author)
+        db.add(other)
+        await db.flush()
+        comment = BugComment(org_id=org, bug_id=bug, author_id=author, body="mine")
+        db.add(comment)
+        await db.commit()
+    async with pg_session_factory() as db:
+        repo = BugCommentRepository(db, org_id=org)
+        found = await repo.get_in_parent(bug, comment.id)
+        assert found is not None and found.body == "mine"
+        assert await repo.get_in_parent(other.id, comment.id) is None
+        assert await repo.count_for_parent(bug) == 1
+        assert await repo.count_for_parent(bug, BugComment.deleted_at.is_not(None)) == 0
+        assert is_comment_author(found, author)
+        assert not is_comment_author(found, uuid.uuid4())

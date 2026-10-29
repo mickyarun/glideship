@@ -21,7 +21,7 @@ once and share the queries.
 
 import uuid
 from datetime import UTC, datetime
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,20 @@ from app.repositories.base import BaseRepository
 
 C = TypeVar("C", bound=ORMBase)
 CM = TypeVar("CM", bound=CommentColumns)
+
+
+class HasAuthor(Protocol):
+    """A thread row with an author; imported rows may have none."""
+
+    @property
+    def author_id(self) -> uuid.UUID | None:
+        """The user who wrote the row."""
+        ...
+
+
+def is_comment_author(comment: HasAuthor, user_id: uuid.UUID) -> bool:
+    """True when ``user_id`` wrote ``comment``; authorless rows have no author to match."""
+    return comment.author_id is not None and comment.author_id == user_id
 
 
 class ThreadRepository(BaseRepository[C]):
@@ -56,6 +70,14 @@ class ThreadRepository(BaseRepository[C]):
         super().__init__(model, db, org_id=org_id)
         self._parent_col = parent_col
 
+    async def get_in_parent(self, parent_id: uuid.UUID, row_id: uuid.UUID) -> C | None:
+        """One row, or None when it's missing or belongs to another parent."""
+        stmt = self._scoped(
+            select(self._model).where(self._model.id == row_id, self._parent_col == parent_id)
+        )
+        result = await self._db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_for_parent(
         self, parent_id: uuid.UUID, *conditions: ColumnElement[bool]
     ) -> list[C]:
@@ -68,10 +90,14 @@ class ThreadRepository(BaseRepository[C]):
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_for_parent(self, parent_id: uuid.UUID) -> int:
-        """How many rows one parent has."""
+    async def count_for_parent(
+        self, parent_id: uuid.UUID, *conditions: ColumnElement[bool]
+    ) -> int:
+        """How many rows one parent has, narrowed by any extra ``conditions``."""
         stmt = self._scoped(
-            select(func.count()).select_from(self._model).where(self._parent_col == parent_id)
+            select(func.count())
+            .select_from(self._model)
+            .where(self._parent_col == parent_id, *conditions)
         )
         result = await self._db.execute(stmt)
         return result.scalar_one()

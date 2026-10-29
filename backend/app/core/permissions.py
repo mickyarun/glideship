@@ -20,7 +20,7 @@ seeder reads both to populate the database on startup.
 """
 
 from app.core.permission_types import CategoryDef, PermissionDef
-from app.core.permissions_boards import BOARD_PERMISSION_CATEGORIES
+from app.core.permissions_boards import BOARD_PERMISSION_CATEGORIES, BOARDS_MANAGE
 from app.core.permissions_people import PEOPLE_PERMISSION_CATEGORIES, WORKSPACE_ENGINEERING
 
 # ---------------------------------------------------------------------------
@@ -198,6 +198,7 @@ ESCALATION_PERMISSION_IDS: frozenset[str] = SENSITIVE_PERMISSION_IDS | {
     "team:manage",
     "org:edit_settings",
     "integrations:configure",
+    BOARDS_MANAGE,
 }
 
 

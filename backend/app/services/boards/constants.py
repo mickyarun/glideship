@@ -22,11 +22,11 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
-from app.models.board import BOARD_KEY_MAX_LENGTH
 from app.models.board_enums import BoardMemberRole
 from app.models.bud import BUDStatus
 
 BOARD_KEY_MIN_LENGTH: Final = 2
+BOARD_KEY_MAX_LENGTH: Final = 10
 
 # Card keys are ``{board key}-{number}``; these prefixes already name BUDs and bugs.
 RESERVED_BOARD_KEYS: Final = frozenset({"BUD", "BUG"})

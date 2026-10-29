@@ -17,8 +17,9 @@
 A person's role on a board is the highest of:
 
 1. ``admin`` when they hold ``boards:manage``;
-2. their own ``board_members`` row;
-3. the ``board_teams`` row of every active team they belong to;
+2. their own ``board_members`` row, when they hold ``boards:view``;
+3. the ``board_teams`` row of every active team they belong to, when they
+   hold ``boards:view``;
 4. ``viewer`` when the board is visible to the whole org and they hold
    ``boards:view``.
 
@@ -75,15 +76,20 @@ class BoardAccessRepository:
         self._db = db
         self._org_id = org_id
 
-    def role_subquery(self, user_id: uuid.UUID, perms: PermissionChecker) -> Subquery:
-        """``(board_id, role)`` for every board in the org where ``user_id`` has a role."""
+    def role_subquery(
+        self, user_id: uuid.UUID, perms: PermissionChecker, *, name: str = "board_roles"
+    ) -> Subquery:
+        """``(board_id, role)`` for every board in the org where ``user_id`` has a role.
+
+        ``name`` aliases the subquery and its CTE, so two can share a statement.
+        """
         grants = select(
             literal(user_id, UUID(as_uuid=True)).label("user_id"),
             literal(perms.has(BOARDS_VIEW)).label("can_view"),
             literal(perms.has(BOARDS_MANAGE)).label("can_manage"),
-        ).cte("board_grants")
-        rows = self._roles(grants)
-        return select(rows.c.board_id, rows.c.role).subquery("board_roles")
+        ).cte(f"{name}_grants")
+        rows = self._roles(grants, name)
+        return select(rows.c.board_id, rows.c.role).subquery(name)
 
     async def role_for(
         self, board_id: uuid.UUID, user_id: uuid.UUID, perms: PermissionChecker
@@ -126,11 +132,11 @@ class BoardAccessRepository:
             )
             .cte("board_grants")
         )
-        rows = self._roles(grants)
+        rows = self._roles(grants, "board_roles")
         stmt = select(rows.c.user_id).where(rows.c.board_id == board_id)
         return set((await self._db.execute(stmt)).scalars().all())
 
-    def _roles(self, grants: CTE) -> Subquery:
+    def _roles(self, grants: CTE, name: str) -> Subquery:
         """``(user_id, board_id, role)``: the highest role per person and board.
 
         ``grants`` has one row per person: ``user_id``, ``can_view``
@@ -150,14 +156,19 @@ class BoardAccessRepository:
         members = (
             select(BoardMember.user_id, BoardMember.board_id, BoardMember.role)
             .join(grants, grants.c.user_id == BoardMember.user_id)
-            .where(BoardMember.org_id == self._org_id)
+            .where(BoardMember.org_id == self._org_id, grants.c.can_view)
         )
         teams = (
             select(TeamMember.user_id, BoardTeam.board_id, BoardTeam.role)
+            .select_from(BoardTeam)
             .join(TeamMember, TeamMember.team_id == BoardTeam.team_id)
             .join(Team, Team.id == BoardTeam.team_id)
             .join(grants, grants.c.user_id == TeamMember.user_id)
-            .where(BoardTeam.org_id == self._org_id, Team.status == TeamStatus.ACTIVE)
+            .where(
+                BoardTeam.org_id == self._org_id,
+                Team.status == TeamStatus.ACTIVE,
+                grants.c.can_view,
+            )
         )
         org_visible = (
             select(grants.c.user_id, Board.id, _role(BoardMemberRole.VIEWER))
@@ -165,9 +176,9 @@ class BoardAccessRepository:
             .join(Board, and_(org_boards, Board.visibility == BoardVisibility.ORG))
             .where(grants.c.can_view)
         )
-        rows = union_all(manage, members, teams, org_visible).subquery("board_role_rows")
+        rows = union_all(manage, members, teams, org_visible).subquery(f"{name}_rows")
         return (
             select(rows.c.user_id, rows.c.board_id, func.max(rows.c.role).label("role"))
             .group_by(rows.c.user_id, rows.c.board_id)
-            .subquery("board_role_max")
+            .subquery(f"{name}_max")
         )

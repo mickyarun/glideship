@@ -16,8 +16,18 @@
 
 from __future__ import annotations
 
-from app.core.permissions import ALL_PERMISSION_IDS, PERMISSION_CATEGORIES
-from app.core.permissions_boards import BOARDS_CREATE, BOARDS_MANAGE, BOARDS_VIEW
+from app.core.permissions import (
+    ALL_PERMISSION_IDS,
+    ESCALATION_PERMISSION_IDS,
+    PERMISSION_CATEGORIES,
+    SENSITIVE_PERMISSION_IDS,
+)
+from app.core.permissions_boards import (
+    BOARD_ROLE_GRANTS,
+    BOARDS_CREATE,
+    BOARDS_MANAGE,
+    BOARDS_VIEW,
+)
 from app.core.role_defs import DEFAULT_SYSTEM_ROLES, UNASSIGNED_MEMBER_PERMISSIONS
 
 
@@ -50,3 +60,13 @@ def test_board_creation_and_management_grants() -> None:
         "designer",
     }
     assert _holders(BOARDS_MANAGE) == {"org_owner", "admin"}
+
+
+def test_boards_manage_is_an_escalation_but_not_sensitive() -> None:
+    assert BOARDS_MANAGE in ESCALATION_PERMISSION_IDS
+    assert BOARDS_MANAGE not in SENSITIVE_PERMISSION_IDS
+    assert BOARDS_VIEW not in ESCALATION_PERMISSION_IDS
+
+
+def test_board_grants_name_only_real_roles() -> None:
+    assert set(BOARD_ROLE_GRANTS) <= {r.name for r in DEFAULT_SYSTEM_ROLES}

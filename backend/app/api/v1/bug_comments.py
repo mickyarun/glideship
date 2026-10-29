@@ -34,6 +34,7 @@ from app.models.bug_comment import BugComment
 from app.models.user import User
 from app.repositories.bug import BugRepository
 from app.repositories.bug_comment import BugCommentRepository
+from app.repositories.thread import is_comment_author
 from app.repositories.user import PersonCard, UserRepository
 from app.schemas.bug import (
     BugCommentCreate,
@@ -126,8 +127,8 @@ async def update_bug_comment(
     """Edit a comment's body. Author-only, with ``bugs:edit`` override."""
     await _ensure_bug_in_org(db, current_user.org_id, bug_id)
     comment_repo = BugCommentRepository(db, org_id=current_user.org_id)
-    comment = await comment_repo.get_by_id(comment_id)
-    if not comment or comment.bug_id != bug_id:
+    comment = await comment_repo.get_in_parent(bug_id, comment_id)
+    if comment is None:
         raise HTTPException(status_code=404, detail="Comment not found")
     await _ensure_can_modify(current_user, comment, db)
     if comment.deleted_at is not None:
@@ -156,8 +157,8 @@ async def delete_bug_comment(
     """
     await _ensure_bug_in_org(db, current_user.org_id, bug_id)
     comment_repo = BugCommentRepository(db, org_id=current_user.org_id)
-    comment = await comment_repo.get_by_id(comment_id)
-    if not comment or comment.bug_id != bug_id:
+    comment = await comment_repo.get_in_parent(bug_id, comment_id)
+    if comment is None:
         raise HTTPException(status_code=404, detail="Comment not found")
     await _ensure_can_modify(current_user, comment, db)
     if comment.deleted_at is not None:
@@ -195,7 +196,7 @@ async def _ensure_can_modify(
     legacy ``buds:edit`` so role tokens minted before Step E rolled
     out keep working.
     """
-    if comment.author_id == current_user.id:
+    if is_comment_author(comment, current_user.id):
         return
     perms = await get_user_permissions(current_user, db)
     if "bugs:edit" in perms or "buds:edit" in perms:

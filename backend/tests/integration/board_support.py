@@ -22,12 +22,20 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy import select
+
 from app.core.permission_deps import PermissionSet
 from app.core.permissions_boards import BOARDS_MANAGE, BOARDS_VIEW
-from app.models.board import Board, BoardStage
-from app.models.board_enums import BoardMemberRole, BoardStageCategory, BoardVisibility
+from app.models.board import Board, BoardLabel, BoardStage
+from app.models.board_enums import (
+    BoardLabelColor,
+    BoardMemberRole,
+    BoardStageCategory,
+    BoardVisibility,
+)
 from app.models.board_member import BoardMember, BoardTeam
 from app.models.team import Team, TeamMember, TeamStatus
+from app.services.permission_seeder import seed_permissions
 from tests.integration.scan_features_bugs_support import Factory
 
 NO_PERMS = PermissionSet(ids=frozenset(), is_owner=False)
@@ -100,3 +108,35 @@ async def add_team(factory: Factory, board: Board, team: uuid.UUID, role: BoardM
     async with factory() as db:
         db.add(BoardTeam(board_id=board.id, team_id=team, org_id=board.org_id, role=role))
         await db.commit()
+
+
+async def seed(factory: Factory) -> None:
+    """Seed system roles and permissions (idempotent)."""
+    async with factory() as db:
+        await seed_permissions(db)
+        await db.commit()
+
+
+async def stage_ids(factory: Factory, board: Board) -> list[uuid.UUID]:
+    """The board's stage ids in position order."""
+    async with factory() as db:
+        rows = await db.scalars(
+            select(BoardStage.id)
+            .where(BoardStage.board_id == board.id)
+            .order_by(BoardStage.position)
+        )
+        return list(rows)
+
+
+async def new_label(factory: Factory, board: Board) -> uuid.UUID:
+    """A label on ``board``."""
+    async with factory() as db:
+        label = BoardLabel(
+            org_id=board.org_id,
+            board_id=board.id,
+            name=f"Label {uuid.uuid4().hex[:6]}",
+            color=BoardLabelColor.BLUE,
+        )
+        db.add(label)
+        await db.commit()
+        return label.id

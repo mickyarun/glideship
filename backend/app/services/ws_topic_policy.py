@@ -33,7 +33,7 @@ prefix here, or no client will ever receive it.
 """
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, assert_never
 
 Scope = Literal["user", "org", "bud", "board", "id"]
 
@@ -89,11 +89,17 @@ def may_subscribe(topic: str, who: Subscriber) -> bool:
     if rule.engineering and not who.has_engineering:
         return False
     owner = rest.split(":", 1)[0]
-    if rule.scope == "user":
-        return owner == who.user_id
-    if rule.scope == "org":
-        return owner == who.org_id
-    return True
+    match rule.scope:
+        case "user":
+            return owner == who.user_id
+        case "org":
+            return owner == who.org_id
+        case "bud" | "board" | "id":
+            # Decided by the scope's database check, or (``id``) by the
+            # unguessable id itself.
+            return True
+        case _:
+            assert_never(rule.scope)
 
 
 def scope_of(topic: str) -> Scope | None:

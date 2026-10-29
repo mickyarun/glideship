@@ -21,12 +21,12 @@ point at another org's board, card or member.
 from sqlalchemy import ForeignKeyConstraint
 
 
-def board_fk(table: str) -> ForeignKeyConstraint:
-    """``(board_id, org_id)`` → ``boards(id, org_id)``, cascading deletes."""
+def board_fk(table: str, *, ondelete: str = "CASCADE") -> ForeignKeyConstraint:
+    """``(board_id, org_id)`` → ``boards(id, org_id)``, cascading deletes by default."""
     return ForeignKeyConstraint(
         ["board_id", "org_id"],
         ["boards.id", "boards.org_id"],
-        ondelete="CASCADE",
+        ondelete=ondelete,
         name=f"fk_{table}_board_org",
     )
 

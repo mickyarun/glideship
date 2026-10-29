@@ -28,7 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
 from app.models.board_enums import BoardCardDocKind, BoardCardDocState, pg_enum
-from app.models.board_keys import card_fk
+from app.models.board_fks import card_fk
 from app.models.bud_version import BUDEditSource
 
 
@@ -45,7 +45,7 @@ class BoardCardDoc(BaseModel):
             "card_id",
             "kind",
             unique=True,
-            postgresql_where=text("state = 'current'"),
+            postgresql_where=text(f"state = '{BoardCardDocState.CURRENT.value}'"),
         ),
     )
 

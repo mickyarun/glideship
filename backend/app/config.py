@@ -15,13 +15,13 @@
 """Application configuration loaded from environment variables."""
 
 import os
-from datetime import time
 from pathlib import Path
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app import instance_secrets
+from app.config_boards import BoardsConfig
 
 
 class DatabaseConfig(BaseSettings):
@@ -186,42 +186,6 @@ class WebSocketConfig(BaseSettings):
     max_subscribe_queue: int = Field(
         default=32,
         description="Max queued events per event-bus subscriber before dropping.",
-    )
-
-
-class BoardsConfig(BaseSettings):
-    """Tunables for team boards: shape, ordering, history, imports and reminders."""
-
-    model_config = SettingsConfigDict(env_prefix="BOARDS_", env_file=".env", extra="ignore")
-
-    max_stages_per_board: int = Field(default=8, gt=0, description="Soft cap on stages.")
-    stage_page_size: int = Field(default=50, gt=0, description="Cards per stage page.")
-    position_gap: float = Field(default=1024.0, gt=0, description="Spacing between cards.")
-    position_epsilon: float = Field(
-        default=1e-6, gt=0, description="A gap below this rebalances the stage."
-    )
-    edit_coalesce_seconds: int = Field(
-        default=300, ge=0, description="Edits by one person within this window merge."
-    )
-    aging_days: int = Field(default=14, gt=0, description="Idle days before a card is aging.")
-    metrics_window_days: int = Field(default=90, gt=0, description="Board metrics look-back.")
-    switcher_other_limit: int = Field(
-        default=20, gt=0, description="Boards listed under 'other' in the switcher."
-    )
-    prefs_touch_interval_seconds: int = Field(
-        default=300, ge=0, description="Minimum gap between last-opened writes."
-    )
-    import_max_upload_bytes: int = Field(
-        default=50 * 1024 * 1024, gt=0, description="Largest import file accepted."
-    )
-    import_max_attachment_bytes: int = Field(
-        default=1024 * 1024 * 1024, gt=0, description="Attachment bytes one import may copy."
-    )
-    trello_requests_per_10s: int = Field(
-        default=90, gt=0, description="Trello API calls per 10 seconds, under its limit."
-    )
-    due_reminder_default_time: time = Field(
-        default=time(9, 0), description="Local time due reminders go out."
     )
 
 

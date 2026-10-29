@@ -66,3 +66,10 @@ def test_hr_assigns_every_role_but_admin_level_ones() -> None:
 @pytest.mark.parametrize("role", sorted(ROLES))
 def test_owner_can_assign_every_role(role: str) -> None:
     assert _can_assign("org_owner", role)
+
+
+def test_only_board_managers_can_grant_boards_manage() -> None:
+    manager = PermissionSet(ids=frozenset(ROLES["manager"]), is_owner=False)
+    admin = PermissionSet(ids=frozenset(ROLES["admin"]), is_owner=False)
+    assert ungrantable(manager, {"boards:manage", "boards:view"}) == {"boards:manage"}
+    assert not ungrantable(admin, {"boards:manage"})

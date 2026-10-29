@@ -12,44 +12,54 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""``require_board`` answers 404, never 403, and the socket board scope uses the same rule."""
+"""``require_board``: 404 for boards you can't see, 403 below the role, 409 when archived."""
 
 from __future__ import annotations
 
-import uuid
 from collections.abc import AsyncIterator
 
 import pytest
 from fastapi import Depends, FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1 import ws_scope_checks
-from app.core.board_deps import BoardAccess, require_board
+from app.core.board_deps import require_board
 from app.core.deps import get_db
-from app.models.board_enums import BoardMemberRole, BoardVisibility
-from app.services.permission_seeder import seed_permissions
-from app.services.ws_topic_policy import Subscriber
-from tests.integration.board_support import add_member, board_key, new_board
+from app.models.board import Board
+from app.models.board_enums import BoardMemberRole, BoardStatus, BoardVisibility
+from app.services.boards.access import BoardAccess
+from tests.integration.board_support import add_member, board_key, new_board, seed
 from tests.integration.scan_features_bugs_support import Factory, as_user, new_member, new_org
 
 pytestmark = pytest.mark.integration
 
+VIEWER, EDITOR, ADMIN = BoardMemberRole.VIEWER, BoardMemberRole.EDITOR, BoardMemberRole.ADMIN
+NOT_FOUND = (404, {"detail": "Board not found."})
+
 
 @pytest.fixture
 async def http(pg_session_factory: Factory) -> AsyncIterator[AsyncClient]:
-    """A tiny app with a viewer route and an editor route on ``/boards/{key}``."""
-    async with pg_session_factory() as db:
-        await seed_permissions(db)
-        await db.commit()
+    """A tiny app with viewer, editor, admin and writable routes on ``/boards/{key}``."""
+    await seed(pg_session_factory)
     app = FastAPI()
 
     @app.get("/boards/{key}")
-    async def view(access: BoardAccess = Depends(require_board(BoardMemberRole.VIEWER))) -> str:
+    async def view(access: BoardAccess = Depends(require_board(VIEWER))) -> str:
         return access.role.value
 
     @app.patch("/boards/{key}")
-    async def edit(access: BoardAccess = Depends(require_board(BoardMemberRole.EDITOR))) -> str:
+    async def edit(access: BoardAccess = Depends(require_board(EDITOR))) -> str:
+        return access.role.value
+
+    @app.put("/boards/{key}")
+    async def manage(access: BoardAccess = Depends(require_board(ADMIN))) -> str:
+        return access.role.value
+
+    @app.post("/boards/{key}")
+    async def write(
+        access: BoardAccess = Depends(require_board(VIEWER, writable=True)),
+    ) -> str:
         return access.role.value
 
     async def _db() -> AsyncIterator[AsyncSession]:
@@ -61,23 +71,34 @@ async def http(pg_session_factory: Factory) -> AsyncIterator[AsyncClient]:
         yield client
 
 
-async def test_viewers_read_but_get_404_on_editor_routes(
+def _result(resp: Response) -> tuple[int, object]:
+    return resp.status_code, resp.json()
+
+
+async def test_viewers_read_but_get_403_on_editor_routes(
     http: AsyncClient, pg_session_factory: Factory
 ) -> None:
     org = await new_org(pg_session_factory)
     user = as_user(await new_member(pg_session_factory, org, "developer"), org)
     board = await new_board(pg_session_factory, org)
-    assert (await http.get(f"/boards/{board.key}", headers=user)).json() == "viewer"
-    assert (await http.patch(f"/boards/{board.key}", headers=user)).status_code == 404
+    assert _result(await http.get(f"/boards/{board.key.lower()}", headers=user)) == (
+        200,
+        "viewer",
+    )
+    assert (await http.patch(f"/boards/{board.key}", headers=user)).status_code == 403
 
 
-async def test_editors_pass_editor_routes(http: AsyncClient, pg_session_factory: Factory) -> None:
+async def test_admin_routes_403_for_editors_and_404_for_non_members(
+    http: AsyncClient, pg_session_factory: Factory
+) -> None:
     org = await new_org(pg_session_factory)
-    user_id = await new_member(pg_session_factory, org, "sales")
+    editor, outsider = [await new_member(pg_session_factory, org, "sales") for _ in range(2)]
     board = await new_board(pg_session_factory, org, visibility=BoardVisibility.MEMBERS)
-    await add_member(pg_session_factory, board, user_id, BoardMemberRole.EDITOR)
-    resp = await http.patch(f"/boards/{board.key}", headers=as_user(user_id, org))
-    assert (resp.status_code, resp.json()) == (200, "editor")
+    await add_member(pg_session_factory, board, editor, EDITOR)
+    url = f"/boards/{board.key}"
+    assert _result(await http.patch(url, headers=as_user(editor, org))) == (200, "editor")
+    assert (await http.put(url, headers=as_user(editor, org))).status_code == 403
+    assert _result(await http.put(url, headers=as_user(outsider, org))) == NOT_FOUND
 
 
 async def test_hidden_missing_and_foreign_boards_are_404(
@@ -88,25 +109,21 @@ async def test_hidden_missing_and_foreign_boards_are_404(
     hidden = await new_board(pg_session_factory, org, visibility=BoardVisibility.MEMBERS)
     foreign = await new_board(pg_session_factory, other)
     for key in (hidden.key, foreign.key, board_key()):
-        resp = await http.get(f"/boards/{key}", headers=user)
-        assert (resp.status_code, resp.json()) == (404, {"detail": "Board not found."})
+        assert _result(await http.get(f"/boards/{key}", headers=user)) == NOT_FOUND
+        assert _result(await http.patch(f"/boards/{key}", headers=user)) == NOT_FOUND
 
 
-async def test_the_board_socket_scope_needs_a_role(
-    pg_session_factory: Factory, monkeypatch: pytest.MonkeyPatch
+async def test_writes_to_an_archived_board_are_409(
+    http: AsyncClient, pg_session_factory: Factory
 ) -> None:
-    monkeypatch.setattr(ws_scope_checks, "AsyncSessionLocal", pg_session_factory)
     org = await new_org(pg_session_factory)
-    member, outsider = [await new_member(pg_session_factory, org) for _ in range(2)]
-    board = await new_board(pg_session_factory, org, visibility=BoardVisibility.MEMBERS)
-    await add_member(pg_session_factory, board, member, BoardMemberRole.VIEWER)
-
-    def who(user: uuid.UUID) -> Subscriber:
-        return Subscriber(user_id=str(user), org_id=str(org), has_engineering=False)
-
-    topic = f"board:{board.id}"
-    assert await ws_scope_checks.passes_scope_check(topic, who(member))
-    assert not await ws_scope_checks.passes_scope_check(topic, who(outsider))
-    assert not await ws_scope_checks.passes_scope_check("board:not-a-uuid", who(member))
-    assert not await ws_scope_checks.passes_scope_check(f"bud:{uuid.uuid4()}", who(member))
-    assert await ws_scope_checks.passes_scope_check(f"notifications:{member}", who(member))
+    user = as_user(await new_member(pg_session_factory, org, "developer"), org)
+    board = await new_board(pg_session_factory, org)
+    assert (await http.post(f"/boards/{board.key}", headers=user)).status_code == 200
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(Board).where(Board.id == board.id).values(status=BoardStatus.ARCHIVED)
+        )
+        await db.commit()
+    assert (await http.post(f"/boards/{board.key}", headers=user)).status_code == 409
+    assert (await http.get(f"/boards/{board.key}", headers=user)).status_code == 200

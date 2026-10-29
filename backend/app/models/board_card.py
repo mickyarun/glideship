@@ -41,7 +41,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
 from app.models.board_enums import pg_enum
-from app.models.board_keys import board_fk, card_fk, member_fk
+from app.models.board_fks import board_fk, card_fk, member_fk
 from app.models.bud import BUDPriority
 
 CARD_TITLE_LENGTH = 500
@@ -54,8 +54,9 @@ class BoardCard(BaseModel):
     __tablename__ = "board_cards"
     __table_args__ = (
         UniqueConstraint("board_id", "number", name="uq_board_cards_board_number"),
-        # Composite-FK target for the card's child tables.
+        # Composite-FK targets for the card's child tables.
         UniqueConstraint("id", "org_id", name="uq_board_cards_id_org"),
+        UniqueConstraint("id", "board_id", name="uq_board_cards_id_board"),
         board_fk("board_cards"),
         # The stage must belong to the card's own board.
         ForeignKeyConstraint(
@@ -63,11 +64,12 @@ class BoardCard(BaseModel):
             ["board_stages.id", "board_stages.board_id"],
             name="fk_board_cards_stage_board",
         ),
+        # Keyset paging of one stage's open cards on ``(position, id)``.
         Index(
             "ix_board_cards_stage_position",
-            "board_id",
             "stage_id",
             "position",
+            "id",
             postgresql_where=text("archived_at IS NULL"),
         ),
         # Due reminders scan open cards by due date.
@@ -133,23 +135,35 @@ class BoardCardAssignee(BaseModel):
 
 
 class BoardCardLabel(BaseModel):
-    """Join row: a card carries a label."""
+    """Join row: a card carries one of its own board's labels.
+
+    ``board_id`` follows the card (``ON UPDATE CASCADE``), so moving a card
+    to another board fails while it still carries the old board's labels.
+    """
 
     __tablename__ = "board_card_labels"
     __table_args__ = (
         UniqueConstraint("card_id", "label_id", name="uq_board_card_labels_card_label"),
         card_fk("board_card_labels"),
         ForeignKeyConstraint(
-            ["label_id", "org_id"],
-            ["board_labels.id", "board_labels.org_id"],
+            ["card_id", "board_id"],
+            ["board_cards.id", "board_cards.board_id"],
             ondelete="CASCADE",
-            name="fk_board_card_labels_label_org",
+            onupdate="CASCADE",
+            name="fk_board_card_labels_card_board",
+        ),
+        ForeignKeyConstraint(
+            ["label_id", "board_id"],
+            ["board_labels.id", "board_labels.board_id"],
+            ondelete="CASCADE",
+            name="fk_board_card_labels_label_board",
         ),
         Index("ix_board_card_labels_label_id", "label_id"),
     )
 
     card_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     label_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    board_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
 

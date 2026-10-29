@@ -38,7 +38,7 @@ from app.models.board_enums import (
     BoardStageCategory,
     pg_enum,
 )
-from app.models.board_keys import card_fk
+from app.models.board_fks import board_fk, card_fk
 from app.models.thread_columns import CommentColumns, OptionalAttachmentColumns
 
 CHECKLIST_GROUP_LENGTH = 255
@@ -90,8 +90,9 @@ class BoardCardAttachment(OptionalAttachmentColumns):
     __table_args__ = (
         card_fk("board_card_attachments"),
         CheckConstraint(
-            "(kind = 'file' AND storage_path IS NOT NULL AND mime_type IS NOT NULL"
-            " AND size_bytes IS NOT NULL) OR (kind = 'link' AND url IS NOT NULL)",
+            f"(kind = '{BoardAttachmentKind.FILE.value}' AND storage_path IS NOT NULL"
+            " AND mime_type IS NOT NULL AND size_bytes IS NOT NULL)"
+            f" OR (kind = '{BoardAttachmentKind.LINK.value}' AND url IS NOT NULL)",
             name="ck_board_card_attachments_kind_fields",
         ),
         Index("ix_board_card_attachments_card_created", "card_id", "created_at"),
@@ -116,6 +117,8 @@ class BoardCardEvent(BaseModel):
     __tablename__ = "board_card_events"
     __table_args__ = (
         card_fk("board_card_events"),
+        # Boards are archived, never deleted, so history is never lost.
+        board_fk("board_card_events", ondelete="RESTRICT"),
         Index(
             "ix_board_card_events_org_board_category_created",
             "org_id",
@@ -128,9 +131,7 @@ class BoardCardEvent(BaseModel):
 
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     card_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    board_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("boards.id", ondelete="CASCADE"), nullable=False
-    )
+    board_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     type: Mapped[BoardCardEventType] = mapped_column(
         pg_enum(BoardCardEventType, "board_card_event_type"), nullable=False
     )
@@ -139,6 +140,8 @@ class BoardCardEvent(BaseModel):
     )
     # Who did it when there's no user, e.g. an imported action.
     actor_label: Mapped[str | None] = mapped_column(String(EXTERNAL_LABEL_LENGTH), nullable=True)
+    # Single-column keys so a deleted stage nulls just its id (pg14 has no
+    # column-list SET NULL); the service keeps both stages on ``board_id``.
     from_stage_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("board_stages.id", ondelete="SET NULL"), nullable=True
     )

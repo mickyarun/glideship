@@ -44,11 +44,11 @@ from app.models.board_enums import (
     BoardVisibility,
     pg_enum,
 )
-from app.models.board_keys import board_fk
+from app.models.board_fks import board_fk
 from app.models.bud import BUDStatus
+from app.services.boards.constants import BOARD_KEY_MAX_LENGTH
 
 BOARD_NAME_LENGTH = 150
-BOARD_KEY_MAX_LENGTH = 10
 STAGE_NAME_LENGTH = 60
 LABEL_NAME_LENGTH = 100
 
@@ -158,10 +158,10 @@ class BoardLabel(BaseModel):
 
     __tablename__ = "board_labels"
     __table_args__ = (
-        # Composite-FK target for ``board_card_labels(label_id, org_id)``.
-        UniqueConstraint("id", "org_id", name="uq_board_labels_id_org"),
+        UniqueConstraint("board_id", "name", name="uq_board_labels_board_name"),
+        # Composite-FK target, so a card only carries its own board's labels.
+        UniqueConstraint("id", "board_id", name="uq_board_labels_id_board"),
         board_fk("board_labels"),
-        Index("ix_board_labels_board", "board_id"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)

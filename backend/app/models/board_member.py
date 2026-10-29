@@ -37,7 +37,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
 from app.models.board_enums import BoardMemberRole, pg_enum
-from app.models.board_keys import board_fk, member_fk
+from app.models.board_fks import board_fk, member_fk
 
 
 class BoardMember(BaseModel):

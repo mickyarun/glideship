@@ -18,10 +18,13 @@ from __future__ import annotations
 
 import pytest
 
+from app.models.board import Board
 from app.models.board_enums import BoardMemberRole
 from app.models.bud import BUDStatus
 from app.services.boards.constants import (
     BOARD_ACTION_MIN_ROLE,
+    BOARD_KEY_MAX_LENGTH,
+    BOARD_KEY_MIN_LENGTH,
     BOARD_KEY_PATTERN,
     HANDOVER_LANDING_STATUSES,
     RESERVED_BOARD_KEYS,
@@ -65,3 +68,8 @@ def test_capabilities_grow_with_the_role() -> None:
     assert viewer == {BoardAction.VIEW, BoardAction.COMMENT}
     assert viewer < editor < admin == set(BoardAction)
     assert BoardAction.MOVE_CARD in editor and BoardAction.MANAGE_STAGES not in editor
+
+
+def test_key_length_bounds_match_the_pattern_and_column() -> None:
+    assert (BOARD_KEY_MIN_LENGTH, BOARD_KEY_MAX_LENGTH) == (2, 10)
+    assert Board.__table__.c.key.type.length == BOARD_KEY_MAX_LENGTH

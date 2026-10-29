@@ -15,8 +15,8 @@
 """Per-scope ownership checks a WebSocket subscription must pass.
 
 :func:`app.services.ws_topic_policy.may_subscribe` answers from the topic
-string alone. Scopes whose ids need a database lookup register a check
-here; scopes without one need nothing more.
+string alone. Every scope registers a check here, even when the string
+check is all it needs, and a scope without one is refused.
 """
 
 import uuid
@@ -57,14 +57,22 @@ async def _has_board_role(topic: str, who: Subscriber) -> bool:
         return await repo.role_for(board_id, uuid.UUID(who.user_id), who) is not None
 
 
+async def _string_check_only(topic: str, who: Subscriber) -> bool:
+    """``may_subscribe`` already matched the owner segment (or the id is the capability)."""
+    return True
+
+
 SCOPE_CHECKS: dict[Scope, ScopeCheck] = {
+    "user": _string_check_only,
+    "org": _string_check_only,
+    "id": _string_check_only,
     "bud": _owns_topic_bud,
     "board": _has_board_role,
 }
 
 
 async def passes_scope_check(topic: str, who: Subscriber) -> bool:
-    """Run the topic's scope check, if its scope registers one."""
+    """Run the topic's scope check; an unknown or unregistered scope is refused."""
     scope = scope_of(topic)
     check = SCOPE_CHECKS.get(scope) if scope is not None else None
-    return True if check is None else await check(topic, who)
+    return False if check is None else await check(topic, who)

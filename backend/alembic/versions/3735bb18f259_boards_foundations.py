@@ -2,7 +2,7 @@
 
 Revision ID: 3735bb18f259
 Revises: 68c7603a34d8
-Create Date: 2026-10-29 13:08:59.140285
+Create Date: 2026-10-29 13:38:50.856290
 
 """
 
@@ -133,9 +133,9 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("id", "org_id", name="uq_board_labels_id_org"),
+        sa.UniqueConstraint("board_id", "name", name="uq_board_labels_board_name"),
+        sa.UniqueConstraint("id", "board_id", name="uq_board_labels_id_board"),
     )
-    op.create_index("ix_board_labels_board", "board_labels", ["board_id"], unique=False)
     op.create_table(
         "board_stages",
         sa.Column("org_id", sa.UUID(), nullable=False),
@@ -274,6 +274,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("board_id", "number", name="uq_board_cards_board_number"),
+        sa.UniqueConstraint("id", "board_id", name="uq_board_cards_id_board"),
         sa.UniqueConstraint("id", "org_id", name="uq_board_cards_id_org"),
     )
     op.create_index(
@@ -286,7 +287,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_board_cards_stage_position",
         "board_cards",
-        ["board_id", "stage_id", "position"],
+        ["stage_id", "position", "id"],
         unique=False,
         postgresql_where=sa.text("archived_at IS NULL"),
     )
@@ -656,7 +657,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["actor_id"], ["users.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["board_id"], ["boards.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["board_id", "org_id"],
+            ["boards.id", "boards.org_id"],
+            name="fk_board_card_events_board_org",
+            ondelete="RESTRICT",
+        ),
         sa.ForeignKeyConstraint(
             ["card_id", "org_id"],
             ["board_cards.id", "board_cards.org_id"],
@@ -713,6 +719,7 @@ def upgrade() -> None:
         "board_card_labels",
         sa.Column("card_id", sa.UUID(), nullable=False),
         sa.Column("label_id", sa.UUID(), nullable=False),
+        sa.Column("board_id", sa.UUID(), nullable=False),
         sa.Column("org_id", sa.UUID(), nullable=False),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
@@ -728,15 +735,22 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
+            ["card_id", "board_id"],
+            ["board_cards.id", "board_cards.board_id"],
+            name="fk_board_card_labels_card_board",
+            onupdate="CASCADE",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
             ["card_id", "org_id"],
             ["board_cards.id", "board_cards.org_id"],
             name="fk_board_card_labels_card_org",
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["label_id", "org_id"],
-            ["board_labels.id", "board_labels.org_id"],
-            name="fk_board_card_labels_label_org",
+            ["label_id", "board_id"],
+            ["board_labels.id", "board_labels.board_id"],
+            name="fk_board_card_labels_label_board",
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -801,17 +815,16 @@ def downgrade() -> None:
     op.drop_index("ix_board_teams_team_id", table_name="board_teams")
     op.drop_table("board_teams")
     op.drop_table("board_stages")
-    op.drop_index("ix_board_labels_board", table_name="board_labels")
     op.drop_table("board_labels")
     op.drop_index("ix_boards_org_status", table_name="boards")
     op.drop_table("boards")
-    postgresql.ENUM(name="board_status").drop(op.get_bind(), checkfirst=True)
-    postgresql.ENUM(name="board_visibility").drop(op.get_bind(), checkfirst=True)
-    postgresql.ENUM(name="board_label_color").drop(op.get_bind(), checkfirst=True)
-    postgresql.ENUM(name="board_stage_category").drop(op.get_bind(), checkfirst=True)
-    postgresql.ENUM(name="board_member_role").drop(op.get_bind(), checkfirst=True)
     postgresql.ENUM(name="board_attachment_kind").drop(op.get_bind(), checkfirst=True)
     postgresql.ENUM(name="board_card_doc_kind").drop(op.get_bind(), checkfirst=True)
     postgresql.ENUM(name="board_card_doc_state").drop(op.get_bind(), checkfirst=True)
     postgresql.ENUM(name="board_card_event_type").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="board_label_color").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="board_member_role").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="board_stage_category").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="board_status").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="board_visibility").drop(op.get_bind(), checkfirst=True)
     # ### end Alembic commands ###

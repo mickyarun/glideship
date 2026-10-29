@@ -29,14 +29,15 @@ class BoardCardRepository(BaseRepository[BoardCard]):
 
     def __init__(self, db: AsyncSession, *, org_id: uuid.UUID) -> None:
         super().__init__(BoardCard, db, org_id=org_id)
-        self._org = org_id
 
     async def allocate_card_numbers(self, board_id: uuid.UUID, n: int) -> range:
         """Claim the board's next ``n`` card numbers in one statement.
 
         The counter only goes up, so a number is never handed out twice,
-        even after its card moves to another board. The row lock taken by
-        the UPDATE serialises concurrent claims until the caller commits.
+        even after its card moves to another board. The UPDATE locks the
+        board row until the transaction ends, so call this late in the
+        transaction: concurrent claims on the board wait for the commit.
+        ``updated_at`` is left alone; claiming numbers isn't a board edit.
 
         Raises:
             ValueError: ``n`` is below 1.
@@ -46,8 +47,8 @@ class BoardCardRepository(BaseRepository[BoardCard]):
             raise ValueError("allocate at least one card number")
         stmt = (
             update(Board)
-            .where(Board.id == board_id, Board.org_id == self._org)
-            .values(next_card_number=Board.next_card_number + n)
+            .where(Board.id == board_id, Board.org_id == self._org_id)
+            .values(next_card_number=Board.next_card_number + n, updated_at=Board.updated_at)
             .returning(Board.next_card_number)
         )
         end = (await self._db.execute(stmt)).scalar_one_or_none()

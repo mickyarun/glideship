@@ -19,6 +19,9 @@ their per-board role, resolved by
 :class:`app.repositories.board_access.BoardAccessRepository`.
 """
 
+from types import MappingProxyType
+from typing import Final
+
 from app.core.permission_types import CategoryDef, PermissionDef
 
 BOARDS_VIEW = "boards:view"
@@ -48,3 +51,25 @@ BOARD_PERMISSION_CATEGORIES: list[CategoryDef] = [
         ],
     ),
 ]
+
+_VIEW_ONLY: Final = (BOARDS_VIEW,)
+_VIEW_CREATE: Final = (BOARDS_VIEW, BOARDS_CREATE)
+
+# Board permissions each default system role gets on top of its own specs;
+# ``org_owner`` already holds everything.
+BOARD_ROLE_GRANTS: Final = MappingProxyType(
+    {
+        "admin": (BOARDS_VIEW, BOARDS_CREATE, BOARDS_MANAGE),
+        "pm": _VIEW_CREATE,
+        "manager": _VIEW_CREATE,
+        "tech_lead": _VIEW_CREATE,
+        "designer": _VIEW_CREATE,
+        "quiz_master": _VIEW_ONLY,
+        "developer": _VIEW_ONLY,
+        "qa": _VIEW_ONLY,
+        "support": _VIEW_ONLY,
+        "viewer": _VIEW_ONLY,
+        "hr": _VIEW_ONLY,
+        "sales": _VIEW_ONLY,
+    }
+)

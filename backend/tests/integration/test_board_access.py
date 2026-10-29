@@ -19,15 +19,13 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select
 
 from app.core.permission_deps import PermissionSet
 from app.models.board import Board
 from app.models.board_enums import BoardMemberRole, BoardVisibility
 from app.models.team import TeamStatus
-from app.models.user import User
 from app.repositories.board_access import BoardAccessRepository
-from app.services.permission_seeder import seed_permissions
 from tests.integration.board_support import (
     MANAGE,
     NO_PERMS,
@@ -43,15 +41,6 @@ pytestmark = pytest.mark.integration
 
 VIEWER, EDITOR, ADMIN = BoardMemberRole.VIEWER, BoardMemberRole.EDITOR, BoardMemberRole.ADMIN
 MEMBERS_ONLY = BoardVisibility.MEMBERS
-
-
-@pytest.fixture
-async def seeded(pg_session_factory: Factory) -> Factory:
-    """The test database with system roles and permissions seeded."""
-    async with pg_session_factory() as db:
-        await seed_permissions(db)
-        await db.commit()
-    return pg_session_factory
 
 
 async def _role(
@@ -77,7 +66,18 @@ async def test_an_individual_row_grants_its_role(
     user = await new_member(pg_session_factory, org)
     board = await new_board(pg_session_factory, org, visibility=MEMBERS_ONLY)
     await add_member(pg_session_factory, board, user, role)
-    assert await _role(pg_session_factory, board, user, NO_PERMS) is role
+    assert await _role(pg_session_factory, board, user, VIEW) is role
+
+
+async def test_member_and_team_rows_need_boards_view(pg_session_factory: Factory) -> None:
+    org = await new_org(pg_session_factory)
+    member, teammate = [await new_member(pg_session_factory, org) for _ in range(2)]
+    board = await new_board(pg_session_factory, org, visibility=MEMBERS_ONLY)
+    await add_member(pg_session_factory, board, member, ADMIN)
+    team = await new_team(pg_session_factory, org, teammate)
+    await add_team(pg_session_factory, board, team, ADMIN)
+    assert await _role(pg_session_factory, board, member, NO_PERMS) is None
+    assert await _role(pg_session_factory, board, teammate, NO_PERMS) is None
 
 
 async def test_a_team_row_grants_its_role_to_every_member(pg_session_factory: Factory) -> None:
@@ -86,8 +86,8 @@ async def test_a_team_row_grants_its_role_to_every_member(pg_session_factory: Fa
     board = await new_board(pg_session_factory, org, visibility=MEMBERS_ONLY)
     team = await new_team(pg_session_factory, org, alice, bob)
     await add_team(pg_session_factory, board, team, EDITOR)
-    assert await _role(pg_session_factory, board, alice, NO_PERMS) is EDITOR
-    assert await _role(pg_session_factory, board, bob, NO_PERMS) is EDITOR
+    assert await _role(pg_session_factory, board, alice, VIEW) is EDITOR
+    assert await _role(pg_session_factory, board, bob, VIEW) is EDITOR
 
 
 async def test_an_archived_team_grants_nothing(pg_session_factory: Factory) -> None:
@@ -122,7 +122,7 @@ async def test_the_highest_of_individual_and_team_roles_wins(
     for role in teams:
         team = await new_team(pg_session_factory, org, user)
         await add_team(pg_session_factory, board, team, role)
-    assert await _role(pg_session_factory, board, user, NO_PERMS) is expected
+    assert await _role(pg_session_factory, board, user, VIEW) is expected
 
 
 async def test_org_visible_boards_give_viewers_with_boards_view(
@@ -156,6 +156,21 @@ async def test_another_orgs_board_has_no_role(pg_session_factory: Factory) -> No
         assert await repo.board_with_role(board.key, user, MANAGE) is None
 
 
+async def test_two_role_subqueries_share_one_statement(pg_session_factory: Factory) -> None:
+    org = await new_org(pg_session_factory)
+    owner, guest = [await new_member(pg_session_factory, org) for _ in range(2)]
+    board = await new_board(pg_session_factory, org, visibility=MEMBERS_ONLY)
+    await add_member(pg_session_factory, board, owner, ADMIN)
+    async with pg_session_factory() as db:
+        repo = BoardAccessRepository(db, org_id=org)
+        mine = repo.role_subquery(owner, VIEW, name="mine")
+        theirs = repo.role_subquery(guest, MANAGE, name="theirs")
+        stmt = select(mine.c.role, theirs.c.role).join(
+            theirs, theirs.c.board_id == mine.c.board_id
+        )
+        assert (await db.execute(stmt)).all() == [(ADMIN, ADMIN)]
+
+
 async def test_board_with_role_finds_the_board_by_key(pg_session_factory: Factory) -> None:
     org = await new_org(pg_session_factory)
     user = await new_member(pg_session_factory, org)
@@ -164,31 +179,3 @@ async def test_board_with_role_finds_the_board_by_key(pg_session_factory: Factor
         found = await BoardAccessRepository(db, org_id=org).board_with_role(board.key, user, VIEW)
     assert found is not None
     assert (found[0].id, found[1]) == (board.id, VIEWER)
-
-
-async def test_users_with_access_applies_the_same_rule(seeded: Factory) -> None:
-    org, other = await new_org(seeded), await new_org(seeded)
-    member, teammate, admin, outsider, gone = [
-        await new_member(seeded, org, role)
-        for role in ("sales", "sales", "admin", "developer", "developer")
-    ]
-    foreign = await new_member(seeded, other, "admin")
-    board = await new_board(seeded, org, visibility=MEMBERS_ONLY)
-    open_board = await new_board(seeded, org)
-    await add_member(seeded, board, member, VIEWER)
-    await add_member(seeded, board, gone, EDITOR)
-    await add_team(seeded, board, await new_team(seeded, org, teammate), EDITOR)
-    async with seeded() as db:
-        await db.execute(update(User).where(User.id == gone).values(is_active=False))
-        await db.commit()
-    everyone = {member, teammate, admin, outsider, gone, foreign}
-    async with seeded() as db:
-        repo = BoardAccessRepository(db, org_id=org)
-        assert await repo.users_with_access(board.id, everyone) == {member, teammate, admin}
-        assert await repo.users_with_access(open_board.id, everyone) == {
-            member,
-            teammate,
-            admin,
-            outsider,
-        }
-        assert await repo.users_with_access(board.id, set()) == set()
