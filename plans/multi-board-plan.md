@@ -512,7 +512,8 @@ One rule, written once as SQL in `BoardAccessRepository.role_subquery` (see Arch
    team they belong to.
 3. `visibility = org` and `boards:view` → `viewer`.
 4. Otherwise `None`. The API returns **404, not 403**, so members-only boards don't leak their
-   existence.
+   existence. Someone who can see the board but whose role is too low for the action gets
+   **403**, since they already know it exists. A write to an archived board gets **409**.
 
 What each role can do:
 
@@ -1559,6 +1560,9 @@ unit and integration tests, Vitest, `vue-tsc`, `vite build`, and the Docker imag
   - Mitigation: they use the same `status_change` shape that `sp_pm` and `sp_tech_arch` already
     read, with the `via: handover` tag so metrics can exclude them. There are tests for SP at
     both landing points.
+- **Team membership is a board-access grant.** Adding someone to a team that holds a role on
+  a board gives them that role. `team:manage` is already an escalation permission, so this is
+  accepted. Board activity records team membership changes that affect board roles.
 - **The workspace boundary.**
   - What can go wrong: boards sit outside `workspace:engineering`, but the handover and the
     Origin panel touch BUDs.
