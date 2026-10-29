@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.board_enums import BoardMemberRole, BoardStatus, BoardVisibility
 from app.models.bud import BUDStatus
+from app.schemas.boards.filters import BoardFilters
 from app.schemas.boards.label import LabelRead
 from app.schemas.boards.stage import StageRead
 from app.schemas.boards.text import BoardDescription, BoardName
@@ -85,18 +86,36 @@ class BoardDetail(BaseModel):
     role: BoardMemberRole
     capabilities: list[BoardAction]
     starred: bool
+    # My saved filters, so the page loads its cards without a prefs round trip.
+    filters: BoardFilters = Field(default_factory=BoardFilters)
+
+
+class CardCounts(BaseModel):
+    """A board's open cards by category, and cards finished lately.
+
+    ``done_recent`` covers ``GET /boards/limits``'s ``recent_done_days``
+    in the boards list, and is 0 in the switcher, which doesn't count them.
+    """
+
+    todo: int = 0
+    in_progress: int = 0
+    done_recent: int = 0
 
 
 class CustomBoardItem(BaseModel):
-    """A team board in the boards list."""
+    """A team board in the boards list and the switcher."""
 
     kind: Literal["custom"] = "custom"
     id: uuid.UUID
     key: str
     name: str
+    description: str | None = None
     visibility: BoardVisibility
+    handover_enabled: bool = False
     role: BoardMemberRole
     starred: bool
+    last_opened_at: datetime | None = None
+    counts: CardCounts = Field(default_factory=CardCounts)
 
 
 class DeliveryBoardItem(BaseModel):

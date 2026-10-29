@@ -63,20 +63,24 @@ def board_topic(board_id: uuid.UUID) -> str:
 class BoardChanges:
     """What one request changed on a board, announced after it commits.
 
-    Every event carries the acting person's id. Access re-checks queued with
+    Every event carries the acting person's id and the tab that made the
+    change (``origin``, or null). Access re-checks queued with
     :meth:`recheck_access` go out after the commit too.
     """
 
-    def __init__(self, board_id: uuid.UUID, actor_id: uuid.UUID | None) -> None:
+    def __init__(
+        self, board_id: uuid.UUID, actor_id: uuid.UUID | None, origin: str | None = None
+    ) -> None:
         self.board_id = board_id
         self.actor_id = actor_id
+        self.origin = origin
         self._events: list[tuple[BoardSocketEvent, dict[str, Any]]] = []
         self._recheck: set[uuid.UUID] | None = set()
 
     @classmethod
     def of(cls, access: BoardAccess) -> "BoardChanges":
         """Changes made by the caller of ``access`` on its board."""
-        return cls(access.board.id, access.user_id)
+        return cls(access.board.id, access.user_id, access.origin)
 
     def emit(self, event: BoardSocketEvent, **payload: Any) -> None:
         """Queue one event for after the commit."""
@@ -102,7 +106,13 @@ class BoardChanges:
         elif self._recheck:
             gate = {ACCESS_CHANGED_KEY: sorted(str(u) for u in self._recheck)}
         for event, payload in self._events:
-            message = {"event": event.value, "actor_id": actor, **payload, **gate}
+            message = {
+                "event": event.value,
+                "actor_id": actor,
+                "origin": self.origin,
+                **payload,
+                **gate,
+            }
             publish_after_commit(db, topic, message)
         if gate:
             recheck_topic(db, topic, self._recheck)

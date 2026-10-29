@@ -35,6 +35,9 @@ class BoardsConfig(BaseSettings):
         default=300, ge=0, description="Edits by one person within this window merge."
     )
     aging_days: int = Field(default=14, gt=0, description="Idle days before a card is aging.")
+    recent_done_days: int = Field(
+        default=7, gt=0, description="Days the boards list counts finished cards over."
+    )
     metrics_window_days: int = Field(default=90, gt=0, description="Board metrics look-back.")
     switcher_other_limit: int = Field(
         default=20, gt=0, description="Boards listed under 'other' in the switcher."

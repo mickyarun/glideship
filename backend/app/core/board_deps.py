@@ -22,10 +22,11 @@ table. The rule itself lives in
 a write to an archived board) are mapped by ``api/v1/_board_errors.py``.
 """
 
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import Depends, Path
+from fastapi import Depends, Header, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth_deps import get_current_user, get_db
@@ -41,6 +42,20 @@ from app.services.boards.access import (
     resolve_card,
 )
 from app.services.boards.constants import BOARD_ACTION_MIN_ROLE, BoardAction
+
+# What a browser tab may send as its client id: a UUID, or anything shaped
+# like one. Anything else is dropped rather than refused, since the id only
+# lets a tab skip its own live events.
+_CLIENT_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+
+
+async def request_origin(
+    x_client_id: str | None = Header(default=None, alias="X-Client-Id"),
+) -> str | None:
+    """The sending tab's id from ``X-Client-Id``, or None when absent or malformed."""
+    if x_client_id is None or not _CLIENT_ID.match(x_client_id):
+        return None
+    return x_client_id
 
 
 async def board_caller(
@@ -92,6 +107,7 @@ def require_action(
         current_user: User = Depends(get_current_user),
         perms: PermissionSet = Depends(get_permission_set),
         db: AsyncSession = Depends(get_db),
+        origin: str | None = Depends(request_origin),
     ) -> BoardAccess:
         return await resolve_board_access(
             db,
@@ -101,6 +117,7 @@ def require_action(
             key=key,
             min_role=min_role,
             writable=write,
+            origin=origin,
         )
 
     _tag(_resolve, action, write)

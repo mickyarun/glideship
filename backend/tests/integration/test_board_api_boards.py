@@ -126,17 +126,20 @@ async def test_the_list_shows_my_boards_and_delivery_only_for_engineering(
     assert [i["kind"] for i in mine][-1] == "delivery"
     assert {i["key"] for i in mine if i["kind"] == "custom"} == {shown["key"], hidden["key"]}
     theirs = ok(await client.get(BOARDS, headers=sales.headers))["items"]
-    assert theirs == [
-        {
-            "kind": "custom",
-            "id": shown["id"],
-            "key": shown["key"],
-            "name": shown["name"],
-            "visibility": "org",
-            "role": "viewer",
-            "starred": False,
-        }
-    ]
+    assert len(theirs) == 1
+    assert theirs[0] | {"counts": None, "handover_enabled": None} == {
+        "kind": "custom",
+        "id": shown["id"],
+        "key": shown["key"],
+        "name": shown["name"],
+        "description": None,
+        "visibility": "org",
+        "handover_enabled": None,
+        "role": "viewer",
+        "starred": False,
+        "last_opened_at": None,
+        "counts": None,
+    }
 
 
 async def test_me_says_whether_i_can_open_a_board(

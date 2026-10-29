@@ -77,6 +77,9 @@ class BoardAccess:
     user_id: uuid.UUID
     org_id: uuid.UUID
     perms: PermissionChecker
+    # The browser tab that sent the request (``X-Client-Id``), echoed on the
+    # board's live events so that tab can skip its own changes.
+    origin: str | None = None
 
     def may(self, action: BoardAction) -> bool:
         """Whether the caller may take ``action`` on the board as it is now."""
@@ -123,6 +126,7 @@ async def resolve_board_access(
     key: str,
     min_role: BoardMemberRole,
     writable: bool = False,
+    origin: str | None = None,
 ) -> BoardAccess:
     """The caller's access to the board keyed ``key`` (case-insensitive).
 
@@ -142,7 +146,9 @@ async def resolve_board_access(
         raise BoardForbiddenError()
     if writable and board.status is BoardStatus.ARCHIVED:
         raise BoardArchivedError()
-    return BoardAccess(board=board, role=role, user_id=user_id, org_id=org_id, perms=perms)
+    return BoardAccess(
+        board=board, role=role, user_id=user_id, org_id=org_id, perms=perms, origin=origin
+    )
 
 
 async def resolve_card(access: BoardAccess, db: AsyncSession, number: int) -> CardAccess:

@@ -17,7 +17,6 @@
 Prefs are personal, so they can be saved on an archived board and by viewers.
 """
 
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -25,7 +24,8 @@ from app.repositories.board import VisibleBoard
 from app.repositories.board_prefs import BoardPrefsRepository
 from app.repositories.board_switcher import BoardSwitcherRepository
 from app.schemas.boards.board import CustomBoardItem, DeliveryBoardItem
-from app.schemas.boards.prefs import BoardFilters, PrefsRead, SwitcherRead
+from app.schemas.boards.filters import BoardFilters, saved_filters
+from app.schemas.boards.prefs import PrefsRead, SwitcherRead
 from app.services.boards.access import BoardAccess, BoardCaller
 from app.services.boards.board_service import custom_item, delivery_item
 
@@ -35,12 +35,7 @@ async def read_prefs(db: AsyncSession, access: BoardAccess) -> PrefsRead:
     row = await BoardPrefsRepository(db, org_id=access.org_id).get(access.board.id, access.user_id)
     if row is None:
         return PrefsRead(starred=False, filters=BoardFilters())
-    try:
-        filters = BoardFilters.model_validate(row.filters)
-    except ValidationError:
-        # Saved under looser limits than today's; start from no filters.
-        filters = BoardFilters()
-    return PrefsRead(starred=row.starred, filters=filters)
+    return PrefsRead(starred=row.starred, filters=saved_filters(row.filters))
 
 
 async def set_star(db: AsyncSession, access: BoardAccess, *, starred: bool) -> PrefsRead:

@@ -98,7 +98,8 @@ async def test_card_events_carry_the_summary_and_the_actor(
         assert set(event["card"]) == SUMMARY_FIELDS
         assert event["card"]["id"] == card["id"]
     assert events[1]["card"]["title"] == "Watched"
-    assert set(events[3]) == {"event", "actor_id"}
+    assert set(events[3]) == {"event", "actor_id", "origin"}
+    assert all(e["origin"] is None for e in events)
 
 
 async def test_a_change_that_fails_to_commit_announces_nothing(
@@ -134,3 +135,33 @@ async def test_a_refused_move_announces_nothing(
     move = {"stage_id": stage_id(board, "Done")}
     assert (await client.post(f"{url}/move", json=move, headers=pm.headers)).status_code == 409
     assert await _events(queue) == []
+
+
+async def test_events_name_the_tab_that_made_the_change(
+    client: AsyncClient, pg_session_factory: Factory, listen: Any
+) -> None:
+    pm, board, key, topic = await _setup(client, pg_session_factory)
+    queue = listen(topic)
+    tab = "6f1c2a9e-4d0b-4c7e-9a31-0b5d2e8f7c11"
+    card = await make_card(client, pm, key, "Mine")
+    url = f"{BOARDS}/{key}/cards/{card['number']}"
+    headers = {**pm.headers, "X-Client-Id": tab}
+    ok(await client.patch(url, json={"title": "Still mine"}, headers=headers))
+    bad = {**pm.headers, "X-Client-Id": "not a client id!"}
+    ok(await client.patch(url, json={"title": "Dropped id"}, headers=bad))
+    events = await _events(queue)
+    assert [e["origin"] for e in events] == [None, tab, None]
+
+
+async def test_a_move_names_the_stage_it_left(
+    client: AsyncClient, pg_session_factory: Factory, listen: Any
+) -> None:
+    pm, board, key, topic = await _setup(client, pg_session_factory)
+    card = await make_card(client, pm, key)
+    queue = listen(topic)
+    move = {"stage_id": stage_id(board, "Done")}
+    url = f"{BOARDS}/{key}/cards/{card['number']}/move"
+    ok(await client.post(url, json=move, headers=pm.headers))
+    (moved,) = [e for e in await _events(queue) if e["event"] == "card_moved"]
+    assert moved["from_stage_id"] == card["stage_id"]
+    assert moved["card"]["stage_id"] == move["stage_id"]

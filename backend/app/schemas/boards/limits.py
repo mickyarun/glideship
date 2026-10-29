@@ -23,6 +23,8 @@ class BoardLimits(BaseModel):
     """Lengths, caps and page sizes for boards, cards and their threads."""
 
     board_name_max: int
+    board_key_min: int
+    board_key_max: int
     board_description_max: int
     stage_name_max: int
     max_stages: int
@@ -39,4 +41,5 @@ class BoardLimits(BaseModel):
     search_max: int
     filters_max_bytes: int
     stage_page_size: int
+    recent_done_days: int
     attachments: AttachmentLimits

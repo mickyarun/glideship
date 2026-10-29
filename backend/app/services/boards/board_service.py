@@ -30,6 +30,7 @@ from app.schemas.boards.board import (
     BoardDetail,
     BoardList,
     BoardListItem,
+    CardCounts,
     CustomBoardItem,
     DeliveryBoardItem,
     TemplateRead,
@@ -56,20 +57,28 @@ def delivery_item(caller: BoardCaller) -> DeliveryBoardItem | None:
 def custom_item(visible: VisibleBoard) -> CustomBoardItem:
     """A team board as the list and the switcher show it."""
     board = visible.board
+    counts = visible.counts
     return CustomBoardItem(
         id=board.id,
         key=board.key,
         name=board.name,
+        description=board.description,
         visibility=board.visibility,
+        handover_enabled=board.handover_enabled,
         role=visible.role,
         starred=visible.starred,
+        last_opened_at=visible.last_opened_at,
+        counts=CardCounts(
+            todo=counts.todo, in_progress=counts.in_progress, done_recent=counts.done_recent
+        ),
     )
 
 
 async def list_boards(db: AsyncSession, caller: BoardCaller) -> BoardList:
     """Every board the caller can open, then Delivery when they may see it."""
+    since = datetime.now(UTC) - timedelta(days=settings.boards.recent_done_days)
     visible = await BoardRepository(db, org_id=caller.org_id).list_visible(
-        caller.user_id, caller.perms
+        caller.user_id, caller.perms, done_since=since
     )
     items: list[BoardListItem] = [custom_item(v) for v in visible]
     delivery = delivery_item(caller)

@@ -14,37 +14,12 @@
 
 """A person's star and saved filters for a board, and the board switcher."""
 
-from typing import Self
+from pydantic import BaseModel, ConfigDict
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from app.config import settings
-from app.models.bud import BUDPriority
 from app.schemas.boards.board import CustomBoardItem, DeliveryBoardItem
-from app.schemas.boards.text import SEARCH_MAX_LENGTH, IdList
+from app.schemas.boards.filters import BoardFilters
 
-
-class BoardFilters(BaseModel):
-    """The board filters to restore when someone comes back to a board.
-
-    Stored as JSON on their prefs row, so the whole set is capped at
-    ``BoardsConfig.filters_max_bytes``.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    q: str | None = Field(default=None, max_length=SEARCH_MAX_LENGTH)
-    assignee_ids: IdList = Field(default_factory=list)
-    label_ids: IdList = Field(default_factory=list)
-    priorities: list[BUDPriority] = Field(default_factory=list)
-    archived: bool = False
-
-    @model_validator(mode="after")
-    def _fits(self) -> Self:
-        limit = settings.boards.filters_max_bytes
-        if len(self.model_dump_json().encode()) > limit:
-            raise ValueError(f"saved filters are limited to {limit} bytes")
-        return self
+__all__ = ["BoardFilters", "PrefsRead", "StarBody", "SwitcherRead"]
 
 
 class StarBody(BaseModel):

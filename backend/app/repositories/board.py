@@ -20,7 +20,7 @@ first and filtered afterwards.
 """
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -33,6 +33,7 @@ from app.models.board_enums import BoardMemberRole, BoardStatus
 from app.models.board_member import BoardUserPrefs
 from app.repositories.base import BaseRepository, violated_constraint
 from app.repositories.board_access import BoardAccessRepository, PermissionChecker
+from app.repositories.board_counts import CardCounts, card_counts_subquery
 
 _UNIQUE_KEY_OR_NAME = frozenset({"uq_boards_org_key", "uq_boards_org_name"})
 
@@ -45,6 +46,7 @@ class VisibleBoard:
     role: BoardMemberRole
     starred: bool
     last_opened_at: datetime | None
+    counts: CardCounts = field(default_factory=CardCounts)
 
 
 def like_pattern(text: str) -> str:
@@ -61,12 +63,32 @@ class BoardRepository(BaseRepository[Board]):
         self._org: uuid.UUID = org_id
 
     def visible_select(
-        self, user_id: uuid.UUID, perms: PermissionChecker, *, q: str | None = None
-    ) -> Select[tuple[Board, BoardMemberRole, Any, Any]]:
-        """Active boards the caller holds a role on, with their star and last visit.
+        self,
+        user_id: uuid.UUID,
+        perms: PermissionChecker,
+        *,
+        q: str | None = None,
+        done_since: datetime | None = None,
+    ) -> Select[Any]:
+        """Active boards the caller holds a role on, with their star, last visit and counts.
 
-        ``q`` narrows to boards whose name or key contains it.
+        ``q`` narrows to boards whose name or key contains it. Counts of done
+        cards include those completed since ``done_since`` (none when unset).
         """
+        counts = card_counts_subquery(self._org, done_since)
+        return (
+            self._visible_base(user_id, perms, q)
+            .add_columns(
+                func.coalesce(counts.c.todo, 0),
+                func.coalesce(counts.c.in_progress, 0),
+                func.coalesce(counts.c.done_recent, 0),
+            )
+            .outerjoin(counts, counts.c.board_id == Board.id)
+        )
+
+    def _visible_base(
+        self, user_id: uuid.UUID, perms: PermissionChecker, q: str | None
+    ) -> Select[Any]:
         roles = BoardAccessRepository(self._db, org_id=self._org).role_subquery(user_id, perms)
         stmt = (
             select(Board, roles.c.role, BoardUserPrefs.starred, BoardUserPrefs.last_opened_at)
@@ -82,23 +104,26 @@ class BoardRepository(BaseRepository[Board]):
             stmt = stmt.where(or_(Board.name.ilike(pattern), Board.key.ilike(pattern)))
         return stmt
 
-    async def run_visible(
-        self, stmt: Select[tuple[Board, BoardMemberRole, Any, Any]]
-    ) -> list[VisibleBoard]:
+    async def run_visible(self, stmt: Select[Any]) -> list[VisibleBoard]:
         """Execute a :meth:`visible_select` statement."""
         rows = (await self._db.execute(stmt)).all()
-        return [VisibleBoard(r[0], r[1], bool(r[2]), r[3]) for r in rows]
+        return [
+            VisibleBoard(r[0], r[1], bool(r[2]), r[3], CardCounts(int(r[4]), int(r[5]), int(r[6])))
+            for r in rows
+        ]
 
     async def list_visible(
-        self, user_id: uuid.UUID, perms: PermissionChecker
+        self, user_id: uuid.UUID, perms: PermissionChecker, *, done_since: datetime | None = None
     ) -> list[VisibleBoard]:
-        """Every active board the caller can open, by name."""
-        stmt = self.visible_select(user_id, perms).order_by(func.lower(Board.name), Board.id)
+        """Every active board the caller can open, by name, with its card counts."""
+        stmt = self.visible_select(user_id, perms, done_since=done_since).order_by(
+            func.lower(Board.name), Board.id
+        )
         return await self.run_visible(stmt)
 
     async def any_visible(self, user_id: uuid.UUID, perms: PermissionChecker) -> bool:
         """Whether the caller can open at least one active board."""
-        visible = self.visible_select(user_id, perms).with_only_columns(Board.id)
+        visible = self._visible_base(user_id, perms, None).with_only_columns(Board.id)
         stmt = select(visible.exists())
         return bool((await self._db.execute(stmt)).scalar())
 

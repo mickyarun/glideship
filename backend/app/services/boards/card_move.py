@@ -94,7 +94,10 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
     changes = BoardChanges.of(access)
     if placement.rebalanced:
         changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(to_stage.id))
-    changes.emit(BoardSocketEvent.CARD_MOVED, card=summary_json(detail))
+    # The stage it left, so a client can keep both counts without a reload.
+    changes.emit(
+        BoardSocketEvent.CARD_MOVED, card=summary_json(detail), from_stage_id=str(from_stage.id)
+    )
     await changes.commit(db)
     return detail
 

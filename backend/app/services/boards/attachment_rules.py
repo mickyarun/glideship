@@ -79,6 +79,8 @@ def board_limits() -> BoardLimits:
     """Every limit the boards UI needs, from the constants, columns and settings."""
     return BoardLimits(
         board_name_max=BOARD_NAME_LENGTH,
+        board_key_min=const.BOARD_KEY_MIN_LENGTH,
+        board_key_max=const.BOARD_KEY_MAX_LENGTH,
         board_description_max=const.BOARD_DESCRIPTION_MAX_CHARS,
         stage_name_max=STAGE_NAME_LENGTH,
         max_stages=settings.boards.max_stages_per_board,
@@ -95,5 +97,6 @@ def board_limits() -> BoardLimits:
         search_max=const.SEARCH_MAX_CHARS,
         filters_max_bytes=settings.boards.filters_max_bytes,
         stage_page_size=settings.boards.stage_page_size,
+        recent_done_days=settings.boards.recent_done_days,
         attachments=limits(),
     )

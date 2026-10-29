@@ -24,6 +24,7 @@ from app.repositories.board_prefs import BoardPrefsRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.board import BoardDetail, BoardRead
 from app.schemas.boards.card import CardDetail, CardSummary
+from app.schemas.boards.filters import saved_filters
 from app.schemas.boards.label import LabelRead
 from app.schemas.boards.stage import StageRead
 from app.services.boards.access import BoardAccess
@@ -53,6 +54,7 @@ async def board_detail(db: AsyncSession, access: BoardAccess) -> BoardDetail:
         role=access.role,
         capabilities=access.capabilities(),
         starred=bool(prefs and prefs.starred),
+        filters=saved_filters(prefs.filters if prefs else None),
     )
 
 
