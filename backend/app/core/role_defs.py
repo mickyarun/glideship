@@ -21,6 +21,7 @@ permission mappings in sync (additions only).
 from dataclasses import dataclass, field
 
 from app.core.permissions import WORKSPACE_ENGINEERING, expand_permission_specs
+from app.core.permissions_boards import BOARDS_CREATE, BOARDS_VIEW
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
         name="quiz_master",
         description="Runs the Company Quiz (configure + approve questions); assign to "
         "a non-competing member so admins can play fairly",
-        permission_specs=[WORKSPACE_ENGINEERING, "quiz:configure"],
+        permission_specs=[WORKSPACE_ENGINEERING, "quiz:configure", BOARDS_VIEW],
     ),
     RoleDef(
         name="admin",
@@ -65,6 +66,7 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "integrations:*",
             "knowledge:*",
             "reports:*",
+            "boards:*",
             # Not ``leave:approve``: the approval queue shows leave reasons,
             # which stay with HR.
             "leave:configure",
@@ -84,6 +86,8 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "settings:view",
             "knowledge:*",
             "reports:*",
+            BOARDS_VIEW,
+            BOARDS_CREATE,
         ],
     ),
     RoleDef(
@@ -100,6 +104,8 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "settings:*",
             "knowledge:*",
             "reports:*",
+            BOARDS_VIEW,
+            BOARDS_CREATE,
         ],
     ),
     RoleDef(
@@ -114,6 +120,8 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "settings:view",
             "knowledge:view",
             "reports:*",
+            BOARDS_VIEW,
+            BOARDS_CREATE,
         ],
     ),
     RoleDef(
@@ -127,6 +135,7 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "settings:view",
             "knowledge:view/contribute",
             "reports:view",
+            BOARDS_VIEW,
         ],
     ),
     RoleDef(
@@ -139,6 +148,8 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "bugs:view/comment",
             "settings:view",
             "knowledge:view/contribute",
+            BOARDS_VIEW,
+            BOARDS_CREATE,
         ],
     ),
     RoleDef(
@@ -156,6 +167,7 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "settings:view",
             "knowledge:view/contribute",
             "reports:view",
+            BOARDS_VIEW,
         ],
     ),
     RoleDef(
@@ -166,6 +178,7 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "backlog:view/create",
             "bugs:view/report/comment",
             "knowledge:view",
+            BOARDS_VIEW,
         ],
     ),
     RoleDef(
@@ -178,17 +191,18 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
             "bugs:view",
             "knowledge:view",
             "reports:view",
+            BOARDS_VIEW,
         ],
     ),
     RoleDef(
         name="hr",
         description="HR: approves leave, manages employee records and documents",
-        permission_specs=["leave:*", "employees:*", "team:view", "team:invite"],
+        permission_specs=["leave:*", "employees:*", "team:view", "team:invite", BOARDS_VIEW],
     ),
     RoleDef(
         name="sales",
-        description="Sales team member: leave, WFH and their own employee details only",
-        permission_specs=[],
+        description="Sales team member: leave, WFH, boards and their own employee details",
+        permission_specs=[BOARDS_VIEW],
     ),
 ]
 

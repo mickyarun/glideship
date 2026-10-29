@@ -1,0 +1,6 @@
+name: Blank
+description: Three stages to start from; rename or add your own.
+stages:
+  - {name: To do, category: todo, default: true}
+  - {name: In progress, category: in_progress}
+  - {name: Done, category: done}

@@ -1,0 +1,8 @@
+name: Ops
+description: Track operational work, including what is waiting on someone else.
+stages:
+  - {name: Backlog, category: todo, default: true}
+  - {name: To do, category: todo}
+  - {name: In progress, category: in_progress}
+  - {name: Waiting, category: in_progress}
+  - {name: Done, category: done}

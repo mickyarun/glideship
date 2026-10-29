@@ -22,6 +22,8 @@ prefix declares who may read it:
 * ``bud`` — the second segment is a BUD id, which must belong to the
   caller's org. BUD ids appear in URLs and Slack links, so they are not a
   secret; the WebSocket handler checks ownership via :func:`bud_id_of`.
+* ``board`` — the second segment is a board id; the WebSocket handler
+  checks the caller holds a role on that board via :func:`board_id_of`.
 * ``id`` — addressed by a server-minted UUID (a job or scan) that is only
   ever handed to the requester. The UUID is the capability.
 
@@ -33,7 +35,7 @@ prefix here, or no client will ever receive it.
 from dataclasses import dataclass
 from typing import Literal
 
-Scope = Literal["user", "org", "bud", "id"]
+Scope = Literal["user", "org", "bud", "board", "id"]
 
 
 @dataclass(frozen=True)
@@ -56,16 +58,26 @@ TOPIC_RULES: dict[str, TopicRule] = {
     "scan_synthesis_tool": TopicRule(scope="id", engineering=True),
     "todo": TopicRule(scope="bud", engineering=True),
     "bud": TopicRule(scope="bud", engineering=True),
+    "board": TopicRule(scope="board", engineering=False),
 }
 
 
 @dataclass(frozen=True)
 class Subscriber:
-    """Identity of a WebSocket connection, resolved once at connect."""
+    """Identity of a WebSocket connection, resolved once at connect.
+
+    ``permissions`` holds the caller's org permission ids; the org owner's
+    set is every permission.
+    """
 
     user_id: str
     org_id: str
     has_engineering: bool
+    permissions: frozenset[str] = frozenset()
+
+    def has(self, permission: str) -> bool:
+        """Return True if the caller holds ``permission``."""
+        return permission in self.permissions
 
 
 def may_subscribe(topic: str, who: Subscriber) -> bool:
@@ -84,10 +96,25 @@ def may_subscribe(topic: str, who: Subscriber) -> bool:
     return True
 
 
-def bud_id_of(topic: str) -> str | None:
-    """The BUD id a ``bud``-scoped topic names, for the ownership check."""
+def scope_of(topic: str) -> Scope | None:
+    """The scope of a topic's prefix, or None for an unknown prefix."""
+    rule = TOPIC_RULES.get(topic.partition(":")[0])
+    return None if rule is None else rule.scope
+
+
+def _id_in_scope(topic: str, scope: Scope) -> str | None:
     prefix, _, rest = topic.partition(":")
     rule = TOPIC_RULES.get(prefix)
-    if rule is None or rule.scope != "bud" or not rest:
+    if rule is None or rule.scope != scope or not rest:
         return None
     return rest.split(":", 1)[0]
+
+
+def bud_id_of(topic: str) -> str | None:
+    """The BUD id a ``bud``-scoped topic names, for the ownership check."""
+    return _id_in_scope(topic, "bud")
+
+
+def board_id_of(topic: str) -> str | None:
+    """The board id a ``board``-scoped topic names, for the role check."""
+    return _id_in_scope(topic, "board")

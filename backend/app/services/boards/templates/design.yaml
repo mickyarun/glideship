@@ -1,0 +1,9 @@
+name: Design
+description: Explore and review designs, then hand approved work to development.
+stages:
+  - {name: Backlog, category: todo, default: true}
+  - {name: Exploring, category: in_progress}
+  - {name: In review, category: in_progress}
+  - {name: Approved, category: done}
+handover_stage: Approved
+return_stage: Backlog

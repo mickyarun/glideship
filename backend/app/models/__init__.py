@@ -24,6 +24,32 @@ from app.models.agent_skill_bud_stage import AgentSkillBudStage
 from app.models.backend_route_cache import BackendRouteCache
 from app.models.backlash import BacklashMatch, BacklashPlayerStats
 from app.models.base import Base, BaseModel
+from app.models.board import Board, BoardLabel, BoardStage
+from app.models.board_card import (
+    BoardCard,
+    BoardCardAssignee,
+    BoardCardKeyAlias,
+    BoardCardLabel,
+)
+from app.models.board_card_detail import (
+    BoardCardAttachment,
+    BoardCardChecklistItem,
+    BoardCardComment,
+    BoardCardEvent,
+)
+from app.models.board_card_doc import BoardCardDoc
+from app.models.board_enums import (
+    BoardAttachmentKind,
+    BoardCardDocKind,
+    BoardCardDocState,
+    BoardCardEventType,
+    BoardLabelColor,
+    BoardMemberRole,
+    BoardStageCategory,
+    BoardStatus,
+    BoardVisibility,
+)
+from app.models.board_member import BoardMember, BoardTeam, BoardUserPrefs
 from app.models.bud import (
     BUDChatMessage,
     BUDDesign,
@@ -143,6 +169,30 @@ __all__ = [
     "BUDAgentTask",
     "Base",
     "BaseModel",
+    "Board",
+    "BoardAttachmentKind",
+    "BoardCard",
+    "BoardCardAssignee",
+    "BoardCardAttachment",
+    "BoardCardChecklistItem",
+    "BoardCardComment",
+    "BoardCardDoc",
+    "BoardCardDocKind",
+    "BoardCardDocState",
+    "BoardCardEvent",
+    "BoardCardEventType",
+    "BoardCardKeyAlias",
+    "BoardCardLabel",
+    "BoardLabel",
+    "BoardLabelColor",
+    "BoardMember",
+    "BoardMemberRole",
+    "BoardStage",
+    "BoardStageCategory",
+    "BoardStatus",
+    "BoardTeam",
+    "BoardUserPrefs",
+    "BoardVisibility",
     "BUDChatMessage",
     "BUDDesign",
     "BUDDesignStatus",

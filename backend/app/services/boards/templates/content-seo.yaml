@@ -1,0 +1,8 @@
+name: Content and SEO
+description: Plan, write, review and publish content.
+stages:
+  - {name: Backlog, category: todo, default: true}
+  - {name: To do, category: todo}
+  - {name: Writing, category: in_progress}
+  - {name: Review, category: in_progress}
+  - {name: Published, category: done}

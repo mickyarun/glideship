@@ -1,0 +1,10 @@
+name: Product
+description: Shape ideas into PRDs and hand them over to development.
+stages:
+  - {name: Ideas, category: todo, default: true}
+  - {name: Shaping, category: in_progress}
+  - {name: PRD, category: in_progress}
+  - {name: Ready for dev, category: done}
+  - {name: Won't do, category: canceled}
+handover_stage: Ready for dev
+return_stage: Ideas

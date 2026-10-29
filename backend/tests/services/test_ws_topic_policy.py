@@ -16,7 +16,13 @@
 
 import pytest
 
-from app.services.ws_topic_policy import Subscriber, bud_id_of, may_subscribe
+from app.services.ws_topic_policy import (
+    Subscriber,
+    board_id_of,
+    bud_id_of,
+    may_subscribe,
+    scope_of,
+)
 
 ENGINEER = Subscriber(user_id="u1", org_id="o1", has_engineering=True)
 SALES = Subscriber(user_id="u2", org_id="o1", has_engineering=False)
@@ -57,3 +63,19 @@ def test_bud_topics_name_the_bud_for_the_ownership_check() -> None:
     assert bud_id_of("todo:b1") == "b1"
     assert bud_id_of("job:abc") is None
     assert bud_id_of("quiz:o1") is None
+
+
+def test_board_topics_reach_people_only_members_for_the_role_check() -> None:
+    assert may_subscribe("board:b1", SALES)
+    assert board_id_of("board:b1") == "b1"
+    assert board_id_of("bud:b1") is None
+    assert scope_of("board:b1") == "board"
+    assert scope_of("unknown:x") is None
+
+
+def test_subscriber_answers_permission_checks() -> None:
+    who = Subscriber(
+        user_id="u1", org_id="o1", has_engineering=False, permissions=frozenset({"x"})
+    )
+    assert who.has("x") and not who.has("y")
+    assert not SALES.has("x")
