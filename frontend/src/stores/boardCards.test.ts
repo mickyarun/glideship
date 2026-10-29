@@ -161,4 +161,43 @@ describe('boardCards store', () => {
     expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
     expect(store.counts.s1).toBe(2)
   })
+
+  it('drops a Load more reply that lands after the stage was reloaded', async () => {
+    const store = useBoardCardsStore()
+    store.reset('OPS', [makeStage('s1')])
+    api.cards.mockResolvedValueOnce(page([A], 'c1'))
+    await store.loadStage('s1')
+    let resolveMore!: (p: CardPage) => void
+    api.cards.mockReturnValueOnce(new Promise(r => (resolveMore = r)))
+    const more = store.loadStage('s1', true)
+    api.cards.mockResolvedValueOnce(page([B]))
+    await store.loadStage('s1')
+    resolveMore(page([C], 'old'))
+    await more
+    expect(ids(store.columns.s1.items)).toEqual(['2'])
+    expect(store.columns.s1.cursor).toBeNull()
+    expect(store.columns.s1.loading).toBe(false)
+  })
+
+  it('undoes only the refused move, keeping live changes made meanwhile', async () => {
+    const store = await loadedStore()
+    let reject!: (e: unknown) => void
+    api.moveCard.mockReturnValue(new Promise((_, r) => (reject = r)) as never)
+    const pending = store.moveCard('1', 's2', 0)
+    store.applyCardEvent({ event: 'card_created', actor_id: 'x', card: makeCard('9', { stage_id: 's2', position: 7 }) })
+    reject(httpError(403))
+    await pending
+    expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
+    expect(ids(store.columns.s2.items)).toEqual(['3', '9'])
+    expect(store.counts).toEqual({ s1: 2, s2: 2 })
+  })
+
+  it('keeps the last loaded card of a paged column when someone edits it', async () => {
+    const store = useBoardCardsStore()
+    store.reset('OPS', [makeStage('s1')])
+    api.cards.mockResolvedValue(page([A, B], 'more'))
+    await store.loadStage('s1')
+    store.applyCardEvent({ event: 'card_updated', actor_id: 'x', card: { ...B, title: 'Renamed' } })
+    expect(store.columns.s1.items.map(c => c.title)).toEqual(['Card 1', 'Renamed'])
+  })
 })

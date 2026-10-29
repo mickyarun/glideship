@@ -31,19 +31,30 @@ export function useBoardPage(key: Ref<string>) {
   const boards = useBoardsStore()
   const filters = useBoardFilters(next => void cards.setFilters(next))
 
+  // Opens in flight; a refresh meanwhile would supersede the open's load.
+  let opening = 0
+
   async function open(k: string): Promise<void> {
-    if (!(await board.load(k)) || !board.detail.value) return
-    const saved = await filters.restore(k)
-    if (k !== key.value || !board.detail.value) return
-    cards.reset(k, board.detail.value.stages, saved)
-    void cards.loadAll()
-    // Opening a board moves it up my recent list.
-    void boards.fetchNav()
+    opening++
+    try {
+      if (!(await board.load(k)) || !board.detail.value) return
+      const saved = await filters.restore(k)
+      if (k !== key.value || !board.detail.value) return
+      cards.reset(k, board.detail.value.stages, saved)
+      void cards.loadAll()
+      // Opening a board moves it up my recent list.
+      void boards.fetchNav()
+    } finally {
+      opening--
+    }
   }
 
   /** Reload the board itself (stages, counts, labels, my capabilities). */
   async function refreshBoard(): Promise<void> {
+    // While a board is still opening, its own load is the refresh.
+    if (opening > 0 || cards.boardKey !== key.value) return
     if (!(await board.load(key.value, { quiet: true })) || !board.detail.value) return
+    if (cards.boardKey !== key.value) return
     cards.syncStages(board.detail.value.stages)
     for (const [id, column] of Object.entries(cards.columns)) {
       if (!column.loaded && !column.loading) void cards.loadStage(id)

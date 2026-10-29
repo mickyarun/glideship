@@ -68,6 +68,7 @@
             :now="now"
             :filtering="filtering"
             :can-drag="board.can('move_card') && !xs"
+            :can-move="board.can('move_card')"
             :can-create="board.can('create_card')"
             :can-archive="board.can('archive_card')"
             :title-max="limits?.card_title_max ?? null"

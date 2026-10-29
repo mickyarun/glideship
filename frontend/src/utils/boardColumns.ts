@@ -69,18 +69,12 @@ export function upsertCard(
   filters: CardFilters,
   force = false,
 ): void {
-  removeCard(columns, card.id)
   const column = columns[card.stage_id]
+  // Judged against the column as it was, so an edit to the last loaded
+  // card keeps it rather than pushing it into the unloaded tail.
+  const loadedBefore = column ? [...column.items] : []
+  removeCard(columns, card.id)
   if (!column?.loaded) return
-  const fits = matchesCard(card, filters) && withinLoaded(column.items, card, column.cursor !== null)
+  const fits = matchesCard(card, filters) && withinLoaded(loadedBefore, card, column.cursor !== null)
   if (force || fits) column.items = placeCard(column.items, card)
-}
-
-/** A copy of every column's card list, to restore if a change is refused. */
-export function snapshot(columns: Columns): Record<string, CardSummary[]> {
-  return Object.fromEntries(Object.entries(columns).map(([id, c]) => [id, [...c.items]]))
-}
-
-export function restore(columns: Columns, saved: Record<string, CardSummary[]>): void {
-  for (const [id, items] of Object.entries(saved)) if (columns[id]) columns[id].items = items
 }

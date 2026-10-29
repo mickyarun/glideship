@@ -32,6 +32,7 @@ export function useBoardFilters(apply: (filters: CardFilters) => void) {
   /** My saved filters for a board (none if they can't be read). */
   async function restore(key: string): Promise<CardFilters> {
     boardKey = key
+    clearTimeout(applyTimer)
     clearTimeout(saveTimer)
     let saved: CardFilters = { ...NO_FILTERS }
     try {
@@ -39,6 +40,8 @@ export function useBoardFilters(apply: (filters: CardFilters) => void) {
     } catch (err) {
       console.error('[boards] prefs fetch failed:', err)
     }
+    // A slow reply for a board I've since left mustn't fill the bar.
+    if (key !== boardKey) return saved
     restoring = true
     filters.value = saved
     restoring = false

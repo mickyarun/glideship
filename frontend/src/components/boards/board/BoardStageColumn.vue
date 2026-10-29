@@ -37,7 +37,7 @@
         :stages="stages"
         :labels-by-id="labelsById"
         :now="now"
-        :can-move="canDrag"
+        :can-move="canMove"
         :can-archive="canArchive"
         @move="(c, stageId) => emit('move', c, stageId)"
         @archive="emit('archive', $event)"
@@ -96,7 +96,9 @@ defineProps<{
   labelsById: Map<string, LabelRead>
   now: Date
   filtering: boolean
+  /** Drag is off on phones; the card menu still moves cards there. */
   canDrag: boolean
+  canMove: boolean
   canCreate: boolean
   canArchive: boolean
   titleMax: number | null

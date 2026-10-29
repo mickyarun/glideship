@@ -29,7 +29,7 @@ import type { CardEvent } from '@/types/boardSocket'
 import type { StageRead } from '@/types/boards'
 import { NO_FILTERS, toListParams, type CardFilters } from '@/utils/boardFilters'
 import {
-  emptyColumn, locate, removeCard, restore, snapshot, upsertCard, type Columns,
+  emptyColumn, locate, removeCard, upsertCard, type Columns,
 } from '@/utils/boardColumns'
 import { guessPosition, neighboursAt } from '@/utils/boardPositions'
 import { extractApiError } from '@/utils/errors'
@@ -39,8 +39,9 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
   const columns = ref<Columns>({})
   const counts = ref<Record<string, number>>({})
   const filters = ref<CardFilters>({ ...NO_FILTERS })
-  // The latest first-page request per stage; older replies are dropped.
-  const latest = new Map<string, number>()
+  // Each stage's current request generation: a first-page load starts a
+  // new one, Load more joins it, and replies from an older one are dropped.
+  const generation = new Map<string, number>()
   let requestSeq = 0
 
   /** Start on a board: no cards loaded, counts from its stages. */
@@ -48,7 +49,7 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
     boardKey.value = key
     filters.value = { ...initial }
     columns.value = {}
-    latest.clear()
+    generation.clear()
     syncStages(stages)
   }
 
@@ -63,10 +64,11 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
   /** The first page of a stage, or the next one with ``more``. */
   async function loadStage(stageId: string, more = false): Promise<void> {
     const column = columns.value[stageId]
-    if (!column || (more && !column.cursor)) return
-    const seq = ++requestSeq
-    if (!more) latest.set(stageId, seq)
+    if (!column || (more && (!column.cursor || column.loading))) return
+    if (!more) generation.set(stageId, ++requestSeq)
+    const mine = generation.get(stageId)
     const key = boardKey.value
+    const current = () => key === boardKey.value && generation.get(stageId) === mine
     column.loading = true
     column.error = ''
     try {
@@ -75,18 +77,17 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
         cursor: more ? column.cursor : null,
         ...toListParams(filters.value),
       })
-      if (key !== boardKey.value || (!more && latest.get(stageId) !== seq)) return
       const live = columns.value[stageId]
-      if (!live) return
+      if (!current() || !live) return
       live.items = more ? [...live.items, ...page.items] : page.items
       live.cursor = page.next_cursor
       live.loaded = true
     } catch (err) {
       const live = columns.value[stageId]
-      if (live) live.error = extractApiError(err, "Couldn't load these cards.")
+      if (current() && live) live.error = extractApiError(err, "Couldn't load these cards.")
     } finally {
       const live = columns.value[stageId]
-      if (live) live.loading = false
+      if (current() && live) live.loading = false
     }
   }
 
@@ -116,7 +117,6 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
       const now = neighboursAt(target.items, target.items.indexOf(found.card), cardId)
       if (now.after_id === n.after_id && now.before_id === n.before_id) return null
     }
-    const saved = { cols: snapshot(columns.value), counts: { ...counts.value } }
     removeCard(columns.value, cardId)
     const moved = { ...found.card, stage_id: toStageId, position: guessPosition(after, before) }
     upsertCard(columns.value, moved, filters.value, true)
@@ -129,8 +129,13 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
       if (locate(columns.value, cardId)) upsertCard(columns.value, detail, filters.value, true)
       return null
     } catch (err) {
-      restore(columns.value, saved.cols)
-      counts.value = saved.counts
+      // Undo only this move, so other moves and live changes made
+      // meanwhile stand.
+      upsertCard(columns.value, found.card, filters.value, true)
+      if (found.stageId !== toStageId) {
+        bump(toStageId, -1)
+        bump(found.stageId, 1)
+      }
       if (isAxiosError(err) && err.response?.status === 409) {
         void loadStage(toStageId)
         if (found.stageId !== toStageId) void loadStage(found.stageId)
@@ -153,14 +158,13 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
   async function archiveCard(cardId: string): Promise<string | null> {
     const found = locate(columns.value, cardId)
     if (!found) return null
-    const saved = snapshot(columns.value)
     removeCard(columns.value, cardId)
     bump(found.stageId, -1)
     try {
       await boardsApi.archiveCard(boardKey.value, found.card.number)
       return null
     } catch (err) {
-      restore(columns.value, saved)
+      upsertCard(columns.value, found.card, filters.value, true)
       bump(found.stageId, 1)
       return extractApiError(err, "Couldn't archive the card. Try again.")
     }
@@ -174,10 +178,11 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
   function applyCardEvent(message: CardEvent): boolean {
     if (message.actor_id && message.actor_id === useAuthStore().user?.id) return false
     const { card } = message
-    const previous = removeCard(columns.value, card.id)
+    const previous = locate(columns.value, card.id)
     let stale = false
     switch (message.event) {
       case 'card_archived':
+        removeCard(columns.value, card.id)
         bump(previous?.stageId ?? card.stage_id, -1)
         return false
       case 'card_created':

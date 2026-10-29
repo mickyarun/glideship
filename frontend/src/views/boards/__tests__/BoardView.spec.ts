@@ -80,6 +80,11 @@ describe('BoardView', () => {
     expect(wrapper.findAllComponents(BoardStageColumn).every(c => c.props('canDrag'))).toBe(true)
   })
 
+  it('still lets an editor move cards from the menu where drag is off (phones)', async () => {
+    const wrapper = await mountBoard(EDITOR_CAPS)
+    expect(wrapper.findAllComponents(BoardStageColumn).every(c => c.props('canMove'))).toBe(true)
+  })
+
   it('follows the board topic once the board loads', async () => {
     await mountBoard(EDITOR_CAPS)
     expect(vi.mocked(subscribe)).toHaveBeenCalledWith('board:b1', expect.any(Function))
