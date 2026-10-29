@@ -14,38 +14,35 @@
 
 """Turn board domain errors into HTTP responses, in one place."""
 
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, status
 
+from app.api.v1._domain_errors import ErrorTable, register_domain_errors
+from app.api.v1._domain_errors import status_for as _status_for
 from app.services.boards.errors import (
     BoardActionForbiddenError,
     BoardConflictError,
     BoardError,
     BoardItemNotFoundError,
     BoardRuleError,
+    BoardStorageError,
     BoardTooLargeError,
 )
 
-_STATUS: tuple[tuple[type[BoardError], int], ...] = (
+_STATUS: ErrorTable = (
     (BoardItemNotFoundError, status.HTTP_404_NOT_FOUND),
     (BoardActionForbiddenError, status.HTTP_403_FORBIDDEN),
     (BoardConflictError, status.HTTP_409_CONFLICT),
     (BoardRuleError, status.HTTP_422_UNPROCESSABLE_ENTITY),
     (BoardTooLargeError, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE),
+    (BoardStorageError, status.HTTP_502_BAD_GATEWAY),
 )
 
 
 def status_for(exc: BoardError) -> int:
     """The HTTP status for a board error (400 for an unclassified one)."""
-    return next((code for kind, code in _STATUS if isinstance(exc, kind)), 400)
-
-
-async def _respond(_request: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, BoardError):  # only ever registered for BoardError
-        raise exc
-    return JSONResponse({"detail": str(exc)}, status_code=status_for(exc))
+    return _status_for(exc, _STATUS)
 
 
 def register_board_errors(app: FastAPI) -> None:
     """Install the handler; call once wherever the API router is mounted."""
-    app.add_exception_handler(BoardError, _respond)
+    register_domain_errors(app, BoardError, _STATUS)

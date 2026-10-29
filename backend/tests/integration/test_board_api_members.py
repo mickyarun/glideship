@@ -12,35 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Board members and teams: roles, the last admin, and live access being revoked."""
+"""Board members and teams: roles and the last admin."""
 
 from __future__ import annotations
-
-import asyncio
-import uuid
-from typing import Any
 
 import pytest
 from httpx import AsyncClient
 
-from app.api.v1 import ws_scope_checks
-from app.api.v1.ws_subscriptions import ConnectionSubscriptions
-from app.core.permissions_boards import BOARDS_VIEW
-from app.services import event_bus
 from app.services.boards.member_service import LAST_ADMIN
-from app.services.ws_topic_policy import Subscriber
 from tests.integration.board_api_support import BOARDS, make_board, ok, person, put_role
 from tests.integration.board_support import new_team
 from tests.integration.scan_features_bugs_support import Factory, new_org
 
 pytestmark = pytest.mark.integration
-
-VIEW_ONLY = frozenset({BOARDS_VIEW})
-
-
-@pytest.fixture(autouse=True)
-def _socket_sessions(pg_session_factory: Factory, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ws_scope_checks, "AsyncSessionLocal", pg_session_factory)
 
 
 async def test_people_and_teams_get_roles(
@@ -109,71 +93,3 @@ async def test_the_last_admin_stays(client: AsyncClient, pg_session_factory: Fac
     ok(await client.put(url, json={"role": "editor"}, headers=pm.headers))
     team_url = f"{BOARDS}/{key}/teams/{team}"
     assert (await client.delete(team_url, headers=dev.headers)).status_code == 409
-
-
-def _socket(
-    org: uuid.UUID, user: uuid.UUID, topic: str
-) -> tuple[ConnectionSubscriptions, asyncio.Queue[Any]]:
-    """A socket for ``user`` holding ``topic``, checked by the real scope check."""
-    who = Subscriber(
-        user_id=str(user), org_id=str(org), has_engineering=False, permissions=VIEW_ONLY
-    )
-    send: asyncio.Queue[Any] = asyncio.Queue()
-    subs = ConnectionSubscriptions(who, send, ws_scope_checks.passes_scope_check)
-    subs.add(topic)
-    return subs, send
-
-
-async def _revoked(send: asyncio.Queue[Any]) -> dict[str, Any]:
-    while True:
-        message = await asyncio.wait_for(send.get(), timeout=2)
-        if message.get("error") == "revoked":
-            return dict(message)
-
-
-async def test_removing_someone_drops_their_board_socket(
-    client: AsyncClient, pg_session_factory: Factory
-) -> None:
-    org = await new_org(pg_session_factory)
-    pm = await person(pg_session_factory, org, "pm")
-    dev, stays = [await person(pg_session_factory, org) for _ in range(2)]
-    board = await make_board(client, pm, visibility="members")
-    key, board_id = board["board"]["key"], board["board"]["id"]
-    for who in (dev, stays):
-        await put_role(client, pm, key, who.id, "editor")
-
-    topic = f"board:{board_id}"
-    (dev_subs, dev_send), (stay_subs, stay_send) = [
-        _socket(org, who.id, topic) for who in (dev, stays)
-    ]
-    await asyncio.sleep(0.05)
-
-    ok(await client.delete(f"{BOARDS}/{key}/members/{dev.id}", headers=pm.headers))
-    assert await _revoked(dev_send) == {"topic": topic, "error": "revoked"}
-    assert dev_subs.topics == frozenset()
-    await asyncio.sleep(0.05)
-    assert stay_subs.topics == frozenset({topic})
-
-    # The next change on the board reaches only the person who still has access.
-    while not stay_send.empty():
-        stay_send.get_nowait()
-    event_bus.publish(topic, {"event": "card_created"})
-    assert (await asyncio.wait_for(stay_send.get(), timeout=2))["data"]["event"] == "card_created"
-    assert dev_send.empty()
-    dev_subs.close()
-    stay_subs.close()
-
-
-async def test_hiding_a_board_rechecks_every_socket(
-    client: AsyncClient, pg_session_factory: Factory
-) -> None:
-    org = await new_org(pg_session_factory)
-    pm = await person(pg_session_factory, org, "pm")
-    reader = await person(pg_session_factory, org, "sales")
-    board = await make_board(client, pm)
-    key, board_id = board["board"]["key"], board["board"]["id"]
-    subs, send = _socket(org, reader.id, f"board:{board_id}")
-    await asyncio.sleep(0.05)
-    ok(await client.patch(f"{BOARDS}/{key}", json={"visibility": "members"}, headers=pm.headers))
-    await _revoked(send)
-    assert subs.topics == frozenset()

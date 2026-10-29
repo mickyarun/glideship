@@ -25,15 +25,28 @@ from app.schemas.boards.text import DocText
 
 
 class DocWrite(BaseModel):
-    """A new current version of one document."""
+    """A new current version of one document.
+
+    ``base_version`` is the version the edit started from (``null`` for a
+    document that doesn't exist yet); a different current version is 409.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     body_md: DocText
+    base_version: int | None
 
 
-class DocRead(BaseModel):
-    """One version of one document."""
+class DocRestore(BaseModel):
+    """Restore an old version over the current one, which must be ``base_version``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_version: int | None
+
+
+class DocVersionRead(BaseModel):
+    """One version of one document, without its text."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -41,10 +54,22 @@ class DocRead(BaseModel):
     kind: BoardCardDocKind
     state: BoardCardDocState
     version: int
-    body_md: str
     source: BUDEditSource
     created_by: uuid.UUID | None
     created_at: datetime
+
+
+class DocRead(DocVersionRead):
+    """One version of one document, with its text."""
+
+    body_md: str
+
+
+class DocVersionPage(BaseModel):
+    """Newest first; pass ``next_before`` back as ``before`` for older versions."""
+
+    items: list[DocVersionRead]
+    next_before: int | None
 
 
 class DocList(BaseModel):

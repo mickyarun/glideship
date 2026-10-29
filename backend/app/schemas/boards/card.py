@@ -20,7 +20,7 @@ from datetime import datetime
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.models.bud import BUDPriority
-from app.schemas.boards.text import CardTitle, Description
+from app.schemas.boards.text import CardTitle, Description, IdList
 
 
 class CardCreate(BaseModel):
@@ -34,8 +34,8 @@ class CardCreate(BaseModel):
     priority: BUDPriority | None = None
     start_at: AwareDatetime | None = None
     due_at: AwareDatetime | None = None
-    assignee_ids: list[uuid.UUID] = Field(default_factory=list)
-    label_ids: list[uuid.UUID] = Field(default_factory=list)
+    assignee_ids: IdList = Field(default_factory=list)
+    label_ids: IdList = Field(default_factory=list)
 
 
 class CardUpdate(BaseModel):
@@ -49,8 +49,8 @@ class CardUpdate(BaseModel):
     start_at: AwareDatetime | None = None
     due_at: AwareDatetime | None = None
     due_done: bool | None = None
-    assignee_ids: list[uuid.UUID] | None = None
-    label_ids: list[uuid.UUID] | None = None
+    assignee_ids: IdList | None = None
+    label_ids: IdList | None = None
 
 
 class CardMove(BaseModel):
@@ -96,10 +96,13 @@ class CardSummary(BaseModel):
 
 
 class CardPage(BaseModel):
-    """One page of a stage's cards; pass ``next_after`` as ``after`` for the next."""
+    """One page of cards; pass ``next_cursor`` back as ``cursor`` for the next.
+
+    ``next_cursor`` is ``None`` on the last page.
+    """
 
     items: list[CardSummary]
-    next_after: uuid.UUID | None
+    next_cursor: str | None
 
 
 class CardDetail(CardSummary):

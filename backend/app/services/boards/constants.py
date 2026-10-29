@@ -29,11 +29,27 @@ BOARD_KEY_MIN_LENGTH: Final = 2
 BOARD_KEY_MAX_LENGTH: Final = 10
 
 # Card keys are ``{board key}-{number}``; BUD and BUG already name BUDs and
-# bugs. The others are path segments under ``/api/v1/boards`` that a board
-# key would otherwise share.
-RESERVED_BOARD_KEYS: Final = frozenset({"BUD", "BUG", "CARDS", "SWITCHER", "TEMPLATES"})
+# bugs. The others are fixed path segments under ``/api/v1/boards``, now or
+# planned, that a board key would otherwise share.
+RESERVED_BOARD_KEYS: Final = frozenset(
+    {"BUD", "BUG", "CARDS", "IMPORTS", "LIMITS", "SKILLS", "SWITCHER", "TEMPLATES"}
+)
 
 BOARD_KEY_PATTERN: Final = re.compile(rf"^[A-Z]{{{BOARD_KEY_MIN_LENGTH},{BOARD_KEY_MAX_LENGTH}}}$")
+
+# Product limits on what people type and attach. They shape the UI, so the
+# frontend reads them from ``GET /api/v1/boards/limits`` instead of copying.
+BOARD_DESCRIPTION_MAX_CHARS: Final = 5_000
+CARD_DESCRIPTION_MAX_CHARS: Final = 50_000
+CARD_DOC_MAX_CHARS: Final = 200_000
+COMMENT_MAX_CHARS: Final = 10_000
+CHECKLIST_TEXT_MAX_CHARS: Final = 2_000
+SEARCH_MAX_CHARS: Final = 200
+CHECKLIST_MAX_ITEMS: Final = 100
+LINKS_MAX_PER_CARD: Final = 50
+# Assignees, labels and the id lists sent to reorder stages.
+ID_LIST_MAX_ITEMS: Final = 50
+WIP_LIMIT_MAX: Final = 999
 
 # The BUD board, listed beside team boards for members of the engineering workspace.
 DELIVERY_BOARD_NAME: Final = "Delivery"
@@ -63,6 +79,7 @@ class BoardAction(StrEnum):
     CONFIGURE_AGENTS = "configure_agents"
     IMPORT = "import"
     ARCHIVE_BOARD = "archive_board"
+    REMOVE_ANY_ATTACHMENT = "remove_any_attachment"
 
 
 _VIEWER_ACTIONS: Final = (BoardAction.VIEW, BoardAction.COMMENT)
@@ -82,6 +99,7 @@ _ADMIN_ACTIONS: Final = (
     BoardAction.CONFIGURE_AGENTS,
     BoardAction.IMPORT,
     BoardAction.ARCHIVE_BOARD,
+    BoardAction.REMOVE_ANY_ATTACHMENT,
 )
 
 BOARD_ACTION_MIN_ROLE: Final = MappingProxyType(
@@ -91,6 +109,10 @@ BOARD_ACTION_MIN_ROLE: Final = MappingProxyType(
         **dict.fromkeys(_ADMIN_ACTIONS, BoardMemberRole.ADMIN),
     }
 )
+
+
+# All an archived board allows: reading it, and an admin restoring it.
+ARCHIVED_BOARD_ACTIONS: Final = frozenset({BoardAction.VIEW, BoardAction.ARCHIVE_BOARD})
 
 
 def capabilities_for(role: BoardMemberRole) -> list[BoardAction]:

@@ -14,14 +14,15 @@
 
 """A card's documents, edited by hand, with their versions."""
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import edit_card, read_card
+from app.api.v1.boards._access import edit_card, view_card
+from app.config import settings
 from app.core.deps import get_db
 from app.models.board_card import INT4_MAX
 from app.models.board_enums import BoardCardDocKind
-from app.schemas.boards.doc import DocList, DocRead, DocWrite
+from app.schemas.boards.doc import DocList, DocRead, DocRestore, DocVersionPage, DocWrite
 from app.services.boards import doc_service
 from app.services.boards.access import CardAccess
 
@@ -32,20 +33,33 @@ DOCS = "/{key}/cards/{number}/docs"
 
 @router.get(DOCS, response_model=DocList)
 async def list_docs(
-    target: CardAccess = Depends(read_card), db: AsyncSession = Depends(get_db)
+    target: CardAccess = Depends(view_card), db: AsyncSession = Depends(get_db)
 ) -> DocList:
     """The current version of each document."""
     return await doc_service.list_docs(db, target)
 
 
-@router.get(f"{DOCS}/{{kind}}/versions", response_model=list[DocRead])
+@router.get(f"{DOCS}/{{kind}}/versions", response_model=DocVersionPage)
 async def list_versions(
     kind: BoardCardDocKind,
-    target: CardAccess = Depends(read_card),
+    before: int | None = Query(default=None, ge=1, le=INT4_MAX),
+    limit: int | None = Query(default=None, ge=1, le=settings.boards.versions_page_size),
+    target: CardAccess = Depends(view_card),
     db: AsyncSession = Depends(get_db),
-) -> list[DocRead]:
-    """Every version of one document, newest first."""
-    return await doc_service.list_versions(db, target, kind)
+) -> DocVersionPage:
+    """A page of one document's versions, newest first, without their text."""
+    return await doc_service.list_versions(db, target, kind, before=before, limit=limit)
+
+
+@router.get(f"{DOCS}/{{kind}}/versions/{{version}}", response_model=DocRead)
+async def get_version(
+    kind: BoardCardDocKind,
+    version: int = Path(..., ge=1, le=INT4_MAX),
+    target: CardAccess = Depends(view_card),
+    db: AsyncSession = Depends(get_db),
+) -> DocRead:
+    """One version with its text."""
+    return await doc_service.get_version(db, target, kind, version)
 
 
 @router.put(f"{DOCS}/{{kind}}", response_model=DocRead)
@@ -55,16 +69,21 @@ async def write_doc(
     target: CardAccess = Depends(edit_card),
     db: AsyncSession = Depends(get_db),
 ) -> DocRead:
-    """Save a new current version of one document."""
-    return await doc_service.write_doc(db, target, kind, body.body_md)
+    """Save a new current version; 409 if the current one isn't ``base_version``."""
+    return await doc_service.write_doc(
+        db, target, kind, body.body_md, base_version=body.base_version
+    )
 
 
 @router.post(f"{DOCS}/{{kind}}/restore/{{version}}", response_model=DocRead)
 async def restore_version(
     kind: BoardCardDocKind,
+    body: DocRestore,
     version: int = Path(..., ge=1, le=INT4_MAX),
     target: CardAccess = Depends(edit_card),
     db: AsyncSession = Depends(get_db),
 ) -> DocRead:
-    """Make an old version's text current again."""
-    return await doc_service.restore_version(db, target, kind, version)
+    """Make an old version's text current again; 409 if the current one isn't ``base_version``."""
+    return await doc_service.restore_version(
+        db, target, kind, version, base_version=body.base_version
+    )

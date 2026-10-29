@@ -30,6 +30,23 @@ from app.models.board_enums import COMPLETED_CATEGORIES, BoardStageCategory
 from app.repositories.base import rowcount
 
 
+def _entry_stamps(category: BoardStageCategory, now: datetime) -> dict[str, object]:
+    """The started/completed columns for cards entering ``category``.
+
+    The SQL form of ``services/boards/card_timing.enter_category``.
+    """
+    stamps: dict[str, object] = {
+        "completed_at": (
+            func.coalesce(BoardCard.completed_at, now)
+            if category in COMPLETED_CATEGORIES
+            else None
+        )
+    }
+    if category is BoardStageCategory.IN_PROGRESS:
+        stamps["started_at"] = func.coalesce(BoardCard.started_at, now)
+    return stamps
+
+
 class BoardCardPositionRepository:
     """Ordering of cards inside the stages of one org's boards."""
 
@@ -142,22 +159,27 @@ class BoardCardPositionRepository:
             .where(BoardCard.org_id == self._org_id, BoardCard.stage_id == from_stage)
             .subquery()
         )
-        completed = (
-            func.coalesce(BoardCard.completed_at, now)
-            if to_category in COMPLETED_CATEGORIES
-            else None
-        )
         values: dict[str, object] = {
             "stage_id": to_stage,
             "position": start + ranked.c.rank * gap,
-            "completed_at": completed,
+            **_entry_stamps(to_category, now),
         }
-        if to_category is BoardStageCategory.IN_PROGRESS:
-            values["started_at"] = func.coalesce(BoardCard.started_at, now)
         stmt = (
             update(BoardCard)
             .where(BoardCard.id == ranked.c.id)
             .values(values)
+            .execution_options(synchronize_session=False)
+        )
+        return rowcount(await self._db.execute(stmt))
+
+    async def restamp(
+        self, stage_id: uuid.UUID, category: BoardStageCategory, *, now: datetime
+    ) -> int:
+        """Re-stamp every card in a stage whose category just changed."""
+        stmt = (
+            update(BoardCard)
+            .where(BoardCard.org_id == self._org_id, BoardCard.stage_id == stage_id)
+            .values(_entry_stamps(category, now))
             .execution_options(synchronize_session=False)
         )
         return rowcount(await self._db.execute(stmt))

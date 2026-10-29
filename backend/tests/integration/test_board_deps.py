@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""``require_board``: 404 for boards you can't see, 403 below the role, 409 when archived."""
+"""``require_action``: 404 for boards you can't see, 403 below the role, 409 when archived."""
 
 from __future__ import annotations
 
@@ -24,41 +24,46 @@ from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.board_deps import require_board
+from app.api.v1._board_errors import register_board_errors
+from app.core.board_deps import require_action
 from app.core.deps import get_db
 from app.models.board import Board
 from app.models.board_enums import BoardMemberRole, BoardStatus, BoardVisibility
 from app.services.boards.access import BoardAccess
+from app.services.boards.constants import BoardAction
 from tests.integration.board_support import add_member, board_key, new_board, seed
 from tests.integration.scan_features_bugs_support import Factory, as_user, new_member, new_org
 
 pytestmark = pytest.mark.integration
 
-VIEWER, EDITOR, ADMIN = BoardMemberRole.VIEWER, BoardMemberRole.EDITOR, BoardMemberRole.ADMIN
+EDITOR = BoardMemberRole.EDITOR
 NOT_FOUND = (404, {"detail": "Board not found."})
 
 
 @pytest.fixture
 async def http(pg_session_factory: Factory) -> AsyncIterator[AsyncClient]:
-    """A tiny app with viewer, editor, admin and writable routes on ``/boards/{key}``."""
+    """A tiny app with view, edit-card, settings and comment routes on ``/boards/{key}``."""
     await seed(pg_session_factory)
     app = FastAPI()
+    register_board_errors(app)
 
     @app.get("/boards/{key}")
-    async def view(access: BoardAccess = Depends(require_board(VIEWER))) -> str:
+    async def view(access: BoardAccess = Depends(require_action(BoardAction.VIEW))) -> str:
         return access.role.value
 
     @app.patch("/boards/{key}")
-    async def edit(access: BoardAccess = Depends(require_board(EDITOR))) -> str:
+    async def edit(access: BoardAccess = Depends(require_action(BoardAction.EDIT_CARD))) -> str:
         return access.role.value
 
     @app.put("/boards/{key}")
-    async def manage(access: BoardAccess = Depends(require_board(ADMIN))) -> str:
+    async def manage(
+        access: BoardAccess = Depends(require_action(BoardAction.EDIT_SETTINGS)),
+    ) -> str:
         return access.role.value
 
     @app.post("/boards/{key}")
     async def write(
-        access: BoardAccess = Depends(require_board(VIEWER, writable=True)),
+        access: BoardAccess = Depends(require_action(BoardAction.COMMENT)),
     ) -> str:
         return access.role.value
 

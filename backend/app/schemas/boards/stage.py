@@ -19,7 +19,8 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.board_enums import BoardStageCategory
-from app.schemas.boards.text import StageName
+from app.schemas.boards.text import OrderList, StageName
+from app.services.boards.constants import WIP_LIMIT_MAX
 
 
 class StageCreate(BaseModel):
@@ -29,7 +30,7 @@ class StageCreate(BaseModel):
 
     name: StageName
     category: BoardStageCategory
-    wip_limit: int | None = Field(default=None, gt=0)
+    wip_limit: int | None = Field(default=None, gt=0, le=WIP_LIMIT_MAX)
     is_default: bool = False
 
 
@@ -40,7 +41,7 @@ class StageUpdate(BaseModel):
 
     name: StageName | None = None
     category: BoardStageCategory | None = None
-    wip_limit: int | None = Field(default=None, gt=0)
+    wip_limit: int | None = Field(default=None, gt=0, le=WIP_LIMIT_MAX)
     is_default: bool | None = None
 
 
@@ -49,7 +50,7 @@ class StageOrder(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    stage_ids: list[uuid.UUID] = Field(min_length=1)
+    stage_ids: OrderList
 
 
 class StageRead(BaseModel):

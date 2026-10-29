@@ -12,23 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The access each kind of board route needs, named once for every module.
+"""The board action each kind of route performs, named once for every module.
 
-Reads need any role; comments need any role on an active board; card work
-needs an editor; settings, stages, members and labels need an admin. Every
-write refuses an archived board with 409, except restoring it.
+Each dependency resolves the caller's board role for one ``BoardAction``;
+the role it needs comes from ``BOARD_ACTION_MIN_ROLE``. Every write refuses
+an archived board with 409, except restoring it and personal prefs.
 """
 
-from app.core.board_deps import require_board, require_card
-from app.models.board_enums import BoardMemberRole
+from app.core.board_deps import require_action, require_card_action
+from app.services.boards.constants import BoardAction
 
-VIEWER, EDITOR, ADMIN = BoardMemberRole.VIEWER, BoardMemberRole.EDITOR, BoardMemberRole.ADMIN
+view_board = require_action(BoardAction.VIEW)
+edit_settings = require_action(BoardAction.EDIT_SETTINGS)
+archive_board = require_action(BoardAction.ARCHIVE_BOARD)
+restore_board = require_action(BoardAction.ARCHIVE_BOARD, writable=False)
+manage_stages = require_action(BoardAction.MANAGE_STAGES)
+manage_members = require_action(BoardAction.MANAGE_MEMBERS)
+manage_labels = require_action(BoardAction.MANAGE_LABELS)
+create_card = require_action(BoardAction.CREATE_CARD)
 
-read_board = require_board(VIEWER)
-edit_board = require_board(EDITOR, writable=True)
-admin_board = require_board(ADMIN, writable=True)
-restore_board = require_board(ADMIN)
-
-read_card = require_card(VIEWER)
-comment_card = require_card(VIEWER, writable=True)
-edit_card = require_card(EDITOR, writable=True)
+view_card = require_card_action(BoardAction.VIEW)
+comment_card = require_card_action(BoardAction.COMMENT)
+edit_card = require_card_action(BoardAction.EDIT_CARD)
+move_card = require_card_action(BoardAction.MOVE_CARD)
+archive_card = require_card_action(BoardAction.ARCHIVE_CARD)

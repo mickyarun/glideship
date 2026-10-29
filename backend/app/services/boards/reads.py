@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board import Board
 from app.models.board_card import BoardCard
-from app.models.board_enums import BoardMemberRole, BoardStatus
 from app.repositories.board_card_summary import BoardCardSummaryRepository, CardSummaryRow
 from app.repositories.board_label import BoardLabelRepository
 from app.repositories.board_prefs import BoardPrefsRepository
@@ -28,24 +27,12 @@ from app.schemas.boards.card import CardDetail, CardSummary
 from app.schemas.boards.label import LabelRead
 from app.schemas.boards.stage import StageRead
 from app.services.boards.access import BoardAccess
-from app.services.boards.constants import BoardAction, capabilities_for
 from app.services.boards.errors import BoardItemNotFoundError
-
-# All an archived board allows: reading it, and an admin restoring it.
-_ARCHIVED_ACTIONS = frozenset({BoardAction.VIEW, BoardAction.ARCHIVE_BOARD})
 
 
 def card_key(board: Board, number: int) -> str:
     """A card's display key, e.g. ``SEO-14``."""
     return f"{board.key}-{number}"
-
-
-def capabilities(board: Board, role: BoardMemberRole) -> list[BoardAction]:
-    """What ``role`` may do on ``board`` right now."""
-    allowed = capabilities_for(role)
-    if board.status is BoardStatus.ARCHIVED:
-        return [a for a in allowed if a in _ARCHIVED_ACTIONS]
-    return allowed
 
 
 async def board_detail(db: AsyncSession, access: BoardAccess) -> BoardDetail:
@@ -64,7 +51,7 @@ async def board_detail(db: AsyncSession, access: BoardAccess) -> BoardDetail:
         stages=stages,
         labels=[LabelRead.model_validate(label) for label in labels],
         role=access.role,
-        capabilities=capabilities(board, access.role),
+        capabilities=access.capabilities(),
         starred=bool(prefs and prefs.starred),
     )
 
@@ -89,6 +76,12 @@ def card_summary(board: Board, row: CardSummaryRow) -> CardSummary:
         checklist_done=row.checklist_done,
         checklist_total=row.checklist_total,
     )
+
+
+def summary_json(card: CardSummary) -> dict[str, object]:
+    """A card's summary fields as a socket payload (never the full detail)."""
+    fields = set(CardSummary.model_fields)
+    return CardSummary.model_validate(card.model_dump(include=fields)).model_dump(mode="json")
 
 
 async def card_detail(db: AsyncSession, board: Board, card: BoardCard) -> CardDetail:

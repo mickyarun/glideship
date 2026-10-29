@@ -14,16 +14,14 @@
 
 """A person's star and saved filters for a board, and the board switcher."""
 
-import uuid
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.config import settings
-from app.models.board_enums import BoardMemberRole
 from app.models.bud import BUDPriority
-from app.schemas.boards.board import DeliveryBoardItem
-from app.schemas.boards.text import SEARCH_MAX_LENGTH
+from app.schemas.boards.board import CustomBoardItem, DeliveryBoardItem
+from app.schemas.boards.text import SEARCH_MAX_LENGTH, IdList
 
 
 class BoardFilters(BaseModel):
@@ -36,8 +34,8 @@ class BoardFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     q: str | None = Field(default=None, max_length=SEARCH_MAX_LENGTH)
-    assignee_ids: list[uuid.UUID] = Field(default_factory=list)
-    label_ids: list[uuid.UUID] = Field(default_factory=list)
+    assignee_ids: IdList = Field(default_factory=list)
+    label_ids: IdList = Field(default_factory=list)
     priorities: list[BUDPriority] = Field(default_factory=list)
     archived: bool = False
 
@@ -64,19 +62,13 @@ class PrefsRead(BaseModel):
     filters: BoardFilters
 
 
-class SwitcherBoard(BaseModel):
-    """A board in the switcher."""
-
-    id: uuid.UUID
-    key: str
-    name: str
-    role: BoardMemberRole
-
-
 class SwitcherRead(BaseModel):
-    """The switcher's groups; ``delivery`` is set for engineering members."""
+    """The switcher's groups, in the same item shapes as the boards list.
 
-    starred: list[SwitcherBoard]
-    recent: list[SwitcherBoard]
-    other: list[SwitcherBoard]
+    ``delivery`` is set for engineering members (when it matches the search).
+    """
+
+    starred: list[CustomBoardItem]
+    recent: list[CustomBoardItem]
+    other: list[CustomBoardItem]
     delivery: DeliveryBoardItem | None

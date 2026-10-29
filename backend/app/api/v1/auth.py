@@ -28,9 +28,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.board_deps import caller_has_boards
 from app.core.deps import (
+    PermissionSet,
     get_current_user,
     get_current_user_pending_password,
     get_db,
+    get_permission_set,
     get_user_permissions,
 )
 from app.core.security import (
@@ -200,6 +202,7 @@ async def refresh(
 async def get_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    perms: PermissionSet = Depends(get_permission_set),
     has_boards: bool = Depends(caller_has_boards),
 ) -> UserRead:
     """Return the currently authenticated user's profile with permissions.
@@ -207,12 +210,14 @@ async def get_me(
     Args:
         current_user: The authenticated user resolved from the JWT token.
         db: The async database session.
+        perms: The caller's permission set, shared with ``caller_has_boards``.
         has_boards: Whether the user can open at least one board.
 
     Returns:
         UserRead with role_name, permissions and has_boards populated.
     """
-    perms = await get_user_permissions(current_user, db)
+    # The owner's set is "everything", so list the role's own permissions.
+    ids = await get_user_permissions(current_user, db) if perms.is_owner else set(perms.ids)
     role_name = current_user.role_ref.name if current_user.role_ref else None
 
     return UserRead(
@@ -222,7 +227,7 @@ async def get_me(
         name=current_user.name,
         role=current_user.role,
         role_name=role_name,
-        permissions=sorted(perms),
+        permissions=sorted(ids),
         slack_id=current_user.slack_id,
         github_username=current_user.github_username,
         character_model=current_user.character_model,

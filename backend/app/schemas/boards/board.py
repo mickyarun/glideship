@@ -24,7 +24,7 @@ from app.models.board_enums import BoardMemberRole, BoardStatus, BoardVisibility
 from app.models.bud import BUDStatus
 from app.schemas.boards.label import LabelRead
 from app.schemas.boards.stage import StageRead
-from app.schemas.boards.text import BoardName
+from app.schemas.boards.text import BoardDescription, BoardName
 from app.services.boards.board_template import TemplateStage
 from app.services.boards.constants import BOARD_KEY_MAX_LENGTH, BoardAction
 
@@ -38,7 +38,7 @@ class BoardCreate(BaseModel):
     key: str = Field(min_length=1, max_length=BOARD_KEY_MAX_LENGTH)
     template: str = Field(min_length=1)
     visibility: BoardVisibility = BoardVisibility.ORG
-    description: str | None = None
+    description: BoardDescription | None = None
 
 
 class BoardUpdate(BaseModel):
@@ -47,7 +47,7 @@ class BoardUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: BoardName | None = None
-    description: str | None = None
+    description: BoardDescription | None = None
     visibility: BoardVisibility | None = None
     handover_enabled: bool | None = None
     handover_stage_id: uuid.UUID | None = None

@@ -23,13 +23,16 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.board_card_detail import BoardCardComment
 from app.models.board_enums import BoardCardEventType
 from app.repositories.board_card_thread import BoardCardCommentRepository
 from app.repositories.thread import is_comment_author
 from app.repositories.user import PersonCard, UserRepository
-from app.schemas.boards.card_detail import CommentRead
+from app.schemas.boards.card_detail import CommentPage, CommentRead
 from app.services.boards.access import CardAccess
+from app.services.boards.card_checks import check_open
+from app.services.boards.cursor import decode_time_cursor, encode_cursor
 from app.services.boards.errors import (
     BoardActionForbiddenError,
     BoardConflictError,
@@ -39,15 +42,28 @@ from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 
 
-async def list_comments(db: AsyncSession, target: CardAccess) -> list[CommentRead]:
-    """The card's thread, oldest first, tombstones in place."""
+async def list_comments(
+    db: AsyncSession, target: CardAccess, *, cursor: str | None, limit: int | None
+) -> CommentPage:
+    """A page of the card's thread, oldest first, tombstones in place."""
+    size = limit or settings.boards.comments_page_size
     repo = BoardCardCommentRepository(db, org_id=target.access.org_id)
-    return await _read(db, target, await repo.list_comments(target.card.id))
+    after = decode_time_cursor(cursor) if cursor else None
+    rows = await repo.page(target.card.id, after=after, limit=size + 1)
+    page = rows[:size]
+    last = page[-1] if page and len(rows) > size else None
+    return CommentPage(
+        items=await _read(db, target, page),
+        next_cursor=None
+        if last is None
+        else encode_cursor(last.created_at.isoformat(), str(last.id)),
+    )
 
 
 async def add_comment(db: AsyncSession, target: CardAccess, body: str) -> CommentRead:
     """Post a comment as the caller."""
     access, card = target.access, target.card
+    check_open(card)
     comment = await BoardCardCommentRepository(db, org_id=access.org_id).create(
         BoardCardComment(
             org_id=access.org_id, card_id=card.id, author_id=access.user_id, body=body
@@ -67,6 +83,7 @@ async def edit_comment(
     db: AsyncSession, target: CardAccess, comment_id: uuid.UUID, body: str
 ) -> CommentRead:
     """Change the caller's own comment."""
+    check_open(target.card)
     repo = BoardCardCommentRepository(db, org_id=target.access.org_id)
     comment = await _own(repo, target, comment_id)
     if comment.deleted_at is not None:
@@ -78,6 +95,7 @@ async def delete_comment(
     db: AsyncSession, target: CardAccess, comment_id: uuid.UUID
 ) -> CommentRead:
     """Tombstone the caller's own comment; deleting it again changes nothing."""
+    check_open(target.card)
     repo = BoardCardCommentRepository(db, org_id=target.access.org_id)
     comment = await _own(repo, target, comment_id)
     if comment.deleted_at is not None:
@@ -101,7 +119,7 @@ async def _announce(
     db: AsyncSession, target: CardAccess, comment: BoardCardComment
 ) -> CommentRead:
     (read,) = await _read(db, target, [comment])
-    changes = BoardChanges(target.access.board.id)
+    changes = BoardChanges.of(target.access)
     changes.emit(BoardSocketEvent.CARD_ACTIVITY, card_id=str(target.card.id))
     await changes.commit(db)
     return read

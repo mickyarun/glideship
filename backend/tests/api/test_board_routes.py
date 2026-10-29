@@ -26,6 +26,12 @@ from app.api.router import api_router
 from app.core.permissions import WORKSPACE_ENGINEERING
 from app.core.permissions_boards import BOARDS_VIEW
 from app.models.board_enums import BoardMemberRole
+from app.services.boards.constants import (
+    BOARD_ACTION_MIN_ROLE,
+    BOARD_KEY_PATTERN,
+    RESERVED_BOARD_KEYS,
+    BoardAction,
+)
 from tests.api.route_walk import ServedRoute, depends_on, served_routes
 
 BOARD_API_MODULES = (
@@ -120,3 +126,37 @@ def test_settings_routes_need_an_admin() -> None:
         member_write = "/members/" in route.path or "/labels" in route.path
         if settings_route or (member_write and _method(route) != "GET"):
             assert dep.board_min_role is ADMIN, route.path
+
+
+def test_every_keyed_route_declares_its_action() -> None:
+    for route in board_routes():
+        dep = board_dep(route)
+        if dep is None:
+            continue
+        assert isinstance(dep.board_action, BoardAction), route.path
+        assert dep.board_min_role is BOARD_ACTION_MIN_ROLE[dep.board_action], route.path
+
+
+def test_reads_are_view_and_card_writes_need_an_editor_except_comments() -> None:
+    viewer, editor = BoardMemberRole.VIEWER, BoardMemberRole.EDITOR
+    for route in board_routes():
+        dep = board_dep(route)
+        if dep is None:
+            continue
+        if _method(route) == "GET":
+            assert dep.board_action is BoardAction.VIEW, route.path
+        elif route.path.startswith(CARD_PATHS):
+            expected = viewer if "/comments" in route.path else editor
+            assert dep.board_min_role is expected, (route.methods, route.path)
+
+
+def test_fixed_path_segments_can_never_be_a_board_key() -> None:
+    fixed = {
+        r.path.removeprefix(f"{PREFIX}/").split("/", 1)[0]
+        for r in board_routes()
+        if r.path.startswith(f"{PREFIX}/") and not r.path.startswith(f"{PREFIX}/{{")
+    }
+    assert {"templates", "switcher", "cards", "limits"} <= fixed
+    for segment in fixed:
+        key = segment.upper()
+        assert key in RESERVED_BOARD_KEYS or not BOARD_KEY_PATTERN.fullmatch(key), segment

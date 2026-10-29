@@ -58,7 +58,7 @@ async def delete_label(db: AsyncSession, access: BoardAccess, label_id: uuid.UUI
     """Delete a label; cards carrying it lose it."""
     label = await _get(db, access, label_id)
     await BoardLabelRepository(db, org_id=access.org_id).delete(label)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     changes.emit(BoardSocketEvent.LABEL_CHANGED, label_id=str(label_id), deleted=True)
     await changes.commit(db)
 
@@ -75,7 +75,7 @@ async def _save(db: AsyncSession, access: BoardAccess, label: BoardLabel) -> Lab
     if not await BoardLabelRepository(db, org_id=access.org_id).save(label):
         raise BoardConflictError(LABEL_TAKEN)
     read = LabelRead.model_validate(label)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     changes.emit(BoardSocketEvent.LABEL_CHANGED, label=read.model_dump(mode="json"))
     await changes.commit(db)
     return read

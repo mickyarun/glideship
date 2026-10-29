@@ -17,7 +17,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import admin_board, read_board, restore_board
+from app.api.v1.boards import _access as can
 from app.core.board_deps import board_caller
 from app.core.deps import get_db, require_permissions
 from app.core.permissions_boards import BOARDS_CREATE
@@ -53,16 +53,19 @@ async def create_board(
 
 @router.get("/{key}", response_model=BoardDetail)
 async def open_board(
-    access: BoardAccess = Depends(read_board), db: AsyncSession = Depends(get_db)
+    access: BoardAccess = Depends(can.view_board), db: AsyncSession = Depends(get_db)
 ) -> BoardDetail:
-    """The board, its stages and labels, my role and what I may do."""
+    """The board, its stages and labels, my role and what I may do.
+
+    Also records my visit (throttled) for the switcher's recent list.
+    """
     return await board_service.open_board(db, access)
 
 
 @router.patch("/{key}", response_model=BoardDetail)
 async def update_board(
     body: BoardUpdate,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(can.edit_settings),
     db: AsyncSession = Depends(get_db),
 ) -> BoardDetail:
     """Change the board's settings."""
@@ -71,7 +74,7 @@ async def update_board(
 
 @router.post("/{key}/archive", response_model=BoardDetail)
 async def archive_board(
-    access: BoardAccess = Depends(admin_board), db: AsyncSession = Depends(get_db)
+    access: BoardAccess = Depends(can.archive_board), db: AsyncSession = Depends(get_db)
 ) -> BoardDetail:
     """Archive the board; nothing on it can change until it's restored."""
     return await board_settings.set_archived(db, access, archived=True)
@@ -79,7 +82,7 @@ async def archive_board(
 
 @router.post("/{key}/restore", response_model=BoardDetail)
 async def restore(
-    access: BoardAccess = Depends(restore_board), db: AsyncSession = Depends(get_db)
+    access: BoardAccess = Depends(can.restore_board), db: AsyncSession = Depends(get_db)
 ) -> BoardDetail:
     """Bring an archived board back."""
     return await board_settings.set_archived(db, access, archived=False)

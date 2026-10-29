@@ -19,7 +19,7 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import admin_board, read_board
+from app.api.v1.boards._access import manage_members, view_board
 from app.core.deps import get_db
 from app.schemas.boards.member import MembersRead, RoleBody
 from app.services.boards import member_service
@@ -30,7 +30,7 @@ router = APIRouter(tags=["boards"])
 
 @router.get("/{key}/members", response_model=MembersRead)
 async def list_members(
-    access: BoardAccess = Depends(read_board), db: AsyncSession = Depends(get_db)
+    access: BoardAccess = Depends(view_board), db: AsyncSession = Depends(get_db)
 ) -> MembersRead:
     """Everyone with a role of their own, and every team with one."""
     return await member_service.list_members(db, access)
@@ -40,7 +40,7 @@ async def list_members(
 async def put_member(
     user_id: uuid.UUID,
     body: RoleBody,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_members),
     db: AsyncSession = Depends(get_db),
 ) -> MembersRead:
     """Give a person a role of their own on the board."""
@@ -50,7 +50,7 @@ async def put_member(
 @router.delete("/{key}/members/{user_id}", response_model=MembersRead)
 async def remove_member(
     user_id: uuid.UUID,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_members),
     db: AsyncSession = Depends(get_db),
 ) -> MembersRead:
     """Take away a person's own role on the board."""
@@ -61,7 +61,7 @@ async def remove_member(
 async def put_team(
     team_id: uuid.UUID,
     body: RoleBody,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_members),
     db: AsyncSession = Depends(get_db),
 ) -> MembersRead:
     """Give a team a role on the board."""
@@ -71,7 +71,7 @@ async def put_team(
 @router.delete("/{key}/teams/{team_id}", response_model=MembersRead)
 async def remove_team(
     team_id: uuid.UUID,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_members),
     db: AsyncSession = Depends(get_db),
 ) -> MembersRead:
     """Take away a team's role on the board."""

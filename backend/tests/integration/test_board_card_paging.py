@@ -23,9 +23,10 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import event
+from sqlalchemy import event, update
 
 from app.config import settings
+from app.models.board_card import BoardCard
 from app.repositories.board_card_summary import BoardCardSummaryRepository, CardQuery
 from tests.integration.board_api_support import (
     BOARDS,
@@ -36,6 +37,7 @@ from tests.integration.board_api_support import (
     page,
     person,
     stage_id,
+    walk,
 )
 from tests.integration.scan_features_bugs_support import Factory, new_org
 
@@ -53,53 +55,83 @@ async def _org_of(client: AsyncClient, who: Person) -> uuid.UUID:
     return uuid.UUID(ok(await client.get("/api/v1/auth/me", headers=who.headers))["org_id"])
 
 
-async def test_pages_follow_position_then_id_and_filters_narrow_them(
+async def _label(client: AsyncClient, pm: Person, key: str) -> str:
+    url = f"{BOARDS}/{key}/labels"
+    body = ok(await client.post(url, json={"name": "L", "color": "red"}, headers=pm.headers), 201)
+    return str(body["id"])
+
+
+async def test_pages_follow_position_and_filters_narrow_them(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     pm, board, key = await _setup(client, pg_session_factory)
     backlog = stage_id(board, "Backlog")
-    label = ok(
-        await client.post(
-            f"{BOARDS}/{key}/labels", json={"name": "L", "color": "red"}, headers=pm.headers
-        ),
-        201,
-    )
+    label = await _label(client, pm, key)
     titles = [f"Card {i:02d}" for i in range(7)]
     for i, title in enumerate(titles):
-        extra = {"label_ids": [label["id"]], "priority": "P0"} if i % 3 == 0 else {}
+        extra = {"label_ids": [label], "priority": "P0"} if i % 3 == 0 else {}
         await make_card(client, pm, key, title, **extra)
 
-    seen, after = [], None
-    while True:
-        params = {"limit": 3, **({"after": after} if after else {})}
-        body = await page(client, pm, key, backlog, **params)
-        seen += [c["title"] for c in body["items"]]
-        after = body["next_after"]
-        if after is None:
-            break
-    assert seen == titles
+    cards, pages = await walk(client, pm, key, backlog, limit=3)
+    assert [c["title"] for c in cards] == titles and pages == 3
+    tagged = ["Card 00", "Card 03", "Card 06"]
+    cards, pages = await walk(client, pm, key, backlog, label=label, limit=2)
+    assert [c["title"] for c in cards] == tagged and pages == 2
+    cards, _ = await walk(client, pm, key, backlog, priority="P0")
+    assert [c["title"] for c in cards] == tagged
+    found = await page(client, pm, key, backlog, q="d 04")
+    assert [c["title"] for c in found["items"]] == ["Card 04"]
 
-    labelled = await page(client, pm, key, backlog, label=label["id"])
-    assert [c["title"] for c in labelled["items"]] == ["Card 00", "Card 03", "Card 06"]
-    assert [
-        c["title"] for c in (await page(client, pm, key, backlog, priority="P0"))["items"]
-    ] == [
-        "Card 00",
-        "Card 03",
-        "Card 06",
-    ]
-    assert [c["title"] for c in (await page(client, pm, key, backlog, q="d 04"))["items"]] == [
-        "Card 04"
-    ]
+
+async def test_an_exact_last_page_has_no_next_cursor(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    pm, board, key = await _setup(client, pg_session_factory)
+    backlog = stage_id(board, "Backlog")
+    for i in range(4):
+        await make_card(client, pm, key, f"C{i}")
+    first = await page(client, pm, key, backlog, limit=2)
+    second = await page(client, pm, key, backlog, limit=2, cursor=first["next_cursor"])
+    assert len(second["items"]) == 2 and second["next_cursor"] is None
+
+
+async def test_tied_positions_page_every_card_once_in_id_order(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    pm, board, key = await _setup(client, pg_session_factory)
+    backlog = stage_id(board, "Backlog")
+    made = [await make_card(client, pm, key, f"Tie {i}") for i in range(5)]
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(BoardCard)
+            .where(BoardCard.id.in_([uuid.UUID(c["id"]) for c in made]))
+            .values(position=1.0)
+        )
+        await db.commit()
+    cards, pages = await walk(client, pm, key, backlog, limit=2)
+    assert [c["id"] for c in cards] == sorted(c["id"] for c in made) and pages == 3
+
+
+async def test_board_wide_lists_need_a_search_or_the_archive(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    pm, board, key = await _setup(client, pg_session_factory)
+    await make_card(client, pm, key, "Backlog needle")
+    await make_card(client, pm, key, "Doing needle", stage_id=stage_id(board, "In progress"))
+    await make_card(client, pm, key, "Other")
+    cards, _ = await walk(client, pm, key, None, q="needle")
+    assert sorted(c["title"] for c in cards) == ["Backlog needle", "Doing needle"]
+    url = f"{BOARDS}/{key}/cards"
+    assert (await client.get(url, headers=pm.headers)).status_code == 422
+    bad = await client.get(url, params={"q": "x", "cursor": "nope"}, headers=pm.headers)
+    assert bad.status_code == 422
     over = await client.get(
-        f"{BOARDS}/{key}/cards",
-        params={"stage_id": backlog, "limit": settings.boards.stage_page_size + 1},
+        url,
+        params={"q": "x", "limit": settings.boards.stage_page_size + 1},
         headers=pm.headers,
     )
     assert over.status_code == 422
-    other_stage = await client.get(
-        f"{BOARDS}/{key}/cards", params={"stage_id": str(uuid.uuid4())}, headers=pm.headers
-    )
+    other_stage = await client.get(url, params={"stage_id": str(uuid.uuid4())}, headers=pm.headers)
     assert other_stage.status_code == 404
 
 

@@ -127,6 +127,10 @@ async def test_assignees_need_board_access_and_labels_must_be_this_boards(
     ):
         resp = await client.post(url, json={"title": "x", **bad}, headers=pm.headers)
         assert resp.status_code == 422, bad
+    card = await make_card(client, pm, key)
+    card_url = f"{url}/{card['number']}"
+    for bad in ({"assignee_ids": [str(outsider.id)]}, {"label_ids": [their_label["id"]]}):
+        assert (await client.patch(card_url, json=bad, headers=pm.headers)).status_code == 422
     await put_role(client, pm, key, outsider.id, "viewer")
     card = await make_card(client, pm, key, assignee_ids=[str(outsider.id)])
     assert card["assignee_ids"] == [str(outsider.id)]

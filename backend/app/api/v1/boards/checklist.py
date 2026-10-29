@@ -19,7 +19,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import edit_card, read_card
+from app.api.v1.boards._access import edit_card, view_card
 from app.config import settings
 from app.core.deps import get_db
 from app.schemas.boards.card_detail import (
@@ -39,7 +39,7 @@ CHECKLIST = "/{key}/cards/{number}/checklist"
 
 @router.get(CHECKLIST, response_model=list[ChecklistItemRead])
 async def list_items(
-    target: CardAccess = Depends(read_card), db: AsyncSession = Depends(get_db)
+    target: CardAccess = Depends(view_card), db: AsyncSession = Depends(get_db)
 ) -> list[ChecklistItemRead]:
     """The card's checklist, top to bottom."""
     return await checklist_service.list_items(db, target)
@@ -90,7 +90,7 @@ async def delete_item(
 async def list_events(
     before: uuid.UUID | None = None,
     limit: int | None = Query(default=None, ge=1, le=settings.boards.events_page_size),
-    target: CardAccess = Depends(read_card),
+    target: CardAccess = Depends(view_card),
     db: AsyncSession = Depends(get_db),
 ) -> EventPage:
     """The card's history, newest first."""

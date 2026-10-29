@@ -19,7 +19,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import edit_board, edit_card, read_board, read_card
+from app.api.v1.boards import _access as can
 from app.config import settings
 from app.core.deps import get_db
 from app.models.bud import BUDPriority
@@ -28,6 +28,7 @@ from app.schemas.boards.card import CardCreate, CardDetail, CardMove, CardPage, 
 from app.schemas.boards.text import SEARCH_MAX_LENGTH
 from app.services.boards import card_edit, card_move, card_service
 from app.services.boards.access import BoardAccess, CardAccess
+from app.services.boards.cursor import CURSOR_MAX_LENGTH, decode_position_cursor
 from app.services.boards.reads import card_detail
 
 router = APIRouter(tags=["boards"])
@@ -35,22 +36,25 @@ router = APIRouter(tags=["boards"])
 
 @router.get("/{key}/cards", response_model=CardPage)
 async def list_cards(
-    stage_id: uuid.UUID,
-    after: uuid.UUID | None = None,
+    stage_id: uuid.UUID | None = None,
+    cursor: str | None = Query(default=None, max_length=CURSOR_MAX_LENGTH),
     limit: int | None = Query(default=None, ge=1, le=settings.boards.stage_page_size),
     q: str | None = Query(default=None, max_length=SEARCH_MAX_LENGTH),
     assignee: uuid.UUID | None = None,
     label: uuid.UUID | None = None,
     priority: BUDPriority | None = None,
     archived: bool = False,
-    access: BoardAccess = Depends(read_board),
+    access: BoardAccess = Depends(can.view_board),
     db: AsyncSession = Depends(get_db),
 ) -> CardPage:
-    """One page of a stage's cards; pass ``next_after`` back as ``after`` for more."""
+    """One page of a stage's cards, or of the whole board when searching or archived.
+
+    Pass ``next_cursor`` back as ``cursor`` for the next page.
+    """
     query = CardQuery(
         stage_id=stage_id,
         limit=limit or settings.boards.stage_page_size,
-        after=after,
+        after=decode_position_cursor(cursor) if cursor else None,
         q=q,
         assignee=assignee,
         label=label,
@@ -63,7 +67,7 @@ async def list_cards(
 @router.post("/{key}/cards", response_model=CardDetail, status_code=status.HTTP_201_CREATED)
 async def create_card(
     body: CardCreate,
-    access: BoardAccess = Depends(edit_board),
+    access: BoardAccess = Depends(can.create_card),
     db: AsyncSession = Depends(get_db),
 ) -> CardDetail:
     """A new card at the bottom of its stage."""
@@ -72,7 +76,7 @@ async def create_card(
 
 @router.get("/{key}/cards/{number}", response_model=CardDetail)
 async def get_card(
-    target: CardAccess = Depends(read_card), db: AsyncSession = Depends(get_db)
+    target: CardAccess = Depends(can.view_card), db: AsyncSession = Depends(get_db)
 ) -> CardDetail:
     """One card."""
     return await card_detail(db, target.access.board, target.card)
@@ -81,7 +85,7 @@ async def get_card(
 @router.patch("/{key}/cards/{number}", response_model=CardDetail)
 async def update_card(
     body: CardUpdate,
-    target: CardAccess = Depends(edit_card),
+    target: CardAccess = Depends(can.edit_card),
     db: AsyncSession = Depends(get_db),
 ) -> CardDetail:
     """Edit a card's fields, assignees or labels."""
@@ -91,7 +95,7 @@ async def update_card(
 @router.post("/{key}/cards/{number}/move", response_model=CardDetail)
 async def move_card(
     body: CardMove,
-    target: CardAccess = Depends(edit_card),
+    target: CardAccess = Depends(can.move_card),
     db: AsyncSession = Depends(get_db),
 ) -> CardDetail:
     """Move a card to a stage of this board, between two neighbours."""
@@ -100,7 +104,7 @@ async def move_card(
 
 @router.post("/{key}/cards/{number}/archive", response_model=CardDetail)
 async def archive_card(
-    target: CardAccess = Depends(edit_card), db: AsyncSession = Depends(get_db)
+    target: CardAccess = Depends(can.archive_card), db: AsyncSession = Depends(get_db)
 ) -> CardDetail:
     """Archive a card."""
     return await card_move.set_card_archived(db, target, archived=True)
@@ -108,7 +112,7 @@ async def archive_card(
 
 @router.post("/{key}/cards/{number}/restore", response_model=CardDetail)
 async def restore_card(
-    target: CardAccess = Depends(edit_card), db: AsyncSession = Depends(get_db)
+    target: CardAccess = Depends(can.archive_card), db: AsyncSession = Depends(get_db)
 ) -> CardDetail:
     """Restore an archived card to the bottom of its stage."""
     return await card_move.set_card_archived(db, target, archived=False)

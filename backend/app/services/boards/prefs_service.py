@@ -24,10 +24,10 @@ from app.config import settings
 from app.repositories.board import VisibleBoard
 from app.repositories.board_prefs import BoardPrefsRepository
 from app.repositories.board_switcher import BoardSwitcherRepository
-from app.schemas.boards.board import DeliveryBoardItem
-from app.schemas.boards.prefs import BoardFilters, PrefsRead, SwitcherBoard, SwitcherRead
+from app.schemas.boards.board import CustomBoardItem, DeliveryBoardItem
+from app.schemas.boards.prefs import BoardFilters, PrefsRead, SwitcherRead
 from app.services.boards.access import BoardAccess, BoardCaller
-from app.services.boards.board_service import delivery_item
+from app.services.boards.board_service import custom_item, delivery_item
 
 
 async def read_prefs(db: AsyncSession, access: BoardAccess) -> PrefsRead:
@@ -59,9 +59,8 @@ async def set_filters(db: AsyncSession, access: BoardAccess, filters: BoardFilte
     return await read_prefs(db, access)
 
 
-def _entry(visible: VisibleBoard) -> SwitcherBoard:
-    board = visible.board
-    return SwitcherBoard(id=board.id, key=board.key, name=board.name, role=visible.role)
+def _entry(visible: VisibleBoard) -> CustomBoardItem:
+    return custom_item(visible)
 
 
 async def switcher(db: AsyncSession, caller: BoardCaller, q: str | None) -> SwitcherRead:

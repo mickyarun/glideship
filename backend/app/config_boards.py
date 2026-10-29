@@ -45,21 +45,12 @@ class BoardsConfig(BaseSettings):
     prefs_touch_interval_seconds: int = Field(
         default=300, ge=0, description="Minimum gap between last-opened writes."
     )
-    search_max_chars: int = Field(
-        default=200, gt=0, description="Longest card search or switcher query."
-    )
-    description_max_chars: int = Field(
-        default=50_000, gt=0, description="Longest card description."
-    )
-    doc_max_chars: int = Field(default=200_000, gt=0, description="Longest card document.")
-    comment_max_chars: int = Field(default=10_000, gt=0, description="Longest card comment.")
-    checklist_text_max_chars: int = Field(
-        default=2000, gt=0, description="Longest checklist line."
-    )
     filters_max_bytes: int = Field(
         default=4096, gt=0, description="Largest saved filter set, as JSON."
     )
     events_page_size: int = Field(default=50, gt=0, description="Card history entries per page.")
+    comments_page_size: int = Field(default=50, gt=0, description="Comments per page.")
+    versions_page_size: int = Field(default=50, gt=0, description="Document versions per page.")
     attachment_max_file_mb: int = Field(
         default=10, gt=0, description="Largest file one card attachment may be."
     )

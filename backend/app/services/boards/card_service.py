@@ -30,26 +30,35 @@ from app.services.boards.access import BoardAccess
 from app.services.boards.card_checks import check_assignees, check_dates, check_labels
 from app.services.boards.card_place import place_card
 from app.services.boards.card_timing import enter_category
-from app.services.boards.errors import BoardItemNotFoundError
+from app.services.boards.cursor import encode_cursor
+from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.reads import card_detail, card_summary
+from app.services.boards.reads import card_detail, card_summary, summary_json
 from app.services.boards.stage_service import STAGE_NOT_FOUND
 
 
 async def list_cards(db: AsyncSession, access: BoardAccess, query: CardQuery) -> CardPage:
-    """One page of a stage's cards in (position, id) order."""
-    stage = await BoardStageRepository(db, org_id=access.org_id).get_in_board(
-        access.board.id, query.stage_id
-    )
-    if stage is None:
-        raise BoardItemNotFoundError(STAGE_NOT_FOUND)
+    """One page of cards in (position, id) order.
+
+    Without a stage the page spans the board, which only searching or the
+    archived view asks for. One extra row is read so the last page knows
+    it's the last.
+    """
+    if query.stage_id is None:
+        if not (query.q or query.archived):
+            raise BoardRuleError("Pick a stage, or search or list archived cards.")
+    else:
+        stages = BoardStageRepository(db, org_id=access.org_id)
+        if await stages.get_in_board(access.board.id, query.stage_id) is None:
+            raise BoardItemNotFoundError(STAGE_NOT_FOUND)
     repo = BoardCardSummaryRepository(db, org_id=access.org_id)
     rows = await repo.list_summaries(access.board.id, replace(query, limit=query.limit + 1))
     page = rows[: query.limit]
+    last = page[-1] if page and len(rows) > query.limit else None
     return CardPage(
         items=[card_summary(access.board, row) for row in page],
-        next_after=page[-1].id if len(rows) > query.limit else None,
+        next_cursor=None if last is None else encode_cursor(last.position, str(last.id)),
     )
 
 
@@ -98,9 +107,9 @@ async def create_card(db: AsyncSession, access: BoardAccess, body: CardCreate) -
             detail={"user_ids": sorted(str(u) for u in added)},
         )
     detail = await card_detail(db, board, card)
-    changes = BoardChanges(board.id)
+    changes = BoardChanges.of(access)
     if placement.rebalanced:
         changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(stage.id))
-    changes.emit(BoardSocketEvent.CARD_CREATED, card=detail.model_dump(mode="json"))
+    changes.emit(BoardSocketEvent.CARD_CREATED, card=summary_json(detail))
     await changes.commit(db)
     return detail

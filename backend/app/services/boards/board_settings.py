@@ -40,7 +40,7 @@ async def update_board(db: AsyncSession, access: BoardAccess, body: BoardUpdate)
     writes take a stage lock and then the board row (for numbering), so
     the same order here can't deadlock with them.
     """
-    board, changes = access.board, BoardChanges(access.board.id)
+    board, changes = access.board, BoardChanges.of(access)
     stages = await BoardStageRepository(db, org_id=access.org_id).lock_board_stages(board.id)
     repo = BoardRepository(db, org_id=access.org_id)
     sent = body.model_fields_set
@@ -78,7 +78,7 @@ async def set_archived(db: AsyncSession, access: BoardAccess, *, archived: bool)
     if board.status is not target:
         board.status = target
         await BoardRepository(db, org_id=access.org_id).save(board)
-        changes = BoardChanges(board.id)
+        changes = BoardChanges.of(access)
         changes.emit(BoardSocketEvent.BOARD_UPDATED, board=_board_json(access))
         await changes.commit(db)
     return await board_detail(db, access)

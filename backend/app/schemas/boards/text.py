@@ -12,22 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Text field types shared by the board schemas.
+"""Field types shared by the board schemas.
 
 Names, titles and bodies are trimmed before their length is checked, so a
 value of only spaces is refused rather than stored empty. Lengths come
-from the column sizes or, for free text, from ``BoardsConfig``.
+from the column sizes or the product limits in ``services/boards/constants``.
 """
 
+import uuid
 from typing import Annotated
 
 from pydantic import Field, StringConstraints
 
-from app.config import settings
 from app.models.board import BOARD_NAME_LENGTH, LABEL_NAME_LENGTH, STAGE_NAME_LENGTH
 from app.models.board_card import CARD_TITLE_LENGTH
-
-_limits = settings.boards
+from app.services.boards.constants import (
+    BOARD_DESCRIPTION_MAX_CHARS,
+    CARD_DESCRIPTION_MAX_CHARS,
+    CARD_DOC_MAX_CHARS,
+    CHECKLIST_MAX_ITEMS,
+    CHECKLIST_TEXT_MAX_CHARS,
+    COMMENT_MAX_CHARS,
+    ID_LIST_MAX_ITEMS,
+    SEARCH_MAX_CHARS,
+)
 
 
 def _trimmed(max_length: int) -> StringConstraints:
@@ -38,10 +46,15 @@ BoardName = Annotated[str, _trimmed(BOARD_NAME_LENGTH)]
 StageName = Annotated[str, _trimmed(STAGE_NAME_LENGTH)]
 LabelName = Annotated[str, _trimmed(LABEL_NAME_LENGTH)]
 CardTitle = Annotated[str, _trimmed(CARD_TITLE_LENGTH)]
-CommentText = Annotated[str, _trimmed(_limits.comment_max_chars)]
-ChecklistText = Annotated[str, _trimmed(_limits.checklist_text_max_chars)]
-Description = Annotated[str, Field(max_length=_limits.description_max_chars)]
-DocText = Annotated[str, Field(max_length=_limits.doc_max_chars)]
+CommentText = Annotated[str, _trimmed(COMMENT_MAX_CHARS)]
+ChecklistText = Annotated[str, _trimmed(CHECKLIST_TEXT_MAX_CHARS)]
+BoardDescription = Annotated[str, Field(max_length=BOARD_DESCRIPTION_MAX_CHARS)]
+Description = Annotated[str, Field(max_length=CARD_DESCRIPTION_MAX_CHARS)]
+DocText = Annotated[str, Field(max_length=CARD_DOC_MAX_CHARS)]
+IdList = Annotated[list[uuid.UUID], Field(max_length=ID_LIST_MAX_ITEMS)]
+OrderList = Annotated[list[uuid.UUID], Field(min_length=1, max_length=ID_LIST_MAX_ITEMS)]
+ChecklistOrderList = Annotated[
+    list[uuid.UUID], Field(min_length=1, max_length=CHECKLIST_MAX_ITEMS)
+]
 
-# How long a card search or switcher query may be.
-SEARCH_MAX_LENGTH = _limits.search_max_chars
+SEARCH_MAX_LENGTH = SEARCH_MAX_CHARS

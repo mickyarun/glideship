@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.board_card_detail import BoardCardChecklistItem
+from app.repositories.board_card import BoardCardRepository
 from app.repositories.board_card_checklist import BoardCardChecklistRepository
 from app.schemas.boards.card_detail import (
     ChecklistItemCreate,
@@ -33,9 +34,10 @@ from app.schemas.boards.card_detail import (
 )
 from app.services.boards.access import CardAccess
 from app.services.boards.card_checks import check_open
-from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
+from app.services.boards.constants import CHECKLIST_MAX_ITEMS
+from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError, BoardRuleError
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.reads import card_detail
+from app.services.boards.reads import card_detail, summary_json
 
 
 async def list_items(db: AsyncSession, target: CardAccess) -> list[ChecklistItemRead]:
@@ -48,8 +50,11 @@ async def add_item(
     db: AsyncSession, target: CardAccess, body: ChecklistItemCreate
 ) -> ChecklistItemRead:
     """A new line at the bottom of the checklist."""
+    await BoardCardRepository(db, org_id=target.access.org_id).lock(target.card)
     check_open(target.card)
     repo = BoardCardChecklistRepository(db, org_id=target.access.org_id)
+    if await repo.count_for_card(target.card.id) >= CHECKLIST_MAX_ITEMS:
+        raise BoardConflictError(f"A checklist holds at most {CHECKLIST_MAX_ITEMS} items.")
     last = await repo.last_position(target.card.id)
     item = BoardCardChecklistItem(
         org_id=target.access.org_id,
@@ -113,6 +118,6 @@ async def _get(db: AsyncSession, target: CardAccess, item_id: uuid.UUID) -> Boar
 async def _announce(db: AsyncSession, target: CardAccess) -> None:
     """Commit and announce the card's new checklist counts."""
     detail = await card_detail(db, target.access.board, target.card)
-    changes = BoardChanges(target.access.board.id)
-    changes.emit(BoardSocketEvent.CARD_UPDATED, card=detail.model_dump(mode="json"))
+    changes = BoardChanges.of(target.access)
+    changes.emit(BoardSocketEvent.CARD_UPDATED, card=summary_json(detail))
     await changes.commit(db)

@@ -17,7 +17,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import read_board
+from app.api.v1.boards._access import view_board
 from app.core.deps import get_db
 from app.schemas.boards.prefs import BoardFilters, PrefsRead, StarBody
 from app.services.boards import prefs_service
@@ -28,7 +28,7 @@ router = APIRouter(tags=["boards"])
 
 @router.get("/{key}/prefs", response_model=PrefsRead)
 async def read_prefs(
-    access: BoardAccess = Depends(read_board), db: AsyncSession = Depends(get_db)
+    access: BoardAccess = Depends(view_board), db: AsyncSession = Depends(get_db)
 ) -> PrefsRead:
     """My star and saved filters for this board."""
     return await prefs_service.read_prefs(db, access)
@@ -37,7 +37,7 @@ async def read_prefs(
 @router.put("/{key}/star", response_model=PrefsRead)
 async def set_star(
     body: StarBody,
-    access: BoardAccess = Depends(read_board),
+    access: BoardAccess = Depends(view_board),
     db: AsyncSession = Depends(get_db),
 ) -> PrefsRead:
     """Star or unstar this board for me."""
@@ -47,7 +47,7 @@ async def set_star(
 @router.put("/{key}/prefs", response_model=PrefsRead)
 async def set_filters(
     body: BoardFilters,
-    access: BoardAccess = Depends(read_board),
+    access: BoardAccess = Depends(view_board),
     db: AsyncSession = Depends(get_db),
 ) -> PrefsRead:
     """Save the filters to restore when I come back to this board."""

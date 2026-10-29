@@ -58,7 +58,22 @@ async def test_templates_are_listed(client: AsyncClient, pg_session_factory: Fac
     assert {"blank", "ops", "product", "design", "content-seo"} <= {t["id"] for t in templates}
 
 
-@pytest.mark.parametrize("key", ["A", "TOOLONGBOARDKEY", "AB1", "BUD", "bug", "TEMPLATES"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "A",
+        "TOOLONGBOARDKEY",
+        "AB1",
+        "BUD",
+        "bug",
+        "TEMPLATES",
+        "CARDS",
+        "SWITCHER",
+        "SKILLS",
+        "IMPORTS",
+        "LIMITS",
+    ],
+)
 async def test_bad_and_reserved_keys_are_refused(
     client: AsyncClient, pg_session_factory: Factory, key: str
 ) -> None:

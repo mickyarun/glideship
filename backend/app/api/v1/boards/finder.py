@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Routes that don't name a board: templates, the switcher and card keys.
+"""Routes that don't name a board: templates, limits, the switcher and card keys.
 
 Mounted before the ``/{key}`` routes, so these paths are never read as a
 board key (the words are reserved keys too).
@@ -25,9 +25,10 @@ from app.core.board_deps import board_caller
 from app.core.deps import get_db
 from app.schemas.boards.board import TemplateRead
 from app.schemas.boards.card import CardDetail
+from app.schemas.boards.limits import BoardLimits
 from app.schemas.boards.prefs import SwitcherRead
 from app.schemas.boards.text import SEARCH_MAX_LENGTH
-from app.services.boards import board_service, prefs_service
+from app.services.boards import attachment_rules, board_service, prefs_service
 from app.services.boards.access import BoardCaller, resolve_card_by_key
 from app.services.boards.reads import card_detail
 
@@ -38,6 +39,12 @@ router = APIRouter(tags=["boards"])
 async def list_templates() -> list[TemplateRead]:
     """Templates a new board can start from."""
     return board_service.list_templates()
+
+
+@router.get("/limits", response_model=BoardLimits)
+async def board_limits() -> BoardLimits:
+    """Lengths, caps and page sizes the boards UI enforces."""
+    return attachment_rules.board_limits()
 
 
 @router.get("/switcher", response_model=SwitcherRead)

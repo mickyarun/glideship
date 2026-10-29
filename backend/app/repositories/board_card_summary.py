@@ -24,10 +24,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, and_, func, or_, select
-from sqlalchemy.dialects.postgresql import aggregate_order_by
+from sqlalchemy import ColumnElement, Double, Select, func, literal, or_, select, tuple_
+from sqlalchemy.dialects.postgresql import UUID, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.models.board_card import INT4_MAX, BoardCard, BoardCardAssignee, BoardCardLabel
 from app.models.board_card_detail import BoardCardChecklistItem
@@ -39,9 +38,10 @@ from app.repositories.board import like_pattern
 class CardQuery:
     """One page of a stage's cards, narrowed by the board filters."""
 
-    stage_id: uuid.UUID
+    stage_id: uuid.UUID | None
     limit: int
-    after: uuid.UUID | None = None
+    # The (position, id) of the last card on the previous page.
+    after: tuple[float, uuid.UUID] | None = None
     q: str | None = None
     assignee: uuid.UUID | None = None
     label: uuid.UUID | None = None
@@ -82,12 +82,20 @@ class BoardCardSummaryRepository:
         self._org_id = org_id
 
     async def list_summaries(self, board_id: uuid.UUID, query: CardQuery) -> list[CardSummaryRow]:
-        """Up to ``query.limit`` cards of one stage after ``query.after``, by (position, id)."""
-        stmt = self._select(board_id).where(
-            BoardCard.stage_id == query.stage_id, *self._filters(query)
-        )
+        """Up to ``query.limit`` cards after ``query.after``, by (position, id).
+
+        One stage when ``query.stage_id`` is set (seeking the stage's
+        ``(stage_id, position, id)`` index), else the whole board.
+        """
+        stmt = self._select(board_id).where(*self._filters(query))
+        if query.stage_id is not None:
+            stmt = stmt.where(BoardCard.stage_id == query.stage_id)
         if query.after is not None:
-            stmt = stmt.where(self._after(board_id, query.after))
+            position, card_id = query.after
+            stmt = stmt.where(
+                tuple_(BoardCard.position, BoardCard.id)
+                > tuple_(literal(position, Double), literal(card_id, UUID(as_uuid=True)))
+            )
         stmt = stmt.order_by(BoardCard.position, BoardCard.id).limit(query.limit)
         return await self._run(stmt)
 
@@ -144,7 +152,7 @@ class BoardCardSummaryRepository:
             match = BoardCard.title.ilike(like_pattern(text))
             clauses.append(
                 or_(match, BoardCard.number == int(text))
-                if text.isdigit() and int(text) <= INT4_MAX
+                if text.isascii() and text.isdigit() and int(text) <= INT4_MAX
                 else match
             )
         if query.assignee is not None:
@@ -167,18 +175,6 @@ class BoardCardSummaryRepository:
         if query.priority is not None:
             clauses.append(BoardCard.priority == query.priority)
         return clauses
-
-    def _after(self, board_id: uuid.UUID, after: uuid.UUID) -> ColumnElement[bool]:
-        """Cards past ``after`` in (position, id) order; nothing when it's not on the board."""
-        other = aliased(BoardCard)
-        anchor = (
-            select(other.position)
-            .where(other.org_id == self._org_id, other.board_id == board_id, other.id == after)
-            .scalar_subquery()
-        )
-        return or_(
-            BoardCard.position > anchor, and_(BoardCard.position == anchor, BoardCard.id > after)
-        )
 
     async def _run(self, stmt: Select[Any]) -> list[CardSummaryRow]:
         rows = (await self._db.execute(stmt)).mappings().all()

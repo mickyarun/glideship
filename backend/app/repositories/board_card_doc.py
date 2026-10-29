@@ -18,6 +18,7 @@ import uuid
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.models.board_card_doc import BoardCardDoc
 from app.models.board_enums import BoardCardDocKind, BoardCardDocState
@@ -42,13 +43,29 @@ class BoardCardDocRepository(BaseRepository[BoardCardDoc]):
         )
         return list((await self._db.execute(stmt)).scalars().all())
 
-    async def versions(self, card_id: uuid.UUID, kind: BoardCardDocKind) -> list[BoardCardDoc]:
-        """Every version of one kind, newest first."""
+    async def current(self, card_id: uuid.UUID, kind: BoardCardDocKind) -> BoardCardDoc | None:
+        """The current version of one kind, if there is one."""
+        stmt = self._scoped(
+            select(BoardCardDoc).where(
+                BoardCardDoc.card_id == card_id,
+                BoardCardDoc.kind == kind,
+                BoardCardDoc.state == BoardCardDocState.CURRENT,
+            )
+        )
+        return (await self._db.execute(stmt)).scalar_one_or_none()
+
+    async def versions(
+        self, card_id: uuid.UUID, kind: BoardCardDocKind, *, before: int | None, limit: int
+    ) -> list[BoardCardDoc]:
+        """Up to ``limit`` versions older than ``before``, newest first, bodies not loaded."""
         stmt = self._scoped(
             select(BoardCardDoc)
+            .options(defer(BoardCardDoc.body_md, raiseload=True))
             .where(BoardCardDoc.card_id == card_id, BoardCardDoc.kind == kind)
-            .order_by(BoardCardDoc.version.desc())
         )
+        if before is not None:
+            stmt = stmt.where(BoardCardDoc.version < before)
+        stmt = stmt.order_by(BoardCardDoc.version.desc()).limit(limit)
         return list((await self._db.execute(stmt)).scalars().all())
 
     async def get_version(

@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board_enums import BoardMemberRole
 from app.models.board_member import BoardMember, BoardTeam
-from app.models.team import Team, TeamMember, TeamStatus
+from app.models.team import Team, TeamMember
 from app.models.user import OrgToUser, User
 from app.repositories.base import rowcount
 
@@ -133,35 +133,6 @@ class BoardMemberRepository:
             BoardTeam.team_id == team_id,
         )
         return rowcount(await self._db.execute(stmt)) > 0
-
-    async def admin_grants(self, board_id: uuid.UUID) -> int:
-        """Admin rows on the board: people's own plus active teams'.
-
-        Locks the board's member and team rows, so two removals can't each
-        see the other's admin and leave the board with none.
-        """
-        people = (
-            select(BoardMember.user_id)
-            .where(
-                BoardMember.org_id == self._org_id,
-                BoardMember.board_id == board_id,
-                BoardMember.role == BoardMemberRole.ADMIN,
-            )
-            .with_for_update()
-        )
-        teams = (
-            select(BoardTeam.team_id)
-            .join(Team, Team.id == BoardTeam.team_id)
-            .where(
-                BoardTeam.org_id == self._org_id,
-                BoardTeam.board_id == board_id,
-                BoardTeam.role == BoardMemberRole.ADMIN,
-                Team.status == TeamStatus.ACTIVE,
-            )
-            .with_for_update(of=BoardTeam)
-        )
-        found = len((await self._db.execute(people)).all())
-        return found + len((await self._db.execute(teams)).all())
 
     async def is_active_member(self, user_id: uuid.UUID) -> bool:
         """Whether ``user_id`` is an active member of the org."""

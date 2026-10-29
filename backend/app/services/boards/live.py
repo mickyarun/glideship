@@ -15,19 +15,20 @@
 """Live updates on ``board:<board_id>``, published only after the commit.
 
 A service collects what changed in a :class:`BoardChanges` and calls
-:meth:`BoardChanges.commit`, so a client never hears about a row it can't
-read yet, and a rolled-back change is never announced.
+:meth:`BoardChanges.commit`. Messages go out from the session's commit hook
+(:mod:`app.services.after_commit`), so a client never hears about a row it
+can't read yet, and a change that failed to commit is never announced.
 """
 
 import uuid
-from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services import event_bus
-from app.services.ws_topic_policy import access_topic
+from app.services.access_recheck import recheck_topic
+from app.services.after_commit import publish_after_commit
+from app.services.boards.access import BoardAccess
 
 
 class BoardSocketEvent(StrEnum):
@@ -52,36 +53,44 @@ def board_topic(board_id: uuid.UUID) -> str:
     return f"board:{board_id}"
 
 
-@dataclass
 class BoardChanges:
     """What one request changed on a board, announced after it commits.
 
-    ``recheck`` names the people whose board subscriptions must be checked
-    again; ``None`` in it means everyone subscribed.
+    Every event carries the acting person's id. Access re-checks queued with
+    :meth:`recheck_access` go out after the commit too.
     """
 
-    board_id: uuid.UUID
-    events: list[tuple[BoardSocketEvent, dict[str, Any]]] = field(default_factory=list)
-    recheck: set[uuid.UUID] | None = field(default_factory=set)
+    def __init__(self, board_id: uuid.UUID, actor_id: uuid.UUID | None) -> None:
+        self.board_id = board_id
+        self.actor_id = actor_id
+        self._events: list[tuple[BoardSocketEvent, dict[str, Any]]] = []
+        self._recheck: set[uuid.UUID] | None = set()
+
+    @classmethod
+    def of(cls, access: BoardAccess) -> "BoardChanges":
+        """Changes made by the caller of ``access`` on its board."""
+        return cls(access.board.id, access.user_id)
 
     def emit(self, event: BoardSocketEvent, **payload: Any) -> None:
         """Queue one event for after the commit."""
-        self.events.append((event, payload))
+        self._events.append((event, payload))
 
     def recheck_access(self, user_ids: set[uuid.UUID] | None) -> None:
         """Queue a re-check of these people's subscriptions (``None``: everyone's)."""
-        if user_ids is None or self.recheck is None:
-            self.recheck = None
+        if user_ids is None or self._recheck is None:
+            self._recheck = None
         else:
-            self.recheck |= user_ids
+            self._recheck |= user_ids
 
     async def commit(self, db: AsyncSession) -> None:
-        """Commit the session, then publish everything queued."""
-        await db.commit()
+        """Queue everything for after the commit, then commit.
+
+        A commit that fails publishes nothing.
+        """
         topic = board_topic(self.board_id)
-        for event, payload in self.events:
-            event_bus.publish(topic, {"event": event.value, **payload})
-        control = access_topic(topic)
-        if control is not None and self.recheck != set():
-            users = None if self.recheck is None else sorted(str(u) for u in self.recheck)
-            event_bus.publish(control, {"user_ids": users})
+        actor = None if self.actor_id is None else str(self.actor_id)
+        for event, payload in self._events:
+            publish_after_commit(db, topic, {"event": event.value, "actor_id": actor, **payload})
+        if self._recheck != set():
+            recheck_topic(db, topic, self._recheck)
+        await db.commit()

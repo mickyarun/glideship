@@ -31,29 +31,62 @@ from app.models.board_enums import BoardMemberRole, BoardStatus
 from app.repositories.board_access import BoardAccessRepository, PermissionChecker
 from app.repositories.board_card import BoardCardRepository
 from app.repositories.board_card_key import BoardCardKeyRepository
-from app.services.boards.errors import BoardItemNotFoundError
+from app.services.boards.constants import (
+    ARCHIVED_BOARD_ACTIONS,
+    BOARD_ACTION_MIN_ROLE,
+    BoardAction,
+)
+from app.services.boards.errors import (
+    BoardActionForbiddenError,
+    BoardConflictError,
+    BoardItemNotFoundError,
+)
 
 
-class BoardNotFoundError(Exception):
+class BoardNotFoundError(BoardItemNotFoundError):
     """No such board in the org, or the caller holds no role on it."""
 
+    def __init__(self) -> None:
+        super().__init__("Board not found.")
 
-class BoardForbiddenError(Exception):
+
+class BoardForbiddenError(BoardActionForbiddenError):
     """The caller can see the board but their role is below what's needed."""
 
+    def __init__(self) -> None:
+        super().__init__("Your role on this board doesn't allow this.")
 
-class BoardArchivedError(Exception):
+
+class BoardArchivedError(BoardConflictError):
     """The board is archived, so nothing on it can change."""
+
+    def __init__(self) -> None:
+        super().__init__("This board is archived.")
 
 
 @dataclass(frozen=True)
 class BoardAccess:
-    """A board the caller may act on, and the role they hold on it."""
+    """A board the caller may act on, their role on it and their org permissions.
+
+    ``perms`` lets an action also require an org permission (handing a card
+    over needs ``buds:create``), on top of the board role.
+    """
 
     board: Board
     role: BoardMemberRole
     user_id: uuid.UUID
     org_id: uuid.UUID
+    perms: PermissionChecker
+
+    def may(self, action: BoardAction) -> bool:
+        """Whether the caller may take ``action`` on the board as it is now."""
+        if self.board.status is BoardStatus.ARCHIVED and action not in ARCHIVED_BOARD_ACTIONS:
+            return False
+        return self.role.at_least(BOARD_ACTION_MIN_ROLE[action])
+
+    def capabilities(self) -> list[BoardAction]:
+        """Every action the caller may take now, in declaration order."""
+        return [action for action in BoardAction if self.may(action)]
 
 
 @dataclass(frozen=True)
@@ -103,13 +136,13 @@ async def resolve_board_access(
         key.upper(), user_id, perms
     )
     if found is None:
-        raise BoardNotFoundError(key)
+        raise BoardNotFoundError()
     board, role = found
     if not role.at_least(min_role):
-        raise BoardForbiddenError(key)
+        raise BoardForbiddenError()
     if writable and board.status is BoardStatus.ARCHIVED:
-        raise BoardArchivedError(key)
-    return BoardAccess(board=board, role=role, user_id=user_id, org_id=org_id)
+        raise BoardArchivedError()
+    return BoardAccess(board=board, role=role, user_id=user_id, org_id=org_id, perms=perms)
 
 
 async def resolve_card(access: BoardAccess, db: AsyncSession, number: int) -> CardAccess:
@@ -143,5 +176,5 @@ async def resolve_card_by_key(
     if found is None:
         raise BoardItemNotFoundError(CARD_NOT_FOUND)
     card, board, role = found
-    access = BoardAccess(board=board, role=role, user_id=user_id, org_id=org_id)
+    access = BoardAccess(board=board, role=role, user_id=user_id, org_id=org_id, perms=perms)
     return CardAccess(access=access, card=card)

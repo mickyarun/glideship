@@ -97,8 +97,10 @@ async def test_moves_freeze_the_board_and_categories_they_happened_in(
 
 
 async def test_edits_by_one_person_coalesce_within_the_window(
-    client: AsyncClient, pg_session_factory: Factory
+    client: AsyncClient, pg_session_factory: Factory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    window_seconds = 300
+    monkeypatch.setattr(settings.boards, "edit_coalesce_seconds", window_seconds)
     pm, _, key = await _setup(client, pg_session_factory)
     card = await make_card(client, pm, key)
     url = f"{BOARDS}/{key}/cards/{card['number']}"
@@ -109,7 +111,7 @@ async def test_edits_by_one_person_coalesce_within_the_window(
     assert [e.detail["fields"] for e in edits] == [["priority", "title"]]
 
     async with pg_session_factory() as db:
-        window = timedelta(seconds=settings.boards.edit_coalesce_seconds + 1)
+        window = timedelta(seconds=window_seconds + 1)
         await db.execute(
             update(BoardCardEvent)
             .where(BoardCardEvent.id == edits[0].id)

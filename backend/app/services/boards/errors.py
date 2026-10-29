@@ -40,6 +40,10 @@ class BoardTooLargeError(BoardError):
     """An upload is bigger than the board accepts."""
 
 
+class BoardStorageError(BoardError):
+    """File storage failed; the request can be retried."""
+
+
 class BoardActionForbiddenError(BoardError):
     """The caller may use the board but not take this action."""
 

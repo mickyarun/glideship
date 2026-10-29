@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A card's files and links. Mirrors ``api/v1/bug_attachments.py``.
+"""A card's files and links. Uploads and downloads share their steps with bugs.
 
-Files are served back only through the access-checked download route,
-always as a download with ``nosniff`` and a sandbox CSP.
+Files are served back only through the access-checked download route.
 """
 
 import uuid
@@ -24,11 +23,11 @@ from fastapi import APIRouter, Depends, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import edit_card, read_card
+from app.api.v1._attachment_response import attachment_response
+from app.api.v1.boards._access import edit_card, view_card
 from app.core.deps import get_db
-from app.core.paths import sanitize_filename
 from app.schemas.boards.card_detail import AttachmentList, AttachmentRead, LinkCreate
-from app.services.boards import attachment_service
+from app.services.boards import attachment_links, attachment_service
 from app.services.boards.access import CardAccess
 from app.services.boards.attachment_rules import policy
 
@@ -39,7 +38,7 @@ ATTACHMENTS = "/{key}/cards/{number}/attachments"
 
 @router.get(ATTACHMENTS, response_model=AttachmentList)
 async def list_attachments(
-    target: CardAccess = Depends(read_card), db: AsyncSession = Depends(get_db)
+    target: CardAccess = Depends(view_card), db: AsyncSession = Depends(get_db)
 ) -> AttachmentList:
     """The card's files and links, with the upload limits."""
     return await attachment_service.list_attachments(db, target)
@@ -51,9 +50,10 @@ async def upload_attachment(
     target: CardAccess = Depends(edit_card),
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentRead:
-    """Attach one file; it's read only up to one byte past the size cap."""
+    """Attach one file; the count and type are checked before the body is read."""
+    name = await attachment_service.prepare_upload(db, target, file.filename)
     data = await file.read(policy().max_bytes + 1)
-    return await attachment_service.upload_file(db, target, file.filename, data)
+    return await attachment_service.upload_file(db, target, name, data)
 
 
 @router.post(
@@ -65,27 +65,18 @@ async def add_link(
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentRead:
     """Attach a link."""
-    return await attachment_service.add_link(db, target, body)
+    return await attachment_links.add_link(db, target, body)
 
 
 @router.get(f"{ATTACHMENTS}/{{attachment_id}}")
 async def download_attachment(
     attachment_id: uuid.UUID,
-    target: CardAccess = Depends(read_card),
+    target: CardAccess = Depends(view_card),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """The file's bytes, as a download."""
-    data, row = await attachment_service.download(db, target, attachment_id)
-    safe_name = sanitize_filename(row.filename, fallback="attachment")
-    return Response(
-        content=data,
-        media_type=row.mime_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}"',
-            "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "default-src 'none'; sandbox",
-        },
-    )
+    data, row = await attachment_links.download(db, target, attachment_id)
+    return attachment_response(data, row.filename, row.mime_type or "application/octet-stream")
 
 
 @router.delete(f"{ATTACHMENTS}/{{attachment_id}}", status_code=status.HTTP_204_NO_CONTENT)
@@ -95,4 +86,4 @@ async def delete_attachment(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Remove my own attachment, or any as a board admin."""
-    await attachment_service.delete_attachment(db, target, attachment_id)
+    await attachment_links.delete_attachment(db, target, attachment_id)

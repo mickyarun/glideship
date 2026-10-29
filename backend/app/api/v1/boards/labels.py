@@ -19,7 +19,7 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import admin_board, read_board
+from app.api.v1.boards._access import manage_labels, view_board
 from app.core.deps import get_db
 from app.schemas.boards.label import LabelCreate, LabelRead, LabelUpdate
 from app.services.boards import label_service
@@ -30,7 +30,7 @@ router = APIRouter(tags=["boards"])
 
 @router.get("/{key}/labels", response_model=list[LabelRead])
 async def list_labels(
-    access: BoardAccess = Depends(read_board), db: AsyncSession = Depends(get_db)
+    access: BoardAccess = Depends(view_board), db: AsyncSession = Depends(get_db)
 ) -> list[LabelRead]:
     """The board's labels, by name."""
     return await label_service.list_labels(db, access)
@@ -39,7 +39,7 @@ async def list_labels(
 @router.post("/{key}/labels", response_model=LabelRead, status_code=status.HTTP_201_CREATED)
 async def create_label(
     body: LabelCreate,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_labels),
     db: AsyncSession = Depends(get_db),
 ) -> LabelRead:
     """Add a label."""
@@ -50,7 +50,7 @@ async def create_label(
 async def update_label(
     label_id: uuid.UUID,
     body: LabelUpdate,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_labels),
     db: AsyncSession = Depends(get_db),
 ) -> LabelRead:
     """Rename or recolour a label."""
@@ -60,7 +60,7 @@ async def update_label(
 @router.delete("/{key}/labels/{label_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_label(
     label_id: uuid.UUID,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_labels),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a label; cards carrying it lose it."""

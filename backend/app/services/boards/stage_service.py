@@ -84,7 +84,7 @@ async def create_stage(db: AsyncSession, access: BoardAccess, body: StageCreate)
         _make_default(stages, stage)
     _check(access, stages)
     await repo.add(stage)
-    await _save(db, access, BoardChanges(access.board.id))
+    await _save(db, access, BoardChanges.of(access))
     return StageRead.model_validate(stage)
 
 
@@ -101,6 +101,7 @@ async def update_stage(
     stage = _find(stages, stage_id)
     if body.name is not None:
         stage.name = body.name
+    recategorised = body.category is not None and body.category is not stage.category
     if body.category is not None:
         stage.category = body.category
     if "wip_limit" in body.model_fields_set:
@@ -110,7 +111,11 @@ async def update_stage(
     elif body.is_default is False and stage.is_default:
         raise BoardRuleError("Make another stage the default instead.")
     _check(access, stages)
-    await _save(db, access, BoardChanges(access.board.id))
+    if recategorised:
+        # The cards already here "enter" the new category, as a move would.
+        positions = BoardCardPositionRepository(db, org_id=access.org_id)
+        await positions.restamp(stage.id, stage.category, now=datetime.now(UTC))
+    await _save(db, access, BoardChanges.of(access))
     return StageRead.model_validate(stage)
 
 
@@ -126,7 +131,7 @@ async def reorder_stages(
     by_id = {s.id: s for s in stages}
     for position, stage_id in enumerate(body.stage_ids):
         by_id[stage_id].position = position
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     await _save(db, access, changes)
     return [StageRead.model_validate(by_id[i]) for i in body.stage_ids]
 
@@ -151,7 +156,7 @@ async def delete_stage(
     elif await BoardCardPositionRepository(db, org_id=access.org_id).has_cards(stage.id):
         raise BoardRuleError("Choose the stage this stage's cards should move to.")
     await repo.delete(stage)
-    changes = BoardChanges(board.id)
+    changes = BoardChanges.of(access)
     changes.emit(BoardSocketEvent.STAGE_CHANGED)
     if target is not None:
         changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(target.id))

@@ -81,6 +81,18 @@ class BoardStageRepository(BaseRepository[BoardStage]):
         )
         return (await self._db.execute(stmt)).scalar_one_or_none()
 
+    async def lock_stages(
+        self, board_id: uuid.UUID, stage_ids: set[uuid.UUID]
+    ) -> dict[uuid.UUID, BoardStage]:
+        """These stages of the board, locked in id order (the order every writer uses)."""
+        stmt = self._scoped(
+            select(BoardStage)
+            .where(BoardStage.board_id == board_id, BoardStage.id.in_(stage_ids))
+            .order_by(BoardStage.id)
+            .with_for_update()
+        )
+        return {s.id: s for s in (await self._db.execute(stmt)).scalars().all()}
+
     async def default_stage(self, board_id: uuid.UUID) -> BoardStage | None:
         """Where new cards land, locked like :meth:`lock`."""
         stmt = self._scoped(

@@ -35,7 +35,12 @@ from app.repositories.board_access import BoardAccessRepository, PermissionCheck
 def split_card_key(key: str) -> tuple[str, int] | None:
     """``"seo-14"`` → ``("SEO", 14)``; None when it isn't shaped like a card key."""
     board_key, sep, number = key.strip().upper().rpartition("-")
-    if not sep or not board_key or not number.isdigit() or int(number) > INT4_MAX:
+    if (
+        not sep
+        or not board_key
+        or not (number.isascii() and number.isdigit())
+        or int(number) > INT4_MAX
+    ):
         return None
     return board_key, int(number)
 

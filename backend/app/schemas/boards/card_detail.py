@@ -23,7 +23,7 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, UrlConstraints
 from app.models.board_card_detail import ATTACHMENT_URL_LENGTH, CHECKLIST_GROUP_LENGTH
 from app.models.board_enums import BoardAttachmentKind, BoardCardEventType, BoardStageCategory
 from app.models.thread_columns import ATTACHMENT_FILENAME_LENGTH
-from app.schemas.boards.text import ChecklistText, CommentText
+from app.schemas.boards.text import ChecklistOrderList, ChecklistText, CommentText
 
 
 class ChecklistItemCreate(BaseModel):
@@ -50,7 +50,7 @@ class ChecklistOrder(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    item_ids: list[uuid.UUID] = Field(min_length=1)
+    item_ids: ChecklistOrderList
 
 
 class ChecklistItemRead(BaseModel):
@@ -85,6 +85,13 @@ class CommentRead(BaseModel):
     edited_at: datetime | None
     deleted_at: datetime | None
     created_at: datetime
+
+
+class CommentPage(BaseModel):
+    """Oldest first; pass ``next_cursor`` back as ``cursor`` for the next page."""
+
+    items: list[CommentRead]
+    next_cursor: str | None
 
 
 class LinkCreate(BaseModel):

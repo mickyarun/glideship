@@ -19,7 +19,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.boards._access import admin_board
+from app.api.v1.boards._access import manage_stages
 from app.core.deps import get_db
 from app.schemas.boards.stage import StageCreate, StageOrder, StageRead, StageUpdate
 from app.services.boards import stage_service
@@ -31,7 +31,7 @@ router = APIRouter(tags=["boards"])
 @router.post("/{key}/stages", response_model=StageRead, status_code=status.HTTP_201_CREATED)
 async def create_stage(
     body: StageCreate,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_stages),
     db: AsyncSession = Depends(get_db),
 ) -> StageRead:
     """Add a stage at the right-hand end."""
@@ -41,7 +41,7 @@ async def create_stage(
 @router.put("/{key}/stages/order", response_model=list[StageRead])
 async def reorder_stages(
     body: StageOrder,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_stages),
     db: AsyncSession = Depends(get_db),
 ) -> list[StageRead]:
     """Put every stage in a new left-to-right order."""
@@ -52,7 +52,7 @@ async def reorder_stages(
 async def update_stage(
     stage_id: uuid.UUID,
     body: StageUpdate,
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_stages),
     db: AsyncSession = Depends(get_db),
 ) -> StageRead:
     """Rename, re-categorise, set the WIP limit or make it the default."""
@@ -63,7 +63,7 @@ async def update_stage(
 async def delete_stage(
     stage_id: uuid.UUID,
     move_to: uuid.UUID | None = Query(default=None),
-    access: BoardAccess = Depends(admin_board),
+    access: BoardAccess = Depends(manage_stages),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a stage, moving its cards to ``move_to`` first."""

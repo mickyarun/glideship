@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.board import Board, BoardStage
 from app.models.board_enums import BoardMemberRole
-from app.repositories.board import BoardRepository
+from app.repositories.board import BoardRepository, VisibleBoard
 from app.repositories.board_member import BoardMemberRepository
 from app.repositories.board_prefs import BoardPrefsRepository
 from app.repositories.board_stage import BoardStageRepository
@@ -53,22 +53,25 @@ def delivery_item(caller: BoardCaller) -> DeliveryBoardItem | None:
     return DeliveryBoardItem(name=DELIVERY_BOARD_NAME, path=DELIVERY_BOARD_PATH)
 
 
+def custom_item(visible: VisibleBoard) -> CustomBoardItem:
+    """A team board as the list and the switcher show it."""
+    board = visible.board
+    return CustomBoardItem(
+        id=board.id,
+        key=board.key,
+        name=board.name,
+        visibility=board.visibility,
+        role=visible.role,
+        starred=visible.starred,
+    )
+
+
 async def list_boards(db: AsyncSession, caller: BoardCaller) -> BoardList:
     """Every board the caller can open, then Delivery when they may see it."""
     visible = await BoardRepository(db, org_id=caller.org_id).list_visible(
         caller.user_id, caller.perms
     )
-    items: list[BoardListItem] = [
-        CustomBoardItem(
-            id=v.board.id,
-            key=v.board.key,
-            name=v.board.name,
-            visibility=v.board.visibility,
-            role=v.role,
-            starred=v.starred,
-        )
-        for v in visible
-    ]
+    items: list[BoardListItem] = [custom_item(v) for v in visible]
     delivery = delivery_item(caller)
     if delivery is not None:
         items.append(delivery)
@@ -126,7 +129,11 @@ async def create_board(db: AsyncSession, caller: BoardCaller, body: BoardCreate)
     await db.commit()
     await db.refresh(board)
     access = BoardAccess(
-        board=board, role=BoardMemberRole.ADMIN, user_id=caller.user_id, org_id=caller.org_id
+        board=board,
+        role=BoardMemberRole.ADMIN,
+        user_id=caller.user_id,
+        org_id=caller.org_id,
+        perms=caller.perms,
     )
     return await board_detail(db, access)
 
@@ -157,7 +164,9 @@ async def _add_template_stages(db: AsyncSession, board: Board, template: BoardTe
 async def open_board(db: AsyncSession, access: BoardAccess) -> BoardDetail:
     """The board's page data, recording the visit for the switcher's recent list.
 
-    The visit is written at most once per ``prefs_touch_interval_seconds``.
+    Although this serves a GET, it may write: ``last_opened_at`` is updated
+    at most once per ``prefs_touch_interval_seconds``, for viewers too and
+    on archived boards, since it's the caller's own preference row.
     """
     interval = timedelta(seconds=settings.boards.prefs_touch_interval_seconds)
     prefs = BoardPrefsRepository(db, org_id=access.org_id)

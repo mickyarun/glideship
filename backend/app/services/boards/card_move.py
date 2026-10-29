@@ -32,12 +32,12 @@ from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.card import CardDetail, CardMove
 from app.services.boards.access import CardAccess
 from app.services.boards.card_checks import check_open
-from app.services.boards.card_place import place_card
+from app.services.boards.card_place import STALE_NEIGHBOURS, place_card
 from app.services.boards.card_timing import enter_category
-from app.services.boards.errors import BoardItemNotFoundError
+from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.reads import card_detail
+from app.services.boards.reads import card_detail, summary_json
 from app.services.boards.stage_service import STAGE_NOT_FOUND
 
 
@@ -53,11 +53,20 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
     """Put the card in ``body.stage_id`` between the given neighbours."""
     access, card = target.access, target.card
     cards = BoardCardRepository(db, org_id=access.org_id)
-    to_stage = await _locked_stage(db, target, body.stage_id)
+    # Source and target stage first, in id order, then the card: the order
+    # a stage delete uses, so the two can't deadlock.
+    stages = await BoardStageRepository(db, org_id=access.org_id).lock_stages(
+        access.board.id, {body.stage_id, card.stage_id}
+    )
+    to_stage = stages.get(body.stage_id)
+    if to_stage is None:
+        raise BoardItemNotFoundError(STAGE_NOT_FOUND)
     await cards.lock(card)
     check_open(card)
-    repo = BoardStageRepository(db, org_id=access.org_id)
-    from_stage = await repo.get_in_board(access.board.id, card.stage_id)
+    from_stage = stages.get(card.stage_id)
+    if from_stage is None:
+        # Moved by someone else between loading and locking.
+        raise BoardConflictError(STALE_NEIGHBOURS)
     placement = await place_card(
         db,
         access.org_id,
@@ -82,10 +91,10 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
             to_stage=to_stage,
         )
     detail = await card_detail(db, access.board, card)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     if placement.rebalanced:
         changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(to_stage.id))
-    changes.emit(BoardSocketEvent.CARD_MOVED, card=detail.model_dump(mode="json"))
+    changes.emit(BoardSocketEvent.CARD_MOVED, card=summary_json(detail))
     await changes.commit(db)
     return detail
 
@@ -99,7 +108,7 @@ async def set_card_archived(db: AsyncSession, target: CardAccess, *, archived: b
     await cards.lock(card)
     if (card.archived_at is not None) == archived:
         return await card_detail(db, access.board, card)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     if stage is None:
         card.archived_at = datetime.now(UTC)
         event, socket = BoardCardEventType.ARCHIVED, BoardSocketEvent.CARD_ARCHIVED
@@ -112,6 +121,6 @@ async def set_card_archived(db: AsyncSession, target: CardAccess, *, archived: b
         event, socket = BoardCardEventType.RESTORED, BoardSocketEvent.CARD_RESTORED
     await record_event(db, card, event, actor_id=access.user_id)
     detail = await card_detail(db, access.board, card)
-    changes.emit(socket, card=detail.model_dump(mode="json"))
+    changes.emit(socket, card=summary_json(detail))
     await changes.commit(db)
     return detail

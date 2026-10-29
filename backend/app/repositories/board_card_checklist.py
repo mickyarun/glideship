@@ -49,6 +49,11 @@ class BoardCardChecklistRepository(BaseRepository[BoardCardChecklistItem]):
         )
         return (await self._db.execute(stmt)).scalar_one_or_none()
 
+    async def count_for_card(self, card_id: uuid.UUID) -> int:
+        """How many lines the card's checklist has."""
+        stmt = self._scoped(select(func.count()).where(BoardCardChecklistItem.card_id == card_id))
+        return int((await self._db.execute(stmt)).scalar_one())
+
     async def last_position(self, card_id: uuid.UUID) -> float | None:
         """The bottom item's position, or None for an empty checklist."""
         stmt = self._scoped(

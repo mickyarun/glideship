@@ -34,7 +34,7 @@ from app.services.boards.card_checks import (
 from app.services.boards.errors import BoardRuleError
 from app.services.boards.events import record_edit, record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.reads import card_detail
+from app.services.boards.reads import card_detail, summary_json
 
 # Plain fields a PATCH can set; ``title`` and ``due_done`` can't be null.
 _FIELDS = ("title", "description_md", "priority", "start_at", "due_at", "due_done")
@@ -65,8 +65,8 @@ async def update_card(db: AsyncSession, target: CardAccess, body: CardUpdate) ->
         await _record_people(db, card, access.user_id, BoardCardEventType.UNASSIGNED, removed)
     await record_edit(db, card, actor_id=access.user_id, fields=edited, now=datetime.now(UTC))
     detail = await card_detail(db, access.board, card)
-    changes = BoardChanges(access.board.id)
-    changes.emit(BoardSocketEvent.CARD_UPDATED, card=detail.model_dump(mode="json"))
+    changes = BoardChanges.of(access)
+    changes.emit(BoardSocketEvent.CARD_UPDATED, card=summary_json(detail))
     await changes.commit(db)
     return detail
 

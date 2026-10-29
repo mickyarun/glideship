@@ -25,6 +25,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board_enums import BoardMemberRole
+from app.repositories.board_admins import BoardAdminRepository
 from app.repositories.board_member import BoardMemberRepository
 from app.schemas.boards.member import MemberRead, MembersRead, TeamGrantRead
 from app.services.boards.access import BoardAccess
@@ -46,10 +47,20 @@ async def list_members(db: AsyncSession, access: BoardAccess) -> MembersRead:
 
 
 async def _keep_an_admin(
-    repo: BoardMemberRepository, access: BoardAccess, losing: BoardMemberRole | None
+    db: AsyncSession,
+    access: BoardAccess,
+    *,
+    person: uuid.UUID | None = None,
+    team: uuid.UUID | None = None,
 ) -> None:
-    """Refuse a change that takes away the board's last admin row."""
-    if losing is BoardMemberRole.ADMIN and await repo.admin_grants(access.board.id) <= 1:
+    """Refuse a change that takes away the board's last admin row that counts.
+
+    An admin row that doesn't count (an inactive person, an archived or
+    empty team) can always go.
+    """
+    grants = await BoardAdminRepository(db, org_id=access.org_id).admin_grants(access.board.id)
+    counted = person in grants.people or team in grants.teams
+    if counted and grants.total <= 1:
         raise BoardConflictError(LAST_ADMIN)
 
 
@@ -62,9 +73,9 @@ async def put_member(
         raise BoardItemNotFoundError("Member not found.")
     current = await repo.member_role(access.board.id, user_id)
     if current is BoardMemberRole.ADMIN and role is not BoardMemberRole.ADMIN:
-        await _keep_an_admin(repo, access, current)
+        await _keep_an_admin(db, access, person=user_id)
     await repo.put_member(access.board.id, user_id, role)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     if current is not None and not role.at_least(current):
         changes.recheck_access({user_id})
     return await _done(db, access, changes)
@@ -76,9 +87,9 @@ async def remove_member(db: AsyncSession, access: BoardAccess, user_id: uuid.UUI
     current = await repo.member_role(access.board.id, user_id)
     if current is None:
         raise BoardItemNotFoundError("That person has no role of their own on this board.")
-    await _keep_an_admin(repo, access, current)
+    await _keep_an_admin(db, access, person=user_id)
     await repo.remove_member(access.board.id, user_id)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     changes.recheck_access({user_id})
     return await _done(db, access, changes)
 
@@ -92,9 +103,9 @@ async def put_team(
         raise BoardItemNotFoundError("Team not found.")
     current = await repo.team_role(access.board.id, team_id)
     if current is BoardMemberRole.ADMIN and role is not BoardMemberRole.ADMIN:
-        await _keep_an_admin(repo, access, current)
+        await _keep_an_admin(db, access, team=team_id)
     await repo.put_team(access.board.id, team_id, role)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     if current is not None and not role.at_least(current):
         changes.recheck_access(await repo.team_member_ids(team_id))
     return await _done(db, access, changes)
@@ -106,9 +117,9 @@ async def remove_team(db: AsyncSession, access: BoardAccess, team_id: uuid.UUID)
     current = await repo.team_role(access.board.id, team_id)
     if current is None:
         raise BoardItemNotFoundError("That team has no role on this board.")
-    await _keep_an_admin(repo, access, current)
+    await _keep_an_admin(db, access, team=team_id)
     await repo.remove_team(access.board.id, team_id)
-    changes = BoardChanges(access.board.id)
+    changes = BoardChanges.of(access)
     changes.recheck_access(await repo.team_member_ids(team_id))
     return await _done(db, access, changes)
 

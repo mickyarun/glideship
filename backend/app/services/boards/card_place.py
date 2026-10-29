@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.board import BoardStage
 from app.repositories.board_card_position import BoardCardPositionRepository
-from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError, BoardRuleError
+from app.services.boards.errors import BoardConflictError, BoardRuleError
 from app.services.boards.positions import position_between
 
 STALE_NEIGHBOURS = "The board changed while you were moving this card; reload and try again."
@@ -97,5 +97,6 @@ async def _anchor(
         return None
     position = await positions.position_of(stage_id, anchor_id)
     if position is None:
-        raise BoardItemNotFoundError("The neighbouring card isn't open in that stage.")
+        # Moved, archived or gone since the client last looked.
+        raise BoardConflictError(STALE_NEIGHBOURS)
     return position
