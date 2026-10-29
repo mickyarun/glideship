@@ -32,7 +32,7 @@
     <AppCallout v-if="store.error" variant="error" class="mb-4">{{ store.error }}</AppCallout>
     <AppCallout v-if="actionError" variant="error" class="mb-4">{{ actionError }}</AppCallout>
 
-    <LeaveEmptyState
+    <AppEmptyState
       v-if="!store.loading && !store.offices.length && !store.error"
       icon="mdi-office-building-outline"
       title="No offices yet"
@@ -90,7 +90,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import OfficeDialog from '@/components/people/offices/OfficeDialog.vue'
 import ConfirmDialog from '@/components/settings/code/ConfirmDialog.vue'
 import { useOfficesStore } from '@/stores/offices'

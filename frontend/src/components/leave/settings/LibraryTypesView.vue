@@ -29,7 +29,7 @@
     <AppCallout v-if="store.error" variant="error" class="mb-4">{{ store.error }}</AppCallout>
     <AppCallout v-if="deleteError" variant="error" class="mb-4">{{ deleteError }}</AppCallout>
     <v-progress-linear v-if="store.loading && !store.entries.length" indeterminate color="primary" class="mb-4" />
-    <LeaveEmptyState
+    <AppEmptyState
       v-if="!store.loading && !store.entries.length && !store.error"
       icon="mdi-bookshelf"
       title="No library types yet"
@@ -66,7 +66,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import LeaveTypeDialog from '@/components/leave/settings/LeaveTypeDialog.vue'
 import LibraryHistory from '@/components/leave/settings/LibraryHistory.vue'
 import LibraryTypeTable from '@/components/leave/settings/LibraryTypeTable.vue'

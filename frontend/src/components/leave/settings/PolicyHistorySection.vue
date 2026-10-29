@@ -25,7 +25,7 @@
   >
     <v-progress-linear v-if="history.loading.value" indeterminate color="primary" class="mb-4" />
     <AppCallout v-if="history.error.value" variant="error" class="mb-4">{{ history.error.value }}</AppCallout>
-    <LeaveEmptyState
+    <AppEmptyState
       v-else-if="!history.loading.value && !history.events.value.length"
       icon="mdi-history"
       title="No changes yet"
@@ -39,7 +39,7 @@
 import { watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import ConfigEventList from '@/components/leave/settings/ConfigEventList.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import LeaveSectionCard from '@/components/leave/settings/LeaveSectionCard.vue'
 import { useConfigHistory } from '@/composables/useConfigHistory'
 

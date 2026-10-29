@@ -56,13 +56,13 @@
       <template #[`item.policy_name`]="{ item }"><MemberPolicyCell :member="item" /></template>
       <template #[`item.assigned_on`]="{ item }">{{ policySinceLabel(item) }}</template>
       <template #no-data>
-        <LeaveEmptyState
+        <AppEmptyState
           v-if="search || filter !== ALL_POLICIES"
           icon="mdi-account-search-outline"
           title="Nobody matches"
           body="Try another name, or a different policy."
         />
-        <LeaveEmptyState
+        <AppEmptyState
           v-else
           icon="mdi-account-multiple-outline"
           :title="pinnedPolicyId ? 'Nobody follows this policy yet' : 'No employee records yet'"
@@ -71,7 +71,7 @@
           <template v-if="!pinnedPolicyId" #actions>
             <v-btn variant="flat" color="primary" :to="{ name: 'employees' }">Go to employees</v-btn>
           </template>
-        </LeaveEmptyState>
+        </AppEmptyState>
       </template>
     </v-data-table>
     <AssignmentBulkBar :count="selected.length" :policies="targets" @move="startMove" @clear="selected = []" />
@@ -84,7 +84,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AssignmentBulkBar from '@/components/leave/settings/AssignmentBulkBar.vue'
 import AssignmentToolbar from '@/components/leave/settings/AssignmentToolbar.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import MemberPolicyCell from '@/components/leave/settings/MemberPolicyCell.vue'
 import MemberSelectCell from '@/components/leave/settings/MemberSelectCell.vue'
 import MovePolicyDialog from '@/components/leave/settings/MovePolicyDialog.vue'
