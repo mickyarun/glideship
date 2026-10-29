@@ -22,9 +22,11 @@ import pytest
 from sqlalchemy import select
 
 from app.core.permission_deps import PermissionSet
+from app.core.permissions_boards import BOARDS_MANAGE
 from app.models.board import Board
 from app.models.board_enums import BoardMemberRole, BoardVisibility
 from app.models.team import TeamStatus
+from app.repositories.board import BoardRepository
 from app.repositories.board_access import BoardAccessRepository
 from tests.integration.board_support import (
     MANAGE,
@@ -56,6 +58,19 @@ async def test_boards_manage_is_admin_everywhere(pg_session_factory: Factory) ->
     user = await new_member(pg_session_factory, org)
     board = await new_board(pg_session_factory, org, visibility=MEMBERS_ONLY)
     assert await _role(pg_session_factory, board, user, MANAGE) is ADMIN
+
+
+async def test_boards_manage_without_boards_view_opens_nothing(
+    pg_session_factory: Factory,
+) -> None:
+    org = await new_org(pg_session_factory)
+    user = await new_member(pg_session_factory, org)
+    board = await new_board(pg_session_factory, org)
+    manage_only = PermissionSet(ids=frozenset({BOARDS_MANAGE}), is_owner=False)
+    assert await _role(pg_session_factory, board, user, manage_only) is None
+    async with pg_session_factory() as db:
+        assert not await BoardRepository(db, org_id=org).any_visible(user, manage_only)
+        assert await BoardRepository(db, org_id=org).any_visible(user, MANAGE)
 
 
 @pytest.mark.parametrize("role", list(BoardMemberRole))

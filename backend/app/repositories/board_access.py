@@ -151,7 +151,8 @@ class BoardAccessRepository:
             )
             .select_from(grants)
             .join(Board, org_boards)
-            .where(grants.c.can_manage)
+            # boards:manage widens boards:view; on its own it opens nothing.
+            .where(grants.c.can_manage, grants.c.can_view)
         )
         members = (
             select(BoardMember.user_id, BoardMember.board_id, BoardMember.role)
