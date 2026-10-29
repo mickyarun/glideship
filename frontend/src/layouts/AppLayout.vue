@@ -38,7 +38,8 @@
 
       <v-list density="compact" nav class="px-2">
         <EngineeringNav v-if="canAccessEngineering" :rail="collapsed" />
-        <PeopleNav :rail="collapsed" :show-heading="canAccessEngineering" />
+        <BoardsNav v-if="canViewBoards" :rail="collapsed" />
+        <PeopleNav :rail="collapsed" :show-heading="canAccessEngineering || canViewBoards" />
       </v-list>
 
       <template #append>
@@ -82,12 +83,15 @@
     </v-main>
 
     <EngineeringOverlays v-if="authStore.user?.id && canAccessEngineering" />
+    <BoardSwitcherHost v-if="canViewBoards" />
   </v-app>
 </template>
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import BoardSwitcherHost from '@/components/boards/switcher/BoardSwitcherHost.vue'
+import BoardsNav from '@/components/layout/BoardsNav.vue'
 import EngineeringNav from '@/components/layout/EngineeringNav.vue'
 import EngineeringOverlays from '@/components/layout/EngineeringOverlays.vue'
 import DesktopTopBar from '@/components/layout/DesktopTopBar.vue'
@@ -102,7 +106,7 @@ import { usePermissions } from '@/composables/usePermissions'
 import { useNavigationProgress } from '@/composables/useNavigationProgress'
 
 const authStore = useAuthStore()
-const { canAccessEngineering, canManageMembers } = usePermissions()
+const { canAccessEngineering, canManageMembers, canViewBoards } = usePermissions()
 
 // Driven by the router guards — true while any route navigation resolves.
 const { navigating } = useNavigationProgress()

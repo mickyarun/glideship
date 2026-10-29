@@ -36,7 +36,15 @@ export function canOpenWorkspace(
   return permissions?.includes(WORKSPACE_PERMISSION[workspace]) ?? false
 }
 
-/** Landing route for a signed-in user, based on what they can open. */
-export function homeRouteFor(permissions: readonly string[] | null | undefined): RouteLocationRaw {
-  return canOpenWorkspace(permissions, 'engineering') ? { name: 'dashboard' } : { name: 'leave' }
+/**
+ * Landing route for a signed-in user, based on what they can open:
+ * engineers get the dashboard, anyone else with a team board gets the
+ * boards, and everyone else their leave.
+ */
+export function homeRouteFor(
+  permissions: readonly string[] | null | undefined,
+  hasBoards = false,
+): RouteLocationRaw {
+  if (canOpenWorkspace(permissions, 'engineering')) return { name: 'dashboard' }
+  return hasBoards ? { name: 'boards' } : { name: 'leave' }
 }

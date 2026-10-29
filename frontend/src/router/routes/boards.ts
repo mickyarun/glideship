@@ -1,0 +1,49 @@
+// Copyright 2025-2026 Arun Rajkumar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * Team boards, open to anyone holding ``boards:view`` in either workspace
+ * (no ``meta.workspace``). Which boards someone may open, and what they
+ * may do on one, is the API's call: a board they can't see is a 404.
+ */
+import type { RouteRecordRaw } from 'vue-router'
+
+const meta = { permission: 'boards:view' }
+
+export const boardRoutes: RouteRecordRaw[] = [
+  {
+    path: 'boards',
+    name: 'boards',
+    meta,
+    component: () => import('@/views/boards/BoardsIndexView.vue'),
+  },
+  {
+    path: 'boards/:key',
+    name: 'board',
+    meta,
+    component: () => import('@/views/boards/BoardView.vue'),
+  },
+  {
+    path: 'boards/:key/settings',
+    name: 'board-settings',
+    meta,
+    component: () => import('@/views/boards/BoardPendingView.vue'),
+  },
+  {
+    path: 'boards/:key/cards/:number',
+    name: 'board-card',
+    meta,
+    component: () => import('@/views/boards/BoardPendingView.vue'),
+  },
+]

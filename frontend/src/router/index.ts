@@ -14,6 +14,7 @@
 
 import { createRouter, createWebHistory } from 'vue-router'
 import { installGuards } from './guards'
+import { boardRoutes } from './routes/boards'
 import { engineeringRoutes } from './routes/engineering'
 import { peopleRoutes } from './routes/people'
 
@@ -74,7 +75,7 @@ const router = createRouter({
     {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
-      children: [...engineeringRoutes, ...peopleRoutes],
+      children: [...engineeringRoutes, ...boardRoutes, ...peopleRoutes],
     },
   ],
 })

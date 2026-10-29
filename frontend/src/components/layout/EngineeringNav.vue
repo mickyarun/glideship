@@ -27,7 +27,7 @@
   />
   <v-list-item
     prepend-icon="mdi-view-column-outline"
-    title="Board"
+    title="Delivery"
     to="/buds"
     rounded="lg"
   />
