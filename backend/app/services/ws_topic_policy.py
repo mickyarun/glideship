@@ -32,9 +32,10 @@ need ``workspace:engineering``. Adding a new publisher means adding its
 prefix here, or no client will ever receive it.
 
 Scopes in :data:`REVOCABLE_SCOPES` can lose access while a socket is open
-(a board member is removed). Their services publish on the topic's
-:func:`access_topic`, which no client can subscribe to, and the socket
-re-runs the scope check for its live subscription.
+(a board member is removed). Services publish a re-check on the topic's
+:func:`access_topic`, or on :func:`people_access_topic` when a person's
+access may have changed everywhere (a role change, a deactivation). No
+client can subscribe to either; ``api/v1/ws_revocation.py`` handles them.
 """
 
 from dataclasses import dataclass
@@ -52,8 +53,11 @@ class TopicRule:
 
 
 # Control topics: ``access:<topic>`` asks sockets holding ``<topic>`` to
-# re-check it. The prefix is not in ``TOPIC_RULES``, so clients can't join.
+# re-check it, and ``access:people:<org_id>`` asks for a re-check of some
+# people's every revocable topic. The prefix is not in ``TOPIC_RULES``, so
+# clients can't join either.
 ACCESS_TOPIC_PREFIX = "access"
+PEOPLE_ACCESS_SEGMENT = "people"
 REVOCABLE_SCOPES: frozenset[Scope] = frozenset({"board"})
 
 TOPIC_RULES: dict[str, TopicRule] = {
@@ -142,3 +146,8 @@ def access_topic(topic: str) -> str | None:
     if scope is None or scope not in REVOCABLE_SCOPES:
         return None
     return f"{ACCESS_TOPIC_PREFIX}:{topic}"
+
+
+def people_access_topic(org_id: str) -> str:
+    """The control topic that re-checks people's revocable topics in one org."""
+    return f"{ACCESS_TOPIC_PREFIX}:{PEOPLE_ACCESS_SEGMENT}:{org_id}"

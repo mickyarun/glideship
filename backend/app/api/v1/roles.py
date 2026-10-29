@@ -28,6 +28,7 @@ from app.repositories.permission import PermissionRepository
 from app.repositories.role import RoleRepository
 from app.schemas.permission import PermissionCategoryRead, PermissionRead
 from app.schemas.role import RoleCreate, RoleRead, RoleUpdate
+from app.services.access_recheck import recheck_people
 from app.services.role_grants import (
     assert_can_grant,
     assert_can_grant_permission_ids,
@@ -214,6 +215,9 @@ async def update_role(
             target=f"role:{role.id}",
         )
 
+    if body.base_role_id is not None or body.permission_ids is not None:
+        # Anyone holding the role may have lost boards:view or boards:manage.
+        recheck_people(db, current_user.org_id, None)
     await db.flush()
     return await read_or_404(role_repo, role.id)
 

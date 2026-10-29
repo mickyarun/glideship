@@ -138,6 +138,13 @@ class TeamRepository(BaseRepository[Team]):
         await self._db.flush()
         return member
 
+    async def list_member_ids(self, team_id: uuid.UUID) -> set[uuid.UUID]:
+        """Everyone on the team."""
+        stmt = select(TeamMember.user_id).where(
+            TeamMember.team_id == team_id, TeamMember.org_id == self._org_id
+        )
+        return set((await self._db.execute(stmt)).scalars().all())
+
     async def remove_member(self, team_id: uuid.UUID, user_id: uuid.UUID) -> int:
         """Remove a user from a team. Returns rows deleted (0 or 1).
 

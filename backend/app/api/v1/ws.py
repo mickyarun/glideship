@@ -111,7 +111,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     # ── State per connection ──────────────────────────────
     send_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=settings.ws.max_send_queue)
-    subscriptions = ConnectionSubscriptions(who, send_queue, passes_scope_check)
+    subscriptions = ConnectionSubscriptions(who, send_queue)
 
     async def _receiver() -> None:
         """Read client messages and handle subscribe/unsubscribe/ping."""
@@ -127,10 +127,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 topic = msg.get("topic", "")
 
                 if action == "subscribe" and topic:
-                    if not may_subscribe(topic, who) or not await passes_scope_check(topic, who):
+                    allowed = may_subscribe(topic, who) and await passes_scope_check(topic, who)
+                    if not allowed or not await subscriptions.add(topic):
                         await websocket.send_json({"error": "forbidden", "topic": topic})
-                        continue
-                    subscriptions.add(topic)
 
                 elif action == "unsubscribe" and topic:
                     if subscriptions.remove(topic):

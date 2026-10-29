@@ -28,6 +28,8 @@ from app.repositories.bud import BUDRepository
 from app.services.ws_topic_policy import Scope, Subscriber, board_id_of, bud_id_of, scope_of
 
 ScopeCheck = Callable[[str, Subscriber], Awaitable[bool]]
+# (topic, org id, user ids) -> the user ids that may still hold the topic.
+HolderCheck = Callable[[str, str, set[str]], Awaitable[set[str]]]
 
 
 async def _owns_topic_bud(topic: str, who: Subscriber) -> bool:
@@ -76,3 +78,29 @@ async def passes_scope_check(topic: str, who: Subscriber) -> bool:
     scope = scope_of(topic)
     check = SCOPE_CHECKS.get(scope) if scope is not None else None
     return False if check is None else await check(topic, who)
+
+
+async def _board_holders(topic: str, org_id: str, user_ids: set[str]) -> set[str]:
+    """Which of ``user_ids`` hold a role on the topic's board now, by the stored permissions."""
+    raw = board_id_of(topic)
+    if raw is None:
+        return set()
+    try:
+        board_id = uuid.UUID(raw)
+    except ValueError:
+        return set()
+    async with AsyncSessionLocal() as db:
+        repo = BoardAccessRepository(db, org_id=uuid.UUID(org_id))
+        allowed = await repo.users_with_access(board_id, {uuid.UUID(u) for u in user_ids})
+    return {str(u) for u in allowed}
+
+
+# Revocable scopes only: one query answers for every holder of a topic.
+HOLDER_CHECKS: dict[Scope, HolderCheck] = {"board": _board_holders}
+
+
+async def holders_still_allowed(topic: str, org_id: str, user_ids: set[str]) -> set[str]:
+    """Which holders of a revocable topic may keep it; none for any other scope."""
+    scope = scope_of(topic)
+    check = HOLDER_CHECKS.get(scope) if scope is not None else None
+    return set() if check is None else await check(topic, org_id, user_ids)
