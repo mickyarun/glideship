@@ -19,6 +19,7 @@
 // keep the two in sync.
 
 import type { ThemeDefinition } from 'vuetify'
+import { boardColorsDark, boardColorsLight } from './boardThemeColors'
 
 export const glideshipDark: ThemeDefinition = {
   dark: true,
@@ -76,6 +77,8 @@ export const glideshipDark: ThemeDefinition = {
     'swatch-5': '#E879F9',
     'swatch-6': '#C4A484',
     'swatch-7': '#D1D5DB',
+    // Board stage categories and card labels (boardThemeColors.ts).
+    ...boardColorsDark,
   },
   variables: {
     'border-color': '#E5E9F0',
@@ -131,6 +134,7 @@ export const glideshipLight: ThemeDefinition = {
     'swatch-5': '#A21CAF',
     'swatch-6': '#7C5A43',
     'swatch-7': '#4B5563',
+    ...boardColorsLight,
   },
   variables: {
     'border-color': '#0F172A',

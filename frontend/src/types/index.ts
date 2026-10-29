@@ -41,6 +41,8 @@ export interface User {
   character_model: string | null
   /** As stored: a Slack CDN URL or a root-relative upload path. Load via resolveAvatarUrl. */
   avatar_url: string | null
+  /** Whether the user can open at least one team board (drives the landing page). */
+  has_boards?: boolean
 }
 
 export interface Organization {
