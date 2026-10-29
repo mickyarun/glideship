@@ -1560,6 +1560,10 @@ unit and integration tests, Vitest, `vue-tsc`, `vite build`, and the Docker imag
   - Mitigation: they use the same `status_change` shape that `sp_pm` and `sp_tech_arch` already
     read, with the `via: handover` tag so metrics can exclude them. There are tests for SP at
     both landing points.
+- **Board keys and names are unique per org, so "taken" hints that a board exists.** Anyone who
+  can create or rename a board could learn that a members-only board uses a key or name. The
+  error is the same generic message whether or not the user can see that board, and never
+  names it. Uniqueness makes the hint itself unavoidable, so it's accepted.
 - **Team membership is a board-access grant.** Adding someone to a team that holds a role on
   a board gives them that role. `team:manage` is already an escalation permission, so this is
   accepted. Board activity records team membership changes that affect board roles.
