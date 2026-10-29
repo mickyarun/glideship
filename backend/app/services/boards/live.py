@@ -18,6 +18,12 @@ A service collects what changed in a :class:`BoardChanges` and calls
 :meth:`BoardChanges.commit`. Messages go out from the session's commit hook
 (:mod:`app.services.after_commit`), so a client never hears about a row it
 can't read yet, and a change that failed to commit is never announced.
+
+When a change also takes access away, its events are marked with whose
+access changed (``ACCESS_CHANGED_KEY``) and every socket named confirms
+access before forwarding them, so someone removed from the board never
+hears the event that removed them. The hub's re-check revokes the rest of
+their subscription after the commit as usual.
 """
 
 import uuid
@@ -29,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.access_recheck import recheck_topic
 from app.services.after_commit import publish_after_commit
 from app.services.boards.access import BoardAccess
+from app.services.ws_topic_policy import ACCESS_CHANGED_KEY
 
 
 class BoardSocketEvent(StrEnum):
@@ -89,8 +96,14 @@ class BoardChanges:
         """
         topic = board_topic(self.board_id)
         actor = None if self.actor_id is None else str(self.actor_id)
+        gate: dict[str, Any] = {}
+        if self._recheck is None:
+            gate = {ACCESS_CHANGED_KEY: None}
+        elif self._recheck:
+            gate = {ACCESS_CHANGED_KEY: sorted(str(u) for u in self._recheck)}
         for event, payload in self._events:
-            publish_after_commit(db, topic, {"event": event.value, "actor_id": actor, **payload})
-        if self._recheck != set():
+            message = {"event": event.value, "actor_id": actor, **payload, **gate}
+            publish_after_commit(db, topic, message)
+        if gate:
             recheck_topic(db, topic, self._recheck)
         await db.commit()

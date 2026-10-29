@@ -17,7 +17,7 @@
 Call these from any write that can take board access away from someone:
 a board member or team removed, a role lowered, a board hidden, someone
 leaving a team, a team archived, an org role or its permissions changed,
-a member deactivated or offboarded. The sockets re-check against the
+a member deactivated, offboarded or merged away. The sockets re-check against the
 committed state, using the permissions in the database at that moment.
 """
 
@@ -26,6 +26,7 @@ from collections.abc import Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.repositories.organization import OrganizationRepository
 from app.services.after_commit import publish_after_commit
 from app.services.ws_topic_policy import access_topic, people_access_topic
 
@@ -49,3 +50,14 @@ def recheck_people(
     if ids == []:
         return
     publish_after_commit(db, people_access_topic(str(org_id)), {"user_ids": ids})
+
+
+async def recheck_account(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Re-check someone's topics in every org they belong to.
+
+    Use it when the account itself changes (deactivated, offboarded,
+    merged away): ``User.is_active`` holds in every org, not just the
+    caller's.
+    """
+    for org_id in await OrganizationRepository(db).ids_for_member(user_id):
+        recheck_people(db, org_id, {user_id})

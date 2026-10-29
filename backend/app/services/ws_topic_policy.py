@@ -59,6 +59,10 @@ class TopicRule:
 ACCESS_TOPIC_PREFIX = "access"
 PEOPLE_ACCESS_SEGMENT = "people"
 REVOCABLE_SCOPES: frozenset[Scope] = frozenset({"board"})
+# Set on an event published with an access change: the user ids whose access
+# changed, or None for everyone. Sockets named confirm access before
+# forwarding it, and the key itself is never sent to clients.
+ACCESS_CHANGED_KEY = "access_changed_for"
 
 TOPIC_RULES: dict[str, TopicRule] = {
     "notifications": TopicRule(scope="user", engineering=False),

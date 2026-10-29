@@ -33,7 +33,7 @@ from app.core.permission_deps import PermissionSet
 from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.repositories.user import UserRepository
 from app.repositories.user_mcp_token import UserMCPTokenRepository
-from app.services.access_recheck import recheck_people
+from app.services.access_recheck import recheck_account
 from app.services.role_grants import assert_can_manage_member
 
 logger = structlog.get_logger(__name__)
@@ -78,6 +78,6 @@ async def apply_exit(
         return False
     user.is_active = False
     await UserMCPTokenRepository(db).delete_all_for_user(user.id)
-    recheck_people(db, org_id, {user.id})
+    await recheck_account(db, user.id)
     logger.info("employee_exited_access_revoked", profile_id=str(profile.id))
     return True

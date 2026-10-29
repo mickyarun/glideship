@@ -187,6 +187,15 @@ class WebSocketConfig(BaseSettings):
         default=32,
         description="Max queued events per event-bus subscriber before dropping.",
     )
+    recheck_attempts: int = Field(
+        default=3, gt=0, description="Tries an access re-check gets before it revokes."
+    )
+    recheck_retry_delay_seconds: float = Field(
+        default=0.25, ge=0, description="Wait before the second try; doubles after each."
+    )
+    recheck_concurrency: int = Field(
+        default=4, gt=0, description="Access re-checks using the database at once."
+    )
 
 
 def _detect_default_data_dir() -> str:

@@ -22,8 +22,9 @@ refused with 422 rather than silently restarting the list.
 import base64
 import binascii
 import json
+import math
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.services.boards.errors import BoardRuleError
 
@@ -50,20 +51,26 @@ def _decode(cursor: str, size: int) -> list[object]:
 
 
 def decode_position_cursor(cursor: str) -> tuple[float, uuid.UUID]:
-    """``(position, id)`` from a card page cursor."""
+    """``(position, id)`` from a card page cursor; the position must be finite."""
     position, card_id = _decode(cursor, 2)
     if isinstance(position, bool) or not isinstance(position, int | float):
         raise BoardRuleError(BAD_CURSOR)
     try:
-        return float(position), uuid.UUID(str(card_id))
-    except ValueError:
+        value = float(position)
+        if not math.isfinite(value):
+            raise ValueError(position)
+        return value, uuid.UUID(str(card_id))
+    except (OverflowError, ValueError):
         raise BoardRuleError(BAD_CURSOR) from None
 
 
 def decode_time_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
-    """``(created_at, id)`` from a thread page cursor."""
+    """``(created_at, id)`` from a thread page cursor, as an aware UTC time."""
     at, row_id = _decode(cursor, 2)
     try:
-        return datetime.fromisoformat(str(at)), uuid.UUID(str(row_id))
-    except ValueError:
+        parsed = datetime.fromisoformat(str(at))
+        if parsed.tzinfo is None:
+            raise ValueError(at)
+        return parsed.astimezone(UTC), uuid.UUID(str(row_id))
+    except (OverflowError, ValueError):
         raise BoardRuleError(BAD_CURSOR) from None

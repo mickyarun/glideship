@@ -21,10 +21,13 @@ a re-check request is never dropped. For each topic to re-check it asks
 the scope's holder check once, for every named holder, against the
 permissions stored in the database, and revokes the ones not returned.
 Re-checks for one topic run one at a time; requests that arrive meanwhile
-are merged into the next run.
+are merged into the next run. At most ``settings.ws.recheck_concurrency``
+checks use the database at once, so an org-wide re-check can't drain the
+connection pool.
 
-A check that fails is retried once and then left alone, so a database
-blip never revokes everyone; the next re-check for the topic tries again.
+A check that fails is retried with backoff (``settings.ws.recheck_*``).
+If every try fails, the named holders are revoked: access fails closed.
+A revoked client may subscribe again, and the subscribe check decides.
 
 This assumes a single backend process, like the event bus and the socket
 fan-out: a socket on another process would never hear the re-check.
@@ -36,7 +39,9 @@ from typing import Any, Protocol
 
 import structlog
 
+from app.api.v1.ws_check_slots import CheckSlots
 from app.api.v1.ws_scope_checks import holders_still_allowed
+from app.config import settings
 from app.services.event_bus import register_transport
 from app.services.ws_topic_policy import ACCESS_TOPIC_PREFIX, PEOPLE_ACCESS_SEGMENT
 
@@ -68,8 +73,13 @@ class Holder(Protocol):
 class RevocationHub:
     """Every socket holding each revocable topic in this process."""
 
-    def __init__(self, check: HolderCheck) -> None:
+    def __init__(self, check: HolderCheck, slots: CheckSlots | None = None) -> None:
         self._check = check
+        self._slots = slots or CheckSlots(
+            concurrency=settings.ws.recheck_concurrency,
+            attempts=settings.ws.recheck_attempts,
+            first_delay=settings.ws.recheck_retry_delay_seconds,
+        )
         self._held: dict[str, dict[Holder, None]] = {}
         self._pending: dict[str, set[str] | None] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
@@ -88,7 +98,7 @@ class RevocationHub:
                 del self._held[topic]
 
     async def allows(self, topic: str, holder: Holder) -> bool:
-        """Whether ``holder`` may hold ``topic`` now; False when the check fails."""
+        """Whether ``holder`` may hold ``topic`` now; False when the check keeps failing."""
         allowed = await self._allowed(topic, holder.org_id, {holder.user_id})
         return allowed is not None and holder.user_id in allowed
 
@@ -120,7 +130,11 @@ class RevocationHub:
     async def _work(self, topic: str) -> None:
         try:
             while topic in self._pending:
-                await self._recheck(topic, self._pending.pop(topic))
+                users = self._pending.pop(topic)
+                try:
+                    await self._recheck(topic, users)
+                except Exception:  # noqa: BLE001 - logged; the worker carries on
+                    logger.exception("ws_recheck_crashed", topic=topic)
         finally:
             # No await between the last check and this, so a request queued
             # meanwhile either joined the loop or starts a new worker.
@@ -134,19 +148,16 @@ class RevocationHub:
         for org, group in by_org.items():
             allowed = await self._allowed(topic, org, {h.user_id for h in group})
             if allowed is None:
-                continue
+                logger.warning("ws_recheck_failed_revoking", topic=topic, count=len(group))
+                allowed = set()
             for holder in group:
                 if holder.user_id not in allowed:
                     logger.info("ws_subscription_revoked", user_id=holder.user_id, topic=topic)
                     holder.revoke(topic)
 
     async def _allowed(self, topic: str, org: str, user_ids: set[str]) -> set[str] | None:
-        for attempt in (1, 2):
-            try:
-                return await self._check(topic, org, user_ids)
-            except Exception:  # noqa: BLE001 - logged; a failed check revokes nobody
-                logger.exception("ws_recheck_failed", topic=topic, attempt=attempt)
-        return None
+        """The check's answer, or None once every try has failed."""
+        return await self._slots.run(lambda: self._check(topic, org, user_ids), topic=topic)
 
 
 # The process-wide hub every socket registers with.

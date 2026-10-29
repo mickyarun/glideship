@@ -125,18 +125,6 @@ async def test_one_check_per_topic_covers_every_holder_named(topic: str) -> None
     assert len(check.calls) == 1  # nobody holding the topic was named
 
 
-async def test_a_failing_check_is_retried_once_then_revokes_nobody(topic: str) -> None:
-    check = _Check()
-    hub = RevocationHub(check)
-    subs, send = await _socket(hub, topic)
-    check.calls.clear()
-    check.allowed, check.failures = set(), 2
-    event_bus.publish(_control(topic), {"user_ids": None})
-    await _until(lambda: len(check.calls) == 2)
-    await _nothing_arrives(send)
-    assert subs.topics == frozenset({topic})
-
-
 async def test_a_people_recheck_covers_every_revocable_topic_they_hold() -> None:
     check = _Check()
     hub = RevocationHub(check)

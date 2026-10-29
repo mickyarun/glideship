@@ -16,8 +16,9 @@
 
 Uploads share ``services/attachment_upload`` with bugs. The count and type
 are checked under a short card lock before the body is read; the bytes
-are stored with no lock held; then the card is locked again, the count
-re-checked and the row written. If that last step fails, the stored file
+are stored with no lock held; then the caller's role is confirmed again
+(it may have been lowered during the upload), the card locked again, the
+count re-checked and the row written. If that last step fails, the stored file
 is removed. Links, downloads and removal live in ``attachment_links``.
 """
 
@@ -26,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board_card_detail import BoardCardAttachment
 from app.models.board_enums import BoardAttachmentKind
+from app.repositories.board_access import BoardAccessRepository
 from app.repositories.board_card import BoardCardRepository
 from app.repositories.board_card_thread import BoardCardAttachmentRepository
 from app.schemas.boards.card_detail import AttachmentList, AttachmentRead
@@ -36,9 +38,10 @@ from app.services.attachment_upload import (
     precheck,
     store,
 )
-from app.services.boards.access import CardAccess
+from app.services.boards.access import BoardForbiddenError, BoardNotFoundError, CardAccess
 from app.services.boards.attachment_rules import announce, limits, policy
 from app.services.boards.card_checks import check_open
+from app.services.boards.constants import BOARD_ACTION_MIN_ROLE, BoardAction
 from app.services.boards.errors import (
     BoardConflictError,
     BoardError,
@@ -84,6 +87,17 @@ async def _locked_file_check(
         raise _board_error(exc) from exc
 
 
+async def _confirm_still_editor(db: AsyncSession, target: CardAccess) -> None:
+    """The caller's committed board role still allows editing the card."""
+    access = target.access
+    repo = BoardAccessRepository(db, org_id=access.org_id)
+    role = await repo.role_for(access.board.id, access.user_id, access.perms)
+    if role is None:
+        raise BoardNotFoundError()
+    if not role.at_least(BOARD_ACTION_MIN_ROLE[BoardAction.EDIT_CARD]):
+        raise BoardForbiddenError()
+
+
 async def prepare_upload(
     db: AsyncSession, target: CardAccess, filename: str | None
 ) -> CheckedName:
@@ -110,6 +124,7 @@ async def upload_file(
     except UploadRejectedError as exc:
         raise _board_error(exc) from exc
     try:
+        await _confirm_still_editor(db, target)
         await _locked_file_check(db, target, stored.filename)
         row = await BoardCardAttachmentRepository(db, org_id=access.org_id).create(
             BoardCardAttachment(
