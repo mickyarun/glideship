@@ -15,39 +15,24 @@
 """Data access for the :class:`app.models.bug_comment.BugComment` thread."""
 
 import uuid
-from datetime import UTC, datetime
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bug_comment import BugComment
-from app.repositories.base import BaseRepository
+from app.repositories.thread import CommentThreadRepository
 
 
-class BugCommentRepository(BaseRepository[BugComment]):
+class BugCommentRepository(CommentThreadRepository[BugComment]):
     """Repository for bug-comment queries, scoped to an organization."""
 
     def __init__(self, db: AsyncSession, *, org_id: uuid.UUID) -> None:
-        super().__init__(BugComment, db, org_id=org_id)
+        super().__init__(BugComment, BugComment.bug_id, db, org_id=org_id)
 
     async def list_for_bug(
         self, bug_id: uuid.UUID, *, include_deleted: bool = True
     ) -> list[BugComment]:
-        """All comments on a bug, oldest first (thread order).
-
-        Soft-deleted comments are included by default so the UI can
-        render a "[deleted]" tombstone in-place; callers that want a
-        clean export should pass ``include_deleted=False``.
-        """
-        stmt = self._scoped(
-            select(BugComment)
-            .where(BugComment.bug_id == bug_id)
-            .order_by(BugComment.created_at.asc())
-        )
-        if not include_deleted:
-            stmt = stmt.where(BugComment.deleted_at.is_(None))
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        """All comments on a bug, oldest first, tombstones included by default."""
+        return await self.list_comments(bug_id, include_deleted=include_deleted)
 
     async def count_active_by_bug(self, bug_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
         """Bulk-count non-deleted comments per bug id.
@@ -55,32 +40,4 @@ class BugCommentRepository(BaseRepository[BugComment]):
         Used by the board card badge ("3 comments"). Bugs with no
         comments are absent from the returned dict.
         """
-        if not bug_ids:
-            return {}
-        stmt = self._scoped(
-            select(BugComment.bug_id, func.count(BugComment.id))
-            .where(BugComment.bug_id.in_(bug_ids), BugComment.deleted_at.is_(None))
-            .group_by(BugComment.bug_id)
-        )
-        result = await self._db.execute(stmt)
-        return {row[0]: row[1] for row in result.all()}
-
-    async def update_body(self, comment: BugComment, body: str) -> BugComment:
-        """Edit a comment's body and stamp ``edited_at``."""
-        comment.body = body
-        comment.edited_at = datetime.now(UTC)
-        await self._db.flush()
-        await self._db.refresh(comment)
-        return comment
-
-    async def soft_delete(self, comment: BugComment) -> BugComment:
-        """Tombstone a comment without removing the row.
-
-        Audit trail and any future notification follow-ups need the
-        original author + timestamp; the UI renders ``[deleted]`` when
-        ``deleted_at`` is set.
-        """
-        comment.deleted_at = datetime.now(UTC)
-        await self._db.flush()
-        await self._db.refresh(comment)
-        return comment
+        return await self.count_active_by_parent(bug_ids)
