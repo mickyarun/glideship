@@ -14,14 +14,14 @@
  * limitations under the License.
  -->
 
-<!-- A board route that the API answered with 404: the board doesn't exist,
-     or it's members-only and I'm not a member. The API doesn't say which,
-     so neither does this page. -->
+<!-- A board route that the API answered with 404: the board (or the card
+     on it) doesn't exist, or it's members-only and I'm not a member. The
+     API doesn't say which, so neither does this page. -->
 <template>
-  <AppPage title="Board not found">
+  <AppPage :title="`${what === 'card' ? 'Card' : 'Board'} not found`">
     <AppEmptyState
       icon="mdi-lock-outline"
-      title="This board doesn't exist, or you don't have access"
+      :title="`This ${what} doesn't exist, or you don't have access`"
       body="If someone sent you a link, ask them to add you to the board."
     >
       <template #actions>
@@ -36,6 +36,8 @@
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import { useBoardSwitcher } from '@/composables/useBoardSwitcher'
+
+withDefaults(defineProps<{ what?: 'board' | 'card' }>(), { what: 'board' })
 
 const switcher = useBoardSwitcher()
 </script>

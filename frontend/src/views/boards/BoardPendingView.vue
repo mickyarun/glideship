@@ -14,12 +14,15 @@
  * limitations under the License.
  -->
 
-<!-- Board pages that aren't built yet (a board's settings, a card's own
-     page): routed already so links to them resolve, with a way back to
-     the board in the meantime. -->
+<!-- A board's settings, not built yet: routed already so links to it
+     resolve, with a way back to the board in the meantime. -->
 <template>
-  <AppPage :title="title">
-    <AppEmptyState icon="mdi-progress-clock" :title="what" :body="body">
+  <AppPage title="Board settings">
+    <AppEmptyState
+      icon="mdi-progress-clock"
+      title="Board settings aren't available yet"
+      body="Stages, members, labels and visibility will be set here."
+    >
       <template #actions>
         <v-btn color="primary" :to="{ name: 'board', params: { key } }">Back to the board</v-btn>
       </template>
@@ -38,15 +41,4 @@ const route = useRoute()
 const { board } = useBoardContext()
 // The board's own key once it has loaded (the URL may differ in case).
 const key = computed(() => board.detail.value?.board.key ?? String(route.params.key ?? ''))
-const card = computed(() => (route.params.number ? `${key.value}-${route.params.number}` : null))
-
-const title = computed(() => card.value ?? 'Board settings')
-const what = computed(() =>
-  card.value ? "This card's page isn't available yet" : "Board settings aren't available yet",
-)
-const body = computed(() =>
-  card.value
-    ? 'You can move, archive and copy a link to the card from its menu on the board.'
-    : 'Stages, members, labels and visibility will be set here.',
-)
 </script>
