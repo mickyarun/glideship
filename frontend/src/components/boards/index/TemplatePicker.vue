@@ -14,7 +14,7 @@
  * limitations under the License.
  -->
 
-<!-- The new board's template, as cards two to a row: each a real radio
+<!-- The new board's template, as cards that fill the row: each a real radio
      (arrow keys move between them), with the template's stages. -->
 <template>
   <fieldset class="tpl">
@@ -51,7 +51,7 @@ const name = useId()
 }
 .tpl__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 8px;
 }
 .tpl__card {
@@ -59,7 +59,7 @@ const name = useId()
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px;
+  padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid rgb(var(--v-theme-rule));
   background: rgb(var(--v-theme-background));

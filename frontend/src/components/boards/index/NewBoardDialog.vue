@@ -18,28 +18,31 @@
      can't change later), the template its stages come from, and who can
      see it, with what each choice means. On success it opens the board. -->
 <template>
-  <v-dialog v-model="open" width="600" scrollable :fullscreen="xs" aria-labelledby="new-board-title">
+  <v-dialog v-model="open" width="640" scrollable :fullscreen="xs" aria-labelledby="new-board-title">
     <v-card>
       <v-card-title id="new-board-title" class="new-board__title">New board</v-card-title>
       <v-card-text class="new-board__body">
         <AppCallout v-if="form.loadError.value" variant="error">{{ form.loadError.value }}</AppCallout>
-        <div class="new-board__row">
-          <v-text-field
-            v-model="form.name.value"
-            label="Name"
-            autofocus
-            :maxlength="limits?.board_name_max"
-            hide-details="auto"
-          />
-          <v-text-field
-            :model-value="form.key.value"
-            label="Key"
-            class="new-board__key"
-            :maxlength="limits?.board_key_max"
-            :hint="form.keyHint.value"
-            persistent-hint
-            @update:model-value="form.setKey"
-          />
+        <div>
+          <div class="new-board__row">
+            <v-text-field
+              v-model="form.name.value"
+              label="Name"
+              autofocus
+              :maxlength="limits?.board_name_max"
+              hide-details="auto"
+            />
+            <v-text-field
+              :model-value="form.key.value"
+              label="Key"
+              class="new-board__key"
+              :maxlength="limits?.board_key_max"
+              :aria-describedby="keyHintId"
+              hide-details
+              @update:model-value="form.setKey"
+            />
+          </div>
+          <p :id="keyHintId" class="new-board__hint">{{ form.keyHint.value }}</p>
         </div>
         <TemplatePicker v-model="form.template.value" :templates="store.templates" />
         <BoardVisibilityField v-model="form.visibility.value" />
@@ -56,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, useId, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import BoardVisibilityField from '@/components/boards/BoardVisibilityField.vue'
@@ -72,6 +75,7 @@ const form = useNewBoardForm()
 const router = useRouter()
 const { xs } = useDisplay()
 const limits = computed(() => store.limits)
+const keyHintId = useId()
 
 watch(open, isOpen => {
   if (isOpen) void form.reset()
@@ -93,13 +97,20 @@ async function create(): Promise<void> {
 .new-board__body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
   padding: 12px 24px !important;
 }
+/* Top-aligned so the name field keeps its own height next to the key. */
 .new-board__row {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
+}
+.new-board__hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .new-board__key :deep(input) {
   font-family: var(--font-mono);

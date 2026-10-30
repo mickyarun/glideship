@@ -19,7 +19,7 @@
 <template>
   <fieldset class="board-vis">
     <legend class="board-vis__legend">{{ legend }}</legend>
-    <v-radio-group v-model="model" hide-details :disabled="disabled">
+    <v-radio-group v-model="model" hide-details density="compact" :disabled="disabled">
       <v-radio value="org">
         <template #label>
           <span class="board-vis__option">
@@ -68,7 +68,12 @@ const orgName = useOrgName()
   display: flex;
   flex-direction: column;
   padding: 4px 0;
+  font-size: 14px;
   color: rgb(var(--v-theme-on-surface));
+}
+/* Radios sit on the first line of their two-line label. */
+.board-vis :deep(.v-selection-control) {
+  align-items: flex-start;
 }
 .board-vis__note {
   font-size: 12px;
