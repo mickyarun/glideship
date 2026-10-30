@@ -17,7 +17,7 @@
 
 import { AxiosError, AxiosHeaders } from 'axios'
 import type {
-  BoardAction, BoardDetail, CardEvent, CardSummary, CustomBoardItem, StageRead,
+  BoardAction, BoardDetail, CardDetail, CardEvent, CardSummary, CustomBoardItem, StageRead,
 } from '@/types/boards'
 
 export function makeCard(id: string, over: Partial<CardSummary> = {}): CardSummary {
@@ -39,6 +39,20 @@ export function makeCard(id: string, over: Partial<CardSummary> = {}): CardSumma
     checklist_done: 0,
     checklist_total: 0,
     handovers: [],
+    ...over,
+  }
+}
+
+/** A card as its own page loads it. */
+export function makeCardDetail(id: string, over: Partial<CardDetail> = {}): CardDetail {
+  return {
+    ...makeCard(id),
+    board_key: 'OPS',
+    description_md: null,
+    started_at: null,
+    completed_at: null,
+    created_by: null,
+    created_at: '2026-10-01T00:00:00Z',
     ...over,
   }
 }

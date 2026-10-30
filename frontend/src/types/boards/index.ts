@@ -16,6 +16,7 @@
 
 export type * from '@/types/boards/board'
 export type * from '@/types/boards/card'
+export type * from '@/types/boards/cardDetail'
 export type * from '@/types/boards/doc'
 export type * from '@/types/boards/prefs'
 export type * from '@/types/boards/socket'

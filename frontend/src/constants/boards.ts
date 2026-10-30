@@ -15,7 +15,7 @@
 // UI choices for team boards. Lengths, caps and page sizes are the
 // server's: read them from GET /boards/limits (stores/boards.ts), never here.
 
-import type { BoardRole, BoardVisibility, LabelColor, StageCategory } from '@/types/boards'
+import type { BoardRole, BoardVisibility, CardDocKind, CardDocSource, LabelColor, StageCategory } from '@/types/boards'
 
 /** The sidebar lists up to this many starred boards… */
 export const SIDEBAR_STARRED_LIMIT = 7
@@ -73,3 +73,20 @@ export const VISIBILITY_LABELS: Record<BoardVisibility, { icon: string; text: st
 export const DRAG_TOUCH_DELAY_MS = 150
 /** How long a drag's slide animation runs. */
 export const DRAG_ANIMATION_MS = 150
+
+/** A card's documents, in the order its Documents tab lists them. */
+export const DOC_LABELS: Record<CardDocKind, string> = {
+  prd: 'PRD',
+  design_brief: 'Design brief',
+  notes: 'Notes',
+}
+export const DOC_KINDS = Object.keys(DOC_LABELS) as CardDocKind[]
+
+/** Where a document version came from, for its history. */
+export const DOC_SOURCE_LABELS: Record<CardDocSource, { text: string; color: string }> = {
+  ui: { text: 'edit', color: 'primary' },
+  mcp: { text: 'mcp', color: 'brand' },
+  agent: { text: 'ai', color: 'success' },
+  migration: { text: 'import', color: 'muted' },
+  revert: { text: 'restore', color: 'warning' },
+}

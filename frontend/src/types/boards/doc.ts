@@ -12,8 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A card's documents. Mirrors BoardCardDocKind and BoardCardDocState in
-// backend/app/models/board_enums.py; the documents UI arrives with the card page.
+// A card's documents and their versions. Mirrors BoardCardDocKind and
+// BoardCardDocState in backend/app/models/board_enums.py, BUDEditSource in
+// models/bud_version.py, and backend/app/schemas/boards/doc.py.
 
 export type CardDocKind = 'prd' | 'design_brief' | 'notes'
 export type CardDocState = 'current' | 'pending_review' | 'rejected' | 'superseded'
+/** Where a version came from: an edit here, MCP, an agent, an import, or a restore. */
+export type CardDocSource = 'ui' | 'mcp' | 'agent' | 'migration' | 'revert'
+
+/** One version of one document, without its text. */
+export interface DocVersionRead {
+  id: string
+  kind: CardDocKind
+  state: CardDocState
+  version: number
+  source: CardDocSource
+  created_by: string | null
+  created_at: string
+}
+
+export interface DocRead extends DocVersionRead {
+  body_md: string
+}
+
+/** Newest first; pass ``next_before`` back as ``before`` for older versions. */
+export interface DocVersionPage {
+  items: DocVersionRead[]
+  next_before: number | null
+}
+
+/** The current version of each document a card has. */
+export interface DocList {
+  items: DocRead[]
+}
