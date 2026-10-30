@@ -14,24 +14,32 @@
  * limitations under the License.
  -->
 
-<!-- Where the BUD sits in the lifecycle: done stages ticked, the current
+<!-- Where something sits on its stages: done stages ticked, the current
      one ringed, the rest hollow. On narrow screens only the current
-     stage keeps its name. -->
+     stage keeps its name. With ``selectable``, each other stage is a
+     button that asks to move there. -->
 <template>
   <ol class="stage-stepper" aria-label="Stages">
     <li
       v-for="(step, i) in steps"
-      :key="step.status"
+      :key="step.id"
       class="stage-stepper__step"
       :class="`stage-stepper__step--${step.state}`"
       :aria-current="step.state === 'current' ? 'step' : undefined"
     >
-      <span class="stage-stepper__mark">
-        <v-icon v-if="step.state === 'done'" icon="mdi-check" size="13" />
-      </span>
-      <span class="stage-stepper__name">
-        {{ step.label }}<span v-if="step.state !== 'current'" class="d-sr-only">, {{ STATE_TEXT[step.state] }}</span>
-      </span>
+      <component
+        :is="selectable && step.state !== 'current' ? 'button' : 'span'"
+        class="stage-stepper__target"
+        v-bind="selectable && step.state !== 'current' ? { type: 'button', 'aria-label': `Move to ${step.label}` } : {}"
+        @click="selectable && step.state !== 'current' && emit('select', step.id)"
+      >
+        <span class="stage-stepper__mark">
+          <v-icon v-if="step.state === 'done'" icon="mdi-check" size="13" />
+        </span>
+        <span class="stage-stepper__name">
+          {{ step.label }}<span v-if="step.state !== 'current'" class="d-sr-only">, {{ STATE_TEXT[step.state] }}</span>
+        </span>
+      </component>
       <span v-if="i < steps.length - 1" class="stage-stepper__line" aria-hidden="true" />
     </li>
   </ol>
@@ -39,17 +47,23 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { BUDStatus } from '@/types'
-import { stageSteps, type StepState } from '@/utils/budDetail'
+import { stageSteps, type StageOption, type StepState } from '@/utils/budDetail'
 
-const props = defineProps<{
-  phaseOrder: readonly BUDStatus[]
-  status: BUDStatus
-}>()
+const props = withDefaults(
+  defineProps<{
+    stages: readonly StageOption[]
+    currentId: string | null
+    /** Every stage done (a closed BUD). */
+    finished?: boolean
+    selectable?: boolean
+  }>(),
+  { finished: false, selectable: false },
+)
+const emit = defineEmits<{ select: [id: string] }>()
 
 const STATE_TEXT: Record<StepState, string> = { done: 'done', current: 'current', todo: 'not started' }
 
-const steps = computed(() => stageSteps(props.phaseOrder, props.status))
+const steps = computed(() => stageSteps(props.stages, props.currentId, { finished: props.finished }))
 </script>
 
 <style scoped>
@@ -72,6 +86,34 @@ const steps = computed(() => stageSteps(props.phaseOrder, props.status))
 }
 .stage-stepper__step:last-child {
   flex: 0 0 auto;
+}
+.stage-stepper__target {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+button.stage-stepper__target {
+  cursor: pointer;
+}
+button.stage-stepper__target:hover .stage-stepper__name {
+  color: rgb(var(--v-theme-on-surface));
+  text-decoration: underline;
+}
+button.stage-stepper__target:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  button.stage-stepper__target {
+    min-height: 44px;
+  }
 }
 .stage-stepper__mark {
   width: 22px;
@@ -139,7 +181,8 @@ const steps = computed(() => stageSteps(props.phaseOrder, props.status))
   .stage-stepper {
     padding: 12px 14px;
   }
-  .stage-stepper__step {
+  .stage-stepper__step,
+  .stage-stepper__target {
     gap: 6px;
   }
   .stage-stepper__mark {

@@ -14,7 +14,10 @@
 
 import { describe, expect, it } from 'vitest'
 import { BUD_STATUS_ORDER, VALID_BUD_TABS } from '@/types'
-import { STATUS_TAB_MAP, branchPrefix, canMoveBud, detailTabs, nextStage, stageSteps } from './budDetail'
+import {
+  STATUS_TAB_MAP, branchPrefix, budStageSteps as stageSteps, canMoveBud, detailTabs, nextBudStage as nextStage,
+} from './budDetail'
+import { nextStage as nextOf, stageSteps as stepsOf } from './budDetail'
 
 const NO_UAT = BUD_STATUS_ORDER.filter(s => s !== 'uat')
 
@@ -41,12 +44,12 @@ describe('detailTabs', () => {
 describe('stageSteps', () => {
   it('marks earlier stages done and the current one current', () => {
     const steps = stageSteps(BUD_STATUS_ORDER, 'development')
-    expect(steps.map(s => s.status)).toEqual(
+    expect(steps.map(s => s.id)).toEqual(
       ['bud', 'design', 'tech_arch', 'development', 'code_review', 'testing', 'uat', 'prod'])
     expect(steps.map(s => s.state)).toEqual(['done', 'done', 'done', 'current', 'todo', 'todo', 'todo', 'todo'])
   })
   it('follows the org phase order', () => {
-    expect(stageSteps(NO_UAT, 'prod').map(s => s.status)).not.toContain('uat')
+    expect(stageSteps(NO_UAT, 'prod').map(s => s.id)).not.toContain('uat')
   })
   it('shows a closed BUD as finished and a discarded one with no position', () => {
     expect(stageSteps(BUD_STATUS_ORDER, 'closed').every(s => s.state === 'done')).toBe(true)
@@ -57,9 +60,9 @@ describe('stageSteps', () => {
 describe('a BUD left in UAT after the org turned UAT off', () => {
   it('keeps its UAT step, with earlier stages done', () => {
     const steps = stageSteps(NO_UAT, 'uat')
-    expect(steps.map(s => s.status)).toEqual(
+    expect(steps.map(s => s.id)).toEqual(
       ['bud', 'design', 'tech_arch', 'development', 'code_review', 'testing', 'uat', 'prod'])
-    expect(steps.find(s => s.status === 'uat')?.state).toBe('current')
+    expect(steps.find(s => s.id === 'uat')?.state).toBe('current')
     expect(steps.filter(s => s.state === 'done')).toHaveLength(6)
   })
   it('moves on to prod', () => {
@@ -77,6 +80,23 @@ describe('nextStage', () => {
     expect(nextStage(BUD_STATUS_ORDER, 'prod')).toBeNull()
     expect(nextStage(BUD_STATUS_ORDER, 'closed')).toBeNull()
     expect(nextStage(BUD_STATUS_ORDER, 'discarded')).toBeNull()
+  })
+})
+
+describe('stageSteps over any stages', () => {
+  const STAGES = [{ id: 's1', label: 'Backlog' }, { id: 's2', label: 'Writing' }, { id: 's3', label: 'Published' }]
+  it('places the current stage by id', () => {
+    expect(stepsOf(STAGES, 's2').map(s => s.state)).toEqual(['done', 'current', 'todo'])
+    expect(stepsOf(STAGES, 's2')[1]).toEqual({ id: 's2', label: 'Writing', state: 'current' })
+  })
+  it('has no position for an unknown stage, and marks all done when finished', () => {
+    expect(stepsOf(STAGES, 'gone').every(s => s.state === 'todo')).toBe(true)
+    expect(stepsOf(STAGES, null, { finished: true }).every(s => s.state === 'done')).toBe(true)
+  })
+  it('steps to the next stage and stops at the last', () => {
+    expect(nextOf(STAGES, 's1')).toBe('s2')
+    expect(nextOf(STAGES, 's3')).toBeNull()
+    expect(nextOf(STAGES, null)).toBeNull()
   })
 })
 

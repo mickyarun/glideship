@@ -43,7 +43,7 @@
           @open-skill-settings="skillSettingsOpen = true" @open-history="openHistory"
         />
 
-        <BUDStageStepper :phase-order="phaseOrder" :status="bud.status" />
+        <BUDStageStepper :stages="budStages(phaseOrder, bud.status)" :current-id="bud.status" :finished="bud.status === 'closed'" />
 
         <BUDExternalLlmCallout v-if="isExternalLlmMode && !isClosed" @open-skill-settings="skillSettingsOpen = true" />
         <BUDWorkflowActions
@@ -143,7 +143,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useBUDStore } from '@/stores/bud'
 import { useBudLinkedFeaturesStore } from '@/stores/budLinkedFeatures'
 import { BUD_STATUS_LABELS, type BUDStatus } from '@/types'
-import { STATUS_TAB_MAP, canMoveBud, nextStage } from '@/utils/budDetail'
+import { STATUS_TAB_MAP, budStages, canMoveBud, nextBudStage } from '@/utils/budDetail'
 
 const budStore = useBUDStore()
 const linkedFeaturesStore = useBudLinkedFeaturesStore()
@@ -198,7 +198,7 @@ const { updateStatus, changingStatus, cancelRunningAgent, cancellingAgent, cance
   statusController
 
 const statusItems = computed(() => phaseOrder.value.map(s => ({ title: BUD_STATUS_LABELS[s], value: s })))
-const nextStatus = computed(() => (bud.value ? nextStage(phaseOrder.value, bud.value.status) : null))
+const nextStatus = computed(() => (bud.value ? nextBudStage(phaseOrder.value, bud.value.status) : null))
 const canMoveTo = (to: BUDStatus): boolean => !!bud.value && canMoveBud(hasPermission, bud.value.status, to)
 
 const { requirements, techSpec, isEditing, toggleEdit, syncEditor } =

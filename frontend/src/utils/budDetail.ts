@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // Pure helpers behind the BUD detail page: the tab list, which tab each
-// status opens on, and the stage stepper.
+// status opens on, and the stage stepper (generic over any ordered stages,
+// so team boards use it too).
 
 import { BUD_STATUS_LABELS, BUD_STATUS_ORDER, type BUDStatus } from '@/types'
 
@@ -73,10 +74,37 @@ export function detailTabs({ uatEnabled, status, hasLearning }: DetailTabOptions
 
 export type StepState = 'done' | 'current' | 'todo'
 
-export interface StageStep {
-  status: BUDStatus
+/** One stage a stepper shows, in order. */
+export interface StageOption<T extends string = string> {
+  id: T
   label: string
+}
+
+export interface StageStep<T extends string = string> extends StageOption<T> {
   state: StepState
+}
+
+/**
+ * Where something sits on an ordered list of stages: earlier ones done,
+ * ``currentId`` current, the rest to do. A ``currentId`` that isn't in the
+ * list (or null) has no position; ``finished`` marks every stage done.
+ */
+export function stageSteps<T extends string>(
+  stages: readonly StageOption<T>[],
+  currentId: T | null,
+  { finished = false } = {},
+): StageStep<T>[] {
+  const at = finished ? stages.length : stages.findIndex(s => s.id === currentId)
+  return stages.map((s, i) => ({
+    ...s,
+    state: at < 0 ? 'todo' : i < at ? 'done' : i === at ? 'current' : 'todo',
+  }))
+}
+
+/** The stage after ``currentId``, or null at the last stage or off the list. */
+export function nextStage<T extends string>(stages: readonly StageOption<T>[], currentId: T | null): T | null {
+  const i = stages.findIndex(s => s.id === currentId)
+  return i >= 0 && i < stages.length - 1 ? stages[i + 1].id : null
 }
 
 const ENDED: ReadonlySet<BUDStatus> = new Set(['closed', 'discarded'])
@@ -86,22 +114,18 @@ const ENDED: ReadonlySet<BUDStatus> = new Set(['closed', 'discarded'])
  * BUD's own stage if the org has since switched it off (a BUD can sit in
  * UAT after UAT is turned off), in canonical lifecycle order.
  */
-function liveStages(phaseOrder: readonly BUDStatus[], status: BUDStatus): BUDStatus[] {
-  return BUD_STATUS_ORDER.filter(s => !ENDED.has(s) && (phaseOrder.includes(s) || s === status))
+export function budStages(phaseOrder: readonly BUDStatus[], status: BUDStatus): StageOption<BUDStatus>[] {
+  return BUD_STATUS_ORDER
+    .filter(s => !ENDED.has(s) && (phaseOrder.includes(s) || s === status))
+    .map(s => ({ id: s, label: BUD_STATUS_LABELS[s] }))
 }
 
 /**
  * The stepper's stages and where the BUD sits on them. A closed BUD has
  * finished every stage; a discarded one has no position.
  */
-export function stageSteps(phaseOrder: readonly BUDStatus[], status: BUDStatus): StageStep[] {
-  const stages = liveStages(phaseOrder, status)
-  const at = status === 'closed' ? stages.length : stages.indexOf(status)
-  return stages.map((s, i) => ({
-    status: s,
-    label: BUD_STATUS_LABELS[s],
-    state: at < 0 ? 'todo' : i < at ? 'done' : i === at ? 'current' : 'todo',
-  }))
+export function budStageSteps(phaseOrder: readonly BUDStatus[], status: BUDStatus): StageStep<BUDStatus>[] {
+  return stageSteps(budStages(phaseOrder, status), status, { finished: status === 'closed' })
 }
 
 /**
@@ -109,11 +133,8 @@ export function stageSteps(phaseOrder: readonly BUDStatus[], status: BUDStatus):
  * Null at prod: closing can't be undone, so it is only offered from the
  * stage menu, behind a confirmation. Null once ended too.
  */
-export function nextStage(phaseOrder: readonly BUDStatus[], status: BUDStatus): BUDStatus | null {
-  if (ENDED.has(status)) return null
-  const stages = liveStages(phaseOrder, status)
-  const i = stages.indexOf(status)
-  return i >= 0 && i < stages.length - 1 ? stages[i + 1] : null
+export function nextBudStage(phaseOrder: readonly BUDStatus[], status: BUDStatus): BUDStatus | null {
+  return nextStage(budStages(phaseOrder, status), status)
 }
 
 /** The branch prefix commits for a BUD go on, e.g. 8 → "bud-008/". Git hooks match on it. */
