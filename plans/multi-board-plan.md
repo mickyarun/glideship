@@ -870,7 +870,9 @@ A `DraftReviewService` gets extracted only when BUD sections adopt drafts.
 ### Scale
 
 - **Board load.** One `list_summaries` query per stage page. Each stage is keyset-paged on
-  `(position, id)`. Columns are virtualised on the frontend, so a 4,000-card backlog stays fast.
+  `(position, id)`. Columns have a fixed height and scroll on their own, loading the next page
+  as you reach the bottom. There's no DOM windowing, because windowing conflicts with SortableJS
+  drag and drop. Paging keeps a 4,000-card backlog light.
 - **Positions.** float8 with midpoint inserts.
   - When a gap falls below `position_epsilon`, the stage is rebalanced with
     `row_number() * position_gap`, under `SELECT … FOR UPDATE` on the stage row.
