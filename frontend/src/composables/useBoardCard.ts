@@ -36,9 +36,11 @@ export interface CardLiveHooks {
   onActivity: () => void
   /** A document got a new version elsewhere. */
   onDoc: (kind: CardDocKind) => void
+  /** Anything about the card changed elsewhere, so its history has a new entry. */
+  onHistory: () => void
 }
 
-export function useBoardCard(number: Ref<number>, hooks: CardLiveHooks) {
+export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
   const page = useBoardContext()
   const detail = ref<CardDetail | null>(null)
   const loading = ref(false)
@@ -54,7 +56,7 @@ export function useBoardCard(number: Ref<number>, hooks: CardLiveHooks) {
     const n = number.value
     if (!key) return
     // Not a card number at all: there's no such card.
-    if (!Number.isInteger(n) || n < 1) {
+    if (n === null) {
       notFound.value = true
       return
     }
@@ -66,7 +68,8 @@ export function useBoardCard(number: Ref<number>, hooks: CardLiveHooks) {
     try {
       const card = await boardCardApi.get(key, n)
       if (mine !== seq) return
-      detail.value = card
+      const held = detail.value
+      if (!held || held.id !== card.id || !isOlder(card, held)) detail.value = card
       notFound.value = false
       gone.value = false
     } catch (err) {
@@ -86,6 +89,7 @@ export function useBoardCard(number: Ref<number>, hooks: CardLiveHooks) {
     const held = detail.value
     if (!held || !isMine(message.card.id) || isOlder(message.card, held)) return
     detail.value = { ...held, ...message.card }
+    hooks.onHistory()
     // The description of an edit isn't in the summary.
     if (message.event !== 'card_updated') return
     void load({ quiet: true })
@@ -104,7 +108,9 @@ export function useBoardCard(number: Ref<number>, hooks: CardLiveHooks) {
         if (isMine(message.card_id)) hooks.onActivity()
       },
       doc_updated: message => {
-        if (isMine(message.card_id)) hooks.onDoc(message.kind)
+        if (!isMine(message.card_id)) return
+        hooks.onDoc(message.kind)
+        hooks.onHistory()
       },
     },
     () => {

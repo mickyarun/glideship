@@ -16,9 +16,10 @@
 
 <!-- The frame around a board's pages: loads the board once (with my saved
      filters), follows its live channel, and shows the states every child
-     page shares: loading, a load error, and no access. -->
+     page shares: loading, a load error, and no access. A key no board could
+     have is "not found" without asking the API. -->
 <template>
-  <BoardNoAccess v-if="board.notFound.value" />
+  <BoardNoAccess v-if="!validKey || board.notFound.value" />
   <div v-else-if="!board.detail.value" class="board-shell">
     <AppCallout
       v-if="board.error.value"
@@ -44,9 +45,18 @@ import BoardSkeleton from '@/components/boards/board/BoardSkeleton.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import { provideBoardContext } from '@/composables/useBoardContext'
 import { useBoardPage } from '@/composables/useBoardPage'
+import { useBoardsStore } from '@/stores/boards'
+import { isBoardKey } from '@/utils/boardRoutes'
 
 const route = useRoute()
-const key = computed(() => String(route.params.key ?? '').toUpperCase())
+const boards = useBoardsStore()
+const validKey = computed(() => {
+  const limits = boards.limits
+  const lengths = limits?.board_key_min && limits.board_key_max ? { min: limits.board_key_min, max: limits.board_key_max } : null
+  return isBoardKey(route.params.key, lengths)
+})
+// The page only ever opens a key that could be a board's.
+const key = computed(() => (validKey.value ? String(route.params.key).toUpperCase() : ''))
 const page = useBoardPage(key)
 const { board } = page
 provideBoardContext(page)

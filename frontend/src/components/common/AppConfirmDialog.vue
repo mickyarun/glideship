@@ -21,7 +21,10 @@
        <AppConfirmDialog v-model="open" title="Close this bug?" body="…" action="Close bug" @confirm="close" />
 
      It stays open while ``busy``; the parent closes it once the action
-     has succeeded. It opens with focus on Cancel, the safe choice. -->
+     has succeeded. It opens with focus on Cancel, the safe choice, and on
+     closing gives focus back to whatever had it when it opened; when that
+     is gone (a deleted row), to ``returnFocus`` (the next row, an add
+     field). ``color`` is the action's: ``error`` for destructive ones. -->
 <template>
   <v-dialog
     :model-value="modelValue"
@@ -36,21 +39,50 @@
       <slot />
       <div class="app-confirm__actions">
         <v-btn ref="cancel" variant="text" :disabled="busy" @click="emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" :loading="busy" @click="emit('confirm')">{{ action }}</v-btn>
+        <v-btn :color="color" variant="flat" :loading="busy" @click="emit('confirm')">{{ action }}</v-btn>
       </div>
     </v-card>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 
-withDefaults(defineProps<{ modelValue: boolean; title: string; body?: string; action: string; busy?: boolean }>(), {
-  body: '',
-  busy: false,
-})
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean
+    title: string
+    body?: string
+    action: string
+    busy?: boolean
+    color?: 'primary' | 'error' | 'warning'
+    /** Where focus goes on close when the element that opened it is gone. */
+    returnFocus?: HTMLElement | null
+  }>(),
+  { body: '', busy: false, color: 'primary', returnFocus: null },
+)
 const emit = defineEmits<{ 'update:modelValue': [open: boolean]; confirm: [] }>()
 const cancel = ref<{ $el: HTMLElement } | null>(null)
+let opener: HTMLElement | null = null
+
+watch(() => props.modelValue, async (open, was) => {
+  if (open) {
+    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    return
+  }
+  if (!was) return
+  // After the parent has redrawn (a deleted row is gone by then) and the
+  // overlay has let go of focus.
+  await nextTick()
+  setTimeout(restoreFocus)
+}, { immediate: true })
+
+function restoreFocus(): void {
+  if (!opener) return
+  const target = opener.isConnected ? opener : props.returnFocus
+  opener = null
+  target?.focus()
+}
 </script>
 
 <style scoped>

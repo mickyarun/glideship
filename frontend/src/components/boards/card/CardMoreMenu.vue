@@ -14,8 +14,8 @@
  * limitations under the License.
  -->
 
-<!-- The card page's overflow menu: copy the card's link, and archive or
-     restore it for those who may. -->
+<!-- The card page's overflow menu: copy the card's link (saying whether it
+     worked), and archive or restore it for those who may. -->
 <template>
   <v-menu location="bottom end">
     <template #activator="{ props: menuProps }">
@@ -37,13 +37,13 @@ import { useRouter } from 'vue-router'
 import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{ boardKey: string; number: number; archived: boolean; canArchive: boolean }>()
-const emit = defineEmits<{ archive: []; restore: []; copied: [] }>()
+const emit = defineEmits<{ archive: []; restore: []; copied: [ok: boolean] }>()
 
 const router = useRouter()
 
 async function copy(): Promise<void> {
   const { href } = router.resolve({ name: 'board-card', params: { key: props.boardKey, number: props.number } })
-  if (await copyText(new URL(href, window.location.origin).toString())) emit('copied')
+  emit('copied', await copyText(new URL(href, window.location.origin).toString()))
 }
 </script>
 

@@ -32,6 +32,12 @@ export const SWITCHER_SHORTCUT_KEY = 'b'
  */
 export const KEY_SUGGESTION_LENGTH = 4
 
+/**
+ * Board key lengths until GET /boards/limits answers: BOARD_KEY_MIN_LENGTH
+ * and BOARD_KEY_MAX_LENGTH in backend/app/services/boards/constants.py.
+ */
+export const BOARD_KEY_LENGTHS = { min: 2, max: 10 }
+
 /** Filter changes are saved to the board's prefs once they settle this long. */
 export const PREFS_SAVE_DELAY_MS = 800
 
@@ -100,12 +106,15 @@ export const DOC_LABELS: Record<CardDocKind, string> = {
   notes: 'Notes',
 }
 export const DOC_KINDS = Object.keys(DOC_LABELS) as CardDocKind[]
+/** The same names mid-sentence ("No PRD yet", "the design brief"). */
+export const DOC_NAMES: Record<CardDocKind, string> = {
+  prd: 'PRD',
+  design_brief: 'design brief',
+  notes: 'notes',
+}
 
-/** Where a document version came from, for its history. */
-export const DOC_SOURCE_LABELS: Record<CardDocSource, { text: string; color: string }> = {
-  ui: { text: 'edit', color: 'primary' },
-  mcp: { text: 'mcp', color: 'brand' },
-  agent: { text: 'ai', color: 'success' },
-  migration: { text: 'import', color: 'muted' },
-  revert: { text: 'restore', color: 'warning' },
+/** Version tags in a document's history: only AI drafts and restores stand out. */
+export const DOC_SOURCE_BADGES: Partial<Record<CardDocSource, { text: string; color: string }>> = {
+  agent: { text: 'AI', color: 'success' },
+  revert: { text: 'Restored', color: 'warning' },
 }

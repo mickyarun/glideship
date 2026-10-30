@@ -55,6 +55,7 @@ let _hasEverOpened = false
 
 /** topic → set of callbacks */
 const listeners: Map<string, Set<(data: unknown) => void>> = new Map()
+const revokeListeners: Map<string, Set<() => void>> = new Map()
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -167,6 +168,12 @@ export function connect(): void {
     try {
       const msg = JSON.parse(event.data as string) as Record<string, unknown>
       if (msg.topic && typeof msg.topic === 'string') {
+        // Access to the topic was lost (or never there): its owners reload,
+        // and the server answers what they may still see.
+        if (msg.error === 'revoked' || msg.error === 'forbidden') {
+          revokeListeners.get(msg.topic)?.forEach((cb) => cb())
+          return
+        }
         const topicListeners = listeners.get(msg.topic)
         topicListeners?.forEach((cb) => cb(msg.data))
       }
@@ -229,6 +236,20 @@ export function subscribe(topic: string, callback: (data: unknown) => void): voi
     connect()
   } else if (isNew && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ action: 'subscribe', topic }))
+  }
+}
+
+/**
+ * Hear when the server drops this tab's access to a topic (``{topic,
+ * error: 'revoked'}``, or a refused subscribe). Returns the unregister.
+ */
+export function onRevoked(topic: string, callback: () => void): () => void {
+  const set = revokeListeners.get(topic) ?? new Set()
+  set.add(callback)
+  revokeListeners.set(topic, set)
+  return () => {
+    set.delete(callback)
+    if (set.size === 0 && revokeListeners.get(topic) === set) revokeListeners.delete(topic)
   }
 }
 

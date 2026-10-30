@@ -91,6 +91,7 @@
           v-if="card.due_at && canEdit"
           :model-value="card.due_done"
           label="Done"
+          aria-label="Mark the due date done"
           density="compact"
           hide-details
           @update:model-value="emit('due-done', !!$event)"
@@ -182,9 +183,7 @@ const labelItems = computed<PickItem[]>(() => props.labels.map(l => ({ id: l.id,
   color: var(--color-accent-text);
   cursor: pointer;
 }
-.bud-facts__link:hover {
-  text-decoration: underline;
-}
+.bud-facts__link:hover { text-decoration: underline; }
 .bud-facts__link:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;

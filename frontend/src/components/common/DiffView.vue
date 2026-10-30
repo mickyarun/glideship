@@ -15,8 +15,9 @@
  -->
 
 <!-- What changed from one text to another, line by line: added lines
-     marked + on a success wash, removed ones − and struck through. Pure:
-     it diffs the two texts it's given. -->
+     marked + on a success wash, removed ones − and struck through (screen
+     readers hear "Added:" and "Removed:"). Pure: it diffs the two texts
+     it's given, and reports how many lines changed (``stats``). -->
 <template>
   <div v-if="!lines.length" class="diff-view__empty">
     <v-icon icon="mdi-equal-box" size="28" class="text-medium-emphasis" />
@@ -24,15 +25,15 @@
   </div>
   <div v-else class="diff-view" role="region" :aria-label="label">
     <div v-for="(line, idx) in lines" :key="idx" class="diff-line" :class="`diff-line--${line.type}`">
-      <span class="diff-line__marker">{{ MARKERS[line.type] }}</span>
-      <span class="diff-line__text">{{ line.text || ' ' }}</span>
+      <span class="diff-line__marker" aria-hidden="true">{{ MARKERS[line.type] }}</span>
+      <span class="diff-line__text"><span v-if="SPOKEN[line.type]" class="d-sr-only">{{ SPOKEN[line.type] }}</span>{{ line.text || ' ' }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { lineDiff, type DiffLine } from '@/utils/lineDiff'
+import { computed, watch } from 'vue'
+import { diffStats, lineDiff, type DiffLine, type DiffStats } from '@/utils/lineDiff'
 
 const props = withDefaults(
   defineProps<{
@@ -44,9 +45,13 @@ const props = withDefaults(
   { label: 'Changes', emptyText: 'No content changes between this version and the current text.' },
 )
 
+const emit = defineEmits<{ stats: [stats: DiffStats | null] }>()
+
 const MARKERS: Record<DiffLine['type'], string> = { added: '+', removed: '−', context: ' ' }
+const SPOKEN: Record<DiffLine['type'], string> = { added: 'Added: ', removed: 'Removed: ', context: '' }
 
 const lines = computed(() => lineDiff(props.old, props.new))
+watch(lines, next => emit('stats', diffStats(next)), { immediate: true })
 </script>
 
 <style scoped>

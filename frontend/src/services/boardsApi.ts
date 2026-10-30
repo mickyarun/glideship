@@ -35,8 +35,14 @@ import type {
 
 const BASE = '/v1/boards'
 
+/** One path segment; "." and ".." would climb out of the boards API. */
+function segment(value: string): string {
+  if (value === '.' || value === '..' || !value) throw new Error(`Not a board path segment: "${value}"`)
+  return encodeURIComponent(value)
+}
+
 /** A board's API path. */
-export const boardUrl = (key: string) => `${BASE}/${encodeURIComponent(key)}`
+export const boardUrl = (key: string) => `${BASE}/${segment(key)}`
 /** A card's API path; its sub-resources (comments, checklist…) hang off it. */
 export const cardUrl = (key: string, number: number) => `${boardUrl(key)}/cards/${number}`
 
@@ -82,5 +88,5 @@ export const boardsApi = {
   restoreCard: async (key: string, number: number) =>
     (await api.post<CardDetail>(`${cardUrl(key, number)}/restore`)).data,
   cardByKey: async (cardKey: string) =>
-    (await api.get<CardDetail>(`${BASE}/cards/by-key/${encodeURIComponent(cardKey)}`)).data,
+    (await api.get<CardDetail>(`${BASE}/cards/by-key/${segment(cardKey)}`)).data,
 }

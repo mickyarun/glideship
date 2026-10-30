@@ -18,14 +18,16 @@
  * versions' text for comparing. Saving writes a new version on top of
  * the one the edit started from; if someone saved in between, the server
  * refuses (409), and the documents reload so the person can redo it on
- * the newer text. Replies for a card no longer open are dropped.
+ * the newer text. Replies for a card no longer open are dropped. The store
+ * empties when the card page closes, access is lost, or I sign out.
  */
 import { isAxiosError } from 'axios'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 import type { CardRef } from '@/composables/useCardChecklist'
 import { boardCardApi } from '@/services/boardCardApi'
+import { useAuthStore } from '@/stores/auth'
 import type { CardDocKind, DocRead, DocVersionRead } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
 
@@ -37,6 +39,12 @@ interface History {
 }
 
 const emptyHistory = (): History => ({ items: [], next: null, loading: false, loaded: false })
+
+/** A save's outcome: the error to show, and whether someone saved a newer version first. */
+export interface WriteResult {
+  error: string | null
+  conflict: boolean
+}
 
 export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
   const card = ref<CardRef | null>(null)
@@ -66,6 +74,20 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
       if (same(c, mine)) loading.value = false
     }
   }
+
+  /** Forget the open card's documents. */
+  function reset(): void {
+    seq++
+    card.value = null
+    current.value = {}
+    history.value = {}
+    loading.value = false
+    error.value = ''
+    texts.clear()
+  }
+  watch(() => useAuthStore().token, token => {
+    if (!token) reset()
+  })
 
   /** Start on a card: nothing loaded, then its current documents. */
   function open(next: CardRef): Promise<void> {
@@ -102,12 +124,14 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
     const c = card.value
     const cached = texts.get(`${kind}:${version}`)
     if (cached !== undefined || !c) return cached ?? null
+    const mine = seq
     try {
       const doc = await boardCardApi.version(c.key, c.number, kind, version)
+      if (!same(c, mine)) return null
       texts.set(`${kind}:${version}`, doc.body_md)
       return doc.body_md
     } catch (err) {
-      error.value = extractApiError(err, "Couldn't load that version.")
+      if (same(c, mine)) error.value = extractApiError(err, "Couldn't load that version.")
       return null
     }
   }
@@ -118,32 +142,45 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
     if (history.value[kind]?.loaded) await loadVersions(kind)
   }
 
-  async function write(kind: CardDocKind, send: (c: CardRef, base: number | null) => Promise<DocRead>, fallback: string) {
+  async function write(kind: CardDocKind, send: (c: CardRef) => Promise<DocRead>, fallback: string): Promise<WriteResult> {
     const c = card.value
-    if (!c) return null
+    if (!c) return { error: null, conflict: false }
     const mine = seq
     try {
-      const doc = await send(c, current.value[kind]?.version ?? null)
-      if (!same(c, mine)) return null
+      const doc = await send(c)
+      if (!same(c, mine)) return { error: null, conflict: false }
       current.value = { ...current.value, [kind]: doc }
       texts.set(`${kind}:${doc.version}`, doc.body_md)
       if (history.value[kind]?.loaded) void loadVersions(kind)
-      return null
+      return { error: null, conflict: false }
     } catch (err) {
-      if (same(c, mine) && isAxiosError(err) && err.response?.status === 409) void refresh(kind)
-      return extractApiError(err, fallback)
+      const conflict = isAxiosError(err) && err.response?.status === 409
+      if (same(c, mine) && conflict) await refresh(kind)
+      return { error: extractApiError(err, fallback), conflict }
     }
   }
 
-  /** Save ``body`` as the document's new current version. */
-  function save(kind: CardDocKind, body: string): Promise<string | null> {
-    return write(kind, (c, base) => boardCardApi.writeDoc(c.key, c.number, kind, body, base), "Couldn't save the document. Try again.")
+  /**
+   * Save ``body`` as the document's new current version, on top of ``base``:
+   * the version the edit started from (null for a document not written yet).
+   */
+  function save(kind: CardDocKind, body: string, base: number | null): Promise<WriteResult> {
+    return write(kind, c => boardCardApi.writeDoc(c.key, c.number, kind, body, base), "Couldn't save the document. Try again.")
   }
 
-  /** Make an old version's text current again, as a new version. */
-  function restore(kind: CardDocKind, version: number): Promise<string | null> {
-    return write(kind, (c, base) => boardCardApi.restoreDoc(c.key, c.number, kind, version, base), "Couldn't restore that version. Try again.")
+  /** Make an old version's text current again, as a new version on top of the current one. */
+  async function restore(kind: CardDocKind, version: number): Promise<string | null> {
+    const base = current.value[kind]?.version ?? null
+    const result = await write(
+      kind,
+      c => boardCardApi.restoreDoc(c.key, c.number, kind, version, base),
+      "Couldn't restore that version. Try again.",
+    )
+    return result.error
   }
 
-  return { card, current, history, loading, error, open, loadDocs, loadVersions, versionText, refresh, save, restore }
+  return {
+    card, current, history, loading, error,
+    open, reset, loadDocs, loadVersions, versionText, refresh, save, restore,
+  }
 })

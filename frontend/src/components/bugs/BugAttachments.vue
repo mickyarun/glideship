@@ -17,7 +17,7 @@
 <template>
   <div>
     <div class="d-flex align-center ga-2 mb-2">
-      <span class="text-caption text-medium-emphasis font-weight-medium">Attachments</span>
+      <span v-if="!headless" class="text-caption text-medium-emphasis font-weight-medium">Attachments</span>
       <span class="text-caption text-disabled">{{ count }} / {{ effectiveLimits.maxFiles }}</span>
       <v-spacer />
       <v-btn
@@ -114,6 +114,8 @@ const props = withDefaults(
     /** Which stored attachments I may remove; any, unless read-only, by default. */
     canRemove?: (attachment: StoredAttachment) => boolean
     maxLinks?: number | null
+    /** Inside a panel that has its own heading. */
+    headless?: boolean
   }>(),
   {
     baseUrl: null,
@@ -122,6 +124,7 @@ const props = withDefaults(
     readonly: false,
     canRemove: undefined,
     maxLinks: null,
+    headless: false,
   },
 )
 

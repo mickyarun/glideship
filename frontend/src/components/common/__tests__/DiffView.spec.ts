@@ -34,7 +34,7 @@ describe('DiffView', () => {
   it('marks added and removed lines between the two texts', () => {
     const wrapper = mount(DiffView, { props: { old: 'Title\nOld line\nSame', new: 'Title\nNew line\nSame' }, global })
     const lines = lineTexts(wrapper)
-    expect(lines).toEqual(['Title', '−Old line', '+New line', 'Same'])
+    expect(lines).toEqual(['Title', '−Removed: Old line', '+Added: New line', 'Same'])
     expect(wrapper.findAll('.diff-line--added')).toHaveLength(1)
     expect(wrapper.findAll('.diff-line--removed')).toHaveLength(1)
   })
@@ -43,6 +43,19 @@ describe('DiffView', () => {
     const wrapper = mount(DiffView, { props: { old: 'Same', new: 'Same', emptyText: 'Nothing changed' }, global })
     expect(wrapper.findAll('.diff-line')).toHaveLength(0)
     expect(wrapper.text()).toContain('Nothing changed')
+  })
+
+  it('reports how many lines changed', () => {
+    const wrapper = mount(DiffView, { props: { old: 'a\nb', new: 'a\nc\nd' }, global })
+    expect(wrapper.emitted('stats')?.[0]).toEqual([{ added: 2, removed: 1 }])
+  })
+
+  it('ignores a missing newline at the end of one side', () => {
+    expect(lineDiff('one\ntwo', 'one\ntwo\n')).toEqual([])
+    expect(lineDiff('one\ntwo', 'one\nTWO\n').map(l => `${l.type}:${l.text}`)).toEqual([
+      'context:one', 'removed:two', 'added:TWO',
+    ])
+    expect(lineDiff('', 'new\n').map(l => l.type)).toEqual(['added'])
   })
 
   it('counts the changed lines', () => {
@@ -59,7 +72,7 @@ describe('VersionRail', () => {
 
   it('lists the versions with the picked one pressed, and reports a pick', async () => {
     const wrapper = mount(VersionRail, { props: { items, selectedId: 'v1', loading: false }, global })
-    const buttons = wrapper.findAll('.diff-rail__item')
+    const buttons = wrapper.findAll('.version-rail__item')
     expect(buttons.map(b => b.attributes('aria-pressed'))).toEqual(['false', 'true'])
     expect(buttons[0].text()).toContain('Current')
     expect(buttons[1].text()).toContain('Asha')

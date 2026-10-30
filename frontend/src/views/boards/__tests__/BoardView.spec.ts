@@ -24,6 +24,7 @@ const listeners = new Map<string, (data: unknown) => void>()
 vi.mock('@/services/socket', () => ({
   subscribe: vi.fn((t: string, cb: (d: unknown) => void) => listeners.set(t, cb)),
   unsubscribe: vi.fn((t: string) => listeners.delete(t)),
+  onRevoked: vi.fn(() => () => {}),
 }))
 vi.mock('@/services/boardsApi', () => ({
   boardsApi: {

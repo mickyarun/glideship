@@ -27,6 +27,7 @@ const reconnects = new Set<() => void>()
 vi.mock('@/services/socket', () => ({
   subscribe: vi.fn((t: string, cb: (d: unknown) => void) => listeners.set(t, cb)),
   unsubscribe: vi.fn((t: string) => listeners.delete(t)),
+  onRevoked: vi.fn(() => () => {}),
 }))
 vi.mock('@/services/wsReconnect', () => ({
   onSocketReconnect: (cb: () => void) => {

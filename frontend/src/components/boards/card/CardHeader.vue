@@ -75,7 +75,7 @@
           :can-archive="canArchive"
           @archive="emit('archive')"
           @restore="emit('restore')"
-          @copied="emit('copied')"
+          @copied="ok => emit('copied', ok)"
         />
       </div>
     </div>
@@ -112,7 +112,7 @@ const emit = defineEmits<{
   priority: [priority: BUDPriority | null]
   archive: []
   restore: []
-  copied: []
+  copied: [ok: boolean]
 }>()
 
 const date = computed(() => dateChip(props.card, props.now))

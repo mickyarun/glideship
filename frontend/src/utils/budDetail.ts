@@ -124,8 +124,8 @@ export function budStages(phaseOrder: readonly BUDStatus[], status: BUDStatus): 
  * The stepper's stages and where the BUD sits on them. A closed BUD has
  * finished every stage; a discarded one has no position.
  */
-export function budStageSteps(phaseOrder: readonly BUDStatus[], status: BUDStatus): StageStep<BUDStatus>[] {
-  return stageSteps(budStages(phaseOrder, status), status, { finished: status === 'closed' })
+export function budStepper(phaseOrder: readonly BUDStatus[], status: BUDStatus) {
+  return { stages: budStages(phaseOrder, status), currentId: status, finished: status === 'closed' }
 }
 
 /**

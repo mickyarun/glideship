@@ -79,7 +79,7 @@
             Pick a version to view the diff.
           </div>
         </div>
-        <DiffView v-else :old="oldText" :new="currentContent" :label="`${sectionLabel} changes`" />
+        <DiffView v-else :old="oldText" :new="currentContent" :label="`${sectionLabel} changes`" @stats="diffStats = $event" />
       </section>
     </div>
 
@@ -122,7 +122,7 @@ import DiffView from '@/components/common/DiffView.vue'
 import VersionRail, { type VersionRailItem } from '@/components/common/VersionRail.vue'
 import type { BUDDesign } from '@/types'
 import { relativeTime } from '@/utils/date'
-import { diffStats as statsOf, lineDiff } from '@/utils/lineDiff'
+import type { DiffStats } from '@/utils/lineDiff'
 
 interface BUDVersionSummary {
   id: string
@@ -269,9 +269,11 @@ const oldText = computed(() => {
   return stringifyForDiff(selectedVersion.value.snapshot[cfg.field], cfg.format)
 })
 
-const diffStats = computed(() =>
-  selectedVersion.value ? statsOf(lineDiff(oldText.value, currentContent.value)) : null,
-)
+// Reported by the diff itself, so the texts are diffed once.
+const diffStats = ref<DiffStats | null>(null)
+watch(selectedVersion, v => {
+  if (!v) diffStats.value = null
+})
 
 const restoreDisabledReason = computed<string | null>(() => {
   if (props.budStatus === 'closed' || props.budStatus === 'discarded') {

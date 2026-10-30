@@ -24,7 +24,7 @@
      it — useful when the parent assumes a non-null mode at all
      times. -->
 <template>
-  <div class="app-pill-toggle" :class="`app-pill-toggle--${size}`" role="radiogroup">
+  <div ref="root" class="app-pill-toggle" :class="`app-pill-toggle--${size}`" role="radiogroup" @keydown="onKey">
     <button
       v-for="opt in options"
       :key="String(opt.value)"
@@ -33,6 +33,7 @@
       class="app-pill-toggle__option"
       :class="{ 'app-pill-toggle__option--active': opt.value === modelValue }"
       :aria-checked="opt.value === modelValue"
+      :tabindex="opt.value === focusValue ? 0 : -1"
       @click="select(opt.value)"
     >
       {{ opt.label }}
@@ -41,6 +42,8 @@
 </template>
 
 <script setup lang="ts" generic="T extends string | number">
+import { computed, nextTick, ref } from 'vue'
+
 interface PillOption<V extends string | number> {
   label: string
   value: V
@@ -63,6 +66,28 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<(e: 'update:modelValue', value: T) => void>()
+
+const root = ref<HTMLElement | null>(null)
+// One tab stop for the group (the checked option, else the first); arrow
+// keys move between options and pick them, as radio groups do.
+const focusValue = computed(() =>
+  props.options.some(o => o.value === props.modelValue) ? props.modelValue : props.options[0]?.value,
+)
+
+const STEPS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
+
+function onKey(event: KeyboardEvent): void {
+  const count = props.options.length
+  const at = props.options.findIndex(o => o.value === focusValue.value)
+  let next: number
+  if (event.key in STEPS) next = (at + STEPS[event.key] + count) % count
+  else if (event.key === 'Home') next = 0
+  else if (event.key === 'End') next = count - 1
+  else return
+  event.preventDefault()
+  select(props.options[next].value)
+  void nextTick(() => root.value?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus())
+}
 
 function select(value: T): void {
   if (props.mandatory && value === props.modelValue) return
@@ -132,6 +157,14 @@ function select(value: T): void {
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-primary));
   cursor: default;
+}
+@media (pointer: coarse) {
+  .app-pill-toggle {
+    height: auto;
+  }
+  .app-pill-toggle .app-pill-toggle__option {
+    min-height: 44px;
+  }
 }
 .app-pill-toggle__option:focus-visible {
   /* No offset, so the whole ring sits on the track rather than past it. */

@@ -43,7 +43,7 @@
           @open-skill-settings="skillSettingsOpen = true" @open-history="openHistory"
         />
 
-        <BUDStageStepper :stages="budStages(phaseOrder, bud.status)" :current-id="bud.status" :finished="bud.status === 'closed'" />
+        <BUDStageStepper v-bind="budStepper(phaseOrder, bud.status)" />
 
         <BUDExternalLlmCallout v-if="isExternalLlmMode && !isClosed" @open-skill-settings="skillSettingsOpen = true" />
         <BUDWorkflowActions
@@ -143,7 +143,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useBUDStore } from '@/stores/bud'
 import { useBudLinkedFeaturesStore } from '@/stores/budLinkedFeatures'
 import { BUD_STATUS_LABELS, type BUDStatus } from '@/types'
-import { STATUS_TAB_MAP, budStages, canMoveBud, nextBudStage } from '@/utils/budDetail'
+import { STATUS_TAB_MAP, budStepper, canMoveBud, nextBudStage } from '@/utils/budDetail'
 
 const budStore = useBUDStore()
 const linkedFeaturesStore = useBudLinkedFeaturesStore()

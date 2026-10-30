@@ -45,7 +45,7 @@ describe('BUDStageStepper with custom stages', () => {
       global: { stubs },
     })
     const buttons = wrapper.findAll('button')
-    expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Move to Backlog', 'Move to Published'])
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Move to Backlog (done)', 'Move to Published (upcoming)'])
     await buttons[1].trigger('click')
     expect(wrapper.emitted('select')).toEqual([['s3']])
   })

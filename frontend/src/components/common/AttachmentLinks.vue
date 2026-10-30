@@ -22,9 +22,10 @@
     <ul v-if="links.length" class="attachment-links__list">
       <li v-for="link in links" :key="link.id" class="attachment-links__row">
         <v-icon icon="mdi-link-variant" size="16" aria-hidden="true" />
-        <a :href="link.url ?? undefined" target="_blank" rel="noopener noreferrer" class="attachment-links__link">
+        <a v-if="safeHttpUrl(link.url)" :href="safeHttpUrl(link.url)" target="_blank" rel="noopener noreferrer" class="attachment-links__link">
           {{ link.filename }}<span class="d-sr-only"> (opens in a new tab)</span>
         </a>
+        <span v-else class="attachment-links__link">{{ link.filename }}</span>
         <span class="attachment-links__host">{{ hostOf(link.url) }}</span>
         <v-btn
           v-if="canRemove(link)"
@@ -62,6 +63,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { StoredAttachment } from '@/utils/attachmentWire'
+import { safeHttpUrl } from '@/utils/safeUrl'
 
 const props = defineProps<{
   links: StoredAttachment[]
@@ -78,13 +80,7 @@ const url = ref('')
 const title = ref('')
 
 const full = computed(() => props.maxLinks !== null && props.links.length >= props.maxLinks)
-const validUrl = computed(() => {
-  try {
-    return ['http:', 'https:'].includes(new URL(url.value.trim()).protocol)
-  } catch {
-    return false
-  }
-})
+const validUrl = computed(() => !!safeHttpUrl(url.value.trim()))
 
 function hostOf(link: string | null): string {
   try {

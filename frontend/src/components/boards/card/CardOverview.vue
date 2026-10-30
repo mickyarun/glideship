@@ -22,12 +22,15 @@
     :editable="canEdit"
     :max-length="limits?.card_description_max ?? null"
     :save="saveDescription"
+    @dirty="what => emit('dirty', what)"
   />
   <CardChecklist
     :list="checklist"
     :editable="canEdit"
     :max-text="limits?.checklist_text_max ?? null"
     :max-items="limits?.checklist_max_items ?? null"
+    :compact="compact"
+    :remove="removeItem"
     @result="(error, success) => emit('result', error, success)"
   />
   <AppPanel title="Files and links">
@@ -38,6 +41,7 @@
       :readonly="!canEdit"
       :can-remove="a => canRemoveAny || a.uploadedBy === meId"
       :max-links="limits?.links_max_per_card ?? null"
+      headless
     />
   </AppPanel>
 </template>
@@ -51,7 +55,7 @@ import AppPanel from '@/components/common/AppPanel.vue'
 import type { useCardChecklist } from '@/composables/useCardChecklist'
 import { cardUrl } from '@/services/boardsApi'
 import { useAuthStore } from '@/stores/auth'
-import type { BoardLimits, CardDetail } from '@/types/boards'
+import type { BoardLimits, CardDetail, ChecklistItem } from '@/types/boards'
 import { CARD_ATTACHMENT_WIRE } from '@/utils/boardCardWire'
 
 const props = defineProps<{
@@ -63,8 +67,11 @@ const props = defineProps<{
   /** A board admin may remove anyone's files and links; others only their own. */
   canRemoveAny: boolean
   saveDescription: (text: string) => Promise<boolean>
+  removeItem: (item: ChecklistItem) => Promise<boolean>
+  /** Phone width. */
+  compact: boolean
 }>()
-const emit = defineEmits<{ result: [error: string | null, success: string] }>()
+const emit = defineEmits<{ result: [error: string | null, success: string]; dirty: [what: string | null] }>()
 
 const auth = useAuthStore()
 const meId = computed(() => auth.user?.id ?? null)

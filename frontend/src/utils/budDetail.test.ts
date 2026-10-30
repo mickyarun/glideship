@@ -15,9 +15,15 @@
 import { describe, expect, it } from 'vitest'
 import { BUD_STATUS_ORDER, VALID_BUD_TABS } from '@/types'
 import {
-  STATUS_TAB_MAP, branchPrefix, budStageSteps as stageSteps, canMoveBud, detailTabs, nextBudStage as nextStage,
+  STATUS_TAB_MAP, branchPrefix, budStepper, canMoveBud, detailTabs, nextBudStage as nextStage,
 } from './budDetail'
 import { nextStage as nextOf, stageSteps as stepsOf } from './budDetail'
+
+/** The BUD stepper's steps, as the page draws them. */
+function stageSteps(order: Parameters<typeof budStepper>[0], status: Parameters<typeof budStepper>[1]) {
+  const { stages, currentId, finished } = budStepper(order, status)
+  return stepsOf(stages, currentId, { finished })
+}
 
 const NO_UAT = BUD_STATUS_ORDER.filter(s => s !== 'uat')
 

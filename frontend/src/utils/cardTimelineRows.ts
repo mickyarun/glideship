@@ -17,7 +17,7 @@
 // member directory. Events that later work adds (handover, AI runs) read
 // as a plain line until they get rows of their own.
 
-import { CATEGORY_COLORS, DOC_LABELS } from '@/constants/boards'
+import { CATEGORY_COLORS, DOC_NAMES } from '@/constants/boards'
 import type { CardDocKind, CardEventRead, StageCategory } from '@/types/boards'
 import { actor, plainRow, section, text, type ActivityPart, type ActivityRenderers, type ActivityRow } from '@/utils/activity'
 import { wordList } from '@/utils/format'
@@ -51,7 +51,7 @@ export function cardTimelineRenderers(names: CardTimelineNames): ActivityRendere
   const said = (words: string) => (e: CardEventRead) => plainRow(who(e), words)
 
   function docRow(e: CardEventRead): ActivityRow {
-    const doc = DOC_LABELS[e.detail.kind as CardDocKind] ?? 'document'
+    const doc = DOC_NAMES[e.detail.kind as CardDocKind] ?? 'document'
     const from = e.detail.restored_from
     return {
       primary: [

@@ -31,9 +31,10 @@
       v-for="v in items"
       :key="v.id"
       type="button"
-      class="diff-rail__item"
-      :class="{ 'diff-rail__item--active': selectedId === v.id }"
+      class="version-rail__item"
+      :class="{ 'version-rail__item--active': selectedId === v.id }"
       :aria-pressed="selectedId === v.id"
+      :data-version-id="v.id"
       @click="emit('select', v.id)"
     >
       <div class="d-flex align-center ga-2">
@@ -49,9 +50,9 @@
         <span class="text-body-2 font-weight-medium">{{ v.label }}</span>
       </div>
       <div class="text-caption text-medium-emphasis mt-1">
-        {{ relativeTime(v.at, new Date()) }}
+        {{ v.who ? `${v.who} · ` : '' }}{{ relativeTime(v.at, new Date()) }}
       </div>
-      <div v-if="v.note" class="text-caption text-medium-emphasis mt-1 diff-rail__reason">
+      <div v-if="v.note" class="text-caption text-medium-emphasis mt-1 version-rail__note">
         {{ v.note }}
       </div>
     </button>
@@ -66,6 +67,8 @@ export interface VersionRailItem {
   /** When it was saved (ISO). */
   at: string
   badge?: { text: string; color: string }
+  /** Who saved it, shown before when. */
+  who?: string | null
   note?: string | null
 }
 </script>
@@ -94,7 +97,7 @@ const emit = defineEmits<{ select: [id: string] }>()
   padding: 32px 12px;
   gap: 6px;
 }
-.diff-rail__item {
+.version-rail__item {
   display: block;
   width: 100%;
   text-align: left;
@@ -106,24 +109,24 @@ const emit = defineEmits<{ select: [id: string] }>()
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.diff-rail__item:hover {
+.version-rail__item:hover {
   background: rgba(var(--v-theme-on-surface), 0.06);
 }
-.diff-rail__item:focus-visible {
+.version-rail__item:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-.diff-rail__item--active {
+.version-rail__item--active {
   background: rgba(var(--v-theme-primary), 0.12);
   border-color: rgba(var(--v-theme-primary), 0.4);
 }
-.diff-rail__reason {
+.version-rail__note {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 @media (pointer: coarse) {
-  .diff-rail__item {
+  .version-rail__item {
     min-height: 44px;
   }
 }

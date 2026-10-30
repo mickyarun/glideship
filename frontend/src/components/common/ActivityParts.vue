@@ -38,7 +38,7 @@
       <v-icon v-if="part.icon" start size="10">{{ part.icon }}</v-icon>
       {{ part.text }}
     </v-chip>
-    <a v-else-if="part.kind === 'link'" :href="part.href" target="_blank" rel="noopener noreferrer" class="text-caption">
+    <a v-else-if="part.kind === 'link' && safeHttpUrl(part.href)" :href="safeHttpUrl(part.href)" target="_blank" rel="noopener noreferrer" class="text-caption">
       {{ part.text }}
       <v-icon size="10">mdi-open-in-new</v-icon>
     </a>
@@ -47,6 +47,7 @@
 
 <script setup lang="ts">
 import type { ActivityPart } from '@/utils/activity'
+import { safeHttpUrl } from '@/utils/safeUrl'
 
 defineProps<{ parts: ActivityPart[] }>()
 </script>

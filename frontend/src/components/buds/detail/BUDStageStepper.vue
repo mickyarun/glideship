@@ -30,7 +30,7 @@
       <component
         :is="selectable && step.state !== 'current' ? 'button' : 'span'"
         class="stage-stepper__target"
-        v-bind="selectable && step.state !== 'current' ? { type: 'button', 'aria-label': `Move to ${step.label}` } : {}"
+        v-bind="selectable && step.state !== 'current' ? { type: 'button', 'aria-label': `Move to ${step.label} (${MOVE_TEXT[step.state]})` } : {}"
         @click="selectable && step.state !== 'current' && emit('select', step.id)"
       >
         <span class="stage-stepper__mark">
@@ -62,6 +62,7 @@ const props = withDefaults(
 const emit = defineEmits<{ select: [id: string] }>()
 
 const STATE_TEXT: Record<StepState, string> = { done: 'done', current: 'current', todo: 'not started' }
+const MOVE_TEXT: Record<StepState, string> = { done: 'done', current: 'current', todo: 'upcoming' }
 
 const steps = computed(() => stageSteps(props.stages, props.currentId, { finished: props.finished }))
 </script>
@@ -99,9 +100,7 @@ const steps = computed(() => stageSteps(props.stages, props.currentId, { finishe
   font: inherit;
   color: inherit;
 }
-button.stage-stepper__target {
-  cursor: pointer;
-}
+button.stage-stepper__target { cursor: pointer; }
 button.stage-stepper__target:hover .stage-stepper__name {
   color: rgb(var(--v-theme-on-surface));
   text-decoration: underline;
@@ -124,7 +123,8 @@ button.stage-stepper__target:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid rgb(var(--v-theme-rule));
+  /* Upcoming stages: a ring with at least 3:1 against the surface. */
+  border: 2px solid rgb(var(--v-theme-on-surface-variant));
   color: rgb(var(--v-theme-on-primary));
 }
 .stage-stepper__step--done .stage-stepper__mark {

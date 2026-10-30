@@ -17,22 +17,21 @@
 // says back after each action: a live-region announcement on success,
 // the snackbar on failure, and "Archived OPS-3" with Undo.
 
-import { computed, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { useBoardCard } from '@/composables/useBoardCard'
 import { useBoardFeedback } from '@/composables/useBoardFeedback'
 import { useCardActivity } from '@/composables/useCardActivity'
 import { useCardChecklist } from '@/composables/useCardChecklist'
 import { useCardEdits } from '@/composables/useCardEdits'
+import { useCardPageActions } from '@/composables/useCardPageActions'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { cardUrl } from '@/services/boardsApi'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
 import { useBoardsStore } from '@/stores/boards'
 import { createCommentThread } from '@/stores/commentThread'
-import type { BUDPriority } from '@/types'
-import type { CardUpdate } from '@/types/boards'
 import { CARD_COMMENT_WIRE } from '@/utils/boardCardWire'
 
-export function useBoardCardPage(number: Ref<number>) {
+export function useBoardCardPage(number: Ref<number | null>) {
   const feedback = useBoardFeedback()
   const docs = useBoardCardDocsStore()
   const boardsStore = useBoardsStore()
@@ -47,6 +46,7 @@ export function useBoardCardPage(number: Ref<number>) {
       activity.refresh()
     },
     onDoc: kind => void docs.refresh(kind),
+    onHistory: () => activity.refresh(),
   })
   const { page, detail, boardKey } = card
   const edits = useCardEdits(card)
@@ -83,42 +83,14 @@ export function useBoardCardPage(number: Ref<number>) {
   const nameFor = (id: string) => page.members.value.find(m => m.user_id === id)?.name ?? directory.nameFor(id)
   const photoFor = (id: string) => page.members.value.find(m => m.user_id === id)?.avatar_url ?? directory.photoFor(id)
 
-  /** Report an action's result; true when it worked. */
-  async function act(pending: Promise<string | null>, success: string): Promise<boolean> {
-    const error = await pending
-    if (!feedback.fail(error)) feedback.announce(success)
-    return !error
-  }
-
-  const key = () => detail.value?.key ?? ''
-  const save = (patch: CardUpdate, success: string) => act(edits.update(patch), success)
-
-  const actions = {
-    saveTitle: (title: string) => save({ title }, 'Title saved'),
-    saveDescription: (text: string) => save({ description_md: text || null }, 'Description saved'),
-    setPriority: (priority: BUDPriority | null) => save({ priority }, priority ? `Priority set to ${priority}` : 'Priority cleared'),
-    setAssignees: (ids: string[]) => save({ assignee_ids: ids }, 'Assignees saved'),
-    setLabels: (ids: string[]) => save({ label_ids: ids }, 'Labels saved'),
-    saveDate: (field: 'start_at' | 'due_at', iso: string | null) =>
-      save({ [field]: iso }, `${field === 'due_at' ? 'Due' : 'Start'} date ${iso ? 'saved' : 'cleared'}`),
-    setDueDone: (done: boolean) => save({ due_done: done }, done ? 'Marked done' : 'Marked not done'),
-    move: (stageId: string) =>
-      act(edits.moveTo(stageId), `Moved ${key()} to ${stages.value.find(s => s.id === stageId)?.name ?? 'the stage'}`),
-    restore: () => act(edits.restore(), `Restored ${key()}`),
-    async archive(): Promise<void> {
-      const archivedKey = key()
-      if (feedback.fail(await edits.archive())) return
-      feedback.show({ text: `Archived ${archivedKey}`, action: { label: 'Undo', run: () => void actions.restore() } })
-    },
-    result: (error: string | null, success: string) => {
-      if (!feedback.fail(error)) feedback.announce(success)
-    },
-  }
+  const actions = useCardPageActions({ card, edits, checklist, activity, feedback, stages })
 
   onMounted(() => {
     void directory.ensureLoaded()
     void boardsStore.ensureLimits()
   })
+  // The documents belong to this page; nothing of them outlives it.
+  onUnmounted(() => docs.reset())
 
   return {
     card, page, detail, boardKey, feedback, checklist, activity, thread, attachments,

@@ -26,6 +26,7 @@ vi.mock('@/services/socket', () => ({
     listeners.set(t, (listeners.get(t) ?? new Set()).add(cb))
   }),
   unsubscribe: vi.fn((t: string, cb: (d: unknown) => void) => listeners.get(t)?.delete(cb)),
+  onRevoked: vi.fn(() => () => {}),
 }))
 vi.mock('@/services/boardsApi', () => ({
   boardUrl: (k: string) => `/v1/boards/${k}`,

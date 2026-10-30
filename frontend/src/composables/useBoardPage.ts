@@ -123,7 +123,10 @@ export function useBoardPage(key: Ref<string>) {
     { ignoreOwn: true },
   )
 
-  watch(key, k => void open(k), { immediate: true })
+  // No key (the shell found the URL's key impossible): nothing to open.
+  watch(key, k => {
+    if (k) void open(k)
+  }, { immediate: true })
 
   async function toggleStar(): Promise<string | null> {
     const detail = board.detail.value

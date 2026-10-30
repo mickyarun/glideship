@@ -22,19 +22,29 @@ export interface DiffLine {
   text: string
 }
 
+/** Every non-empty text ends with one newline, so a missing last newline isn't a change. */
+const settled = (text: string) => (text && !text.endsWith('\n') ? `${text}\n` : text)
+
 /** The rows from ``oldText`` to ``newText``; none when they're the same. */
 export function lineDiff(oldText: string, newText: string): DiffLine[] {
-  if (oldText === newText) return []
+  const before = settled(oldText)
+  const after = settled(newText)
+  if (before === after) return []
   const out: DiffLine[] = []
-  for (const chunk of diffLines(oldText, newText)) {
+  for (const chunk of diffLines(before, after)) {
     const type: DiffLine['type'] = chunk.added ? 'added' : chunk.removed ? 'removed' : 'context'
     for (const line of chunk.value.replace(/\n$/, '').split('\n')) out.push({ type, text: line })
   }
   return out
 }
 
+export interface DiffStats {
+  added: number
+  removed: number
+}
+
 /** Lines added and removed, or null when nothing changed. */
-export function diffStats(lines: DiffLine[]): { added: number; removed: number } | null {
+export function diffStats(lines: DiffLine[]): DiffStats | null {
   let added = 0
   let removed = 0
   for (const line of lines) {

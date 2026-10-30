@@ -16,7 +16,8 @@
  * Ask before throwing away unsaved edits: on leaving the route, on a query
  * or path-param change that would unmount the form (any of `queryKeys` or
  * `paramKeys` changing), and on closing the tab. Render a confirm dialog on
- * `asking` and call `answer`.
+ * `asking` and call `answer`. `ask` puts the same question before an
+ * in-page switch (a tab, a document) that would drop the edits.
  */
 import { onBeforeUnmount, onMounted, type Ref, ref } from 'vue'
 import {
@@ -69,5 +70,5 @@ export function useUnsavedGuard(
     answer(false)
   })
 
-  return { asking, answer }
+  return { asking, answer, ask }
 }

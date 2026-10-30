@@ -17,7 +17,9 @@
 <!-- A card's checklist: done of total, its lines (grouped under their
      group names when they have them), and an add field for editors. Each
      result is reported to the page (``result``) for its live region or
-     snackbar; a moved line keeps keyboard focus on its arrow. -->
+     snackbar; a moved line keeps keyboard focus on its arrow, and after a
+     delete (which the page offers to undo) focus goes to the next line or
+     the add field. -->
 <template>
   <AppPanel title="Checklist" :note="total ? `${list.done.value} of ${total} done` : undefined">
     <p v-if="list.error.value" class="check-list__note" role="alert">{{ list.error.value }}</p>
@@ -35,14 +37,15 @@
           :first="i === 0"
           :last="i === group.items.length - 1"
           :max-text="maxText"
+          :compact="compact"
           @toggle="report(list.toggle(item), item.done ? `Unticked ${item.text}` : `Ticked ${item.text}`)"
           @edit="text => report(list.edit(item, text), 'Item saved')"
-          @remove="report(list.remove(item), `Deleted ${item.text}`)"
+          @remove="removeItem(item)"
           @move="delta => move(item, delta)"
         />
       </ul>
     </section>
-    <form v-if="editable && !full" class="check-list__add" @submit.prevent="add">
+    <form v-if="editable && !full" ref="addForm" class="check-list__add" @submit.prevent="add">
       <v-text-field
         v-model="draft"
         label="Add an item"
@@ -68,11 +71,15 @@ const props = defineProps<{
   editable: boolean
   maxText: number | null
   maxItems: number | null
+  compact: boolean
+  /** Delete a line; the page reports it and offers Undo. */
+  remove: (item: ChecklistItem) => Promise<boolean>
 }>()
 const emit = defineEmits<{ result: [error: string | null, success: string] }>()
 
 const draft = ref('')
 const adding = ref(false)
+const addForm = ref<HTMLFormElement | null>(null)
 const total = computed(() => props.list.items.value.length)
 const full = computed(() => props.maxItems !== null && total.value >= props.maxItems)
 
@@ -96,6 +103,15 @@ async function add(): Promise<void> {
   adding.value = false
   if (!error) draft.value = ''
   emit('result', error, `Added ${text}`)
+}
+
+async function removeItem(item: ChecklistItem): Promise<void> {
+  const all = props.list.items.value
+  const next = all[all.findIndex(i => i.id === item.id) + 1] ?? null
+  if (!(await props.remove(item))) return
+  await nextTick()
+  const row = next && document.querySelector<HTMLElement>(`[data-checklist-item="${next.id}"] input`)
+  ;(row ?? addForm.value?.querySelector<HTMLElement>('input'))?.focus()
 }
 
 async function move(item: ChecklistItem, delta: -1 | 1): Promise<void> {

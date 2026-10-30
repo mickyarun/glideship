@@ -18,10 +18,12 @@
      first, with "Show more" while the thread has more pages, each one's
      edit and delete for whoever may, and the composer. The parent hands
      in the thread (stores/commentThread.ts), so the same list serves any
-     parent's comments. -->
+     parent's comments. ``closed`` (an archived card) shows why nobody can
+     reply, with no composer and no edit or delete. ``headless`` drops
+     the heading inside a panel that already has one. -->
 <template>
   <div>
-    <div class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center ga-2">
+    <div v-if="!headless" class="text-subtitle-2 font-weight-medium mb-2 d-flex align-center ga-2">
       <v-icon icon="mdi-comment-text-outline" size="18" />
       <span>Comments</span>
       <v-chip v-if="thread.activeCount > 0" size="x-small" variant="tonal" color="primary">
@@ -34,7 +36,7 @@
     </div>
 
     <div v-else-if="thread.comments.length === 0" class="text-caption text-medium-emphasis pa-3 text-center">
-      No comments yet. Be the first.
+      {{ closed ?? 'No comments yet. Be the first.' }}
     </div>
 
     <div v-else class="d-flex flex-column ga-2 mb-3">
@@ -61,8 +63,9 @@
       </v-btn>
     </div>
 
+    <p v-if="closed && thread.comments.length" class="text-caption text-medium-emphasis mb-0">{{ closed }}</p>
     <v-textarea
-      v-if="canComment"
+      v-if="canReply"
       v-model="newBody"
       label="Add a comment"
       variant="outlined"
@@ -73,7 +76,7 @@
       :maxlength="maxLength"
       :disabled="posting"
     />
-    <div v-if="canComment" class="d-flex justify-end">
+    <div v-if="canReply" class="d-flex justify-end">
       <v-btn
         color="primary"
         variant="flat"
@@ -89,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import type { CommentThread, ThreadComment } from '@/stores/commentThread'
 import BugCommentItem from './BugCommentItem.vue'
@@ -100,7 +103,12 @@ const props = defineProps<{
   /** May edit and delete anyone's comments, not only their own. */
   canModerate: boolean
   maxLength?: number
+  /** Why the thread is closed (no replies, edits or deletes), when it is. */
+  closed?: string | null
+  headless?: boolean
 }>()
+
+const canReply = computed(() => props.canComment && !props.closed)
 
 const authStore = useAuthStore()
 
@@ -119,7 +127,7 @@ watch(
 )
 
 function canModify(comment: ThreadComment): boolean {
-  if (comment.deletedAt) return false
+  if (comment.deletedAt || props.closed) return false
   if (!authStore.user) return false
   if (comment.authorId === authStore.user.id) return true
   return props.canModerate

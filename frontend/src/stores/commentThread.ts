@@ -64,15 +64,29 @@ export function createCommentThread(
   // Only the latest fetch may land, so a slow reply can't overwrite a newer one.
   let requestId = 0
 
+  /**
+   * Load the thread from the start. A refetch (someone else commented) is
+   * quiet: what's shown stays until the reply lands, and as many pages as
+   * were loaded come back, so an open edit and "Show more" pages survive.
+   */
   async function fetch(): Promise<void> {
     const mine = ++requestId
-    loading.value = true
+    const had = comments.value.length
+    loading.value = !had
     error.value = null
     try {
-      const page = wire.page((await api.get(url)).data)
+      let items: ThreadComment[] = []
+      let cursor: string | null = null
+      do {
+        const reply = cursor ? await api.get(url, { params: { cursor } }) : await api.get(url)
+        const page = wire.page(reply.data)
+        const seen = new Set(items.map(c => c.id))
+        items = [...items, ...page.items.filter(c => !seen.has(c.id))]
+        cursor = page.next
+      } while (cursor && items.length < had && mine === requestId)
       if (mine !== requestId) return
-      comments.value = page.items
-      next.value = page.next
+      comments.value = items
+      next.value = cursor
     } catch (err) {
       if (mine === requestId) error.value = extractApiError(err, 'Failed to load comments.')
     } finally {

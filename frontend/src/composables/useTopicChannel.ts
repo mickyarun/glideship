@@ -20,11 +20,13 @@
 // The topic can change (or be unknown until a load finishes): pass a ref
 // or getter and the channel follows it, dropping the previous topic.
 // With ``ignoreOwn``, messages whose ``origin`` is this tab's client id
-// (the echo of a change this tab made) are skipped.
+// (the echo of a change this tab made) are skipped. When the server drops
+// this tab's access to the topic, ``onRevoked`` runs (``onResync`` unless
+// given), so the page reloads and lands on whatever it may still see.
 
 import { getCurrentScope, onScopeDispose, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { clientId } from '@/services/clientId'
-import { subscribe, unsubscribe } from '@/services/socket'
+import { onRevoked, subscribe, unsubscribe } from '@/services/socket'
 import { onSocketReconnect } from '@/services/wsReconnect'
 
 export interface TopicMessage {
@@ -36,6 +38,8 @@ export interface TopicMessage {
 export interface TopicChannelOptions {
   /** Skip messages this tab caused (their ``origin`` is our client id). */
   ignoreOwn?: boolean
+  /** The server dropped my access to the topic; defaults to ``onResync``. */
+  onRevoked?: () => void
 }
 
 /** One optional handler per event name, typed by that event's message. */
@@ -69,9 +73,11 @@ export function useTopicChannel<E extends TopicMessage>(
     }
     subscribe(name, onMessage)
     const unregister = onSocketReconnect(onResync)
+    const unrevoke = onRevoked(name, options.onRevoked ?? onResync)
     cleanup = () => {
       unsubscribe(name, onMessage)
       unregister()
+      unrevoke()
     }
   }
 

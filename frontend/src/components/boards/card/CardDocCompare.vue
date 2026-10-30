@@ -16,14 +16,21 @@
 
 <!-- An old version of a card document against the current text, line by
      line, with Restore (behind a confirmation) for editors. Restoring
-     makes the old text current as a new version, so nothing is lost. -->
+     makes the old text current as a new version, so nothing is lost. It
+     takes focus (and scrolls into view) when a version is picked, which
+     matters on narrow screens where it sits under the version list. -->
 <template>
-  <section class="doc-compare" :aria-label="`${label} v${version.version} compared with the current version`">
+  <section
+    ref="root"
+    class="doc-compare"
+    tabindex="-1"
+    :aria-label="`${label} v${version.version} compared with the current version`"
+  >
     <header class="doc-compare__head">
       <span>
         Comparing <strong>v{{ version.version }}</strong> → <strong>current (v{{ currentVersion }})</strong>
       </span>
-      <span v-if="stats" class="doc-compare__stats">{{ stats.added }} added · {{ stats.removed }} removed</span>
+      <span v-if="stats" class="doc-compare__stats">{{ plural(stats.added, 'line') }} added · {{ stats.removed }} removed</span>
       <v-spacer />
       <v-btn variant="text" size="small" @click="emit('close')">Back to the document</v-btn>
       <v-btn v-if="canEdit" size="small" color="warning" variant="flat" prepend-icon="mdi-undo" @click="confirming = true">
@@ -31,7 +38,7 @@
       </v-btn>
     </header>
     <div v-if="oldText === null" class="doc-compare__loading"><v-progress-circular indeterminate size="24" /></div>
-    <DiffView v-else :old="oldText" :new="currentText" :label="`${label} changes`" />
+    <DiffView v-else :old="oldText" :new="currentText" :label="`${label} changes`" @stats="stats = $event" />
 
     <AppConfirmDialog
       v-model="confirming"
@@ -45,13 +52,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import DiffView from '@/components/common/DiffView.vue'
 import { DOC_LABELS } from '@/constants/boards'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
 import type { CardDocKind, DocVersionRead } from '@/types/boards'
-import { diffStats, lineDiff } from '@/utils/lineDiff'
+import { plural } from '@/utils/format'
+import type { DiffStats } from '@/utils/lineDiff'
 
 const props = defineProps<{
   kind: CardDocKind
@@ -67,12 +75,17 @@ const label = computed(() => DOC_LABELS[props.kind])
 const oldText = ref<string | null>(null)
 const confirming = ref(false)
 const restoring = ref(false)
-const stats = computed(() => (oldText.value === null ? null : diffStats(lineDiff(oldText.value, props.currentText))))
+const stats = ref<DiffStats | null>(null)
+const root = ref<HTMLElement | null>(null)
 
 watch(
   () => [props.kind, props.version.version] as const,
   async ([kind, version]) => {
     oldText.value = null
+    stats.value = null
+    await nextTick()
+    root.value?.focus()
+    root.value?.scrollIntoView?.({ block: 'start' })
     const text = await docs.versionText(kind, version)
     if (props.kind === kind && props.version.version === version) oldText.value = text ?? ''
   },
@@ -99,6 +112,10 @@ async function restore(): Promise<void> {
   border: 1px solid rgb(var(--v-theme-rule));
   border-radius: 12px;
   overflow: hidden;
+}
+.doc-compare:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 .doc-compare__head {
   display: flex;

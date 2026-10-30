@@ -15,8 +15,9 @@
  -->
 
 <!-- One checklist line: tick it, edit its text in place, move it up or
-     down within its group, or delete it. Viewers see the line and whether
-     it's done, with no controls. -->
+     down within its group, or delete it. On phones (``compact``) the tools
+     fold into one ⋯ menu. Closing the editor puts focus back on what
+     opened it. Viewers see the line and whether it's done, no controls. -->
 <template>
   <li class="check-row" :data-checklist-item="item.id">
     <template v-if="editing">
@@ -30,9 +31,9 @@
         :maxlength="maxText ?? undefined"
         class="check-row__field"
         @keyup.enter="save"
-        @keyup.escape="editing = false"
+        @keyup.escape="close"
       />
-      <v-btn variant="text" size="small" @click="editing = false">Cancel</v-btn>
+      <v-btn variant="text" size="small" @click="close">Cancel</v-btn>
       <v-btn variant="outlined" size="small" :disabled="!draft.trim()" @click="save">Save</v-btn>
     </template>
     <template v-else>
@@ -48,8 +49,19 @@
       <span class="check-row__text" :class="{ 'check-row__text--done': item.done }">
         {{ item.text }}<span v-if="!editable" class="d-sr-only">, {{ item.done ? 'done' : 'not done' }}</span>
       </span>
-      <span v-if="editable" class="check-row__tools">
-        <v-btn icon="mdi-pencil-outline" variant="text" size="x-small" :aria-label="`Edit ${item.text}`" @click="start" />
+      <v-menu v-if="editable && compact" location="bottom end">
+        <template #activator="{ props: menuProps }">
+          <v-btn v-bind="menuProps" icon="mdi-dots-horizontal" variant="text" size="small" data-edit :aria-label="`Actions for ${item.text}`" />
+        </template>
+        <v-list density="compact" :aria-label="`Actions for ${item.text}`">
+          <v-list-item prepend-icon="mdi-pencil-outline" title="Edit" @click="start" />
+          <v-list-item v-if="!first" prepend-icon="mdi-arrow-up" title="Move up" @click="emit('move', -1)" />
+          <v-list-item v-if="!last" prepend-icon="mdi-arrow-down" title="Move down" @click="emit('move', 1)" />
+          <v-list-item base-color="error" prepend-icon="mdi-delete-outline" title="Delete" @click="emit('remove')" />
+        </v-list>
+      </v-menu>
+      <span v-else-if="editable" class="check-row__tools">
+        <v-btn icon="mdi-pencil-outline" variant="text" size="x-small" data-edit :aria-label="`Edit ${item.text}`" @click="start" />
         <v-btn
           icon="mdi-arrow-up"
           variant="text"
@@ -75,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import type { ChecklistItem } from '@/types/boards'
 
 const props = defineProps<{
@@ -84,6 +96,8 @@ const props = defineProps<{
   first: boolean
   last: boolean
   maxText: number | null
+  /** Phone width: the tools sit in one menu. */
+  compact: boolean
 }>()
 const emit = defineEmits<{ toggle: []; edit: [text: string]; move: [delta: -1 | 1]; remove: [] }>()
 
@@ -95,10 +109,16 @@ function start(): void {
   editing.value = true
 }
 
+async function close(): Promise<void> {
+  editing.value = false
+  await nextTick()
+  document.querySelector<HTMLElement>(`[data-checklist-item="${props.item.id}"] [data-edit]`)?.focus()
+}
+
 function save(): void {
   const text = draft.value.trim()
   if (text && text !== props.item.text) emit('edit', text)
-  if (text) editing.value = false
+  if (text) void close()
 }
 </script>
 
@@ -118,6 +138,7 @@ function save(): void {
 }
 .check-row__text {
   flex: 1 1 auto;
+  text-align: left;
   min-width: 0;
   overflow-wrap: anywhere;
 }

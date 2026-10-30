@@ -15,11 +15,13 @@
  -->
 
 <!-- A card's description: markdown, rendered and sanitised by renderMarkdown, with Edit for
-     editors. The editor stays open with the draft until the save lands. -->
+     editors. The editor stays open with the draft until the save lands;
+     closing it puts focus back on Edit. It reports an unsaved draft
+     (``dirty``) so the page can ask before it's lost. -->
 <template>
   <AppPanel title="Description">
     <template v-if="editable && !md.editing.value" #action>
-      <v-btn variant="text" size="small" prepend-icon="mdi-pencil-outline" @click="md.toggle()">Edit</v-btn>
+      <v-btn ref="editButton" variant="text" size="small" prepend-icon="mdi-pencil-outline" @click="md.toggle()">Edit</v-btn>
     </template>
     <template v-if="md.editing.value">
       <v-textarea
@@ -33,7 +35,7 @@
         :maxlength="maxLength ?? undefined"
       />
       <div class="card-text__actions">
-        <v-btn variant="text" size="small" @click="md.editing.value = false">Cancel</v-btn>
+        <v-btn variant="text" size="small" @click="cancel">Cancel</v-btn>
         <v-btn variant="flat" color="primary" size="small" :loading="saving" @click="commit">Save</v-btn>
       </div>
     </template>
@@ -43,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import { useMarkdownSection } from '@/composables/useMarkdownSection'
 import { renderMarkdown } from '@/utils/markdown'
@@ -55,14 +57,34 @@ const props = defineProps<{
   save: (value: string) => Promise<boolean>
 }>()
 
+const emit = defineEmits<{ dirty: [what: string | null] }>()
+
 const md = useMarkdownSection(() => props.value ?? '', props.save)
 const saving = ref(false)
 const html = computed(() => renderMarkdown(props.value))
+const editButton = ref<{ $el: HTMLElement } | null>(null)
+
+const dirty = computed(() => md.editing.value && md.editValue.value !== (props.value ?? ''))
+watch(dirty, isDirty => emit('dirty', isDirty ? 'the description' : null), { immediate: true })
+onBeforeUnmount(() => emit('dirty', null))
+
+/** Back to reading, with focus on Edit. */
+async function refocus(): Promise<void> {
+  if (md.editing.value) return
+  await nextTick()
+  editButton.value?.$el.focus()
+}
 
 async function commit(): Promise<void> {
   saving.value = true
   await md.save()
   saving.value = false
+  await refocus()
+}
+
+function cancel(): void {
+  md.editing.value = false
+  void refocus()
 }
 </script>
 

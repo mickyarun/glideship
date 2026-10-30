@@ -13,204 +13,139 @@
 // limitations under the License.
 
 /**
- * Changing a card from its page: each edit calls the card's API with just
- * that field and is put back if the server refuses; stage moves go to the
- * bottom of the stage; the checklist adds, ticks and reorders; history
- * pages back; documents save new versions, compare and restore.
+ * Changing a card's fields from its page, through the real controls: each
+ * edit sends just that field and is put back if the server refuses, dates
+ * are refused or cleared as the server says, a stage move offers Undo,
+ * and a reply that lands after a newer copy doesn't overwrite it.
  */
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const listeners = new Map<string, Set<(data: unknown) => void>>()
-vi.mock('@/services/socket', () => ({
-  subscribe: vi.fn((t: string, cb: (d: unknown) => void) => listeners.set(t, (listeners.get(t) ?? new Set()).add(cb))),
-  unsubscribe: vi.fn((t: string, cb: (d: unknown) => void) => listeners.get(t)?.delete(cb)),
-}))
-vi.mock('@/services/boardsApi', async original => ({
-  ...(await original<typeof import('@/services/boardsApi')>()),
-  boardsApi: {
-    get: vi.fn(), members: vi.fn(), switcher: vi.fn(), limits: vi.fn(), cards: vi.fn(),
-    moveCard: vi.fn(), archiveCard: vi.fn(), restoreCard: vi.fn(),
-  },
-}))
-vi.mock('@/services/boardCardApi', () => ({
-  boardCardApi: {
-    get: vi.fn(), update: vi.fn(), checklist: vi.fn(), addItem: vi.fn(), updateItem: vi.fn(), removeItem: vi.fn(),
-    orderItems: vi.fn(), events: vi.fn(), docs: vi.fn(), versions: vi.fn(), version: vi.fn(), writeDoc: vi.fn(),
-    restoreDoc: vi.fn(),
-  },
-}))
-vi.mock('@/services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() } }))
-vi.mock('@/composables/useMemberDirectory', () => ({
-  useMemberDirectory: () => ({ nameFor: (id: string) => `Person ${id}`, photoFor: () => null, ensureLoaded: vi.fn() }),
-}))
+vi.mock('@/services/socket', async () => (await import('./cardPageMockModules')).socketModule())
+vi.mock('@/services/boardsApi', async original => (await import('./cardPageMockModules')).boardsApiModule(original))
+vi.mock('@/services/boardCardApi', async () => (await import('./cardPageMockModules')).boardCardApiModule())
+vi.mock('@/services/api', async () => (await import('./cardPageMockModules')).apiModule())
+vi.mock('@/composables/useMemberDirectory', async () => (await import('./cardPageMockModules')).directoryModule())
 
-import { httpError, makeCardDetail, makeDetail } from '@/components/boards/__tests__/fixtures'
-import CardDetailsPanel from '@/components/boards/card/CardDetailsPanel.vue'
-import api from '@/services/api'
-import { boardCardApi } from '@/services/boardCardApi'
-import { boardsApi } from '@/services/boardsApi'
+import { EDITOR_CAPS, httpError, makeDetail } from '@/components/boards/__tests__/fixtures'
 import { useBoardCardsStore } from '@/stores/boardCards'
-import type { ChecklistItem, DocRead } from '@/types/boards'
+import type { CardDetail, CardUpdate } from '@/types/boards'
 import { buttonsWith, mountCardPage } from './cardPageHarness'
+import { CARD, cardDefaults, mocked, send } from './cardPageMocks'
 
-const boards = vi.mocked(boardsApi)
-const cardApi = vi.mocked(boardCardApi)
-const http = vi.mocked(api)
-const CARD = makeCardDetail('3', { title: 'Pricing page', priority: 'P2', label_ids: [] })
-const item = (id: string, text: string, over: Partial<ChecklistItem> = {}): ChecklistItem =>
-  ({ id, text, done: false, group_name: null, position: 1, ...over })
-const doc = (version: number, body_md: string, over: Partial<DocRead> = {}): DocRead => ({
-  id: `d${version}`, kind: 'prd', state: 'current', version, source: 'ui', created_by: 'u9',
-  created_at: '2026-10-02T00:00:00Z', body_md, ...over,
-})
-const heading = (w: { find: (s: string) => { text: () => string } }) => w.find('[role="heading"][aria-level="1"]').text()
-const tabNamed = async (w: Awaited<ReturnType<typeof mountCardPage>>['wrapper'], name: string) => {
-  await w.findAll('[role="tab"]').find(t => t.text().startsWith(name))!.trigger('click')
+const { boards, cardApi } = mocked
+const START = { ...CARD, priority: 'P2' as const }
+const later = (s: number) => new Date(Date.parse(CARD.updated_at) + s * 1000).toISOString()
+type Wrapper = Awaited<ReturnType<typeof mountCardPage>>['wrapper']
+
+/** Open a menu by its button's label and pick the item with this text. */
+async function pick(wrapper: Wrapper, button: string, text: string): Promise<void> {
+  await wrapper.find(`button[aria-label="${button}"]`).trigger('click')
+  await flushPromises()
+  const item = [...document.querySelectorAll<HTMLElement>('.v-overlay--active .v-list-item')].find(i => i.textContent?.includes(text))
+  item!.click()
   await flushPromises()
 }
 
-describe('BoardCardView edits', () => {
+/** The server applies each edit on top of the last, as PATCHes do. */
+function serverEdits(): void {
+  let saved: CardDetail = { ...START }
+  let tick = 0
+  cardApi.update.mockImplementation(async (_k, _n, body: CardUpdate) => (saved = { ...saved, ...body, updated_at: later(++tick) } as CardDetail))
+}
+
+describe('BoardCardView field edits', () => {
   beforeEach(() => {
-    vi.resetAllMocks()
+    cardDefaults(EDITOR_CAPS, START)
     boards.get.mockResolvedValue(makeDetail({ labels: [{ id: 'l1', name: 'Landing', color: 'purple' }] }))
-    boards.members.mockResolvedValue({ members: [{ user_id: 'u9', name: 'Meera Iyer', avatar_url: null, role: 'admin' }], teams: [] })
-    boards.switcher.mockResolvedValue({ starred: [], recent: [], other: [], delivery: null })
-    boards.limits.mockRejectedValue(new Error('offline'))
-    boards.cards.mockResolvedValue({ items: [], next_cursor: null })
-    cardApi.get.mockResolvedValue(CARD)
-    cardApi.checklist.mockResolvedValue([])
-    cardApi.events.mockResolvedValue({ items: [], next_before: null })
-    cardApi.docs.mockResolvedValue({ items: [] })
-    cardApi.versions.mockResolvedValue({ items: [], next_before: null })
-    http.get.mockResolvedValue({ data: { items: [], next_cursor: null, limits: { max_file_mb: 5, max_files: 3, accepted_extensions: ['.png'] } } })
   })
   afterEach(() => {
     document.body.innerHTML = ''
   })
 
-  it('renames the card, and puts the title back when the save fails', async () => {
-    cardApi.update.mockResolvedValueOnce({ ...CARD, title: 'Pricing calculator' })
+  it('keeps a refused title in its field, with the error, and the saved title on the card', async () => {
+    cardApi.update.mockRejectedValueOnce(httpError(409, 'This card is archived; restore it first.'))
     const { wrapper } = await mountCardPage()
     await wrapper.find('button[aria-label="Edit title"]').trigger('click')
-    await wrapper.find('input').setValue('Pricing calculator')
-    await buttonsWith(wrapper, 'Save')[0].trigger('click')
-    await flushPromises()
-    expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { title: 'Pricing calculator' })
-    expect(heading(wrapper)).toContain('Pricing calculator')
-
-    cardApi.update.mockRejectedValueOnce(httpError(409, 'This card is archived; restore it first.'))
-    await wrapper.find('button[aria-label="Edit title"]').trigger('click')
-    await wrapper.find('input').setValue('Never saved')
+    await wrapper.find('[role="heading"] input').setValue('Never saved')
     await buttonsWith(wrapper, 'Save')[0].trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('This card is archived; restore it first.')
-    // The field stays open with the draft; the title shown is the saved one.
-    expect(wrapper.find('input').element.value).toBe('Never saved')
+    expect((wrapper.find('[role="heading"] input').element as HTMLInputElement).value).toBe('Never saved')
   })
 
-  it('saves each detail with only that field, and rolls back what the server refuses', async () => {
+  it('picks assignees and labels from their menus, one field per save', async () => {
+    serverEdits()
     const { wrapper } = await mountCardPage()
-    const panel = wrapper.findComponent(CardDetailsPanel)
-    // The server applies each edit on top of the last, as PATCHes do.
-    let saved = { ...CARD }
-    cardApi.update.mockImplementation(async (_k, _n, body) => (saved = { ...saved, ...body } as typeof CARD))
-    panel.vm.$emit('assignees', ['u9'])
-    panel.vm.$emit('labels', ['l1'])
-    await flushPromises()
-    expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { assignee_ids: ['u9'] })
-    expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { label_ids: ['l1'] })
-    expect(panel.text()).toContain('Meera Iyer')
-    expect(panel.text()).toContain('Landing')
-    await panel.props('saveDate')('due_at', '2026-10-20T00:00:00.000Z')
-    panel.vm.$emit('due-done', true)
-    await flushPromises()
-    expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { due_at: '2026-10-20T00:00:00.000Z' })
-    expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { due_done: true })
+    await pick(wrapper, 'Change assignees', 'Meera Iyer')
+    expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { assignee_ids: ['u9'] })
+    await pick(wrapper, 'Change labels', 'Landing')
+    expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { label_ids: ['l1'] })
+    const details = wrapper.find('aside[aria-label="Card details"]')
+    expect(details.text()).toContain('Meera Iyer')
+    expect(details.text()).toContain('Landing')
+  })
 
+  it('puts the priority back when the server refuses it', async () => {
     cardApi.update.mockRejectedValueOnce(httpError(400, 'Priority refused'))
-    panel.vm.$emit('priority', 'P0')
-    await flushPromises()
-    expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { priority: 'P0' })
+    const { wrapper } = await mountCardPage()
+    await pick(wrapper, 'Priority P2. Change priority', 'P0')
+    expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { priority: 'P0' })
     expect(wrapper.find('.bud-header').text()).toContain('P2')
     expect(document.body.textContent).toContain('Priority refused')
   })
 
-  it('moves the card to the bottom of a stage picked on the stepper', async () => {
-    boards.moveCard.mockResolvedValue({ ...CARD, stage_id: 's2' })
+  it('saves, refuses and clears dates, and marks the due date done', async () => {
+    serverEdits()
     const { wrapper } = await mountCardPage()
-    await wrapper.find('button[aria-label="Move to Stage s2"]').trigger('click')
+    await wrapper.find('button[aria-label="Change due date"]').trigger('click')
+    await wrapper.find('input[type="date"]').setValue('2026-10-20')
+    await buttonsWith(wrapper, 'Save')[0].trigger('click')
+    await flushPromises()
+    expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { due_at: new Date(2026, 9, 20).toISOString() })
+
+    cardApi.update.mockRejectedValueOnce(httpError(400, 'The start date must be on or before the due date.'))
+    await wrapper.find('button[aria-label="Change start date"]').trigger('click')
+    await wrapper.find('input[type="date"]').setValue('2026-10-25')
+    await buttonsWith(wrapper, 'Save')[0].trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('The start date must be on or before the due date.')
+    expect(wrapper.find('input[type="date"]').exists()).toBe(true)
+    await buttonsWith(wrapper, 'Cancel')[0].trigger('click')
+
+    await wrapper.find('input[aria-label="Mark the due date done"]').setValue(true)
+    await flushPromises()
+    expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { due_done: true })
+    await wrapper.find('button[aria-label="Change due date"]').trigger('click')
+    await buttonsWith(wrapper, 'Clear')[0].trigger('click')
+    await flushPromises()
+    expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { due_at: null })
+  })
+
+  it('moves the card to the bottom of a stage, tells the board, and undoes it', async () => {
+    boards.moveCard.mockImplementation(async (_k, _n, body) => ({ ...START, stage_id: body.stage_id, updated_at: later(1) }))
+    const { wrapper } = await mountCardPage()
+    await wrapper.find('button[aria-label="Move to Stage s2 (upcoming)"]').trigger('click')
     await flushPromises()
     expect(boards.moveCard).toHaveBeenCalledWith('OPS', 3, { stage_id: 's2' })
     expect(wrapper.find('[aria-current="step"]').text()).toContain('Stage s2')
     expect(document.body.textContent).toContain('Moved OPS-3 to Stage s2')
     // The board behind the page hears it too (the live echo is skipped).
     expect(useBoardCardsStore().counts.s2).toBe(1)
+    ;[...document.querySelectorAll('button')].find(b => b.textContent?.includes('Undo'))!.click()
+    await flushPromises()
+    expect(boards.moveCard).toHaveBeenLastCalledWith('OPS', 3, { stage_id: 's1' })
   })
 
-  it('adds, ticks and reorders checklist items', async () => {
-    cardApi.checklist.mockResolvedValue([item('a', 'Brief'), item('b', 'Copy')])
-    cardApi.addItem.mockResolvedValue(item('c', 'Design'))
-    cardApi.updateItem.mockResolvedValue(item('a', 'Brief', { done: true }))
-    cardApi.orderItems.mockImplementation(async (_k, _n, ids) => ids.map(id => item(id, id)))
+  it("keeps someone else's newer change when my older reply lands after it", async () => {
+    let answer: (card: CardDetail) => void = () => {}
+    cardApi.update.mockReturnValueOnce(new Promise(resolve => (answer = resolve)))
     const { wrapper } = await mountCardPage()
-    expect(wrapper.text()).toContain('0 of 2 done')
-    await wrapper.find('form.check-list__add input').setValue('Design')
-    await wrapper.find('form.check-list__add').trigger('submit')
+    await pick(wrapper, 'Priority P2. Change priority', 'P1')
+    send({ event: 'card_moved', from_stage_id: 's1', card: { ...START, priority: 'P1', stage_id: 's2', updated_at: later(5) } })
     await flushPromises()
-    expect(cardApi.addItem).toHaveBeenCalledWith('OPS', 3, 'Design', null)
-    await wrapper.find('input[aria-label="Brief"]').setValue(true)
+    answer({ ...START, priority: 'P1', updated_at: later(2) })
     await flushPromises()
-    expect(cardApi.updateItem).toHaveBeenCalledWith('OPS', 3, 'a', { done: true })
-    expect(wrapper.text()).toContain('1 of 3 done')
-    await wrapper.find('button[aria-label="Move Brief down"]').trigger('click')
-    await flushPromises()
-    expect(cardApi.orderItems).toHaveBeenCalledWith('OPS', 3, ['b', 'a', 'c'])
-  })
-
-  it('pages back through the history', async () => {
-    const ev = (id: string) => ({
-      id, type: 'commented' as const, board_id: 'b1', actor_id: 'u9', actor_label: null, from_stage_id: null,
-      to_stage_id: null, from_category: null, to_category: null, detail: {}, created_at: '2026-10-02T00:00:00Z',
-    })
-    cardApi.events.mockResolvedValueOnce({ items: [ev('e2')], next_before: 'e2' }).mockResolvedValueOnce({ items: [ev('e1')], next_before: null })
-    const { wrapper } = await mountCardPage()
-    await tabNamed(wrapper, 'Activity')
-    expect(wrapper.findAll('.tl-content')).toHaveLength(1)
-    await buttonsWith(wrapper, 'Show older activity')[0].trigger('click')
-    await flushPromises()
-    expect(cardApi.events).toHaveBeenLastCalledWith('OPS', 3, 'e2')
-    expect(wrapper.findAll('.tl-content')).toHaveLength(2)
-    expect(wrapper.text()).toContain('Meera Iyer')
-    expect(buttonsWith(wrapper, 'Show older activity')).toHaveLength(0)
-  })
-
-  it('saves a document as a new version, compares an old one and restores it', async () => {
-    cardApi.docs.mockResolvedValue({ items: [doc(2, 'Second')] })
-    cardApi.versions.mockResolvedValue({ items: [doc(2, ''), doc(1, '')], next_before: null })
-    cardApi.version.mockResolvedValue(doc(1, 'First'))
-    cardApi.writeDoc.mockResolvedValue(doc(3, 'Third'))
-    cardApi.restoreDoc.mockResolvedValue(doc(4, 'First', { source: 'revert' }))
-    const { wrapper } = await mountCardPage()
-    await tabNamed(wrapper, 'Documents')
-    expect(wrapper.text()).toContain('Version 2')
-    await buttonsWith(wrapper, 'Edit')[0].trigger('click')
-    await wrapper.find('textarea').setValue('Third')
-    await buttonsWith(wrapper, 'Save version')[0].trigger('click')
-    await flushPromises()
-    expect(cardApi.writeDoc).toHaveBeenCalledWith('OPS', 3, 'prd', 'Third', 2)
-    expect(wrapper.text()).toContain('Version 3')
-
-    await wrapper.findAll('.diff-rail__item')[1].trigger('click')
-    await flushPromises()
-    expect(cardApi.version).toHaveBeenCalledWith('OPS', 3, 'prd', 1)
-    const lines = wrapper.findAll('.diff-line').map(l => l.text().replace(/\s+/g, ' ').trim())
-    expect(lines).toEqual(['−First', '+Third'])
-    await buttonsWith(wrapper, 'Restore v1')[0].trigger('click')
-    await flushPromises()
-    ;[...document.querySelectorAll('.app-confirm button')].find(b => b.textContent?.trim() === 'Restore')!.dispatchEvent(new Event('click'))
-    await flushPromises()
-    expect(cardApi.restoreDoc).toHaveBeenCalledWith('OPS', 3, 'prd', 1, 3)
-    expect(wrapper.text()).toContain('Version 4')
+    expect(wrapper.find('[aria-current="step"]').text()).toContain('Stage s2')
   })
 })

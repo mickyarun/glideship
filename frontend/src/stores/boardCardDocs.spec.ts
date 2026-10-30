@@ -49,7 +49,7 @@ describe('boardCardDocs store', () => {
     await docs.open(CARD)
     await docs.loadVersions('notes')
     api.writeDoc.mockResolvedValue(doc(3, 'New'))
-    expect(await docs.save('notes', 'New')).toBeNull()
+    expect(await docs.save('notes', 'New', 2)).toEqual({ error: null, conflict: false })
     expect(api.writeDoc).toHaveBeenCalledWith('OPS', 3, 'notes', 'New', 2)
     expect(docs.current.notes?.version).toBe(3)
     expect(api.versions).toHaveBeenCalledTimes(2)
@@ -64,9 +64,33 @@ describe('boardCardDocs store', () => {
     await docs.open(CARD)
     api.writeDoc.mockRejectedValue(httpError(409, 'Someone saved a newer version.'))
     api.docs.mockResolvedValue({ items: [doc(1, 'Theirs')] })
-    expect(await docs.save('notes', 'Mine')).toBe('Someone saved a newer version.')
+    expect(await docs.save('notes', 'Mine', null)).toEqual({ error: 'Someone saved a newer version.', conflict: true })
     expect(api.writeDoc).toHaveBeenCalledWith('OPS', 3, 'notes', 'Mine', null)
-    await vi.waitFor(() => expect(docs.current.notes?.body_md).toBe('Theirs'))
+    expect(docs.current.notes?.body_md).toBe('Theirs')
+  })
+
+  it('saves on the version the edit started from, not the one current at save time', async () => {
+    const docs = useBoardCardDocsStore()
+    await docs.open(CARD)
+    api.docs.mockResolvedValue({ items: [doc(3, 'Theirs')] })
+    await docs.refresh('notes')
+    api.writeDoc.mockRejectedValue(httpError(409, 'Changed'))
+    await docs.save('notes', 'Mine', 2)
+    expect(api.writeDoc).toHaveBeenCalledWith('OPS', 3, 'notes', 'Mine', 2)
+  })
+
+  it('drops an old version\'s text that lands after the card changed, and empties on sign-out', async () => {
+    const docs = useBoardCardDocsStore()
+    await docs.open(CARD)
+    let finish: (value: DocRead) => void = () => {}
+    api.version.mockReturnValueOnce(new Promise(resolve => (finish = resolve)))
+    const pending = docs.versionText('notes', 1)
+    await docs.open({ key: 'OPS', number: 4 })
+    finish(doc(1, 'Old'))
+    expect(await pending).toBeNull()
+    docs.reset()
+    expect(docs.card).toBeNull()
+    expect(docs.current).toEqual({})
   })
 
   it('restores an old version as a new one', async () => {

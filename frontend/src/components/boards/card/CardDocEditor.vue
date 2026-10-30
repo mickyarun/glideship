@@ -16,8 +16,9 @@
 
 <!-- One card document, read rendered or edited as markdown with the BUD
      section toolbar (Edit / Preview, Export, Import). Saving writes a new
-     version; the editor stays open with the draft until it lands. Viewers
-     read it with no toolbar. -->
+     version on top of the one the edit started from; if someone saved a
+     newer one meanwhile, a note offers to compare or save mine anyway, and
+     the draft stays. Viewers read it with no toolbar. -->
 <template>
   <AppPanel :title="label" :note="doc ? `Version ${doc.version}` : 'Not written yet'">
     <template v-if="canEdit" #action>
@@ -32,6 +33,22 @@
       />
     </template>
     <template v-if="md.editing.value">
+      <CardDocConflictNote
+        v-if="conflict && theirs !== null"
+        class="mb-3"
+        :version="theirs"
+        :comparing="comparing"
+        :saving="saving"
+        @compare="comparing = !comparing"
+        @save="saveMine"
+      />
+      <DiffView
+        v-if="conflict && comparing"
+        class="mb-3"
+        :old="doc?.body_md ?? ''"
+        :new="md.editValue.value"
+        :label="`Their ${DOC_NAMES[kind]} compared with your draft`"
+      />
       <v-textarea
         v-model="md.editValue.value"
         :label="`${label} (markdown)`"
@@ -43,23 +60,25 @@
         :maxlength="maxLength ?? undefined"
       />
       <div class="doc-editor__actions">
-        <v-btn variant="text" size="small" @click="md.editing.value = false">Cancel</v-btn>
+        <v-btn variant="text" size="small" @click="cancel">Cancel</v-btn>
         <v-btn variant="flat" color="primary" size="small" :loading="saving" @click="commit">Save version</v-btn>
       </div>
     </template>
     <div v-else-if="doc?.body_md" class="markdown-body" v-html="html" />
     <p v-else class="doc-editor__empty">
-      {{ canEdit ? `No ${label.toLowerCase()} yet. Use Edit to write one.` : `No ${label.toLowerCase()} yet.` }}
+      No {{ DOC_NAMES[kind] }} yet.{{ canEdit ? ' Use Edit to write one.' : '' }}
     </p>
   </AppPanel>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import CardDocConflictNote from '@/components/boards/card/CardDocConflictNote.vue'
 import BUDSectionToolbar from '@/components/buds/BUDSectionToolbar.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
+import DiffView from '@/components/common/DiffView.vue'
 import { useMarkdownSection } from '@/composables/useMarkdownSection'
-import { DOC_LABELS } from '@/constants/boards'
+import { DOC_LABELS, DOC_NAMES } from '@/constants/boards'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
 import type { CardDocKind, DocRead } from '@/types/boards'
 import { saveBlob } from '@/utils/download'
@@ -71,22 +90,46 @@ const props = defineProps<{
   cardKey: string
   canEdit: boolean
   maxLength: number | null
+  /** Asks before an open draft is thrown away; resolves true to go ahead. */
+  confirmDiscard: () => Promise<boolean>
 }>()
-const emit = defineEmits<{ result: [error: string | null, success: string] }>()
+const emit = defineEmits<{
+  result: [error: string | null, success: string]
+  /** What has unsaved changes ("the PRD"), or null once nothing does. */
+  dirty: [what: string | null]
+}>()
 
 const docs = useBoardCardDocsStore()
 const saving = ref(false)
+const comparing = ref(false)
 const label = computed(() => DOC_LABELS[props.kind])
 const html = computed(() => renderMarkdown(props.doc?.body_md))
+/** The version the open edit started from. */
+const base = ref<number | null>(null)
+const theirs = computed(() => props.doc?.version ?? null)
 
 const md = useMarkdownSection(
   () => props.doc?.body_md ?? '',
   async value => {
-    const error = await docs.save(props.kind, value)
-    emit('result', error, `Saved ${label.value} version ${docs.current[props.kind]?.version ?? ''}`.trim())
-    return !error
+    const result = await docs.save(props.kind, value, base.value)
+    // A conflict shows the note in the editor instead of an error.
+    if (result.conflict) return false
+    if (!result.error) base.value = theirs.value
+    emit('result', result.error, `Saved the ${DOC_NAMES[props.kind]} as version ${docs.current[props.kind]?.version ?? ''}`)
+    return !result.error
   },
 )
+
+const conflict = computed(() => md.editing.value && theirs.value !== base.value)
+const dirty = computed(() => md.editing.value && md.editValue.value !== (props.doc?.body_md ?? ''))
+
+watch(() => md.editing.value, open => {
+  if (!open) return
+  base.value = theirs.value
+  comparing.value = false
+})
+watch(dirty, isDirty => emit('dirty', isDirty ? `the ${DOC_NAMES[props.kind]}` : null), { immediate: true })
+onBeforeUnmount(() => emit('dirty', null))
 
 async function commit(): Promise<void> {
   saving.value = true
@@ -94,13 +137,24 @@ async function commit(): Promise<void> {
   saving.value = false
 }
 
+/** Save my draft on top of their newer version. */
+function saveMine(): Promise<void> {
+  base.value = theirs.value
+  return commit()
+}
+
+function cancel(): void {
+  md.editing.value = false
+}
+
 function exportDoc(): void {
   const name = `${props.cardKey}-${props.kind.replace('_', '-')}.md`
   saveBlob(new Blob([props.doc?.body_md ?? ''], { type: 'text/markdown' }), name)
 }
 
-/** Load a file's text into the editor, to review before saving. */
+/** Load a file's text into the editor to review before saving, asking first over a draft. */
 async function importDoc(file: File): Promise<void> {
+  if (dirty.value && !(await props.confirmDiscard())) return
   const text = await file.text()
   if (!md.editing.value) md.toggle()
   md.editValue.value = props.maxLength ? text.slice(0, props.maxLength) : text

@@ -22,6 +22,7 @@ import { boardCardApi } from '@/services/boardCardApi'
 import { boardsApi } from '@/services/boardsApi'
 import type { BoardCard } from '@/composables/useBoardCard'
 import type { CardDetail, CardEvent, CardUpdate } from '@/types/boards'
+import { isOlder } from '@/utils/boardColumns'
 import { extractApiError } from '@/utils/errors'
 
 type Mirrored = CardEvent['event']
@@ -52,7 +53,8 @@ export function useCardEdits(card: BoardCard) {
     detail.value = { ...held, ...optimistic }
     try {
       const next = await send(boardKey.value, held.number)
-      if (detail.value?.id === held.id) detail.value = next
+      // A newer copy (a later edit, or someone else's change) has landed meanwhile.
+      if (detail.value?.id === held.id && !isOlder(next, detail.value)) detail.value = next
       mirror(event, next, before.stage_id)
       return null
     } catch (err) {

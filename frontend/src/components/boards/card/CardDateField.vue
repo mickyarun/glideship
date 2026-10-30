@@ -16,7 +16,8 @@
 
 <!-- One date on a card (start, due): the date, or "Not set", with Change
      for editors, which swaps in a date field with Save, Clear and Cancel.
-     The field stays open, with the pick, until ``save`` reports success. -->
+     The field stays open, with the pick, until ``save`` reports success;
+     closing it puts focus back on Change. -->
 <template>
   <div v-if="editing" class="date-field__edit">
     <v-text-field
@@ -28,24 +29,24 @@
       hide-details
       autofocus
       @keyup.enter="submit(draft)"
-      @keyup.escape="editing = false"
+      @keyup.escape="close"
     />
     <div class="date-field__actions">
-      <v-btn variant="text" size="small" @click="editing = false">Cancel</v-btn>
+      <v-btn variant="text" size="small" @click="close">Cancel</v-btn>
       <v-btn v-if="value" variant="text" size="small" :loading="saving" @click="submit('')">Clear</v-btn>
       <v-btn variant="outlined" size="small" :loading="saving" :disabled="!draft" @click="submit(draft)">Save</v-btn>
     </div>
   </div>
   <div v-else class="date-field">
     <span :class="{ 'date-field__empty': !value }">{{ value ? formatShortDate(value) : 'Not set' }}</span>
-    <button v-if="editable" type="button" class="date-field__link" :aria-label="`Change ${label.toLowerCase()} date`" @click="start">
+    <button v-if="editable" ref="change" type="button" class="date-field__link" :aria-label="`Change ${label.toLowerCase()} date`" @click="start">
       Change
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { dateInputValue, fromDateInput } from '@/utils/cardDates'
 import { formatShortDate } from '@/utils/date'
 
@@ -59,6 +60,13 @@ const props = defineProps<{
 const editing = ref(false)
 const saving = ref(false)
 const draft = ref('')
+const change = ref<HTMLButtonElement | null>(null)
+
+async function close(): Promise<void> {
+  editing.value = false
+  await nextTick()
+  change.value?.focus()
+}
 
 function start(): void {
   draft.value = dateInputValue(props.value)
@@ -70,7 +78,7 @@ async function submit(day: string): Promise<void> {
   saving.value = true
   const ok = await props.save(day ? fromDateInput(day) : null)
   saving.value = false
-  if (ok) editing.value = false
+  if (ok) await close()
 }
 </script>
 
