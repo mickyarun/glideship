@@ -27,7 +27,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.models.board_enums import BoardMemberRole
-from tests.api.test_board_routes import board_dep, board_routes
+from tests.api.test_board_routes import ADMIN_READS, board_dep, board_routes
 from tests.integration.board_api_support import (
     BOARDS,
     CardTeam,
@@ -125,7 +125,7 @@ def _fill(value: Any, ids: dict[str, str]) -> Any:
 
 def test_the_tables_cover_every_read_and_every_editor_route() -> None:
     reads = {r.path for r in board_routes() if r.methods == {"GET"}}
-    assert reads == set(READS)
+    assert reads == set(READS) | set(ADMIN_READS)
     editor_routes = {
         (next(iter(r.methods)), r.path)
         for r in board_routes()

@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.boards._access import manage_members, view_board
 from app.core.deps import get_db
-from app.schemas.boards.member import MembersRead, RoleBody
+from app.schemas.boards.member import MembersRead, RoleBody, TeamOptions
 from app.services.boards import member_service
 from app.services.boards.access import BoardAccess
 
@@ -55,6 +55,14 @@ async def remove_member(
 ) -> MembersRead:
     """Take away a person's own role on the board."""
     return await member_service.remove_member(db, access, user_id)
+
+
+@router.get("/{key}/teams/options", response_model=TeamOptions)
+async def list_team_options(
+    access: BoardAccess = Depends(manage_members), db: AsyncSession = Depends(get_db)
+) -> TeamOptions:
+    """The org's teams a board admin can give a role, with their sizes."""
+    return await member_service.team_options(db, access)
 
 
 @router.put("/{key}/teams/{team_id}", response_model=MembersRead)

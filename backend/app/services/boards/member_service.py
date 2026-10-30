@@ -27,7 +27,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.board_enums import BoardMemberRole
 from app.repositories.board_admins import BoardAdminRepository
 from app.repositories.board_member import BoardMemberRepository
-from app.schemas.boards.member import MemberRead, MembersRead, TeamGrantRead
+from app.repositories.team import TeamRepository
+from app.schemas.boards.member import (
+    MemberRead,
+    MembersRead,
+    TeamGrantRead,
+    TeamOption,
+    TeamOptions,
+)
 from app.services.boards.access import BoardAccess
 from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError
 from app.services.boards.live import BoardChanges, BoardSocketEvent
@@ -92,6 +99,14 @@ async def remove_member(db: AsyncSession, access: BoardAccess, user_id: uuid.UUI
     changes = BoardChanges.of(access)
     changes.recheck_access({user_id})
     return await _done(db, access, changes)
+
+
+async def team_options(db: AsyncSession, access: BoardAccess) -> TeamOptions:
+    """Every active team in the board's org, for giving one a role here."""
+    rows = await TeamRepository(db, org_id=access.org_id).list_active_with_member_counts()
+    return TeamOptions(
+        items=[TeamOption(id=team.id, name=team.name, member_count=count) for team, count in rows]
+    )
 
 
 async def put_team(

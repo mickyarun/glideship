@@ -48,6 +48,9 @@ BOARD_API_MODULES = (
     "stages",
 )
 PREFIX = "/api/v1/boards"
+# Reads only an admin may make: the team picker lists the org's teams,
+# which a viewer has no business seeing.
+ADMIN_READS = {f"{PREFIX}/{{key}}/teams/options": BoardAction.MANAGE_MEMBERS}
 ADMIN = BoardMemberRole.ADMIN
 
 # Writes that don't need an active board: restoring one, and personal prefs.
@@ -144,7 +147,8 @@ def test_reads_are_view_and_card_writes_need_an_editor_except_comments() -> None
         if dep is None:
             continue
         if _method(route) == "GET":
-            assert dep.board_action is BoardAction.VIEW, route.path
+            expected = ADMIN_READS.get(route.path, BoardAction.VIEW)
+            assert dep.board_action is expected, route.path
         elif route.path.startswith(CARD_PATHS):
             expected = viewer if "/comments" in route.path else editor
             assert dep.board_min_role is expected, (route.methods, route.path)

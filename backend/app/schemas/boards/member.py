@@ -51,3 +51,17 @@ class MembersRead(BaseModel):
 
     members: list[MemberRead]
     teams: list[TeamGrantRead]
+
+
+class TeamOption(BaseModel):
+    """A team in the org that could be given a role on the board."""
+
+    id: uuid.UUID
+    name: str
+    member_count: int
+
+
+class TeamOptions(BaseModel):
+    """The org's active teams, by name, for a board admin's team picker."""
+
+    items: list[TeamOption]
