@@ -24,41 +24,12 @@
     <div class="diff-drawer__body">
       <!-- Left rail — version list scoped to this phase. -->
       <aside class="diff-rail">
-        <div v-if="loading && !versions.length" class="diff-rail__empty">
-          <v-progress-circular indeterminate size="20" />
-        </div>
-        <div v-else-if="!versions.length" class="diff-rail__empty">
-          <v-icon icon="mdi-clock-outline" size="22" class="text-medium-emphasis" />
-          <div class="text-caption text-medium-emphasis text-center mt-1">
-            No history for this section yet.
-          </div>
-        </div>
-        <button
-          v-for="v in versions"
-          :key="v.id"
-          type="button"
-          class="diff-rail__item"
-          :class="{ 'diff-rail__item--active': selectedVersion?.id === v.id }"
-          @click="selectVersion(v)"
-        >
-          <div class="d-flex align-center ga-2">
-            <v-chip
-              :color="sourceColor(v.source)"
-              size="x-small"
-              variant="tonal"
-              class="font-weight-bold text-uppercase"
-            >
-              {{ v.source }}
-            </v-chip>
-            <span class="text-body-2 font-weight-medium">v{{ v.version_no }}</span>
-          </div>
-          <div class="text-caption text-medium-emphasis mt-1">
-            {{ relativeTime(v.edited_at, new Date()) }}
-          </div>
-          <div v-if="v.reason" class="text-caption text-medium-emphasis mt-1 diff-rail__reason">
-            {{ v.reason }}
-          </div>
-        </button>
+        <VersionRail
+          :items="railItems"
+          :selected-id="selectedVersion?.id ?? null"
+          :loading="loading"
+          @select="id => selectById(id)"
+        />
       </aside>
 
       <!-- Right pane — diff viewer. -->
@@ -108,23 +79,7 @@
             Pick a version to view the diff.
           </div>
         </div>
-        <div v-else-if="diffLines.length === 0" class="diff-pane__placeholder">
-          <v-icon icon="mdi-equal-box" size="28" class="text-medium-emphasis" />
-          <div class="text-body-2 text-medium-emphasis mt-2">
-            No content changes between this version and the current text.
-          </div>
-        </div>
-        <div v-else class="diff-pane__body">
-          <div
-            v-for="(line, idx) in diffLines"
-            :key="idx"
-            class="diff-line"
-            :class="diffLineClass(line.type)"
-          >
-            <span class="diff-line__marker">{{ markerFor(line.type) }}</span>
-            <span class="diff-line__text">{{ line.text || ' ' }}</span>
-          </div>
-        </div>
+        <DiffView v-else :old="oldText" :new="currentContent" :label="`${sectionLabel} changes`" />
       </section>
     </div>
 
@@ -160,12 +115,14 @@
 </template>
 
 <script setup lang="ts">
-import { diffLines as diffLinesFn } from 'diff'
 import { computed, ref, watch } from 'vue'
 import api from '@/services/api'
 import AppSideSheet from '@/components/common/AppSideSheet.vue'
+import DiffView from '@/components/common/DiffView.vue'
+import VersionRail, { type VersionRailItem } from '@/components/common/VersionRail.vue'
 import type { BUDDesign } from '@/types'
 import { relativeTime } from '@/utils/date'
+import { diffStats as statsOf, lineDiff } from '@/utils/lineDiff'
 
 interface BUDVersionSummary {
   id: string
@@ -291,54 +248,30 @@ function stringifyForDiff(value: unknown, format: 'markdown' | 'html' | 'json'):
   return String(value)
 }
 
-interface DiffLine {
-  type: 'added' | 'removed' | 'context'
-  text: string
+const railItems = computed<VersionRailItem[]>(() =>
+  versions.value.map(v => ({
+    id: v.id,
+    label: `v${v.version_no}`,
+    at: v.edited_at,
+    badge: { text: v.source, color: sourceColor(v.source) },
+    note: v.reason,
+  })),
+)
+
+function selectById(id: string): void {
+  const v = versions.value.find(x => x.id === id)
+  if (v) void selectVersion(v)
 }
 
-const diffLines = computed<DiffLine[]>(() => {
-  if (!selectedVersion.value) return []
+const oldText = computed(() => {
+  if (!selectedVersion.value) return ''
   const cfg = sectionConfig.value
-  const oldText = stringifyForDiff(selectedVersion.value.snapshot[cfg.field], cfg.format)
-  const newText = currentContent.value
-  if (oldText === newText) return []
-  const chunks = diffLinesFn(oldText, newText)
-  const out: DiffLine[] = []
-  for (const chunk of chunks) {
-    const lines = chunk.value.replace(/\n$/, '').split('\n')
-    const type: DiffLine['type'] = chunk.added
-      ? 'added'
-      : chunk.removed
-        ? 'removed'
-        : 'context'
-    for (const line of lines) {
-      out.push({ type, text: line })
-    }
-  }
-  return out
+  return stringifyForDiff(selectedVersion.value.snapshot[cfg.field], cfg.format)
 })
 
-const diffStats = computed<{ added: number; removed: number } | null>(() => {
-  if (!selectedVersion.value) return null
-  let added = 0
-  let removed = 0
-  for (const line of diffLines.value) {
-    if (line.type === 'added') added += 1
-    else if (line.type === 'removed') removed += 1
-  }
-  if (added === 0 && removed === 0) return null
-  return { added, removed }
-})
-
-function diffLineClass(type: DiffLine['type']): string {
-  return `diff-line--${type}`
-}
-
-function markerFor(type: DiffLine['type']): string {
-  if (type === 'added') return '+'
-  if (type === 'removed') return '−'
-  return ' '
-}
+const diffStats = computed(() =>
+  selectedVersion.value ? statsOf(lineDiff(oldText.value, currentContent.value)) : null,
+)
 
 const restoreDisabledReason = computed<string | null>(() => {
   if (props.budStatus === 'closed' || props.budStatus === 'discarded') {
@@ -467,38 +400,6 @@ watch(
   padding: 8px;
   background: rgba(var(--v-theme-on-surface), 0.02);
 }
-.diff-rail__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 12px;
-  gap: 6px;
-}
-.diff-rail__item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  margin-bottom: 4px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.diff-rail__item:hover {
-  background: rgba(var(--v-theme-on-surface), 0.06);
-}
-.diff-rail__item--active {
-  background: rgba(var(--v-theme-primary), 0.12);
-  border-color: rgba(var(--v-theme-primary), 0.4);
-}
-.diff-rail__reason {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 .diff-pane {
   display: flex;
@@ -523,14 +424,6 @@ watch(
   padding: 48px 12px;
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
-.diff-pane__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 0;
-  font-family: var(--v-font-family-monospace, 'Menlo', monospace);
-  font-size: 13px;
-  line-height: 1.55;
-}
 .diff-stats {
   display: inline-flex;
   gap: 8px;
@@ -543,39 +436,5 @@ watch(
 }
 .diff-stats__removed {
   color: rgb(var(--v-theme-error));
-}
-.diff-line {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  padding: 1px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.diff-line__marker {
-  text-align: center;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  user-select: none;
-}
-.diff-line__text {
-  min-width: 0;
-}
-.diff-line--added {
-  background: rgba(var(--v-theme-success), 0.16);
-}
-.diff-line--added .diff-line__marker {
-  color: rgb(var(--v-theme-success));
-}
-.diff-line--removed {
-  background: rgba(var(--v-theme-error), 0.16);
-}
-.diff-line--removed .diff-line__marker {
-  color: rgb(var(--v-theme-error));
-}
-.diff-line--removed .diff-line__text {
-  text-decoration: line-through;
-  opacity: 0.85;
-}
-.diff-line--context {
-  background: transparent;
 }
 </style>
