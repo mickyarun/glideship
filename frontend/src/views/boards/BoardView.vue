@@ -14,111 +14,123 @@
  * limitations under the License.
  -->
 
-<!-- A team board: one column per stage, filters, drag and drop, and live
-     updates from everyone else on it. What I can do comes from the board's
-     capabilities: a viewer gets the read-only note, no drag, no quick-add.
-     On phones one stage shows at a time, picked from pills. -->
+<!-- A team board: one window-tall column per stage, filters, drag and drop
+     and the card menu. The board itself (and its live channel) comes from
+     the route shell. What I can do comes from the board's capabilities: a
+     viewer gets the read-only note and no drag or quick-add. Phones show
+     one stage at a time, picked from pills. -->
 <template>
-  <BoardNoAccess v-if="board.notFound.value" />
-  <div v-else class="board-page">
-    <BoardSkeleton v-if="!detail && !board.error.value" />
-    <AppCallout v-else-if="!detail" variant="error" title="This board didn't load">
-      {{ board.error.value }}
-      <template #actions>
-        <v-btn variant="outlined" size="small" @click="page.open(key)">Try again</v-btn>
-      </template>
-    </AppCallout>
-    <template v-else>
-      <BoardViewHeader
-        :detail="detail"
-        :can-create="board.can('create_card')"
-        :can-settings="board.can('edit_settings')"
-        @star="star"
-        @new-card="composeIn = defaultStageId"
-      />
-      <BoardReadOnlyNote v-if="!board.can('edit_card')" :board-key="key" :archived="board.archived.value" />
-      <BoardFilterBar
-        v-model="filters.filters.value"
-        :labels="detail.labels"
-        :cards="loadedCards"
-        :more="hasMore"
-        :search-max="limits?.search_max ?? null"
-        @clear="filters.clear()"
-      />
-      <AppEmptyState
-        v-if="!detail.stages.length"
-        icon="mdi-view-column-outline"
-        title="This board has no stages yet"
-        body="Stages are the board's columns. An admin can add them in the board's settings."
-      />
-      <template v-else>
-        <BoardStageTabs v-if="xs" v-model="phoneStage" :stages="detail.stages" :counts="cards.counts" />
-        <div class="board-page__columns">
-          <BoardStageColumn
-            v-for="stage in shownStages"
-            :key="stage.id"
-            :composing="composeIn === stage.id"
-            :stage="stage"
-            :column="cards.columns[stage.id] ?? emptyColumn()"
-            :count="cards.counts[stage.id] ?? 0"
-            :board-id="detail.board.id"
-            :board-key="key"
-            :stages="detail.stages"
-            :labels-by-id="labelsById"
-            :now="now"
-            :filtering="filtering"
-            :can-drag="board.can('move_card') && !xs"
-            :can-move="board.can('move_card')"
-            :can-create="board.can('create_card')"
-            :can-archive="board.can('archive_card')"
-            :title-max="limits?.card_title_max ?? null"
-            :submit-card="cards.createCard"
-            @update:composing="open => (composeIn = open ? stage.id : null)"
-            @drop="d => report(cards.moveCard(d.cardId, d.stageId, d.index))"
-            @move="(card, stageId) => report(cards.moveCard(card.id, stageId, Infinity))"
-            @archive="card => report(cards.archiveCard(card.id))"
-            @load="more => cards.loadStage(stage.id, more)"
-          />
-        </div>
-      </template>
+  <div v-if="detail" class="board-page">
+    <BoardViewHeader
+      :detail="detail"
+      :can-create="canCreate"
+      :can-settings="board.can('edit_settings')"
+      @star="star"
+      @new-card="composeIn = defaultStageId"
+    />
+    <BoardReadOnlyNote
+      v-if="!board.can('edit_card')"
+      :board-name="detail.board.name"
+      :archived="board.archived.value"
+      :members="page.members.value"
+    />
+    <BoardFilterBar
+      v-model="filters.filters.value"
+      :labels="detail.labels"
+      :members="page.members.value"
+      :shown="shownCount"
+      :total="totalOpen"
+      :more="hasMore"
+      :search-max="limits?.search_max ?? null"
+      @clear="filters.clear()"
+    />
+    <BoardStatePanel v-if="noMatch" title="No cards match these filters" :body="summary">
+      <v-btn variant="outlined" size="small" @click="filters.clear()">Clear filters</v-btn>
+    </BoardStatePanel>
+    <BoardStatePanel
+      v-else-if="emptyBoard"
+      :title="`${detail.board.name} is ready`"
+      :body="detail.stages.length ? `${plural(detail.stages.length, 'stage')}, no cards yet.` : 'An admin can add stages in the board settings.'"
+    >
+      <v-btn v-if="canCreate && defaultStageId" color="primary" size="small" @click="composeIn = defaultStageId">
+        Add your first card
+      </v-btn>
+    </BoardStatePanel>
+
+    <template v-if="detail.stages.length && !noMatch">
+      <BoardStageTabs v-if="xs" v-model="phoneStage" :stages="detail.stages" :counts="cards.counts" />
+      <div class="board-page__columns">
+        <BoardStageColumn
+          v-for="stage in shownStages"
+          :key="stage.id"
+          :composing="composeIn === stage.id"
+          :stage="stage"
+          :column="cards.columns[stage.id] ?? emptyColumn()"
+          :count="cards.counts[stage.id] ?? 0"
+          :board-id="detail.board.id"
+          :board-key="detail.board.key"
+          :stages="detail.stages"
+          :labels-by-id="labelsById"
+          :now="now"
+          :can-drag="canMove && !xs && !cards.filters.archived"
+          :can-move="canMove"
+          :can-create="canCreate && !cards.filters.archived"
+          :can-archive="board.can('archive_card')"
+          :title-max="limits?.card_title_max ?? null"
+          :submit-card="cards.createCard"
+          @update:composing="open => (composeIn = open ? stage.id : null)"
+          @drop="act.drop"
+          @move="act.menuMove"
+          @archive="act.archive"
+          @restore="act.restore"
+          @copied="feedback.announce('Link copied')"
+          @load="more => cards.loadStage(stage.id, { more })"
+        />
+      </div>
+      <p v-if="canMove && !xs" class="board-page__hint">
+        Drag cards between stages, or use a card's ⋯ menu to move it from the keyboard.
+      </p>
     </template>
-    <v-snackbar v-model="toastOpen" :timeout="5000" color="error">{{ toast }}</v-snackbar>
+
+    <BoardFeedback :feedback="feedback" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
-import BoardNoAccess from '@/components/boards/BoardNoAccess.vue'
+import BoardFeedback from '@/components/boards/board/BoardFeedback.vue'
 import BoardFilterBar from '@/components/boards/board/BoardFilterBar.vue'
 import BoardReadOnlyNote from '@/components/boards/board/BoardReadOnlyNote.vue'
-import BoardSkeleton from '@/components/boards/board/BoardSkeleton.vue'
 import BoardStageColumn from '@/components/boards/board/BoardStageColumn.vue'
 import BoardStageTabs from '@/components/boards/board/BoardStageTabs.vue'
+import BoardStatePanel from '@/components/boards/board/BoardStatePanel.vue'
 import BoardViewHeader from '@/components/boards/board/BoardViewHeader.vue'
-import AppCallout from '@/components/common/AppCallout.vue'
-import AppEmptyState from '@/components/common/AppEmptyState.vue'
-import { useBoardPage } from '@/composables/useBoardPage'
+import { useBoardActions } from '@/composables/useBoardActions'
+import { useBoardContext } from '@/composables/useBoardContext'
+import { useBoardFeedback } from '@/composables/useBoardFeedback'
+import { useBoardStats } from '@/composables/useBoardStats'
+import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { useNow } from '@/composables/useNow'
 import { useBoardsStore } from '@/stores/boards'
 import { emptyColumn } from '@/utils/boardColumns'
-import { hasFilters } from '@/utils/boardFilters'
+import { plural } from '@/utils/format'
 
-const route = useRoute()
-const key = computed(() => String(route.params.key ?? '').toUpperCase())
-const page = useBoardPage(key)
+const page = useBoardContext()
 const { board, cards, filters } = page
 const boardsStore = useBoardsStore()
+const feedback = useBoardFeedback()
+const act = useBoardActions(page, feedback)
+const { nameFor } = useMemberDirectory()
 const { xs } = useDisplay()
 const now = useNow()
 
 const detail = computed(() => board.detail.value)
 const limits = computed(() => boardsStore.limits)
+const canMove = computed(() => board.can('move_card'))
+const canCreate = computed(() => board.can('create_card'))
 const labelsById = computed(() => new Map((detail.value?.labels ?? []).map(l => [l.id, l])))
-const filtering = computed(() => hasFilters(cards.filters))
-const loadedCards = computed(() => Object.values(cards.columns).flatMap(c => c.items))
-const hasMore = computed(() => Object.values(cards.columns).some(c => c.cursor !== null))
+const { shownCount, totalOpen, hasMore, noMatch, emptyBoard, summary } = useBoardStats(page, nameFor)
 const defaultStageId = computed(
   () => detail.value?.stages.find(s => s.is_default)?.id ?? detail.value?.stages[0]?.id ?? null,
 )
@@ -133,24 +145,15 @@ const shownStages = computed(() => {
   return xs.value ? stages.filter(s => s.id === phoneStage.value) : stages
 })
 
-// The stage whose composer is open; "New card" opens the default stage's.
+// The stage whose composer is open; "New card" opens the default stage's,
+// and on phones switches to that stage.
 const composeIn = ref<string | null>(null)
 watch(composeIn, id => {
   if (id && xs.value) phoneStage.value = id
 })
 
-const toast = ref('')
-const toastOpen = ref(false)
-async function report(result: Promise<string | null>): Promise<void> {
-  const error = await result
-  if (error) {
-    toast.value = error
-    toastOpen.value = true
-  }
-}
-
 function star(): void {
-  void report(page.toggleStar())
+  void page.toggleStar().then(feedback.fail)
 }
 
 onMounted(() => void boardsStore.ensureLimits())
@@ -160,22 +163,38 @@ onMounted(() => void boardsStore.ensureLimits())
 .board-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  height: 100%;
   min-width: 0;
-  min-height: 100%;
-  padding: 28px 36px 24px;
+  padding: 24px 36px 12px;
   background: rgb(var(--v-theme-background));
 }
+/* The columns scroll sideways at the board level, bleeding through the
+   page padding like the BUD board; each column scrolls its own cards. */
 .board-page__columns {
+  flex: 1 1 auto;
+  min-height: 320px;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 12px;
   overflow-x: auto;
-  padding-bottom: 12px;
+  margin-inline: -36px;
+  padding: 0 36px 8px;
+  scroll-padding-inline: 36px;
+}
+.board-page__hint {
+  margin: 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 @media (max-width: 600px) {
   .board-page {
-    padding: 20px 16px 32px;
+    padding: 20px 16px 16px;
+  }
+  .board-page__columns {
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scroll-padding-inline: 16px;
   }
 }
 </style>

@@ -17,11 +17,13 @@
 <!-- The one board switcher, mounted in the app layout: a panel near the
      top of the window on wide screens, a bottom sheet on phones. Opened
      by the board header, the sidebar or the B key outside a text field.
-     Both overlays trap focus while open and hand it back on close. -->
+     Both overlays trap focus while open and hand it back on close. The B
+     key stands down on pages that take the keyboard (meta.shortcuts false,
+     the Garden) and while another overlay is open. -->
 <template>
   <v-bottom-sheet v-if="xs" v-model="open" aria-label="Find a board">
     <div class="switcher-host switcher-host--sheet">
-      <BoardSwitcher v-if="open" @close="hide" />
+      <BoardSwitcher v-if="open" @close="hide" @new-board="newBoard" />
     </div>
   </v-bottom-sheet>
   <v-dialog
@@ -33,26 +35,38 @@
     aria-label="Find a board"
   >
     <div class="switcher-host">
-      <BoardSwitcher v-if="open" @close="hide" />
+      <BoardSwitcher v-if="open" @close="hide" @new-board="newBoard" />
     </div>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import BoardSwitcher from '@/components/boards/switcher/BoardSwitcher.vue'
 import { useBoardSwitcher } from '@/composables/useBoardSwitcher'
 import { SWITCHER_SHORTCUT_KEY } from '@/constants/boards'
-import { isPageShortcut } from '@/utils/shortcuts'
+import { pageShortcutsSuspended } from '@/composables/usePageShortcuts'
+import { isPageShortcut, overlayOpen } from '@/utils/shortcuts'
 
 const { xs } = useDisplay()
 const { open, show, hide } = useBoardSwitcher()
+const route = useRoute()
+const router = useRouter()
 
 function onKeydown(event: KeyboardEvent): void {
   if (open.value || !isPageShortcut(event, SWITCHER_SHORTCUT_KEY)) return
+  // Pages that take the keyboard, and anything already open over the page, win.
+  if (route.meta.shortcuts === false || pageShortcutsSuspended() || overlayOpen()) return
   event.preventDefault()
   show()
+}
+
+// The new-board dialog lives on the boards page.
+function newBoard(): void {
+  hide()
+  void router.push({ name: 'boards', query: { new: '1' } })
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown))

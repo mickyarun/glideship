@@ -13,43 +13,45 @@
 // limitations under the License.
 
 import { describe, expect, it } from 'vitest'
-import type { SwitcherRead } from '@/types/boardPrefs'
-import type { CustomBoardItem } from '@/types/boards'
+import { makeBoardItem } from '@/components/boards/__tests__/fixtures'
+import type { SwitcherRead } from '@/types/boards'
 import { cardKeyIn, flatOptions, stepIndex, switcherGroups } from './switcherOptions'
 
-const board = (id: string): CustomBoardItem => ({
-  kind: 'custom', id, key: id.toUpperCase(), name: `Board ${id}`, visibility: 'org', role: 'viewer', starred: false,
-})
-
+const NOW = new Date('2026-10-20T12:00:00Z')
 const DATA: SwitcherRead = {
-  starred: [board('a')],
-  recent: [],
-  other: [board('b'), board('c')],
+  starred: [makeBoardItem('SEO', { name: 'SEO', role: 'admin', counts: { todo: 9, in_progress: 5, done_recent: 0 } }), makeBoardItem('PDT', { name: 'Product', role: 'viewer' })],
+  recent: [makeBoardItem('DES', { name: 'Design', visibility: 'members', last_opened_at: '2026-10-20T10:00:00Z' })],
+  other: [makeBoardItem('SUP', { name: 'Support' })],
   delivery: { kind: 'delivery', name: 'Delivery', path: '/buds' },
 }
 
 describe('switcherGroups', () => {
-  it('lists Starred, Recent, Other and Delivery, dropping empty groups', () => {
-    const groups = switcherGroups(DATA, '')
-    expect(groups.map(g => g.label)).toEqual(['Starred', 'Other boards', 'Delivery'])
-    expect(flatOptions(groups).map(o => o.label)).toEqual(['Board a', 'Board b', 'Board c', 'Delivery'])
+  it('lists Starred, Recent, Other boards you can open and Delivery', () => {
+    const groups = switcherGroups(DATA, '', { currentKey: null, now: NOW })
+    expect(groups.map(g => g.label)).toEqual(['Starred', 'Recent', 'Other boards you can open', 'Delivery'])
   })
 
-  it('offers to jump to a card when the search is a card key', () => {
+  it('notes role and open cards, when I last opened it, or who can see it, and marks my board', () => {
+    const rows = flatOptions(switcherGroups(DATA, '', { currentKey: 'SEO', now: NOW }))
+    const meta = rows.map(r => (r.kind === 'card' ? '' : r.meta))
+    expect(meta).toEqual(['Current · 14 open', 'Viewer · 0 open', '2h ago', 'Org-visible', 'Engineering'])
+    expect(rows[0]).toMatchObject({ kind: 'board', current: true })
+  })
+
+  it('drops empty groups and offers to jump to a typed card key', () => {
     expect(cardKeyIn(' ops-58 ')).toBe('OPS-58')
-    expect(cardKeyIn('ops')).toBeNull()
     expect(cardKeyIn('ops 58')).toBeNull()
-    const first = flatOptions(switcherGroups(DATA, 'ops-58'))[0]
-    expect(first).toMatchObject({ kind: 'card', cardKey: 'OPS-58' })
+    const groups = switcherGroups({ ...DATA, recent: [], other: [] }, 'ops-58')
+    expect(groups.map(g => g.id)).toEqual(['card', 'starred', 'delivery'])
   })
 })
 
 describe('stepIndex', () => {
-  it('wraps at both ends and starts from nothing', () => {
+  it('wraps at both ends and starts from nothing or out of range', () => {
     expect(stepIndex(2, 1, 3)).toBe(0)
     expect(stepIndex(0, -1, 3)).toBe(2)
     expect(stepIndex(-1, 1, 3)).toBe(0)
-    expect(stepIndex(-1, -1, 3)).toBe(2)
+    expect(stepIndex(7, -1, 3)).toBe(2)
     expect(stepIndex(0, 1, 0)).toBe(-1)
   })
 })

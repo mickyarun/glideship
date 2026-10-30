@@ -13,38 +13,60 @@
 // limitations under the License.
 
 import { describe, expect, it } from 'vitest'
+import { makeBoardItem } from '@/components/boards/__tests__/fixtures'
 import { KEY_SUGGESTION_LENGTH } from '@/constants/boards'
-import type { CustomBoardItem } from '@/types/boards'
-import { normaliseKey, searchBoards, sortBoards, suggestKey } from './boardIndex'
+import { deliveryMatches, doneLabel, normaliseKey, searchBoards, sortBoards, suggestKey } from './boardIndex'
 
-const board = (name: string, key: string, starred = false): CustomBoardItem => ({
-  kind: 'custom', id: key, key, name, visibility: 'org', role: 'editor', starred,
-})
+const boards = [
+  makeBoardItem('OPS', { name: 'Ops', last_opened_at: '2026-10-01T00:00:00Z', counts: { todo: 1, in_progress: 4, done_recent: 2 } }),
+  makeBoardItem('SEO', { name: 'Content SEO', last_opened_at: '2026-10-20T00:00:00Z', counts: { todo: 0, in_progress: 1, done_recent: 5 } }),
+  makeBoardItem('DES', { name: 'Design', counts: { todo: 3, in_progress: 9, done_recent: 2 } }),
+]
+const keys = (list: typeof boards) => list.map(b => b.key)
 
 describe('boards index', () => {
-  const boards = [board('Ops', 'OPS', true), board('Content SEO', 'SEO'), board('Design', 'DES')]
-
   it('searches names and keys', () => {
-    expect(searchBoards(boards, 'seo').map(b => b.key)).toEqual(['SEO'])
-    expect(searchBoards(boards, 'des').map(b => b.key)).toEqual(['DES'])
+    expect(keys(searchBoards(boards, 'seo'))).toEqual(['SEO'])
+    expect(keys(searchBoards(boards, 'des'))).toEqual(['DES'])
     expect(searchBoards(boards, ' ')).toHaveLength(3)
   })
 
-  it('sorts starred first, or by name', () => {
-    expect(sortBoards(boards, 'starred').map(b => b.key)).toEqual(['OPS', 'SEO', 'DES'])
-    expect(sortBoards(boards, 'name').map(b => b.key)).toEqual(['SEO', 'DES', 'OPS'])
+  it('sorts by last visit (never opened last), by name, or by recent activity', () => {
+    expect(keys(sortBoards(boards, 'recent'))).toEqual(['SEO', 'OPS', 'DES'])
+    expect(keys(sortBoards(boards, 'name'))).toEqual(['SEO', 'DES', 'OPS'])
+    expect(keys(sortBoards(boards, 'active'))).toEqual(['SEO', 'DES', 'OPS'])
+  })
+
+  it('keeps Delivery for an empty search or one that names it', () => {
+    expect(deliveryMatches('Delivery', '')).toBe(true)
+    expect(deliveryMatches('Delivery', 'deliv')).toBe(true)
+    expect(deliveryMatches('Delivery', 'bud')).toBe(true)
+    expect(deliveryMatches('Delivery', 'ops')).toBe(false)
+  })
+
+  it('labels the done count by its window', () => {
+    expect(doneLabel(7)).toBe('Done this week')
+    expect(doneLabel(14)).toBe('Done in 14 days')
   })
 })
 
 describe('suggestKey', () => {
+  const limits = { min: 2, max: 10 }
+
   it('uses initials for several words and the first letters of one', () => {
-    expect(suggestKey('Content SEO')).toBe('CS')
-    expect(suggestKey('Product ops team')).toBe('POT')
-    expect(suggestKey('Marketing')).toBe('MARKETING'.slice(0, KEY_SUGGESTION_LENGTH))
-    expect(suggestKey('  ')).toBe('')
+    expect(suggestKey('Content SEO', limits)).toBe('CS')
+    expect(suggestKey('Product ops team', limits)).toBe('POT')
+    expect(suggestKey('Marketing', limits)).toBe('MARKETING'.slice(0, KEY_SUGGESTION_LENGTH))
   })
 
-  it('keeps typed keys to upper-case letters', () => {
+  it('stays within the server key length', () => {
+    expect(suggestKey('Marketing', { min: 2, max: 3 })).toBe('MAR')
+    expect(suggestKey('Ab Cd', { min: 3, max: 10 })).toBe('ABCD'.slice(0, KEY_SUGGESTION_LENGTH))
+    expect(suggestKey('X', limits)).toBe('')
+  })
+
+  it('keeps typed keys to upper-case letters and the cap', () => {
     expect(normaliseKey('ops-2 x')).toBe('OPSX')
+    expect(normaliseKey('abcdefghijkl', 10)).toBe('ABCDEFGHIJ')
   })
 })

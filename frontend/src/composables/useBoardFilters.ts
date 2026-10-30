@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A board's filter bar state: restored from my saved prefs when the board
-// opens, applied once typing settles, and saved back (debounced) so the
-// board opens the same way next time. Saving is best effort.
+// A board's filter bar state: restored from my saved filters (which come
+// with the board), applied once typing settles, and saved back (debounced)
+// so the board opens the same way next time. A save still pending when I
+// switch boards or leave is sent then, not dropped. Saving is best effort.
 
 import { getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import { PREFS_SAVE_DELAY_MS } from '@/constants/boards'
 import { SEARCH_DELAY_MS } from '@/composables/useDebounced'
 import { boardsApi } from '@/services/boardsApi'
+import type { SavedFilters } from '@/types/boards'
 import { fromSaved, NO_FILTERS, toSaved, type CardFilters } from '@/utils/boardFilters'
 
 export function useBoardFilters(apply: (filters: CardFilters) => void) {
@@ -27,34 +29,37 @@ export function useBoardFilters(apply: (filters: CardFilters) => void) {
   let boardKey = ''
   let restoring = false
   let applyTimer: ReturnType<typeof setTimeout> | undefined
+  let pending: (() => void) | null = null
   let saveTimer: ReturnType<typeof setTimeout> | undefined
 
-  /** My saved filters for a board (none if they can't be read). */
-  async function restore(key: string): Promise<CardFilters> {
-    boardKey = key
-    clearTimeout(applyTimer)
+  /** Send a save that's still waiting, now. */
+  function flush(): void {
     clearTimeout(saveTimer)
-    let saved: CardFilters = { ...NO_FILTERS }
-    try {
-      saved = fromSaved((await boardsApi.prefs(key)).filters)
-    } catch (err) {
-      console.error('[boards] prefs fetch failed:', err)
-    }
-    // A slow reply for a board I've since left mustn't fill the bar.
-    if (key !== boardKey) return saved
+    const send = pending
+    pending = null
+    send?.()
+  }
+
+  /** Show a board's saved filters; resolves to them as the bar's shape. */
+  function restore(key: string, saved: SavedFilters | null | undefined): CardFilters {
+    flush()
+    clearTimeout(applyTimer)
+    boardKey = key
+    const value = fromSaved(saved)
     restoring = true
-    filters.value = saved
+    filters.value = value
     restoring = false
-    return saved
+    return { ...value }
   }
 
   function save(key: string, value: CardFilters): void {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
+    pending = () => {
       boardsApi.savePrefs(key, toSaved(value)).catch(err => {
         console.error('[boards] prefs save failed:', err)
       })
-    }, PREFS_SAVE_DELAY_MS)
+    }
+    saveTimer = setTimeout(flush, PREFS_SAVE_DELAY_MS)
   }
 
   // Synchronous, so a restore (which sets ``restoring`` around its write)
@@ -73,15 +78,15 @@ export function useBoardFilters(apply: (filters: CardFilters) => void) {
   )
 
   function clear(): void {
-    filters.value = { ...NO_FILTERS }
+    filters.value = { ...NO_FILTERS, archived: filters.value.archived }
   }
 
   if (getCurrentScope()) {
     onScopeDispose(() => {
       clearTimeout(applyTimer)
-      clearTimeout(saveTimer)
+      flush()
     })
   }
 
-  return { filters, restore, clear }
+  return { filters, restore, clear, flush }
 }

@@ -75,18 +75,6 @@
   --color-priority-p2:  #A5B4FC;
   --color-priority-p3:  #CBD5E1;
 
-  /* Board stage categories and card labels. Dots, bars and tag text on a
-     wash of itself (4.5:1 or better); the stage-* hues stay for BUDs. */
-  --color-category-todo:        #94A3B8;
-  --color-category-in-progress: #60A5FA;
-  --color-category-done:        #4ADE80;
-  --color-category-canceled:    #FCA5A5;
-  --color-label-green:  #4ADE80;  --color-label-yellow: #FACC15;
-  --color-label-orange: #FB923C;  --color-label-red:    #F87171;
-  --color-label-purple: #C084FC;  --color-label-blue:   #60A5FA;
-  --color-label-sky:    #38BDF8;  --color-label-lime:   #A3E635;
-  --color-label-pink:   #F472B6;  --color-label-black:  #CBD5E1;
-
   /* Leave-type swatches — a categorical palette HR picks from per type.
      Dots and meters only; never a status signal, so no hue here repeats
      the action, status, brand or gold colours. */
@@ -177,16 +165,6 @@
   --color-priority-p1:  #C2410C;
   --color-priority-p2:  #4338CA;
   --color-priority-p3:  #475569;
-
-  --color-category-todo:        #475569;
-  --color-category-in-progress: #1D4ED8;
-  --color-category-done:        #166534;
-  --color-category-canceled:    #B91C1C;
-  --color-label-green:  #166534;  --color-label-yellow: #854D0E;
-  --color-label-orange: #9A3412;  --color-label-red:    #B91C1C;
-  --color-label-purple: #7E22CE;  --color-label-blue:   #1D4ED8;
-  --color-label-sky:    #0369A1;  --color-label-lime:   #3F6212;
-  --color-label-pink:   #BE185D;  --color-label-black:  #1F2937;
 
   --color-swatch-1:     #0F766E;
   --color-swatch-2:     #6D28D9;

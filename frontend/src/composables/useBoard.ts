@@ -29,9 +29,13 @@ export function useBoard() {
   const notFound = ref(false)
   let seq = 0
 
-  /** Load (or reload) a board; resolves true when it loaded. */
+  /**
+   * Load (or reload) a board; resolves true when it loaded. Loading another
+   * board drops the one shown, so its name never sits under the new URL.
+   */
   async function load(key: string, { quiet = false } = {}): Promise<boolean> {
     const mine = ++seq
+    if (detail.value && detail.value.board.key !== key.toUpperCase()) detail.value = null
     if (!quiet) loading.value = true
     error.value = ''
     try {

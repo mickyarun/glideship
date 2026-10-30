@@ -21,11 +21,11 @@
   <AppPage title="Board not found">
     <AppEmptyState
       icon="mdi-lock-outline"
-      title="This board doesn't exist, or you don't have access to it"
-      body="Members-only boards are visible to their members. Ask the person who shared the link to add you."
+      title="This board doesn't exist, or you don't have access"
+      body="If someone sent you a link, ask them to add you to the board."
     >
       <template #actions>
-        <v-btn color="primary" :to="{ name: 'boards' }">All boards</v-btn>
+        <v-btn color="primary" :to="{ name: 'boards' }">Go to your boards</v-btn>
         <v-btn variant="outlined" @click="switcher.show()">Find a board</v-btn>
       </template>
     </AppEmptyState>

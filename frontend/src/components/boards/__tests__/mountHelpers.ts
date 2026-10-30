@@ -23,6 +23,10 @@ import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
 vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} disconnect(): void {} })
+// Vuetify menus position against the visual viewport, which jsdom lacks.
+if (!('visualViewport' in window)) {
+  vi.stubGlobal('visualViewport', Object.assign(new EventTarget(), { width: 1024, height: 768, scale: 1, offsetLeft: 0, offsetTop: 0 }))
+}
 
 const blank = { render: () => null }
 

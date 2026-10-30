@@ -35,7 +35,7 @@ describe('afterSignIn', () => {
   it('lands on their home otherwise', () => {
     expect(afterSignIn(engineer)).toEqual({ name: 'dashboard' })
     expect(afterSignIn(peopleOnly)).toEqual({ name: 'leave' })
-    expect(afterSignIn({ ...peopleOnly, has_boards: true })).toEqual({ name: 'boards' })
+    expect(afterSignIn({ ...peopleOnly, permissions: ['boards:view'], has_boards: true })).toEqual({ name: 'boards' })
   })
 
   it('sends an engineer without an avatar to pick one, keeping the page for after', () => {

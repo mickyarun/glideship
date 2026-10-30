@@ -15,50 +15,56 @@
  -->
 
 <!-- A board on the index: its name (a link that stretches over the tile),
-     key, my role, a lock when it's members-only, and my star, which sits
-     above the link so it stays its own button. -->
+     key, a lock when it's members-only, my role and my star (above the link,
+     so it stays its own button); then its description, card counts and
+     who can see it. -->
 <template>
   <article class="board-tile">
     <div class="board-tile__top">
+      <h2 class="board-tile__name">
+        <router-link :to="{ name: 'board', params: { key: board.key } }" class="board-tile__link">
+          {{ board.name }}
+        </router-link>
+      </h2>
       <span class="board-tile__key">{{ board.key }}</span>
-      <v-icon
-        v-if="board.visibility === 'members'"
-        icon="mdi-lock-outline"
-        size="15"
-        class="board-tile__lock"
-        aria-hidden="true"
-      />
-      <span v-if="board.visibility === 'members'" class="d-sr-only">Members only</span>
+      <template v-if="board.visibility === 'members'">
+        <v-icon icon="mdi-lock-outline" size="15" class="board-tile__lock" aria-hidden="true" />
+        <span class="d-sr-only">Members only</span>
+      </template>
+      <AppTag class="board-tile__role" sr-prefix="Your role:">{{ ROLE_LABELS[board.role] }}</AppTag>
       <v-btn
         :icon="board.starred ? 'mdi-star' : 'mdi-star-outline'"
         variant="text"
         size="small"
         density="comfortable"
-        :color="board.starred ? 'gold' : undefined"
+        :color="board.starred ? 'warning' : undefined"
         class="board-tile__star"
         :aria-label="board.starred ? `Unstar ${board.name}` : `Star ${board.name}`"
         :aria-pressed="board.starred"
         @click="emit('star', board)"
       />
     </div>
-    <h2 class="board-tile__name">
-      <router-link :to="{ name: 'board', params: { key: board.key } }" class="board-tile__link">
-        {{ board.name }}
-      </router-link>
-    </h2>
-    <div class="board-tile__foot">
-      <AppTag sr-prefix="Your role:">{{ ROLE_LABELS[board.role] }}</AppTag>
-    </div>
+    <p v-if="board.description" class="board-tile__desc">{{ board.description }}</p>
+    <BoardCountsBar :counts="board.counts" :done-label="doneLabel" />
+    <p class="board-tile__meta">{{ meta }}</p>
   </article>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import BoardCountsBar from '@/components/boards/index/BoardCountsBar.vue'
 import AppTag from '@/components/common/AppTag.vue'
-import { ROLE_LABELS } from '@/constants/boards'
+import { ROLE_LABELS, VISIBILITY_LABELS } from '@/constants/boards'
 import type { CustomBoardItem } from '@/types/boards'
 
-defineProps<{ board: CustomBoardItem }>()
+const props = defineProps<{ board: CustomBoardItem; doneLabel: string }>()
 const emit = defineEmits<{ star: [board: CustomBoardItem] }>()
+
+const meta = computed(() =>
+  [VISIBILITY_LABELS[props.board.visibility].text, props.board.handover_enabled ? 'hands over to Delivery' : '']
+    .filter(Boolean)
+    .join(' · '),
+)
 </script>
 
 <style scoped>
@@ -90,13 +96,16 @@ const emit = defineEmits<{ star: [board: CustomBoardItem] }>()
 .board-tile__lock {
   color: rgb(var(--v-theme-on-surface-variant));
 }
+.board-tile__role {
+  margin-left: auto;
+}
 .board-tile__star {
   position: relative;
   z-index: 1;
-  margin-left: auto;
 }
 .board-tile__name {
   margin: 0;
+  min-width: 0;
   font-size: 16px;
   line-height: 22px;
   font-weight: 600;
@@ -119,8 +128,15 @@ const emit = defineEmits<{ star: [board: CustomBoardItem] }>()
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-.board-tile__foot {
+.board-tile__desc,
+.board-tile__meta {
+  margin: 0;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.board-tile__meta {
   margin-top: auto;
+  font-size: 12px;
 }
 @media (pointer: coarse) {
   .board-tile__star {

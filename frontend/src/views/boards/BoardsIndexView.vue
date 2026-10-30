@@ -14,17 +14,17 @@
  * limitations under the License.
  -->
 
-<!-- Every board I can open, with Delivery pinned first for engineering
-     members, a search and a sort, and "New board" for people who may
-     create one. Lists nothing it can't open: members-only boards I'm not
-     on never reach this page. -->
+<!-- Every board I can open, with Delivery pinned full width for engineering
+     members, a search and a sort, and "New board" for people who may create
+     one (?new=1 opens it, from the switcher). Lists nothing it can't open:
+     members-only boards I'm not on never reach this page. -->
 <template>
   <AppPage title="Boards" :subtitle="subtitle">
     <template v-if="canCreateBoards" #actions>
       <v-btn color="primary" prepend-icon="mdi-plus" @click="creating = true">New board</v-btn>
     </template>
 
-    <AppCallout v-if="store.error" variant="error" title="Your boards didn't load">
+    <AppCallout v-if="store.error" variant="error" title="Your boards didn't load" role="alert">
       {{ store.error }}
       <template #actions>
         <v-btn variant="outlined" size="small" @click="store.fetchIndex()">Try again</v-btn>
@@ -38,34 +38,40 @@
     <AppEmptyState
       v-else-if="!store.customBoards.length && !store.delivery"
       icon="mdi-view-column-outline"
-      title="No boards yet"
+      title="Give your team a board"
       :body="canCreateBoards
-        ? 'A board tracks a team\'s work in stages you choose. Start from a template.'
-        : 'Boards you\'re added to, and boards open to everyone, will show here.'"
+        ? 'Pick a template with stages that fit how your team works.'
+        : 'No permission to create boards? Ask an admin to make one and add you.'"
     >
       <template v-if="canCreateBoards" #actions>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="creating = true">Create a board</v-btn>
-        <v-btn variant="outlined" prepend-icon="mdi-import" disabled>Import from Trello</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="creating = true">New board</v-btn>
       </template>
     </AppEmptyState>
 
     <template v-else>
-      <div class="boards-tools">
+      <div class="boards-tools" role="search">
         <v-text-field
           v-model="query"
           class="boards-tools__search"
-          placeholder="Search boards"
+          placeholder="Find a board"
           prepend-inner-icon="mdi-magnify"
           density="compact"
           hide-details
           clearable
-          aria-label="Search boards"
+          aria-label="Find a board"
         />
-        <AppPillToggle v-model="sort" :options="SORT_OPTIONS" aria-label="Sort boards" />
+        <v-select
+          v-model="sort"
+          :items="SORT_OPTIONS"
+          label="Sort"
+          density="compact"
+          hide-details
+          class="boards-tools__sort"
+        />
       </div>
       <div class="boards-grid">
-        <DeliveryTile v-if="store.delivery && !query" :item="store.delivery" />
-        <BoardTile v-for="board in shown" :key="board.id" :board="board" @star="star" />
+        <DeliveryTile v-if="store.delivery && deliveryMatches(store.delivery.name, query ?? '')" :item="store.delivery" />
+        <BoardTile v-for="board in shown" :key="board.id" :board="board" :done-label="done" @star="star" />
       </div>
       <p v-if="query && !shown.length" class="boards-none" role="status">No boards match "{{ query }}".</p>
     </template>
@@ -76,37 +82,50 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import BoardTile from '@/components/boards/index/BoardTile.vue'
 import DeliveryTile from '@/components/boards/index/DeliveryTile.vue'
 import NewBoardDialog from '@/components/boards/index/NewBoardDialog.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPage from '@/components/common/AppPage.vue'
-import AppPillToggle from '@/components/common/AppPillToggle.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import { useBoardsStore } from '@/stores/boards'
 import type { CustomBoardItem } from '@/types/boards'
-import { searchBoards, sortBoards, type BoardSort } from '@/utils/boardIndex'
+import { deliveryMatches, doneLabel, searchBoards, sortBoards, type BoardSort } from '@/utils/boardIndex'
 import { plural } from '@/utils/format'
 
-const SORT_OPTIONS: { label: string; value: BoardSort }[] = [
-  { label: 'Starred first', value: 'starred' },
-  { label: 'A–Z', value: 'name' },
+const SORT_OPTIONS: { title: string; value: BoardSort }[] = [
+  { title: 'Recently opened', value: 'recent' },
+  { title: 'A to Z', value: 'name' },
+  { title: 'Most active', value: 'active' },
 ]
 
 const store = useBoardsStore()
+const route = useRoute()
+const router = useRouter()
 const { canCreateBoards } = usePermissions()
 const query = ref<string | null>('')
-const sort = ref<BoardSort>('starred')
+const sort = ref<BoardSort>('recent')
 const creating = ref(false)
 const toast = ref('')
 const toastOpen = ref(false)
 
 const shown = computed(() => sortBoards(searchBoards(store.customBoards, query.value ?? ''), sort.value))
+const done = computed(() => doneLabel(store.limits?.recent_done_days))
 const subtitle = computed(() =>
-  store.loaded ? `${plural(store.customBoards.length, 'board')} you can open` : undefined,
+  store.loaded
+    ? `${plural(store.customBoards.length, 'board')} you can open. Star the ones you use most to keep them in the sidebar.`
+    : undefined,
 )
+
+// "New board" from the switcher lands here with ?new=1.
+watch(() => route.query.new, flag => {
+  if (flag !== '1') return
+  if (canCreateBoards.value) creating.value = true
+  void router.replace({ query: { ...route.query, new: undefined } })
+}, { immediate: true })
 
 async function star(board: CustomBoardItem): Promise<void> {
   const error = await store.setStar(board.key, !board.starred)
@@ -116,7 +135,10 @@ async function star(board: CustomBoardItem): Promise<void> {
   }
 }
 
-onMounted(() => void store.fetchIndex())
+onMounted(() => {
+  void store.fetchIndex()
+  void store.ensureLimits()
+})
 </script>
 
 <style scoped>
@@ -130,9 +152,12 @@ onMounted(() => void store.fetchIndex())
   flex: 0 1 320px;
   min-width: 200px;
 }
+.boards-tools__sort {
+  flex: 0 0 200px;
+}
 .boards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
 }
 .boards-grid__bone {

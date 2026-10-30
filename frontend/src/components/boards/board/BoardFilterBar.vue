@@ -14,9 +14,10 @@
  * limitations under the License.
  -->
 
-<!-- A board's filters: search, assignee, label and priority, then a way
-     back to everything and how many loaded cards match. Every board keeps
-     my last filters (useBoardFilters saves them). -->
+<!-- A board's filters: search, assignee (the board's people), label and
+     priority, how many cards match ("11 of 13 cards", in a live region
+     that's always there), Clear filters, and Show archived. Every board
+     keeps my last filters (useBoardFilters saves them). -->
 <template>
   <div class="filter-bar" role="search" aria-label="Filter cards">
     <v-text-field
@@ -30,27 +31,33 @@
       aria-label="Search cards"
       :maxlength="searchMax ?? undefined"
     />
-    <BoardFilterMenu v-model="assignee" label="Assignee" all-label="Anyone" :options="assignees" />
-    <BoardFilterMenu v-if="labels.length" v-model="label" label="Label" all-label="Any label" :options="labelOpts" />
+    <BoardFilterMenu v-model="assignee" label="Assignee" all-label="Anyone" :options="assigneeOptions(members)" />
+    <BoardFilterMenu v-if="labels.length" v-model="label" label="Label" all-label="Any label" :options="labelOptions(labels)" />
     <BoardFilterMenu v-model="priority" label="Priority" all-label="Any priority" :options="priorityOptions()" />
-    <template v-if="active">
-      <v-btn variant="text" size="small" prepend-icon="mdi-close" @click="emit('clear')">Clear filters</v-btn>
-      <span class="filter-bar__count" role="status">{{ resultText }}</span>
-    </template>
+    <span class="filter-bar__count" role="status">{{ countText }}</span>
+    <v-btn v-if="hasFilters(model)" variant="text" size="small" prepend-icon="mdi-close" @click="emit('clear')">
+      Clear filters
+    </v-btn>
+    <v-checkbox v-model="archived" label="Show archived" density="compact" hide-details class="filter-bar__archived" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import BoardFilterMenu from '@/components/buds/board/BoardFilterMenu.vue'
-import { useMemberDirectory } from '@/composables/useMemberDirectory'
-import type { CardSummary, LabelRead } from '@/types/boards'
-import { assigneeOptions, hasFilters, labelOptions, priorityOptions, type CardFilters } from '@/utils/boardFilters'
+import type { LabelRead, MemberRead } from '@/types/boards'
+import {
+  assigneeOptions, hasFilters, labelOptions, priorityOptions, type CardFilters,
+} from '@/utils/boardFilters'
 import { plural } from '@/utils/format'
 
 const props = defineProps<{
   labels: LabelRead[]
-  cards: CardSummary[]
+  members: MemberRead[]
+  /** Cards shown (loaded and matching). */
+  shown: number
+  /** Open cards on the board. */
+  total: number
   /** True when some stage has more matching cards than are loaded. */
   more: boolean
   searchMax: number | null
@@ -71,6 +78,12 @@ function field<K extends keyof CardFilters>(key: K) {
 const assignee = field('assignee')
 const label = field('label')
 const priority = field('priority')
+const archived = computed<boolean>({
+  get: () => model.value.archived,
+  set: value => {
+    model.value = { ...model.value, archived: !!value }
+  },
+})
 // Clearing the box gives null; the filters keep an empty string.
 const query = computed<string | null>({
   get: () => model.value.query,
@@ -79,15 +92,11 @@ const query = computed<string | null>({
   },
 })
 
-const { nameFor, ensureLoaded } = useMemberDirectory()
-void ensureLoaded()
-
-const assignees = computed(() => assigneeOptions(props.cards, nameFor, model.value.assignee))
-const labelOpts = computed(() => labelOptions(props.labels))
-const active = computed(() => hasFilters(model.value))
-const resultText = computed(() => {
-  const text = plural(props.cards.length, 'card')
-  return props.more ? `${text} so far` : `${text} match`
+const countText = computed(() => {
+  const shown = `${props.shown}${props.more ? '+' : ''}`
+  if (model.value.archived) return `${shown} archived ${props.shown === 1 ? 'card' : 'cards'}`
+  if (!hasFilters(model.value)) return plural(props.total, 'card')
+  return `${shown} of ${plural(props.total, 'card')}`
 })
 </script>
 
@@ -105,5 +114,8 @@ const resultText = computed(() => {
 .filter-bar__count {
   font-size: 13px;
   color: rgb(var(--v-theme-on-surface-variant));
+}
+.filter-bar__archived {
+  flex: 0 0 auto;
 }
 </style>

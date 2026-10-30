@@ -18,27 +18,27 @@
 
 import api from '@/services/api'
 import type {
-  BoardLimits,
-  MembersRead,
-  PrefsRead,
-  SavedFilters,
-  SwitcherRead,
-} from '@/types/boardPrefs'
-import type {
   BoardCreate,
   BoardDetail,
+  BoardLimits,
   BoardList,
   BoardTemplate,
   CardCreate,
   CardDetail,
   CardMove,
   CardPage,
+  MembersRead,
+  PrefsRead,
+  SavedFilters,
+  SwitcherRead,
 } from '@/types/boards'
 
 const BASE = '/v1/boards'
 
-const board = (key: string) => `${BASE}/${encodeURIComponent(key)}`
-const card = (key: string, number: number) => `${board(key)}/cards/${number}`
+/** A board's API path. */
+export const boardUrl = (key: string) => `${BASE}/${encodeURIComponent(key)}`
+/** A card's API path; its sub-resources (comments, checklist…) hang off it. */
+export const cardUrl = (key: string, number: number) => `${boardUrl(key)}/cards/${number}`
 
 /** Query params for one page of a stage's cards. */
 export interface CardListParams {
@@ -48,6 +48,7 @@ export interface CardListParams {
   assignee?: string | null
   label?: string | null
   priority?: string | null
+  archived?: boolean | null
 }
 
 function compact(params: object): Record<string, string> {
@@ -63,21 +64,23 @@ export const boardsApi = {
   switcher: async (q?: string) =>
     (await api.get<SwitcherRead>(`${BASE}/switcher`, { params: compact({ q }) })).data,
   create: async (body: BoardCreate) => (await api.post<BoardDetail>(BASE, body)).data,
-  get: async (key: string) => (await api.get<BoardDetail>(board(key))).data,
-  members: async (key: string) => (await api.get<MembersRead>(`${board(key)}/members`)).data,
-  prefs: async (key: string) => (await api.get<PrefsRead>(`${board(key)}/prefs`)).data,
+  get: async (key: string) => (await api.get<BoardDetail>(boardUrl(key))).data,
+  members: async (key: string) => (await api.get<MembersRead>(`${boardUrl(key)}/members`)).data,
+  prefs: async (key: string) => (await api.get<PrefsRead>(`${boardUrl(key)}/prefs`)).data,
   savePrefs: async (key: string, filters: SavedFilters) =>
-    (await api.put<PrefsRead>(`${board(key)}/prefs`, filters)).data,
+    (await api.put<PrefsRead>(`${boardUrl(key)}/prefs`, filters)).data,
   star: async (key: string, starred: boolean) =>
-    (await api.put<PrefsRead>(`${board(key)}/star`, { starred })).data,
+    (await api.put<PrefsRead>(`${boardUrl(key)}/star`, { starred })).data,
   cards: async (key: string, params: CardListParams) =>
-    (await api.get<CardPage>(`${board(key)}/cards`, { params: compact(params) })).data,
+    (await api.get<CardPage>(`${boardUrl(key)}/cards`, { params: compact(params) })).data,
   createCard: async (key: string, body: CardCreate) =>
-    (await api.post<CardDetail>(`${board(key)}/cards`, body)).data,
+    (await api.post<CardDetail>(`${boardUrl(key)}/cards`, body)).data,
   moveCard: async (key: string, number: number, body: CardMove) =>
-    (await api.post<CardDetail>(`${card(key, number)}/move`, body)).data,
+    (await api.post<CardDetail>(`${cardUrl(key, number)}/move`, body)).data,
   archiveCard: async (key: string, number: number) =>
-    (await api.post<CardDetail>(`${card(key, number)}/archive`)).data,
+    (await api.post<CardDetail>(`${cardUrl(key, number)}/archive`)).data,
+  restoreCard: async (key: string, number: number) =>
+    (await api.post<CardDetail>(`${cardUrl(key, number)}/restore`)).data,
   cardByKey: async (cardKey: string) =>
     (await api.get<CardDetail>(`${BASE}/cards/by-key/${encodeURIComponent(cardKey)}`)).data,
 }

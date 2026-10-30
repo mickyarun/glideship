@@ -15,8 +15,9 @@
  -->
 
 <!-- A card's ⋯ menu: move it to another stage (the keyboard path for
-     anything drag does), copy its link, archive it. Items the board's
-     capabilities don't allow are left out. -->
+     anything drag does; it lands at the bottom), copy its link, and
+     archive or restore it. Items the board's capabilities don't allow are
+     left out, so a viewer sees only Copy link. -->
 <template>
   <v-menu location="bottom end">
     <template #activator="{ props: menuProps }">
@@ -30,31 +31,33 @@
         :aria-label="`Actions for ${card.key}`"
       />
     </template>
-    <v-list density="compact" min-width="220">
-      <template v-if="canMove && targets.length">
+    <v-list density="compact" min-width="220" :aria-label="`Actions for ${card.key}`">
+      <template v-if="canMove && !card.archived_at && stages.length > 1">
         <v-list-subheader>Move to stage</v-list-subheader>
         <v-list-item
-          v-for="stage in targets"
+          v-for="stage in stages"
           :key="stage.id"
-          :title="stage.name"
-          prepend-icon="mdi-arrow-right"
+          :title="stage.id === card.stage_id ? `${stage.name} (current)` : stage.name"
+          :disabled="stage.id === card.stage_id"
           @click="emit('move', stage.id)"
         />
         <v-divider class="my-1" />
       </template>
-      <v-list-item prepend-icon="mdi-link-variant" :title="copied ? 'Link copied' : 'Copy link'" @click.stop="copy" />
-      <v-list-item
-        v-if="canArchive"
-        prepend-icon="mdi-archive-outline"
-        title="Archive"
-        @click="emit('archive')"
-      />
+      <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
+      <template v-if="canArchive">
+        <v-list-item
+          v-if="card.archived_at"
+          prepend-icon="mdi-archive-arrow-up-outline"
+          title="Restore"
+          @click="emit('restore')"
+        />
+        <v-list-item v-else prepend-icon="mdi-archive-outline" title="Archive" @click="emit('archive')" />
+      </template>
     </v-list>
   </v-menu>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { CardSummary, StageRead } from '@/types/boards'
 import { copyText } from '@/utils/clipboard'
@@ -67,19 +70,16 @@ const props = defineProps<{
   canArchive: boolean
 }>()
 
-const emit = defineEmits<{ move: [stageId: string]; archive: [] }>()
+const emit = defineEmits<{ move: [stageId: string]; archive: []; restore: []; copied: [] }>()
 
 const router = useRouter()
-const copied = ref(false)
-
-const targets = computed(() => props.stages.filter(s => s.id !== props.card.stage_id))
 
 async function copy(): Promise<void> {
   const { href } = router.resolve({
     name: 'board-card',
     params: { key: props.boardKey, number: props.card.number },
   })
-  copied.value = await copyText(new URL(href, window.location.origin).toString())
+  if (await copyText(new URL(href, window.location.origin).toString())) emit('copied')
 }
 </script>
 

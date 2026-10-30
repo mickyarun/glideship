@@ -32,9 +32,12 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPage from '@/components/common/AppPage.vue'
+import { useBoardContext } from '@/composables/useBoardContext'
 
 const route = useRoute()
-const key = computed(() => String(route.params.key ?? ''))
+const { board } = useBoardContext()
+// The board's own key once it has loaded (the URL may differ in case).
+const key = computed(() => board.detail.value?.board.key ?? String(route.params.key ?? ''))
 const card = computed(() => (route.params.number ? `${key.value}-${route.params.number}` : null))
 
 const title = computed(() => card.value ?? 'Board settings')

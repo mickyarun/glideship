@@ -12,21 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Pure helpers behind a team board's filter bar and card chips. The server
-// filters each stage page; matchesCard applies the same filters to cards
-// that arrive live, so a socket event never shows a card the bar hides.
+// Pure helpers behind a team board's filter bar. The server filters each
+// stage page; matchesCard applies the same rule to cards that arrive live,
+// so a socket event never shows a card the bar hides.
+//
+// The search rule is the server's (repositories/board_card_summary.py):
+// the title contains the text, or the text is a card's exact number. The
+// BUD board's matchesQuery (utils/budBoard) matches number substrings and
+// a "BUD-" prefix instead, so the two aren't shared.
 
 import { BUD_PRIORITIES, type BUDPriority } from '@/types'
-import type { SavedFilters } from '@/types/boardPrefs'
-import type { CardSummary, LabelRead } from '@/types/boards'
-import { deadlineTone, type FilterOption, type StatusTone } from '@/utils/budBoard'
-import { formatShortDate } from '@/utils/date'
+import type { CardSummary, LabelRead, MemberRead, SavedFilters } from '@/types/boards'
+import type { FilterOption } from '@/utils/budBoard'
 
 export interface CardFilters {
   query: string
   assignee: string | null
   label: string | null
   priority: BUDPriority | null
+  /** Show the stages' archived cards instead of their open ones. */
+  archived: boolean
 }
 
 export const NO_FILTERS: Readonly<CardFilters> = Object.freeze({
@@ -34,19 +39,26 @@ export const NO_FILTERS: Readonly<CardFilters> = Object.freeze({
   assignee: null,
   label: null,
   priority: null,
+  archived: false,
 })
 
+/** Whether anything narrows the cards (the archived view isn't a narrowing). */
 export function hasFilters(f: CardFilters): boolean {
   return f.query.trim() !== '' || f.assignee !== null || f.label !== null || f.priority !== null
 }
 
-/** True when the card's title or key contains the search text. */
-export function matchesQuery(card: Pick<CardSummary, 'title' | 'key'>, query: string): boolean {
-  const q = query.trim().toLowerCase()
-  return !q || card.title.toLowerCase().includes(q) || card.key.toLowerCase().includes(q)
+const DIGITS = /^\d+$/
+
+/** The server's search: the title contains the text, or it's the card's exact number. */
+export function matchesQuery(card: Pick<CardSummary, 'title' | 'number'>, query: string): boolean {
+  const q = query.trim()
+  if (!q) return true
+  if (card.title.toLowerCase().includes(q.toLowerCase())) return true
+  return DIGITS.test(q) && card.number === Number(q)
 }
 
 export function matchesCard(card: CardSummary, f: CardFilters): boolean {
+  if ((card.archived_at !== null) !== f.archived) return false
   if (f.assignee && !card.assignee_ids.includes(f.assignee)) return false
   if (f.label && !card.label_ids.includes(f.label)) return false
   if (f.priority && card.priority !== f.priority) return false
@@ -55,7 +67,13 @@ export function matchesCard(card: CardSummary, f: CardFilters): boolean {
 
 /** The filters as list-endpoint params (empty ones are dropped by the client). */
 export function toListParams(f: CardFilters) {
-  return { q: f.query.trim() || null, assignee: f.assignee, label: f.label, priority: f.priority }
+  return {
+    q: f.query.trim() || null,
+    assignee: f.assignee,
+    label: f.label,
+    priority: f.priority,
+    archived: f.archived || null,
+  }
 }
 
 /** Saved prefs hold lists; the bar picks one of each. */
@@ -66,6 +84,7 @@ export function fromSaved(saved: SavedFilters | null | undefined): CardFilters {
     assignee: saved.assignee_ids[0] ?? null,
     label: saved.label_ids[0] ?? null,
     priority: saved.priorities[0] ?? null,
+    archived: saved.archived,
   }
 }
 
@@ -75,20 +94,14 @@ export function toSaved(f: CardFilters): SavedFilters {
     assignee_ids: f.assignee ? [f.assignee] : [],
     label_ids: f.label ? [f.label] : [],
     priorities: f.priority ? [f.priority] : [],
-    archived: false,
+    archived: f.archived,
   }
 }
 
-/** People assigned to any loaded card, by name; the current pick stays listed. */
-export function assigneeOptions(
-  cards: CardSummary[],
-  nameFor: (id: string) => string,
-  current: string | null = null,
-): FilterOption[] {
-  const ids = new Set(cards.flatMap(c => c.assignee_ids))
-  if (current) ids.add(current)
-  return [...ids]
-    .map(value => ({ value, label: nameFor(value) }))
+/** The board's people, by name, for the assignee filter. */
+export function assigneeOptions(members: MemberRead[]): FilterOption[] {
+  return members
+    .map(m => ({ value: m.user_id, label: m.name }))
     .sort((a, b) => a.label.localeCompare(b.label))
 }
 
@@ -100,35 +113,16 @@ export function priorityOptions(): FilterOption<BUDPriority>[] {
   return BUD_PRIORITIES.map(p => ({ value: p, label: p }))
 }
 
-export interface DateChip {
-  text: string
-  tone: StatusTone
-  icon: string
-}
-
-const TONE_ICONS: Record<StatusTone, string> = {
-  error: 'mdi-alert-circle-outline',
-  warning: 'mdi-clock-alert-outline',
-  success: 'mdi-check-circle-outline',
-  muted: 'mdi-calendar-blank-outline',
-}
-
-/**
- * The card's date chip: its due date (overdue in the error tone, done in
- * the success tone), else its start date. Icon plus text, never colour alone.
- */
-export function dateChip(
-  card: Pick<CardSummary, 'due_at' | 'due_done' | 'start_at'>,
-  now: Date,
-): DateChip | null {
-  if (card.due_at) {
-    const date = formatShortDate(card.due_at)
-    const tone = card.due_done ? 'success' : deadlineTone(card.due_at, now)
-    const text = card.due_done ? `Done · ${date}` : tone === 'error' ? `Overdue · ${date}` : `Due ${date}`
-    return { text, tone, icon: TONE_ICONS[tone] }
-  }
-  if (card.start_at) {
-    return { text: `Starts ${formatShortDate(card.start_at)}`, tone: 'muted', icon: TONE_ICONS.muted }
-  }
-  return null
+/** "Assignee: Tom Okafor · Label: Refresh · Priority: P0", for the no-match panel. */
+export function filterSummary(
+  f: CardFilters,
+  nameOf: (userId: string) => string,
+  labels: LabelRead[],
+): string {
+  const parts: string[] = []
+  if (f.query.trim()) parts.push(`Search: "${f.query.trim()}"`)
+  if (f.assignee) parts.push(`Assignee: ${nameOf(f.assignee)}`)
+  if (f.label) parts.push(`Label: ${labels.find(l => l.id === f.label)?.name ?? 'removed label'}`)
+  if (f.priority) parts.push(`Priority: ${f.priority}`)
+  return parts.join(' · ')
 }

@@ -118,6 +118,7 @@ import api from '@/services/api'
 import TouchControls, { type TouchContext } from '@/components/touch/TouchControls.vue'
 import EngineLoadingOverlay, { type LoadingPhase } from '@/components/tree/EngineLoadingOverlay.vue'
 import { useTouchDevice } from '@/composables/useTouchDevice'
+import { useSuspendPageShortcuts } from '@/composables/usePageShortcuts'
 import { OrgRoomClient, type ConnectionStatus } from '@/multiplayer'
 
 const authStore = useAuthStore()
@@ -522,6 +523,9 @@ function onResize(): void {
 }
 
 const initError = ref<string | null>(null)
+
+// The garden takes the keyboard (WASD, E…), so page shortcuts stand down.
+useSuspendPageShortcuts()
 
 onMounted(async () => {
   // Subscribe to OrgRoom connection-status BEFORE initEngine so the very

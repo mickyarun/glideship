@@ -36,15 +36,20 @@ export function canOpenWorkspace(
   return permissions?.includes(WORKSPACE_PERMISSION[workspace]) ?? false
 }
 
+export const BOARDS_VIEW = 'boards:view'
+
 /**
  * Landing route for a signed-in user, based on what they can open:
- * engineers get the dashboard, anyone else with a team board gets the
- * boards, and everyone else their leave.
+ * engineers get the dashboard, anyone else who can open a team board gets
+ * the boards, and everyone else their leave. Boards need both the
+ * permission (the route's own gate) and a board, or the boards route would
+ * send them straight back here.
  */
 export function homeRouteFor(
   permissions: readonly string[] | null | undefined,
   hasBoards = false,
 ): RouteLocationRaw {
   if (canOpenWorkspace(permissions, 'engineering')) return { name: 'dashboard' }
-  return hasBoards ? { name: 'boards' } : { name: 'leave' }
+  const boards = hasBoards && (permissions?.includes(BOARDS_VIEW) ?? false)
+  return boards ? { name: 'boards' } : { name: 'leave' }
 }

@@ -15,28 +15,31 @@
  -->
 
 <!-- Add a card at the bottom of a column. Enter adds it and keeps the box
-     open for the next one; Esc (or Cancel) closes it and puts focus back
-     on "Add a card". Shift+Enter is a line break the title will trim. -->
+     open for the next one, even while the last is still saving (titles
+     queue up in order); Esc (or Cancel) closes it and puts focus back on
+     "Add a card". Shift+Enter is a line break the title will trim. -->
 <template>
   <div class="quick-add">
     <form v-if="open" class="quick-add__form" @submit.prevent="submit">
       <v-textarea
         ref="field"
         v-model="title"
-        :aria-label="`New card title in ${stageName}`"
-        placeholder="What needs doing?"
+        label="New card title"
         rows="2"
         auto-grow
-        hide-details="auto"
         density="compact"
+        hint="Enter adds and keeps this open · Esc closes"
+        persistent-hint
         :maxlength="maxLength ?? undefined"
         :error-messages="error || undefined"
-        :disabled="saving"
         @keydown.enter.exact.prevent="submit"
         @keydown.esc.prevent="close"
       />
+      <p class="quick-add__status" role="status">{{ notice }}</p>
       <div class="quick-add__actions">
-        <v-btn type="submit" color="primary" size="small" :loading="saving" :disabled="!title.trim()">Add card</v-btn>
+        <v-btn type="submit" color="primary" size="small" :loading="queued > 0" :disabled="!title.trim()">
+          Add card
+        </v-btn>
         <v-btn variant="text" size="small" @click="close">Cancel</v-btn>
       </div>
     </form>
@@ -47,7 +50,7 @@
       size="small"
       prepend-icon="mdi-plus"
       class="quick-add__open"
-      @click="show"
+      @click="open = true"
     >
       Add a card
     </v-btn>
@@ -56,20 +59,24 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
+import type { ActionResult } from '@/stores/boardCardActions'
 
 const props = defineProps<{
   stageName: string
   /** From GET /boards/limits; null until it loads. */
   maxLength: number | null
-  submitCard: (title: string) => Promise<string | null>
+  submitCard: (title: string) => Promise<ActionResult>
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
 const title = ref('')
 const error = ref('')
-const saving = ref(false)
+const notice = ref('')
+const queued = ref(0)
 const field = ref<{ focus: () => void } | null>(null)
 const opener = ref<{ $el: HTMLElement } | null>(null)
+// Saves run one after another, so cards land in the order they were typed.
+let chain: Promise<void> = Promise.resolve()
 
 // However it opens (the button here, or the board's "New card"), the
 // title box takes focus.
@@ -83,27 +90,34 @@ watch(
   { immediate: true },
 )
 
-function show(): void {
-  open.value = true
-}
-
 async function close(): Promise<void> {
   open.value = false
   title.value = ''
   error.value = ''
+  notice.value = ''
   await nextTick()
   opener.value?.$el.focus()
 }
 
-async function submit(): Promise<void> {
+function submit(): void {
   const text = title.value.trim()
-  if (!text || saving.value) return
-  saving.value = true
-  error.value = (await props.submitCard(text)) ?? ''
-  saving.value = false
-  if (!error.value) title.value = ''
-  await nextTick()
-  field.value?.focus()
+  if (!text) return
+  title.value = ''
+  error.value = ''
+  queued.value++
+  chain = chain.then(async () => {
+    const result = await props.submitCard(text)
+    queued.value--
+    if (result.error) {
+      error.value = result.error
+      // Give the title back unless something new is already typed.
+      if (!title.value) title.value = text
+    } else {
+      notice.value = result.shown
+        ? `Added "${text}".`
+        : `Added "${text}" to the bottom of ${props.stageName}.`
+    }
+  })
 }
 </script>
 
@@ -112,6 +126,12 @@ async function submit(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.quick-add__status {
+  margin: 0;
+  min-height: 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .quick-add__actions {
   display: flex;

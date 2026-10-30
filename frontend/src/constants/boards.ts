@@ -15,7 +15,7 @@
 // UI choices for team boards. Lengths, caps and page sizes are the
 // server's: read them from GET /boards/limits (stores/boards.ts), never here.
 
-import type { BoardRole, LabelColor, StageCategory } from '@/types/boards'
+import type { BoardRole, BoardVisibility, LabelColor, StageCategory } from '@/types/boards'
 
 /** The sidebar lists up to this many starred boards… */
 export const SIDEBAR_STARRED_LIMIT = 7
@@ -25,7 +25,10 @@ export const SIDEBAR_RECENT_LIMIT = 5
 /** Pressed anywhere outside a text field, opens the board switcher. */
 export const SWITCHER_SHORTCUT_KEY = 'b'
 
-/** How many letters of a new board's name the suggested key takes. */
+/**
+ * How many letters of a new board's name the suggested key takes, before
+ * it's clamped to the server's key length (GET /boards/limits).
+ */
 export const KEY_SUGGESTION_LENGTH = 4
 
 /** Filter changes are saved to the board's prefs once they settle this long. */
@@ -54,6 +57,16 @@ export const ROLE_LABELS: Record<BoardRole, string> = {
   viewer: 'Viewer',
   editor: 'Editor',
   admin: 'Admin',
+}
+
+/** "You're an editor", for a board's header. */
+export function rolePhrase(role: BoardRole): string {
+  return role === 'viewer' ? "You're a viewer" : `You're an ${ROLE_LABELS[role].toLowerCase()}`
+}
+
+export const VISIBILITY_LABELS: Record<BoardVisibility, { icon: string; text: string }> = {
+  org: { icon: 'mdi-domain', text: 'Org-visible' },
+  members: { icon: 'mdi-lock-outline', text: 'Members only' },
 }
 
 /** On touch screens a card must be held this long before it drags, so the column still scrolls. */

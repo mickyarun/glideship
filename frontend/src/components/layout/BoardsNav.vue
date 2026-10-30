@@ -15,8 +15,9 @@
  -->
 
 <!-- Sidebar links for team boards, for anyone holding boards:view: my
-     starred boards (or, with none starred, the ones I opened last), then
-     every board and the switcher. It never lists every board. -->
+     starred boards (or, with none starred, the ones I opened last), each
+     with its key, then every board and the switcher. It never lists every
+     board, and reuses the switcher and list replies already loaded. -->
 <template>
   <NavHeading label="Boards" :rail="rail" />
   <v-list-item
@@ -24,18 +25,22 @@
     :key="board.id"
     :prepend-icon="starred.length ? 'mdi-star-outline' : 'mdi-history'"
     :title="board.name"
-    :to="`/boards/${board.key}`"
+    :to="{ name: 'board', params: { key: board.key } }"
     rounded="lg"
-  />
+  >
+    <template v-if="!rail" #append>
+      <span class="boards-nav__key">{{ board.key }}</span>
+    </template>
+  </v-list-item>
   <v-list-item
     prepend-icon="mdi-view-grid-outline"
     title="All boards"
-    to="/boards"
+    :to="{ name: 'boards' }"
     exact
     rounded="lg"
   >
     <template v-if="store.loaded && !rail" #append>
-      <span class="boards-nav__count" :aria-label="`${count} boards`">{{ count }}</span>
+      <span class="boards-nav__count">{{ count }}<span class="d-sr-only"> boards</span></span>
     </template>
   </v-list-item>
   <v-list-item
@@ -79,15 +84,18 @@ const count = computed(() => store.customBoards.length)
 
 onMounted(() => {
   void store.fetchNav()
-  if (!store.loaded) void store.fetchIndex()
 })
 </script>
 
 <style scoped>
+.boards-nav__key,
 .boards-nav__count {
   font-size: 12px;
   font-weight: 500;
   color: rgb(var(--v-theme-on-surface-variant));
+}
+.boards-nav__key {
+  font-family: var(--font-mono);
 }
 .boards-nav__kbd {
   min-width: 20px;

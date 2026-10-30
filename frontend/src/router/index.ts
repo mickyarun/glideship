@@ -59,7 +59,7 @@ const router = createRouter({
       // The garden avatar picker — part of the engineering workspace.
       path: '/character-select',
       name: 'character-select',
-      meta: { workspace: 'engineering' },
+      meta: { workspace: 'engineering', shortcuts: false },
       component: () => import('@/views/character/CharacterSelectView.vue'),
     },
     {

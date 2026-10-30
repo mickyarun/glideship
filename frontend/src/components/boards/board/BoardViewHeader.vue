@@ -14,13 +14,19 @@
  * limitations under the License.
  -->
 
-<!-- A board's title row. The name is the switcher's button (B opens it
-     too); then my star, who can see the board and my role, and on the
-     right Settings (for admins) and New card (for editors). -->
+<!-- A board's title area: the breadcrumb, then the name and key as the
+     switcher's button (B opens it too), my star, who can see the board and
+     my role; on the right Settings (admins) and New card (editors), which
+     shrinks to a + button on phones. -->
 <template>
   <header class="board-head">
     <div class="board-head__intro">
-      <h1 class="board-head__title">
+      <nav aria-label="Breadcrumb" class="board-head__crumbs">
+        <router-link :to="{ name: 'boards' }">Boards</router-link>
+        <span aria-hidden="true"> / </span>
+        <span aria-current="page">{{ detail.board.name }}</span>
+      </nav>
+      <div class="board-head__title-row">
         <button
           type="button"
           class="board-head__switch"
@@ -29,88 +35,100 @@
           :aria-keyshortcuts="SWITCHER_SHORTCUT_KEY.toUpperCase()"
           @click="switcher.show()"
         >
-          <span class="board-head__name">{{ detail.board.name }}</span>
-          <v-icon icon="mdi-chevron-down" size="22" aria-hidden="true" />
-          <span class="d-sr-only">, switch board</span>
+          <h1 class="board-head__name">{{ detail.board.name }}</h1>
+          <span class="board-head__key">{{ detail.board.key }}</span>
+          <v-icon icon="mdi-chevron-down" size="20" aria-hidden="true" />
+          <span class="d-sr-only">Switch board</span>
         </button>
-      </h1>
-      <v-btn
-        :icon="detail.starred ? 'mdi-star' : 'mdi-star-outline'"
-        variant="text"
-        size="small"
-        :color="detail.starred ? 'gold' : undefined"
-        :aria-label="detail.starred ? 'Unstar this board' : 'Star this board'"
-        :aria-pressed="detail.starred"
-        @click="emit('star')"
-      />
+        <v-btn
+          :icon="detail.starred ? 'mdi-star' : 'mdi-star-outline'"
+          variant="text"
+          size="small"
+          :color="detail.starred ? 'warning' : undefined"
+          :aria-label="detail.starred ? `Unstar ${detail.board.name}` : `Star ${detail.board.name}`"
+          :aria-pressed="detail.starred"
+          @click="emit('star')"
+        />
+      </div>
       <p class="board-head__meta">
-        <span class="board-head__key">{{ detail.board.key }}</span>
-        <span class="board-head__sep" aria-hidden="true">·</span>
         <v-icon :icon="visibility.icon" size="15" aria-hidden="true" />{{ visibility.text }}
-        <span class="board-head__sep" aria-hidden="true">·</span>
-        You're {{ ROLE_LABELS[detail.role].toLowerCase() }}
+        <span aria-hidden="true">·</span>
+        {{ rolePhrase(detail.role) }}
+        <span class="board-head__hint">
+          <span aria-hidden="true">·</span>
+          press <kbd>{{ SWITCHER_SHORTCUT_KEY.toUpperCase() }}</kbd> to switch boards
+        </span>
       </p>
     </div>
     <div class="board-head__actions">
       <v-btn
         v-if="canSettings"
         variant="outlined"
-        prepend-icon="mdi-cog-outline"
+        :prepend-icon="xs ? undefined : 'mdi-cog-outline'"
         :to="{ name: 'board-settings', params: { key: detail.board.key } }"
       >
         Settings
       </v-btn>
-      <v-btn v-if="canCreate" color="primary" prepend-icon="mdi-plus" @click="emit('new-card')">New card</v-btn>
+      <template v-if="canCreate">
+        <v-btn v-if="xs" color="primary" icon="mdi-plus" size="small" aria-label="New card" @click="emit('new-card')" />
+        <v-btn v-else color="primary" prepend-icon="mdi-plus" @click="emit('new-card')">New card</v-btn>
+      </template>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useBoardSwitcher } from '@/composables/useBoardSwitcher'
-import { ROLE_LABELS, SWITCHER_SHORTCUT_KEY } from '@/constants/boards'
+import { rolePhrase, SWITCHER_SHORTCUT_KEY, VISIBILITY_LABELS } from '@/constants/boards'
 import type { BoardDetail } from '@/types/boards'
 
 const props = defineProps<{ detail: BoardDetail; canCreate: boolean; canSettings: boolean }>()
 const emit = defineEmits<{ star: []; 'new-card': [] }>()
 
 const switcher = useBoardSwitcher()
+const { xs } = useDisplay()
 
-const visibility = computed(() =>
-  props.detail.board.visibility === 'members'
-    ? { icon: 'mdi-lock-outline', text: 'Members only' }
-    : { icon: 'mdi-domain', text: 'Everyone in the org' },
-)
+const visibility = computed(() => VISIBILITY_LABELS[props.detail.board.visibility])
 </script>
 
 <style scoped>
 .board-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px 16px;
 }
 .board-head__intro {
   flex: 1 1 320px;
   min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 4px;
+  flex-direction: column;
+  gap: 2px;
 }
-.board-head__title {
-  margin: 0;
+.board-head__crumbs {
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.board-head__crumbs a {
+  color: var(--color-accent-text);
+  text-decoration: none;
+}
+.board-head__crumbs a:hover {
+  text-decoration: underline;
+}
+.board-head__title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
-  font-size: 28px;
-  line-height: 34px;
-  font-weight: 600;
-  letter-spacing: var(--tracking-display);
 }
 .board-head__switch {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 100%;
+  gap: 8px;
+  min-width: 0;
   padding: 2px 6px;
   margin-left: -6px;
   border-radius: 8px;
@@ -125,12 +143,23 @@ const visibility = computed(() =>
   outline-offset: 2px;
 }
 .board-head__name {
+  margin: 0;
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.board-head__key {
+  padding: 1px 7px;
+  border-radius: 6px;
+  font: 500 12px var(--font-mono);
+  color: rgb(var(--v-theme-ink-2));
+  background: rgb(var(--v-theme-surface-bright));
+}
 .board-head__meta {
-  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -139,8 +168,11 @@ const visibility = computed(() =>
   font-size: 13px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
-.board-head__key {
-  font: 500 12px var(--font-mono);
+.board-head__meta kbd {
+  padding: 0 5px;
+  border: 1px solid rgb(var(--v-theme-rule));
+  border-radius: 4px;
+  font: 500 11px var(--font-mono);
 }
 .board-head__actions {
   display: flex;
@@ -148,9 +180,12 @@ const visibility = computed(() =>
   gap: 8px;
 }
 @media (max-width: 600px) {
-  .board-head__title {
+  .board-head__name {
     font-size: 24px;
     line-height: 30px;
+  }
+  .board-head__hint {
+    display: none;
   }
 }
 </style>

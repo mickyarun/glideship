@@ -171,12 +171,14 @@ export const engineeringRoutes: RouteRecordRaw[] = inEngineeringWorkspace([
   {
     path: 'raceview/:roomId',
     name: 'race-view',
+    meta: { shortcuts: false },
     component: () => import('@/views/race/RaceRoomView.vue'),
     props: true,
   },
   {
     path: 'games/backlash/:roomId',
     name: 'backlash-room',
+    meta: { shortcuts: false },
     component: () => import('@/views/backlash/BacklashRoomView.vue'),
     props: true,
   },

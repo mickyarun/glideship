@@ -21,6 +21,8 @@ declare module 'vue-router' {
     permission?: string | string[]
     /** Workspace the route belongs to; users without it are sent home. */
     workspace?: Workspace
+    /** False on pages that take the keyboard for themselves (games, the avatar picker). */
+    shortcuts?: boolean
   }
 }
 

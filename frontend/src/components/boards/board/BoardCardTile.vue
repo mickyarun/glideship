@@ -18,7 +18,7 @@
      the ⋯ menu sits above it and stays separately clickable without
      nesting interactive elements. Same rhythm as the BUD board card. -->
 <template>
-  <article class="card-tile" :data-card-id="card.id">
+  <article class="card-tile" :class="{ 'card-tile--archived': card.archived_at }" :data-card-id="card.id">
     <div class="card-tile__top">
       <span class="card-tile__key">{{ card.key }}</span>
       <BudPriorityChip v-if="card.priority" :priority="card.priority" />
@@ -31,6 +31,8 @@
         :can-archive="canArchive"
         @move="(stageId) => emit('move', card, stageId)"
         @archive="emit('archive', card)"
+        @restore="emit('restore', card)"
+        @copied="emit('copied', card)"
       />
     </div>
 
@@ -80,7 +82,7 @@ import AppTag from '@/components/common/AppTag.vue'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { labelColor } from '@/constants/boards'
 import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
-import { dateChip } from '@/utils/boardFilters'
+import { dateChip } from '@/utils/cardChips'
 
 const props = defineProps<{
   card: CardSummary
@@ -95,6 +97,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   move: [card: CardSummary, stageId: string]
   archive: [card: CardSummary]
+  restore: [card: CardSummary]
+  copied: [card: CardSummary]
 }>()
 
 const { nameFor, photoFor } = useMemberDirectory()
@@ -177,6 +181,9 @@ const date = computed(() => dateChip(props.card, props.now))
 .card-tile__date--error { color: rgb(var(--v-theme-error)); }
 .card-tile__date--warning { color: rgb(var(--v-theme-warning)); }
 .card-tile__date--success { color: rgb(var(--v-theme-success)); }
+.card-tile--archived {
+  border-style: dashed;
+}
 .card-tile--ghost {
   opacity: 0.4;
 }

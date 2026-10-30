@@ -15,18 +15,24 @@
  -->
 
 <!-- A stage column's heading: a category-coloured dot (named for screen
-     readers), the stage name, its open-card count, and the WIP limit,
-     which turns to the warning tone once the count passes it. -->
+     readers), the stage name and a count pill ("4 / 3" with a WIP limit),
+     then, once the count passes the limit, a warning row under it. -->
 <template>
-  <header class="stage-head" :class="{ 'stage-head--over': over }">
-    <span class="stage-head__dot" :style="{ background: `rgb(var(--v-theme-${CATEGORY_COLORS[stage.category]}))` }" aria-hidden="true" />
-    <h2 :id="id" class="stage-head__name">
-      {{ stage.name }}<span class="d-sr-only">, {{ CATEGORY_LABELS[stage.category] }}</span>
-    </h2>
-    <span class="stage-head__count" :aria-label="countLabel">
-      {{ count }}<template v-if="stage.wip_limit"> / {{ stage.wip_limit }}</template>
-    </span>
-    <v-icon v-if="over" icon="mdi-alert-outline" size="14" class="stage-head__warn" aria-hidden="true" />
+  <header class="stage-head">
+    <div class="stage-head__row">
+      <span class="stage-head__dot" :style="{ background: `rgb(var(--v-theme-${CATEGORY_COLORS[stage.category]}))` }" aria-hidden="true" />
+      <h2 :id="id" class="stage-head__name">
+        {{ stage.name }}<span class="d-sr-only">, {{ CATEGORY_LABELS[stage.category] }}</span>
+      </h2>
+      <span class="stage-head__count" :class="{ 'stage-head__count--over': over }">
+        <span aria-hidden="true">{{ limit ? `${count} / ${limit}` : count }}</span>
+        <span class="d-sr-only">{{ countLabel }}</span>
+      </span>
+    </div>
+    <p v-if="over" class="stage-head__over">
+      <v-icon icon="mdi-alert-circle-outline" size="14" aria-hidden="true" />
+      Over the WIP limit of {{ limit }}
+    </p>
   </header>
 </template>
 
@@ -35,23 +41,29 @@ import { computed } from 'vue'
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '@/constants/boards'
 import type { StageRead } from '@/types/boards'
 import { plural } from '@/utils/format'
+import { overWip, wipLimit } from '@/utils/wip'
 
 const props = defineProps<{ id: string; stage: StageRead; count: number }>()
 
-const over = computed(() => props.stage.wip_limit !== null && props.count > props.stage.wip_limit)
+const limit = computed(() => wipLimit(props.stage.wip_limit))
+const over = computed(() => overWip(props.count, props.stage.wip_limit))
 const countLabel = computed(() => {
   const cards = plural(props.count, 'card')
-  if (!props.stage.wip_limit) return cards
-  return `${cards}, limit ${props.stage.wip_limit}${over.value ? ', over the limit' : ''}`
+  return limit.value ? `${cards}, limit ${limit.value}` : cards
 })
 </script>
 
 <style scoped>
 .stage-head {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 2px;
+}
+.stage-head__row {
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 2px;
 }
 .stage-head__dot {
   width: 8px;
@@ -69,12 +81,24 @@ const countLabel = computed(() => {
   white-space: nowrap;
 }
 .stage-head__count {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
   font-size: 12px;
-  font-weight: 500;
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: rgb(var(--v-theme-ink-2));
+  background: rgb(var(--v-theme-surface-bright));
 }
-.stage-head--over .stage-head__count,
-.stage-head__warn {
+.stage-head__count--over {
+  font-weight: 600;
+  color: rgb(var(--v-theme-warning));
+  background: rgba(var(--v-theme-warning), 0.16);
+}
+.stage-head__over {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
   color: rgb(var(--v-theme-warning));
 }
 </style>

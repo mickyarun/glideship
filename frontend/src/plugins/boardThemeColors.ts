@@ -13,9 +13,11 @@
 // limitations under the License.
 
 // Board stage-category and card-label hues, spread into both themes in
-// vuetify-theme.ts. They mirror tokens.css (--color-category-* and
-// --color-label-*). Each reads at 4.5:1 or better as tag text on a wash of
-// itself over the card surface; the BUD stage-* hues stay separate.
+// vuetify-theme.ts. Components read them as Vuetify theme colours
+// (rgb(var(--v-theme-label-red)), AppTag's color prop), so there is no
+// tokens.css copy to keep in sync. Each reads at 4.5:1 or better as tag
+// text on a wash of itself over the card surface; the BUD stage-* hues
+// stay separate.
 
 export const boardColorsDark: Record<string, string> = {
   'category-todo': '#94A3B8',

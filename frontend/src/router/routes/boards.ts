@@ -18,8 +18,9 @@
  * may do on one, is the API's call: a board they can't see is a 404.
  */
 import type { RouteRecordRaw } from 'vue-router'
+import { BOARDS_VIEW } from '@/utils/workspace'
 
-const meta = { permission: 'boards:view' }
+const meta = { permission: BOARDS_VIEW }
 
 export const boardRoutes: RouteRecordRaw[] = [
   {
@@ -29,21 +30,23 @@ export const boardRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/boards/BoardsIndexView.vue'),
   },
   {
+    // The shell loads the board and follows its live channel once; the
+    // board, a card and the settings are its child pages.
     path: 'boards/:key',
-    name: 'board',
     meta,
-    component: () => import('@/views/boards/BoardView.vue'),
-  },
-  {
-    path: 'boards/:key/settings',
-    name: 'board-settings',
-    meta,
-    component: () => import('@/views/boards/BoardPendingView.vue'),
-  },
-  {
-    path: 'boards/:key/cards/:number',
-    name: 'board-card',
-    meta,
-    component: () => import('@/views/boards/BoardPendingView.vue'),
+    component: () => import('@/views/boards/BoardShell.vue'),
+    children: [
+      { path: '', name: 'board', component: () => import('@/views/boards/BoardView.vue') },
+      {
+        path: 'settings',
+        name: 'board-settings',
+        component: () => import('@/views/boards/BoardPendingView.vue'),
+      },
+      {
+        path: 'cards/:number',
+        name: 'board-card',
+        component: () => import('@/views/boards/BoardPendingView.vue'),
+      },
+    ],
   },
 ]

@@ -14,57 +14,66 @@
  * limitations under the License.
  -->
 
-<!-- One stage of a team board: its header (category, name, count and WIP
-     limit, in the warning tone when over it, which never blocks a move),
-     its cards in drag order, "Load more" for the next page, and the
-     quick-add composer for people who may add cards. -->
+<!-- One stage of a team board, as tall as the window: its header, then its
+     cards in their own scroll box (the next page loads as the bottom comes
+     into view), then quick-add. Cards aren't windowed: SortableJS needs
+     them all in the DOM. A drag heading in past the WIP limit says so,
+     and the drop still goes through. -->
 <template>
-  <section class="stage-col" :aria-labelledby="headingId">
+  <section class="stage-col" :aria-labelledby="headingId" :data-stage-col="stage.id">
     <StageColumnHeader :id="headingId" :stage="stage" :count="count" />
-
-    <VueDraggable
-      :model-value="column.items"
-      v-bind="dragOptions(boardId, canDrag)"
-      class="stage-col__cards"
-      :data-stage-id="stage.id"
-      @end="onEnd"
-    >
-      <BoardCardTile
-        v-for="card in column.items"
-        :key="card.id"
-        :card="card"
-        :board-key="boardKey"
-        :stages="stages"
-        :labels-by-id="labelsById"
-        :now="now"
-        :can-move="canMove"
-        :can-archive="canArchive"
-        @move="(c, stageId) => emit('move', c, stageId)"
-        @archive="emit('archive', $event)"
-      />
-    </VueDraggable>
-
-    <template v-if="!column.loaded && column.loading">
-      <v-skeleton-loader v-for="i in 2" :key="i" type="list-item-two-line" class="stage-col__skeleton" />
-    </template>
-    <p v-else-if="column.error" class="stage-col__note" role="alert">
-      {{ column.error }}
-      <v-btn variant="text" size="small" color="primary" @click="emit('load', false)">Try again</v-btn>
-    </p>
-    <p v-else-if="column.loaded && !column.items.length" class="stage-col__note">
-      {{ filtering ? 'No cards match' : 'No cards yet' }}
+    <p v-if="goesOver" class="stage-col__over" role="status">
+      {{ stage.name }} goes over its limit of {{ limit }}. You can still drop here.
     </p>
 
-    <v-btn
-      v-if="column.cursor"
-      variant="tonal"
-      size="small"
-      :loading="column.loading"
-      class="stage-col__more"
-      @click="emit('load', true)"
-    >
-      Load more
-    </v-btn>
+    <div ref="scrollBox" class="stage-col__scroll">
+      <VueDraggable
+        :model-value="column.items"
+        v-bind="dragOptions(boardId, canDrag)"
+        @move="dragMoved"
+        class="stage-col__cards"
+        :data-stage-id="stage.id"
+        @start="dragStarted"
+        @end="onEnd"
+      >
+        <BoardCardTile
+          v-for="card in column.items"
+          :key="card.id"
+          :card="card"
+          :board-key="boardKey"
+          :stages="stages"
+          :labels-by-id="labelsById"
+          :now="now"
+          :can-move="canMove"
+          :can-archive="canArchive"
+          @move="(c, stageId) => emit('move', c, stageId)"
+          @archive="emit('archive', $event)"
+          @restore="emit('restore', $event)"
+          @copied="emit('copied', $event)"
+        />
+      </VueDraggable>
+
+      <template v-if="column.loading && !column.items.length">
+        <v-skeleton-loader v-for="i in 2" :key="i" type="list-item-two-line" class="stage-col__skeleton" />
+      </template>
+      <p v-else-if="column.error" class="stage-col__note" role="alert">
+        {{ column.error }}
+        <v-btn variant="text" size="small" color="primary" @click="emit('load', false)">Try again</v-btn>
+      </p>
+      <p v-else-if="column.loaded && !column.items.length" class="stage-col__note">No cards here</p>
+
+      <div ref="sentinel" class="stage-col__sentinel" aria-hidden="true" />
+      <v-btn
+        v-if="column.cursor"
+        variant="text"
+        size="small"
+        :loading="column.loading"
+        class="stage-col__more"
+        @click="emit('load', true)"
+      >
+        Load more
+      </v-btn>
+    </div>
 
     <BoardQuickAdd
       v-if="canCreate"
@@ -77,16 +86,21 @@
 </template>
 
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import BoardCardTile from '@/components/boards/board/BoardCardTile.vue'
 import BoardQuickAdd from '@/components/boards/board/BoardQuickAdd.vue'
 import StageColumnHeader from '@/components/boards/board/StageColumnHeader.vue'
-import { dragOptions, dropFromDragEnd, type CardDrop } from '@/composables/useCardDrag'
+import {
+  dragEnded, dragGoesOver, dragMoved, dragOptions, dragStarted, dropFromDragEnd, type CardDrop,
+} from '@/composables/useCardDrag'
+import { useLoadMoreSentinel } from '@/composables/useLoadMoreSentinel'
+import type { ActionResult } from '@/stores/boardCardActions'
 import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
 import type { Column } from '@/utils/boardColumns'
+import { wipLimit } from '@/utils/wip'
 
-defineProps<{
+const props = defineProps<{
   stage: StageRead
   column: Column
   count: number
@@ -95,27 +109,38 @@ defineProps<{
   stages: StageRead[]
   labelsById: Map<string, LabelRead>
   now: Date
-  filtering: boolean
-  /** Drag is off on phones; the card menu still moves cards there. */
+  /** Drag is off on phones and in the archived view; the menu still moves cards. */
   canDrag: boolean
   canMove: boolean
   canCreate: boolean
   canArchive: boolean
   titleMax: number | null
-  submitCard: (stageId: string, title: string) => Promise<string | null>
+  submitCard: (stageId: string, title: string) => Promise<ActionResult>
 }>()
 
 const emit = defineEmits<{
   drop: [drop: CardDrop]
   move: [card: CardSummary, stageId: string]
   archive: [card: CardSummary]
+  restore: [card: CardSummary]
+  copied: [card: CardSummary]
   load: [more: boolean]
 }>()
 
 const composing = defineModel<boolean>('composing', { default: false })
 const headingId = useId()
+const scrollBox = ref<HTMLElement | null>(null)
+const sentinel = ref<HTMLElement | null>(null)
+
+const limit = computed(() => wipLimit(props.stage.wip_limit))
+const goesOver = computed(() => dragGoesOver(props.stage.id, props.count, props.stage.wip_limit))
+
+useLoadMoreSentinel(sentinel, scrollBox, () => {
+  if (props.column.cursor && !props.column.loading) emit('load', true)
+})
 
 function onEnd(event: Parameters<typeof dropFromDragEnd>[0]): void {
+  dragEnded()
   const drop = dropFromDragEnd(event)
   if (drop) emit('drop', drop)
 }
@@ -125,13 +150,31 @@ function onEnd(event: Parameters<typeof dropFromDragEnd>[0]): void {
 .stage-col {
   width: 284px;
   flex-shrink: 0;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding: 10px;
   border-radius: 12px;
   border: 1px solid rgb(var(--v-theme-rule));
   background: rgba(var(--v-theme-on-surface), 0.03);
+}
+.stage-col__over {
+  margin: 0 4px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-warning));
+}
+.stage-col__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Room for focus rings on the cards. */
+  padding: 2px;
+  margin: -2px;
 }
 .stage-col__cards {
   display: flex;
@@ -140,9 +183,7 @@ function onEnd(event: Parameters<typeof dropFromDragEnd>[0]): void {
   /* Room to drop into an empty column. */
   min-height: 24px;
 }
-.stage-col__skeleton {
-  background: transparent;
-}
+.stage-col__skeleton { background: transparent; }
 .stage-col__note {
   margin: 0;
   padding: 12px 4px;
@@ -150,9 +191,8 @@ function onEnd(event: Parameters<typeof dropFromDragEnd>[0]): void {
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
-.stage-col__more {
-  align-self: center;
-}
+.stage-col__sentinel { height: 1px; flex-shrink: 0; }
+.stage-col__more { align-self: center; }
 @media (max-width: 600px) {
   .stage-col {
     width: 100%;

@@ -21,14 +21,15 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { boardsApi } from '@/services/boardsApi'
-import type { BoardLimits, SwitcherRead } from '@/types/boardPrefs'
 import type {
   BoardCreate,
   BoardDetail,
+  BoardLimits,
   BoardListItem,
   BoardTemplate,
   CustomBoardItem,
   DeliveryBoardItem,
+  SwitcherRead,
 } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
 

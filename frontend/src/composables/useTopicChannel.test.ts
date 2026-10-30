@@ -29,6 +29,7 @@ vi.mock('@/services/wsReconnect', () => ({
   }),
 }))
 
+import { clientId } from '@/services/clientId'
 import { useTopicChannel } from './useTopicChannel'
 
 type Msg = { event: 'added'; id: string } | { event: 'removed'; id: string }
@@ -65,6 +66,17 @@ describe('useTopicChannel', () => {
     scope.stop()
     expect(listeners.size).toBe(0)
     expect(reconnects.size).toBe(0)
+  })
+
+  it('skips this tab\'s own echoes with ignoreOwn, but not another tab\'s', () => {
+    const added = vi.fn()
+    const scope = effectScope()
+    scope.run(() => useTopicChannel<Msg>('t:1', { added }, () => {}, { ignoreOwn: true }))
+    listeners.get('t:1')?.({ event: 'added', id: 'mine', origin: clientId })
+    listeners.get('t:1')?.({ event: 'added', id: 'other tab, same person', origin: 'another-tab' })
+    listeners.get('t:1')?.({ event: 'added', id: 'no tab', origin: null })
+    expect(added.mock.calls.map(([m]) => m.id)).toEqual(['other tab, same person', 'no tab'])
+    scope.stop()
   })
 
   it('resyncs on reconnect', () => {

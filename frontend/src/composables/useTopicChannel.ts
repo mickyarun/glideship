@@ -19,13 +19,23 @@
 //
 // The topic can change (or be unknown until a load finishes): pass a ref
 // or getter and the channel follows it, dropping the previous topic.
+// With ``ignoreOwn``, messages whose ``origin`` is this tab's client id
+// (the echo of a change this tab made) are skipped.
 
 import { getCurrentScope, onScopeDispose, toValue, watch, type MaybeRefOrGetter } from 'vue'
+import { clientId } from '@/services/clientId'
 import { subscribe, unsubscribe } from '@/services/socket'
 import { onSocketReconnect } from '@/services/wsReconnect'
 
 export interface TopicMessage {
   event: string
+  /** The client id of the tab whose change this announces, when there is one. */
+  origin?: string | null
+}
+
+export interface TopicChannelOptions {
+  /** Skip messages this tab caused (their ``origin`` is our client id). */
+  ignoreOwn?: boolean
 }
 
 /** One optional handler per event name, typed by that event's message. */
@@ -41,6 +51,7 @@ export function useTopicChannel<E extends TopicMessage>(
   topic: MaybeRefOrGetter<string | null>,
   handlers: TopicHandlers<E>,
   onResync: () => void,
+  options: TopicChannelOptions = {},
 ) {
   let cleanup: (() => void) | null = null
 
@@ -52,6 +63,7 @@ export function useTopicChannel<E extends TopicMessage>(
   function start(name: string): void {
     const onMessage = (data: unknown) => {
       if (!isMessage(data)) return
+      if (options.ignoreOwn && data.origin === clientId) return
       const handler = handlers[data.event as E['event']] as ((m: E) => void) | undefined
       handler?.(data as E)
     }

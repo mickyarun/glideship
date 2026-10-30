@@ -30,6 +30,11 @@ describe('homeRouteFor', () => {
     expect(homeRouteFor(['boards:view'], false)).toEqual({ name: 'leave' })
   })
 
+  it('needs boards:view as well as a board, or the boards route would bounce them back', () => {
+    expect(homeRouteFor(['leave:approve'], true)).toEqual({ name: 'leave' })
+    expect(homeRouteFor(['boards:manage'], true)).toEqual({ name: 'leave' })
+  })
+
   it('keeps engineers on the dashboard even when they have boards', () => {
     expect(homeRouteFor([WORKSPACE_ENGINEERING, 'boards:view'], true)).toEqual({ name: 'dashboard' })
   })

@@ -15,9 +15,13 @@
 // Turns a finished SortableJS drag into a card move. The drag library
 // puts the DOM back the way it was and we ignore its list updates: the
 // store moves the card (optimistically), and Vue re-renders from that.
-// Columns carry ``data-stage-id`` and cards ``data-card-id``.
+// Columns carry ``data-stage-id`` and cards ``data-card-id``. While a
+// drag is on, ``dragging`` says which card and which column it's over,
+// so a column can warn before a drop takes it past its WIP limit.
 
+import { ref } from 'vue'
 import { DRAG_ANIMATION_MS, DRAG_TOUCH_DELAY_MS } from '@/constants/boards'
+import { overWip } from '@/utils/wip'
 
 export interface CardDrop {
   cardId: string
@@ -33,6 +37,15 @@ interface DragEndLike {
   newDraggableIndex?: number
 }
 
+export interface DragState {
+  cardId: string
+  fromStageId: string
+  overStageId: string
+}
+
+/** The drag in progress on the board, if any. */
+export const dragging = ref<DragState | null>(null)
+
 /** The move a drag ended in, or null when the card went back where it was. */
 export function dropFromDragEnd(event: DragEndLike): CardDrop | null {
   const cardId = event.item.dataset.cardId
@@ -41,6 +54,30 @@ export function dropFromDragEnd(event: DragEndLike): CardDrop | null {
   if (!cardId || !stageId || index === undefined) return null
   if (event.from === event.to && event.oldDraggableIndex === index) return null
   return { cardId, stageId, index }
+}
+
+export function dragStarted(event: { item: HTMLElement; from: HTMLElement }): void {
+  const cardId = event.item.dataset.cardId
+  const stageId = event.from.dataset.stageId
+  if (cardId && stageId) dragging.value = { cardId, fromStageId: stageId, overStageId: stageId }
+}
+
+/** SortableJS's onMove: note the column the card is over. Never cancels the move. */
+export function dragMoved(event: { to: HTMLElement }): boolean {
+  const over = event.to.dataset.stageId
+  if (dragging.value && over) dragging.value = { ...dragging.value, overStageId: over }
+  return true
+}
+
+/** Whether the drag in progress, dropped here, would take this stage past its WIP limit. */
+export function dragGoesOver(stageId: string, count: number, limit: number | null): boolean {
+  const drag = dragging.value
+  if (!drag || drag.overStageId !== stageId || drag.fromStageId === stageId) return false
+  return overWip(count + 1, limit)
+}
+
+export function dragEnded(): void {
+  dragging.value = null
 }
 
 /** SortableJS options shared by every column of one board. */

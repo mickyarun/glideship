@@ -16,48 +16,51 @@
 
 <!-- Create a board: its name, a key that starts every card's key (which
      can't change later), the template its stages come from, and who can
-     see it. On success it opens the new board. -->
+     see it, with what each choice means. On success it opens the board. -->
 <template>
-  <v-dialog v-model="open" width="560" scrollable :fullscreen="xs" aria-labelledby="new-board-title">
+  <v-dialog v-model="open" width="600" scrollable :fullscreen="xs" aria-labelledby="new-board-title">
     <v-card>
       <v-card-title id="new-board-title" class="new-board__title">New board</v-card-title>
       <v-card-text class="new-board__body">
         <AppCallout v-if="form.loadError.value" variant="error">{{ form.loadError.value }}</AppCallout>
-        <v-text-field
-          v-model="form.name.value"
-          label="Name"
-          autofocus
-          :counter="limits?.board_name_max"
-          :maxlength="limits?.board_name_max"
-        />
-        <v-text-field
-          :model-value="form.key.value"
-          label="Key"
-          class="new-board__key"
-          hint="Card keys start with it, like OPS-12. Letters only; it can't be changed later."
-          persistent-hint
-          @update:model-value="form.setKey"
-        />
-        <fieldset class="new-board__group">
-          <legend class="new-board__legend">Template</legend>
-          <v-radio-group v-model="form.template.value" hide-details>
-            <v-radio v-for="t in store.templates" :key="t.id" :value="t.id">
-              <template #label>
-                <span class="new-board__option">
-                  <span class="new-board__option-name">{{ t.name }}</span>
-                  <span class="new-board__option-note">
-                    {{ t.stages.length ? t.stages.map(s => s.name).join(' → ') : t.description }}
-                  </span>
-                </span>
-              </template>
-            </v-radio>
-          </v-radio-group>
-        </fieldset>
+        <div class="new-board__row">
+          <v-text-field
+            v-model="form.name.value"
+            label="Name"
+            autofocus
+            :maxlength="limits?.board_name_max"
+            hide-details="auto"
+          />
+          <v-text-field
+            :model-value="form.key.value"
+            label="Key"
+            class="new-board__key"
+            :maxlength="limits?.board_key_max"
+            :hint="form.keyHint.value"
+            persistent-hint
+            @update:model-value="form.setKey"
+          />
+        </div>
+        <TemplatePicker v-model="form.template.value" :templates="store.templates" />
         <fieldset class="new-board__group">
           <legend class="new-board__legend">Who can see it</legend>
           <v-radio-group v-model="form.visibility.value" hide-details>
-            <v-radio value="org" label="Everyone in the org can view it" />
-            <v-radio value="members" label="Only the people and teams I add" />
+            <v-radio value="org">
+              <template #label>
+                <span class="new-board__option">
+                  <span>Everyone in {{ orgName }}</span>
+                  <span class="new-board__note">They can view and comment. Members you add can edit.</span>
+                </span>
+              </template>
+            </v-radio>
+            <v-radio value="members">
+              <template #label>
+                <span class="new-board__option">
+                  <span>Members only</span>
+                  <span class="new-board__note">Hidden from everyone else, including search and the switcher.</span>
+                </span>
+              </template>
+            </v-radio>
           </v-radio-group>
         </fieldset>
         <AppCallout v-if="form.error.value" variant="error">{{ form.error.value }}</AppCallout>
@@ -76,8 +79,10 @@
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
+import TemplatePicker from '@/components/boards/index/TemplatePicker.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import { useNewBoardForm } from '@/composables/useNewBoardForm'
+import { useOrgName } from '@/composables/useOrgName'
 import { useBoardsStore } from '@/stores/boards'
 
 const open = defineModel<boolean>({ required: true })
@@ -85,12 +90,13 @@ const open = defineModel<boolean>({ required: true })
 const store = useBoardsStore()
 const form = useNewBoardForm()
 const router = useRouter()
+const orgName = useOrgName()
 const { xs } = useDisplay()
 const limits = computed(() => store.limits)
 
 watch(open, isOpen => {
   if (isOpen) void form.reset()
-})
+}, { immediate: true })
 
 async function create(): Promise<void> {
   const detail = await form.submit()
@@ -111,6 +117,11 @@ async function create(): Promise<void> {
   gap: 12px;
   padding: 12px 24px !important;
 }
+.new-board__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
+}
 .new-board__key :deep(input) {
   font-family: var(--font-mono);
   text-transform: uppercase;
@@ -129,14 +140,16 @@ async function create(): Promise<void> {
   display: flex;
   flex-direction: column;
   padding: 4px 0;
-}
-.new-board__option-name {
-  font-weight: 500;
   color: rgb(var(--v-theme-on-surface));
 }
-.new-board__option-note {
+.new-board__note {
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
+}
+@media (max-width: 600px) {
+  .new-board__row {
+    grid-template-columns: 1fr;
+  }
 }
 .new-board__actions {
   justify-content: flex-end;

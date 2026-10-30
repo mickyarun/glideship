@@ -13,11 +13,13 @@
 // limitations under the License.
 
 // The loaded cards of each stage, as stores/boardCards.ts keeps them, and
-// the pure edits a move, a create or a live event makes to them.
+// the pure edits a page, a move, a create or a live event makes to them.
+// Cards merge by id, so a card never shows twice, and an older copy of a
+// card (by updated_at) never replaces a newer one.
 
 import type { CardSummary } from '@/types/boards'
 import { matchesCard, type CardFilters } from '@/utils/boardFilters'
-import { placeCard, withinLoaded } from '@/utils/boardPositions'
+import { byPosition, placeCard, withinLoaded } from '@/utils/boardPositions'
 
 export interface Column {
   /** The loaded cards that match the filters, in (position, id) order. */
@@ -48,6 +50,21 @@ export function locate(columns: Columns, cardId: string): Located | null {
   return null
 }
 
+/** True when ``incoming`` is an older copy of ``held`` than the one we have. */
+export function isOlder(incoming: CardSummary, held: CardSummary): boolean {
+  return Date.parse(incoming.updated_at) < Date.parse(held.updated_at)
+}
+
+/** ``items`` plus ``page``, one copy per card (the newer), in order. */
+export function mergePage(items: CardSummary[], page: CardSummary[]): CardSummary[] {
+  const byId = new Map(items.map(c => [c.id, c]))
+  for (const card of page) {
+    const held = byId.get(card.id)
+    if (!held || !isOlder(card, held)) byId.set(card.id, card)
+  }
+  return [...byId.values()].sort(byPosition)
+}
+
 /** Take the card out of whichever column holds it; returns where it was. */
 export function removeCard(columns: Columns, cardId: string): Located | null {
   const found = locate(columns, cardId)
@@ -59,22 +76,31 @@ export function removeCard(columns: Columns, cardId: string): Located | null {
 }
 
 /**
- * Put the card in its stage's column when it belongs there: the column is
- * loaded, the card passes the filters, and it falls inside the loaded
- * pages. ``force`` skips the last two, for the caller's own new card.
+ * Where an upserted card ended up: in its column; past the loaded pages
+ * (it arrives with a later page); hidden by the filters; in a stage not
+ * loaded yet; or not applied because we hold a newer copy.
+ */
+export type Placement = 'shown' | 'later' | 'filtered' | 'unloaded' | 'stale'
+
+/**
+ * Put the card in its stage's column when it belongs there. Judged against
+ * the column as it was, so an edit to the last loaded card keeps it.
+ * ``ignoreFilters`` keeps the caller's own new or moved card in view.
  */
 export function upsertCard(
   columns: Columns,
   card: CardSummary,
   filters: CardFilters,
-  force = false,
-): void {
+  { ignoreFilters = false } = {},
+): Placement {
+  const held = locate(columns, card.id)
+  if (held && isOlder(card, held.card)) return 'stale'
   const column = columns[card.stage_id]
-  // Judged against the column as it was, so an edit to the last loaded
-  // card keeps it rather than pushing it into the unloaded tail.
   const loadedBefore = column ? [...column.items] : []
   removeCard(columns, card.id)
-  if (!column?.loaded) return
-  const fits = matchesCard(card, filters) && withinLoaded(loadedBefore, card, column.cursor !== null)
-  if (force || fits) column.items = placeCard(column.items, card)
+  if (!column?.loaded) return 'unloaded'
+  if (!ignoreFilters && !matchesCard(card, filters)) return 'filtered'
+  if (!withinLoaded(loadedBefore, card, column.cursor !== null)) return 'later'
+  column.items = placeCard(column.items, card)
+  return 'shown'
 }

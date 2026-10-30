@@ -33,14 +33,25 @@ export function useNewBoardForm() {
   const error = ref('')
   const loadError = ref('')
 
+  const keyLimits = computed(() =>
+    store.limits ? { min: store.limits.board_key_min, max: store.limits.board_key_max } : null,
+  )
+
   watch(name, value => {
-    if (!keyEdited.value) key.value = suggestKey(value)
+    if (!keyEdited.value) key.value = suggestKey(value, keyLimits.value)
   })
 
   function setKey(raw: string | null): void {
     keyEdited.value = true
-    key.value = normaliseKey(raw ?? '')
+    key.value = normaliseKey(raw ?? '', keyLimits.value?.max ?? null)
   }
+
+  /** "Cards will be EVT-1, EVT-2…", or what the key still needs. */
+  const keyHint = computed(() => {
+    const min = keyLimits.value?.min ?? 1
+    if (key.value.length < min) return `Letters only, at least ${min}. Cards are numbered from it.`
+    return `Cards will be ${key.value}-1, ${key.value}-2… Can't be changed later.`
+  })
 
   async function reset(): Promise<void> {
     name.value = ''
@@ -59,7 +70,11 @@ export function useNewBoardForm() {
   }
 
   const canSubmit = computed(
-    () => !!name.value.trim() && !!key.value && !!template.value && !saving.value,
+    () =>
+      !!name.value.trim() &&
+      key.value.length >= (keyLimits.value?.min ?? 1) &&
+      !!template.value &&
+      !saving.value,
   )
 
   /** Create the board; resolves to it, or null with `error` set. */
@@ -82,5 +97,8 @@ export function useNewBoardForm() {
     }
   }
 
-  return { name, key, template, visibility, saving, error, loadError, canSubmit, setKey, reset, submit }
+  return {
+    name, key, keyHint, keyLimits, template, visibility, saving, error, loadError, canSubmit,
+    setKey, reset, submit,
+  }
 }

@@ -15,68 +15,73 @@
  -->
 
 <!-- Sidebar links for the engineering workspace, in two groups: day-to-day
-     work and the read-only insight views. Rendered only for members holding
-     ``workspace:engineering``. -->
+     work and the read-only insight views. The layout renders each group
+     where it belongs (Boards sits between them). Rendered only for members
+     holding ``workspace:engineering``. -->
 <template>
-  <NavHeading label="Work" :rail="rail" />
-  <v-list-item
-    prepend-icon="mdi-view-dashboard-outline"
-    title="Dashboard"
-    to="/dashboard"
-    rounded="lg"
-  />
-  <v-list-item
-    prepend-icon="mdi-view-column-outline"
-    title="Delivery"
-    to="/buds"
-    rounded="lg"
-  />
-  <v-list-item
-    prepend-icon="mdi-lightbulb-outline"
-    title="Features"
-    to="/features"
-    rounded="lg"
-  />
-  <v-list-item
-    prepend-icon="mdi-bug-outline"
-    title="Bugs"
-    to="/bugs"
-    rounded="lg"
-  />
-  <v-list-item
-    v-if="canApprove"
-    prepend-icon="mdi-inbox-outline"
-    title="Triage"
-    to="/triage"
-    rounded="lg"
-  />
+  <template v-if="group === 'work'">
+    <NavHeading label="Work" :rail="rail" />
+    <v-list-item
+      prepend-icon="mdi-view-dashboard-outline"
+      title="Dashboard"
+      to="/dashboard"
+      rounded="lg"
+    />
+    <v-list-item
+      prepend-icon="mdi-view-column-outline"
+      title="Delivery"
+      to="/buds"
+      rounded="lg"
+    />
+    <v-list-item
+      prepend-icon="mdi-lightbulb-outline"
+      title="Features"
+      to="/features"
+      rounded="lg"
+    />
+    <v-list-item
+      prepend-icon="mdi-bug-outline"
+      title="Bugs"
+      to="/bugs"
+      rounded="lg"
+    />
+    <v-list-item
+      v-if="canApprove"
+      prepend-icon="mdi-inbox-outline"
+      title="Triage"
+      to="/triage"
+      rounded="lg"
+    />
 
-  <NavHeading label="Insights" :rail="rail" />
-  <v-list-item
-    prepend-icon="mdi-trophy-outline"
-    title="Leaderboard"
-    to="/leaderboard"
-    rounded="lg"
-  />
-  <v-list-item
-    prepend-icon="mdi-target"
-    title="Skills"
-    to="/skills"
-    rounded="lg"
-  />
-  <v-list-item
-    prepend-icon="mdi-chart-bar"
-    title="Learnings"
-    to="/learnings"
-    rounded="lg"
-  />
+  </template>
+  <template v-else>
+    <NavHeading label="Insights" :rail="rail" />
+    <v-list-item
+      prepend-icon="mdi-trophy-outline"
+      title="Leaderboard"
+      to="/leaderboard"
+      rounded="lg"
+    />
+    <v-list-item
+      prepend-icon="mdi-target"
+      title="Skills"
+      to="/skills"
+      rounded="lg"
+    />
+    <v-list-item
+      prepend-icon="mdi-chart-bar"
+      title="Learnings"
+      to="/learnings"
+      rounded="lg"
+    />
+  </template>
 </template>
 
 <script setup lang="ts">
 import NavHeading from '@/components/layout/NavHeading.vue'
 import { usePermissions } from '@/composables/usePermissions'
 
-defineProps<{ rail: boolean }>()
+defineProps<{ rail: boolean; group: 'work' | 'insights' }>()
 
 const { canApprove } = usePermissions()
 </script>

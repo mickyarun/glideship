@@ -13,191 +13,123 @@
 // limitations under the License.
 
 /**
- * The open board's card store: keyset paging per stage, optimistic moves
- * that roll back when refused (and resync on a stale-neighbour 409), and
- * live events that skip our own echoes.
+ * The card store's loading: keyset paging merged by id, generations that
+ * drop stale replies, reloads that keep as many cards as were shown, and
+ * following a changed stage list.
  */
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const auth = vi.hoisted(() => ({ user: null as { id: string } | null }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
-vi.mock('@/services/boardsApi', () => ({
-  boardsApi: { cards: vi.fn(), moveCard: vi.fn(), createCard: vi.fn(), archiveCard: vi.fn() },
-}))
+vi.mock('@/services/boardsApi', () => ({ boardsApi: { cards: vi.fn() } }))
 
-import { httpError, makeCard, makeStage } from '@/components/boards/__tests__/fixtures'
+import { makeCard, makeStage } from '@/components/boards/__tests__/fixtures'
 import { boardsApi } from '@/services/boardsApi'
 import { useBoardCardsStore } from '@/stores/boardCards'
 import type { CardPage, CardSummary } from '@/types/boards'
+import { NO_FILTERS } from '@/utils/boardFilters'
 
 const api = vi.mocked(boardsApi)
-
-function page(items: CardSummary[], next_cursor: string | null = null): CardPage {
-  return { items, next_cursor }
-}
-
+const page = (items: CardSummary[], next_cursor: string | null = null): CardPage => ({ items, next_cursor })
+const ids = (items: CardSummary[]) => items.map(c => c.id)
 const A = makeCard('1', { position: 1 })
 const B = makeCard('2', { position: 2 })
-const C = makeCard('3', { position: 1, stage_id: 's2' })
+const C = makeCard('3', { position: 3 })
 
-async function loadedStore() {
+function deferred<T>() {
+  let resolve!: (v: T) => void
+  const promise = new Promise<T>(r => (resolve = r))
+  return { promise, resolve }
+}
+
+function fresh(stages = [makeStage('s1')]) {
   const store = useBoardCardsStore()
-  store.reset('OPS', [makeStage('s1', { open_cards: 2 }), makeStage('s2', { open_cards: 1 })])
-  api.cards.mockImplementation(async (_key, params) =>
-    params.stage_id === 's1' ? page([A, B]) : page([C]),
-  )
-  await store.loadAll()
+  store.reset('OPS', 'b1', stages)
   return store
 }
 
-const ids = (items: CardSummary[]) => items.map(c => c.id)
-
-describe('boardCards store', () => {
+describe('boardCards loading', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.resetAllMocks()
-    auth.user = null
   })
 
-  it('pages a stage with the cursor and appends the next page', async () => {
-    const store = useBoardCardsStore()
-    store.reset('OPS', [makeStage('s1')])
-    api.cards.mockResolvedValueOnce(page([A], 'c1')).mockResolvedValueOnce(page([B]))
+  it('pages with the cursor and merges pages by id, so a card never shows twice', async () => {
+    const store = fresh()
+    api.cards.mockResolvedValueOnce(page([A, B], 'c1')).mockResolvedValueOnce(page([B, C]))
     await store.loadStage('s1')
-    expect(store.columns.s1.cursor).toBe('c1')
-    await store.loadStage('s1', true)
+    await store.loadStage('s1', { more: true })
     expect(api.cards).toHaveBeenLastCalledWith('OPS', expect.objectContaining({ stage_id: 's1', cursor: 'c1' }))
-    expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
+    expect(ids(store.columns.s1.items)).toEqual(['1', '2', '3'])
     expect(store.columns.s1.cursor).toBeNull()
-    // Nothing more to fetch once the last page is in.
-    await store.loadStage('s1', true)
+    await store.loadStage('s1', { more: true })
     expect(api.cards).toHaveBeenCalledTimes(2)
   })
 
-  it('sends the filters with every page', async () => {
+  it('sends the filters, including the archived view, with every page', async () => {
     const store = useBoardCardsStore()
-    store.reset('OPS', [makeStage('s1')], { query: 'seo', assignee: 'u1', label: null, priority: 'P1' })
+    store.reset('OPS', 'b1', [makeStage('s1')], { ...NO_FILTERS, query: 'seo', assignee: 'u1', archived: true })
     api.cards.mockResolvedValue(page([]))
     await store.loadStage('s1')
-    expect(api.cards).toHaveBeenCalledWith('OPS', expect.objectContaining({ q: 'seo', assignee: 'u1', priority: 'P1' }))
-  })
-
-  it('moves a card at once, then keeps the server position', async () => {
-    const store = await loadedStore()
-    let resolve!: (v: unknown) => void
-    api.moveCard.mockReturnValue(new Promise(r => (resolve = r)) as never)
-    const pending = store.moveCard('2', 's2', 0)
-    expect(ids(store.columns.s1.items)).toEqual(['1'])
-    expect(ids(store.columns.s2.items)).toEqual(['2', '3'])
-    expect(store.counts).toEqual({ s1: 1, s2: 2 })
-    expect(api.moveCard).toHaveBeenCalledWith('OPS', 2, { stage_id: 's2', after_id: null, before_id: '3' })
-    resolve({ ...B, stage_id: 's2', position: 0.5 })
-    expect(await pending).toBeNull()
-    expect(store.columns.s2.items[0].position).toBe(0.5)
-  })
-
-  it('rolls a refused move back and keeps the counts', async () => {
-    const store = await loadedStore()
-    api.moveCard.mockRejectedValue(httpError(403, 'You can only view this board.'))
-    expect(await store.moveCard('1', 's2', 1)).toBe('You can only view this board.')
-    expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
-    expect(ids(store.columns.s2.items)).toEqual(['3'])
-    expect(store.counts).toEqual({ s1: 2, s2: 1 })
-    expect(api.cards).toHaveBeenCalledTimes(2)
-  })
-
-  it('reloads both stages when the neighbours were stale (409)', async () => {
-    const store = await loadedStore()
-    api.moveCard.mockRejectedValue(httpError(409, 'The board changed'))
-    await store.moveCard('1', 's2', 1)
-    expect(api.cards).toHaveBeenCalledTimes(4)
-    const reloaded = api.cards.mock.calls.slice(2).map(([, p]) => p.stage_id).sort()
-    expect(reloaded).toEqual(['s1', 's2'])
-  })
-
-  it('skips a move back to the same place', async () => {
-    const store = await loadedStore()
-    expect(await store.moveCard('1', 's1', 0)).toBeNull()
-    expect(api.moveCard).not.toHaveBeenCalled()
-  })
-
-  it('applies other people\'s events and ignores its own echoes', async () => {
-    const store = await loadedStore()
-    auth.user = { id: 'me' }
-    const created = makeCard('9', { position: 3 })
-    store.applyCardEvent({ event: 'card_created', actor_id: 'me', card: created })
-    expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
-    store.applyCardEvent({ event: 'card_created', actor_id: 'someone', card: created })
-    expect(ids(store.columns.s1.items)).toEqual(['1', '2', '9'])
-    expect(store.counts.s1).toBe(3)
-    store.applyCardEvent({ event: 'card_moved', actor_id: 'someone', card: { ...A, stage_id: 's2', position: 5 } })
-    expect(ids(store.columns.s2.items)).toEqual(['3', '1'])
-    expect(store.counts).toEqual({ s1: 2, s2: 2 })
-    store.applyCardEvent({ event: 'card_archived', actor_id: 'someone', card: C })
-    expect(ids(store.columns.s2.items)).toEqual(['1'])
-  })
-
-  it('leaves out live cards the filters hide or that fall past the loaded pages', async () => {
-    const store = useBoardCardsStore()
-    store.reset('OPS', [makeStage('s1')], { query: 'seo', assignee: null, label: null, priority: null })
-    api.cards.mockResolvedValue(page([makeCard('1', { title: 'SEO audit' })], 'more'))
-    await store.loadStage('s1')
-    store.applyCardEvent({ event: 'card_created', actor_id: 'x', card: makeCard('5', { title: 'Hiring' }) })
-    store.applyCardEvent({ event: 'card_created', actor_id: 'x', card: makeCard('6', { title: 'SEO plan', position: 9 }) })
-    expect(ids(store.columns.s1.items)).toEqual(['1'])
-  })
-
-  it('asks for a board refresh when a card moves in from a stage it never loaded', async () => {
-    const store = await loadedStore()
-    const stranger = makeCard('7', { stage_id: 's2', position: 9 })
-    expect(store.applyCardEvent({ event: 'card_moved', actor_id: 'x', card: stranger })).toBe(true)
-  })
-
-  it('archives at once and restores the card if the server refuses', async () => {
-    const store = await loadedStore()
-    api.archiveCard.mockRejectedValue(httpError(500))
-    expect(await store.archiveCard('1')).toBe('Refused')
-    expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
-    expect(store.counts.s1).toBe(2)
+    expect(api.cards).toHaveBeenCalledWith('OPS', expect.objectContaining({ q: 'seo', assignee: 'u1', archived: true }))
   })
 
   it('drops a Load more reply that lands after the stage was reloaded', async () => {
-    const store = useBoardCardsStore()
-    store.reset('OPS', [makeStage('s1')])
+    const store = fresh()
     api.cards.mockResolvedValueOnce(page([A], 'c1'))
     await store.loadStage('s1')
-    let resolveMore!: (p: CardPage) => void
-    api.cards.mockReturnValueOnce(new Promise(r => (resolveMore = r)))
-    const more = store.loadStage('s1', true)
+    const more = deferred<CardPage>()
+    api.cards.mockReturnValueOnce(more.promise)
+    const loadingMore = store.loadStage('s1', { more: true })
     api.cards.mockResolvedValueOnce(page([B]))
     await store.loadStage('s1')
-    resolveMore(page([C], 'old'))
-    await more
+    more.resolve(page([C], 'old'))
+    await loadingMore
     expect(ids(store.columns.s1.items)).toEqual(['2'])
     expect(store.columns.s1.cursor).toBeNull()
     expect(store.columns.s1.loading).toBe(false)
   })
 
-  it('undoes only the refused move, keeping live changes made meanwhile', async () => {
-    const store = await loadedStore()
-    let reject!: (e: unknown) => void
-    api.moveCard.mockReturnValue(new Promise((_, r) => (reject = r)) as never)
-    const pending = store.moveCard('1', 's2', 0)
-    store.applyCardEvent({ event: 'card_created', actor_id: 'x', card: makeCard('9', { stage_id: 's2', position: 7 }) })
-    reject(httpError(403))
-    await pending
-    expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
-    expect(ids(store.columns.s2.items)).toEqual(['3', '9'])
-    expect(store.counts).toEqual({ s1: 2, s2: 2 })
+  it('drops replies for a board I have left', async () => {
+    const store = fresh()
+    const old = deferred<CardPage>()
+    api.cards.mockReturnValueOnce(old.promise)
+    const loading = store.loadStage('s1')
+    store.reset('SEO', 'b2', [makeStage('s1')])
+    old.resolve(page([A]))
+    await loading
+    expect(store.columns.s1.loaded).toBe(false)
+    expect(store.columns.s1.items).toEqual([])
   })
 
-  it('keeps the last loaded card of a paged column when someone edits it', async () => {
-    const store = useBoardCardsStore()
-    store.reset('OPS', [makeStage('s1')])
-    api.cards.mockResolvedValue(page([A, B], 'more'))
+  it('reloads as many cards as were shown, across pages', async () => {
+    const store = fresh()
+    api.cards.mockResolvedValueOnce(page([A], 'c1')).mockResolvedValueOnce(page([B], 'c2'))
     await store.loadStage('s1')
-    store.applyCardEvent({ event: 'card_updated', actor_id: 'x', card: { ...B, title: 'Renamed' } })
-    expect(store.columns.s1.items.map(c => c.title)).toEqual(['Card 1', 'Renamed'])
+    await store.loadStage('s1', { more: true })
+    api.cards.mockResolvedValueOnce(page([A], 'r1')).mockResolvedValueOnce(page([B], 'r2'))
+    await store.loadStage('s1', { keep: true })
+    expect(ids(store.columns.s1.items)).toEqual(['1', '2'])
+    expect(store.columns.s1.cursor).toBe('r2')
+    expect(api.cards).toHaveBeenCalledTimes(4)
+  })
+
+  it('follows a changed stage list, keeping loaded columns and fresh counts', async () => {
+    const store = fresh([makeStage('s1', { open_cards: 1 }), makeStage('s2')])
+    api.cards.mockResolvedValue(page([A]))
+    await store.loadStage('s1')
+    store.syncStages([makeStage('s1', { open_cards: 4 }), makeStage('s3', { open_cards: 2 })])
+    expect(Object.keys(store.columns)).toEqual(['s1', 's3'])
+    expect(ids(store.columns.s1.items)).toEqual(['1'])
+    expect(store.columns.s3.loaded).toBe(false)
+    expect(store.counts).toEqual({ s1: 4, s3: 2 })
+  })
+
+  it('clears everything when I lose the board', async () => {
+    const store = fresh()
+    api.cards.mockResolvedValue(page([A]))
+    await store.loadStage('s1')
+    store.clear()
+    expect(store.boardKey).toBe('')
+    expect(store.columns).toEqual({})
   })
 })

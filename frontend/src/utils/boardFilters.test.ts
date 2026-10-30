@@ -14,22 +14,29 @@
 
 import { describe, expect, it } from 'vitest'
 import { makeCard } from '@/components/boards/__tests__/fixtures'
+import type { MemberRead } from '@/types/boards'
 import {
-  assigneeOptions, dateChip, fromSaved, hasFilters, matchesCard, NO_FILTERS, toListParams, toSaved,
+  assigneeOptions, filterSummary, fromSaved, hasFilters, matchesCard, matchesQuery, NO_FILTERS,
+  toListParams, toSaved,
 } from './boardFilters'
 
-const NOW = new Date('2026-10-20T12:00:00Z')
+describe('matchesQuery follows the server rule', () => {
+  const card = { title: 'Renew the SSL certificate', number: 58 }
+
+  it('matches the title, case-insensitively', () => {
+    expect(matchesQuery(card, 'ssl')).toBe(true)
+    expect(matchesQuery(card, 'hiring')).toBe(false)
+  })
+
+  it('matches an exact card number, not part of one, and not the key', () => {
+    expect(matchesQuery(card, '58')).toBe(true)
+    expect(matchesQuery(card, '5')).toBe(false)
+    expect(matchesQuery(card, 'OPS-58')).toBe(false)
+  })
+})
 
 describe('matchesCard', () => {
-  const card = makeCard('58', {
-    key: 'OPS-58', title: 'Renew the SSL certificate', assignee_ids: ['u1'], label_ids: ['l1'], priority: 'P1',
-  })
-
-  it('matches the title or the key, case-insensitively', () => {
-    expect(matchesCard(card, { ...NO_FILTERS, query: 'ssl' })).toBe(true)
-    expect(matchesCard(card, { ...NO_FILTERS, query: 'ops-58' })).toBe(true)
-    expect(matchesCard(card, { ...NO_FILTERS, query: 'hiring' })).toBe(false)
-  })
+  const card = makeCard('58', { assignee_ids: ['u1'], label_ids: ['l1'], priority: 'P1' })
 
   it('needs every picked filter to hold', () => {
     expect(matchesCard(card, { ...NO_FILTERS, assignee: 'u1', label: 'l1', priority: 'P1' })).toBe(true)
@@ -37,47 +44,46 @@ describe('matchesCard', () => {
     expect(matchesCard(card, { ...NO_FILTERS, label: 'l2' })).toBe(false)
     expect(matchesCard(card, { ...NO_FILTERS, priority: 'P0' })).toBe(false)
   })
+
+  it('shows open cards in the open view and archived ones in the archived view', () => {
+    const archived = { ...card, archived_at: '2026-10-02T00:00:00Z' }
+    expect(matchesCard(card, NO_FILTERS)).toBe(true)
+    expect(matchesCard(archived, NO_FILTERS)).toBe(false)
+    expect(matchesCard(archived, { ...NO_FILTERS, archived: true })).toBe(true)
+    expect(matchesCard(card, { ...NO_FILTERS, archived: true })).toBe(false)
+  })
 })
 
 describe('saved filters', () => {
-  it('round-trips through the prefs shape, one pick of each', () => {
-    const f = { query: ' seo ', assignee: 'u1', label: null, priority: 'P2' as const }
-    expect(toSaved(f)).toEqual({ q: 'seo', assignee_ids: ['u1'], label_ids: [], priorities: ['P2'], archived: false })
-    expect(fromSaved(toSaved(f))).toEqual({ query: 'seo', assignee: 'u1', label: null, priority: 'P2' })
+  it('round-trips through the prefs shape, keeping the archived view', () => {
+    const f = { query: ' seo ', assignee: 'u1', label: null, priority: 'P2' as const, archived: true }
+    expect(toSaved(f)).toEqual({ q: 'seo', assignee_ids: ['u1'], label_ids: [], priorities: ['P2'], archived: true })
+    expect(fromSaved(toSaved(f))).toEqual({ ...f, query: 'seo' })
     expect(fromSaved(null)).toEqual(NO_FILTERS)
   })
 
-  it('knows when anything is set and drops blanks from the list params', () => {
+  it('knows when anything narrows the cards and drops blanks from the params', () => {
     expect(hasFilters(NO_FILTERS)).toBe(false)
     expect(hasFilters({ ...NO_FILTERS, query: '  ' })).toBe(false)
+    expect(hasFilters({ ...NO_FILTERS, archived: true })).toBe(false)
     expect(hasFilters({ ...NO_FILTERS, label: 'l1' })).toBe(true)
-    expect(toListParams({ ...NO_FILTERS, query: '  ' }).q).toBeNull()
+    expect(toListParams({ ...NO_FILTERS, query: '  ' })).toMatchObject({ q: null, archived: null })
   })
 })
 
-describe('assigneeOptions', () => {
-  it('lists each assignee once, by name, keeping the current pick', () => {
-    const cards = [makeCard('1', { assignee_ids: ['u2', 'u1'] }), makeCard('2', { assignee_ids: ['u1'] })]
-    const names: Record<string, string> = { u1: 'Zoe', u2: 'Asha', u3: 'Ravi' }
-    expect(assigneeOptions(cards, id => names[id], 'u3').map(o => o.label)).toEqual(['Asha', 'Ravi', 'Zoe'])
-  })
-})
+describe('the filter bar options and summary', () => {
+  const members: MemberRead[] = [
+    { user_id: 'u1', name: 'Zoe', avatar_url: null, role: 'editor' },
+    { user_id: 'u2', name: 'Asha', avatar_url: null, role: 'admin' },
+  ]
 
-describe('dateChip', () => {
-  it('reads overdue in the error tone, with an icon and the date', () => {
-    const chip = dateChip({ due_at: '2026-10-18T09:00:00Z', due_done: false, start_at: null }, NOW)
-    expect(chip?.tone).toBe('error')
-    expect(chip?.text).toMatch(/^Overdue · /)
-    expect(chip?.icon).toBeTruthy()
+  it('lists the board\'s people by name, not just those on loaded cards', () => {
+    expect(assigneeOptions(members)).toEqual([{ value: 'u2', label: 'Asha' }, { value: 'u1', label: 'Zoe' }])
   })
 
-  it('is a warning when due within two days, and success once done', () => {
-    expect(dateChip({ due_at: '2026-10-21T09:00:00Z', due_done: false, start_at: null }, NOW)?.tone).toBe('warning')
-    expect(dateChip({ due_at: '2026-10-18T09:00:00Z', due_done: true, start_at: null }, NOW)?.text).toMatch(/^Done · /)
-  })
-
-  it('falls back to the start date, and to nothing', () => {
-    expect(dateChip({ due_at: null, due_done: false, start_at: '2026-11-02T09:00:00Z' }, NOW)?.text).toMatch(/^Starts /)
-    expect(dateChip({ due_at: null, due_done: false, start_at: null }, NOW)).toBeNull()
+  it('summarises what is set', () => {
+    const labels = [{ id: 'l1', name: 'Refresh', color: 'pink' as const }]
+    const f = { ...NO_FILTERS, assignee: 'u1', label: 'l1', priority: 'P0' as const }
+    expect(filterSummary(f, () => 'Tom Okafor', labels)).toBe('Assignee: Tom Okafor · Label: Refresh · Priority: P0')
   })
 })

@@ -36,11 +36,7 @@
     >
       <SidebarHead v-if="!compact" :collapsed="collapsed" />
 
-      <v-list density="compact" nav class="px-2">
-        <EngineeringNav v-if="canAccessEngineering" :rail="collapsed" />
-        <BoardsNav v-if="canViewBoards" :rail="collapsed" />
-        <PeopleNav :rail="collapsed" :show-heading="canAccessEngineering || canViewBoards" />
-      </v-list>
+      <SidebarNavList :rail="collapsed" />
 
       <template #append>
         <v-divider class="mb-2" />
@@ -91,15 +87,13 @@
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import BoardSwitcherHost from '@/components/boards/switcher/BoardSwitcherHost.vue'
-import BoardsNav from '@/components/layout/BoardsNav.vue'
-import EngineeringNav from '@/components/layout/EngineeringNav.vue'
 import EngineeringOverlays from '@/components/layout/EngineeringOverlays.vue'
 import DesktopTopBar from '@/components/layout/DesktopTopBar.vue'
 import MobileTopBar from '@/components/layout/MobileTopBar.vue'
-import PeopleNav from '@/components/layout/PeopleNav.vue'
 import SettingsNav from '@/components/layout/SettingsNav.vue'
 import SidebarFoot from '@/components/layout/SidebarFoot.vue'
 import SidebarHead from '@/components/layout/SidebarHead.vue'
+import SidebarNavList from '@/components/layout/SidebarNavList.vue'
 import { TOP_BAR_HEIGHT } from '@/constants/layout'
 import { useAppDrawer } from '@/composables/useAppDrawer'
 import { usePermissions } from '@/composables/usePermissions'

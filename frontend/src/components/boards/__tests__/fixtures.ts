@@ -16,7 +16,9 @@
 // error with a status, each overridable field by field.
 
 import { AxiosError, AxiosHeaders } from 'axios'
-import type { BoardAction, BoardDetail, CardSummary, StageRead } from '@/types/boards'
+import type {
+  BoardAction, BoardDetail, CardEvent, CardSummary, CustomBoardItem, StageRead,
+} from '@/types/boards'
 
 export function makeCard(id: string, over: Partial<CardSummary> = {}): CardSummary {
   return {
@@ -81,6 +83,7 @@ export function makeDetail(over: Partial<BoardDetail> = {}): BoardDetail {
     role: 'editor',
     capabilities: EDITOR_CAPS,
     starred: false,
+    filters: { q: null, assignee_ids: [], label_ids: [], priorities: [], archived: false },
     ...over,
   }
 }
@@ -94,4 +97,35 @@ export function httpError(status: number, detail = 'Refused'): AxiosError {
     config,
     data: { detail },
   })
+}
+
+export function makeBoardItem(key: string, over: Partial<CustomBoardItem> = {}): CustomBoardItem {
+  return {
+    kind: 'custom',
+    id: key.toLowerCase(),
+    key,
+    name: `${key} board`,
+    description: null,
+    visibility: 'org',
+    handover_enabled: false,
+    role: 'editor',
+    starred: false,
+    last_opened_at: null,
+    counts: { todo: 0, in_progress: 0, done_recent: 0 },
+    ...over,
+  }
+}
+
+/** A card event from someone else's tab (any origin but ours). */
+export function cardEvent<E extends CardEvent['event']>(
+  event: E,
+  card: CardSummary,
+  extra: Partial<CardEvent> = {},
+): CardEvent {
+  return { event, actor_id: 'someone', origin: 'other-tab', card, ...extra } as CardEvent
+}
+
+/** One second later than ``iso``, for a newer copy of a card. */
+export function later(iso: string, seconds = 1): string {
+  return new Date(Date.parse(iso) + seconds * 1000).toISOString()
 }

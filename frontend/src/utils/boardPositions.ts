@@ -33,6 +33,11 @@ export function neighboursAt(list: CardSummary[], index: number, cardId: string)
   return { after_id: others[at - 1]?.id ?? null, before_id: others[at]?.id ?? null }
 }
 
+/** Below every card in ``list``, where the server puts a card moved with no neighbours. */
+export function bottomPosition(list: CardSummary[]): number {
+  return list.length ? list[list.length - 1].position + 1 : 0
+}
+
 /** A position between two cards' positions, for local sorting only. */
 export function guessPosition(after: CardSummary | undefined, before: CardSummary | undefined): number {
   if (after && before) return (after.position + before.position) / 2
@@ -41,7 +46,8 @@ export function guessPosition(after: CardSummary | undefined, before: CardSummar
   return 0
 }
 
-function byPosition(a: CardSummary, b: CardSummary): number {
+/** (position, id) order, the server's. */
+export function byPosition(a: CardSummary, b: CardSummary): number {
   return a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 }
 

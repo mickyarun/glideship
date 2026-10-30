@@ -15,41 +15,27 @@
  -->
 
 <!-- Why the board can't be changed: it's archived, or I'm a viewer. A
-     viewer is told which admins to ask for edit access. -->
+     viewer is told which admin to ask for edit access. -->
 <template>
   <AppCallout v-if="archived" variant="warning" icon="mdi-archive-outline">
     This board is archived. Its cards can be read but not changed until an admin restores it.
   </AppCallout>
-  <AppCallout v-else variant="info" icon="mdi-eye-outline">
-    You can view this board but not change it.
-    <template v-if="admins.length"> Ask {{ admins }} for edit access.</template>
-    <template v-else> Ask a board admin for edit access.</template>
+  <AppCallout v-else variant="info" icon="mdi-eye-outline" role="note">
+    You can view and comment on {{ boardName }}. Ask {{ adminNames || 'a board admin' }} for edit access.
   </AppCallout>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
-import { boardsApi } from '@/services/boardsApi'
+import type { MemberRead } from '@/types/boards'
 
-const props = defineProps<{ boardKey: string; archived: boolean }>()
+const props = defineProps<{ boardName: string; archived: boolean; members: MemberRead[] }>()
 
-const admins = ref('')
-
-// Names only; a viewer may read the member list, and if it fails the
-// generic line is enough.
-watch(
-  () => props.boardKey,
-  async key => {
-    admins.value = ''
-    try {
-      const names = (await boardsApi.members(key)).members.filter(m => m.role === 'admin').map(m => m.name)
-      const last = names.pop()
-      admins.value = names.length ? `${names.join(', ')} or ${last}` : (last ?? '')
-    } catch (err) {
-      console.error('[boards] members fetch failed:', err)
-    }
-  },
-  { immediate: true },
-)
+const admins = computed(() => props.members.filter(m => m.role === 'admin').map(m => `${m.name} (admin)`))
+const adminNames = computed(() => {
+  const names = [...admins.value]
+  const last = names.pop()
+  return names.length ? `${names.join(', ')} or ${last}` : (last ?? '')
+})
 </script>
