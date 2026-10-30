@@ -18,8 +18,8 @@
   <AppPage :title="title" :subtitle="subtitle">
     <template #actions>
       <slot name="header-actions" />
-      <v-btn variant="text" prepend-icon="mdi-arrow-left" :to="{ name: 'settings' }">Back to Settings</v-btn>
-      <v-btn color="primary" variant="flat" :loading="saving" :disabled="!valid" @click="$emit('save')">Save changes</v-btn>
+      <v-btn variant="text" prepend-icon="mdi-arrow-left" :to="backTo">{{ backLabel }}</v-btn>
+      <v-btn v-if="showSave" color="primary" variant="flat" :loading="saving" :disabled="!valid" @click="$emit('save')">Save changes</v-btn>
     </template>
 
     <AppCallout v-if="error" variant="error">{{ error }}</AppCallout>
@@ -40,18 +40,32 @@
 </template>
 
 <script setup lang="ts">
+import type { RouteLocationRaw } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 
-defineProps<{
-  title: string
-  subtitle?: string
-  loading: boolean
-  saving: boolean
-  valid: boolean
-  error: string | null
-  saveSuccess: boolean
-}>()
+withDefaults(
+  defineProps<{
+    title: string
+    subtitle?: string
+    loading: boolean
+    saving: boolean
+    valid: boolean
+    error: string | null
+    saveSuccess: boolean
+    /** Where the back button goes; org Settings unless a page says otherwise. */
+    backTo?: RouteLocationRaw
+    backLabel?: string
+    /** Pages whose parts save as you go hide the Save button. */
+    showSave?: boolean
+  }>(),
+  {
+    subtitle: undefined,
+    backTo: () => ({ name: 'settings' }),
+    backLabel: 'Back to Settings',
+    showSave: true,
+  },
+)
 
 defineEmits<{
   save: []

@@ -42,27 +42,7 @@
           />
         </div>
         <TemplatePicker v-model="form.template.value" :templates="store.templates" />
-        <fieldset class="new-board__group">
-          <legend class="new-board__legend">Who can see it</legend>
-          <v-radio-group v-model="form.visibility.value" hide-details>
-            <v-radio value="org">
-              <template #label>
-                <span class="new-board__option">
-                  <span>Everyone in {{ orgName }}</span>
-                  <span class="new-board__note">They can view and comment. Members you add can edit.</span>
-                </span>
-              </template>
-            </v-radio>
-            <v-radio value="members">
-              <template #label>
-                <span class="new-board__option">
-                  <span>Members only</span>
-                  <span class="new-board__note">Hidden from everyone else, including search and the switcher.</span>
-                </span>
-              </template>
-            </v-radio>
-          </v-radio-group>
-        </fieldset>
+        <BoardVisibilityField v-model="form.visibility.value" />
         <AppCallout v-if="form.error.value" variant="error">{{ form.error.value }}</AppCallout>
       </v-card-text>
       <v-card-actions class="new-board__actions">
@@ -79,10 +59,10 @@
 import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
+import BoardVisibilityField from '@/components/boards/BoardVisibilityField.vue'
 import TemplatePicker from '@/components/boards/index/TemplatePicker.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import { useNewBoardForm } from '@/composables/useNewBoardForm'
-import { useOrgName } from '@/composables/useOrgName'
 import { useBoardsStore } from '@/stores/boards'
 
 const open = defineModel<boolean>({ required: true })
@@ -90,7 +70,6 @@ const open = defineModel<boolean>({ required: true })
 const store = useBoardsStore()
 const form = useNewBoardForm()
 const router = useRouter()
-const orgName = useOrgName()
 const { xs } = useDisplay()
 const limits = computed(() => store.limits)
 
@@ -125,26 +104,6 @@ async function create(): Promise<void> {
 .new-board__key :deep(input) {
   font-family: var(--font-mono);
   text-transform: uppercase;
-}
-.new-board__group {
-  border: 0;
-  margin: 4px 0 0;
-  padding: 0;
-}
-.new-board__legend {
-  margin-bottom: 4px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.new-board__option {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 0;
-  color: rgb(var(--v-theme-on-surface));
-}
-.new-board__note {
-  font-size: 12px;
-  color: rgb(var(--v-theme-on-surface-variant));
 }
 @media (max-width: 600px) {
   .new-board__row {

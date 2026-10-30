@@ -16,6 +16,7 @@
 // server's: read them from GET /boards/limits (stores/boards.ts), never here.
 
 import type { BoardRole, BoardVisibility, CardDocKind, CardDocSource, LabelColor, StageCategory } from '@/types/boards'
+import type { HandoverTarget } from '@/types/boards/settings'
 
 /** The sidebar lists up to this many starred boards… */
 export const SIDEBAR_STARRED_LIMIT = 7
@@ -68,6 +69,24 @@ export const VISIBILITY_LABELS: Record<BoardVisibility, { icon: string; text: st
   org: { icon: 'mdi-domain', text: 'Org-visible' },
   members: { icon: 'mdi-lock-outline', text: 'Members only' },
 }
+
+/** Every stage category, in board order. */
+export const STAGE_CATEGORIES = Object.keys(CATEGORY_LABELS) as StageCategory[]
+
+/** Label colours in swatch order (the server's `BoardLabelColor`). */
+export const LABEL_COLORS: LabelColor[] = [
+  'green', 'yellow', 'orange', 'red', 'purple', 'blue', 'sky', 'lime', 'pink', 'black',
+]
+
+/** Board roles, lowest first. */
+export const BOARD_ROLES = Object.keys(ROLE_LABELS) as BoardRole[]
+
+/** Where a handed-over card's BUD lands by default, as board settings name it. */
+export const HANDOVER_TARGETS: { value: HandoverTarget; label: string }[] = [
+  { value: 'bud', label: 'Requirements' },
+  { value: 'design', label: 'Design' },
+  { value: 'tech_arch', label: 'Tech arch' },
+]
 
 /** On touch screens a card must be held this long before it drags, so the column still scrolls. */
 export const DRAG_TOUCH_DELAY_MS = 150

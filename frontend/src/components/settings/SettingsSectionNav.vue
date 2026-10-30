@@ -15,18 +15,20 @@
  -->
 
 <!-- The settings pages the reader can open, grouped, beside the
-     Integrations page. Phones reach the same pages from the menu. -->
+     Integrations page. Phones reach the same pages from the menu. Another
+     settings page (a board's) passes its own groups and the link that is
+     current. -->
 <template>
-  <nav aria-label="Settings sections" class="settings-nav">
-    <div v-for="group in groups" :key="group.label" class="settings-nav__group">
-      <p class="settings-nav__label">{{ group.label }}</p>
+  <nav :aria-label="label" class="settings-nav">
+    <div v-for="group in shown" :key="group.label" class="settings-nav__group">
+      <p v-if="group.label" class="settings-nav__label">{{ group.label }}</p>
       <router-link
         v-for="item in group.items"
         :key="item.to"
         :to="item.to"
         class="settings-nav__link"
-        :class="{ 'settings-nav__link--on': item.to === route.path }"
-        :aria-current="item.to === route.path ? 'page' : undefined"
+        :class="{ 'settings-nav__link--on': item.to === here }"
+        :aria-current="item.to === here ? 'page' : undefined"
       >
         {{ item.title }}
       </router-link>
@@ -35,11 +37,30 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettingsSections } from '@/composables/useSettingsSections'
 
+interface NavGroup {
+  label: string
+  items: { title: string; to: string }[]
+}
+
+const props = withDefaults(
+  defineProps<{
+    /** Groups to list instead of the org settings pages. */
+    groups?: NavGroup[]
+    /** The link that is current; the route's path when omitted. */
+    current?: string
+    label?: string
+  }>(),
+  { groups: undefined, current: undefined, label: 'Settings sections' },
+)
+
 const route = useRoute()
-const groups = useSettingsSections()
+const orgGroups = useSettingsSections()
+const shown = computed(() => props.groups ?? orgGroups.value)
+const here = computed(() => props.current ?? route.path)
 </script>
 
 <style scoped>

@@ -24,7 +24,7 @@
     <BoardViewHeader
       :detail="detail"
       :can-create="canCreate"
-      :can-settings="board.can('edit_settings')"
+      :can-settings="board.can('edit_settings') || board.can('archive_board')"
       @star="star"
       @new-card="composeIn = defaultStageId"
     />

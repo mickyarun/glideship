@@ -40,7 +40,7 @@ export const boardRoutes: RouteRecordRaw[] = [
       {
         path: 'settings',
         name: 'board-settings',
-        component: () => import('@/views/boards/BoardPendingView.vue'),
+        component: () => import('@/views/boards/BoardSettingsView.vue'),
       },
       {
         path: 'cards/:number',
