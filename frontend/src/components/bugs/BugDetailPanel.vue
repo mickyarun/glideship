@@ -54,16 +54,18 @@
       </template>
     </dl>
 
-    <BugAttachments :bug-id="bug.id" :readonly="!canAttachToBugs" />
-    <BugComments :bug-id="bug.id" />
+    <BugAttachments :base-url="`/v1/bugs/${bug.id}`" :readonly="!canAttachToBugs" />
+    <BugComments v-if="comments" :thread="comments" :can-comment="canCommentOnBugs" :can-moderate="canEditBugs" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 import AppTag from '@/components/common/AppTag.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import { useBugsStore } from '@/stores/bugs'
+import { createCommentThread } from '@/stores/commentThread'
 import { BUG_SEVERITY_COLORS, BUG_STATUS_LABELS, budRef } from '@/types'
 import { BUG_TYPE_LABELS, severityLabel } from '@/utils/bugList'
 import { formatDateTime } from '@/utils/date'
@@ -75,8 +77,16 @@ import BugEditableText from './BugEditableText.vue'
 const emit = defineEmits<{ saved: [] }>()
 
 const bugsStore = useBugsStore()
-const { canEditBugs, canAssignBugs, canReportBugs } = usePermissions()
+const { canEditBugs, canAssignBugs, canReportBugs, canCommentOnBugs } = usePermissions()
 const bug = computed(() => bugsStore.currentBug)
+const { error } = storeToRefs(bugsStore)
+
+// One thread per open bug; its adds and deletes keep the cached counts in step.
+const bugId = computed(() => bug.value?.id ?? null)
+const comments = computed(() => {
+  const id = bugId.value
+  return id ? createCommentThread(`/v1/bugs/${id}`, error, delta => bugsStore.bumpCommentCount(id, delta)) : null
+})
 
 // Reporters attach evidence too, not just editors; the backend gates the
 // upload route the same way.

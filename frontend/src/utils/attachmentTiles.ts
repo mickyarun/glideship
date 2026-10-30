@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** Tile rows and the limits hint for the bug attachment strip. */
-import type { BugAttachment, BugAttachmentLimits } from '@/types'
+/** Tile rows and the limits hint for the attachment strip. */
+import type { AttachmentLimits, StoredAttachment } from '@/utils/attachmentWire'
 
 /** One tile in the attachment strip, staged (``file``) or stored (``fetchPath``). */
 export interface AttachmentTileRow {
@@ -25,7 +25,7 @@ export interface AttachmentTileRow {
   file: File | null
 }
 
-/** Tiles for files picked before the bug exists. */
+/** Tiles for files picked before the parent (a new bug) exists. */
 export function stagedTiles(files: File[]): AttachmentTileRow[] {
   return files.map((file, index) => ({
     key: `${index}-${file.name}-${file.lastModified}`,
@@ -37,9 +37,9 @@ export function stagedTiles(files: File[]): AttachmentTileRow[] {
   }))
 }
 
-/** Tiles for a bug's stored attachments; ``pathFor`` gives each one's download path. */
+/** Tiles for a parent's stored files; ``pathFor`` gives each one's download path. */
 export function storedTiles(
-  items: BugAttachment[],
+  items: Pick<StoredAttachment, 'id' | 'filename' | 'mimeType' | 'sizeBytes'>[],
   pathFor: (attachmentId: string) => string,
 ): AttachmentTileRow[] {
   return items.map((a) => ({
@@ -53,9 +53,9 @@ export function storedTiles(
 }
 
 /** "Up to 5 files, 10 MB each (png, jpg, pdf)." */
-export function attachmentHint(limits: BugAttachmentLimits): string {
+export function attachmentHint(limits: AttachmentLimits): string {
   return (
-    `Up to ${limits.maxFilesPerBug} files, ${limits.maxFileMb} MB each ` +
+    `Up to ${limits.maxFiles} files, ${limits.maxFileMb} MB each ` +
     `(${limits.acceptedExtensions.join(', ')}).`
   )
 }

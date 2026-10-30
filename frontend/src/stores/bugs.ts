@@ -15,7 +15,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/services/api'
-import { createBugComments } from '@/stores/bugComments'
 import { extractApiError } from '@/utils/errors'
 import {
   type BugBoardFilters,
@@ -46,8 +45,6 @@ export const useBugsStore = defineStore('bugs', () => {
   // Load failures for the list and board, kept apart from ``error`` (a
   // failed save, comment or attachment) so a page can show them in place.
   const loadError = ref<string | null>(null)
-  const { comments, commentsLoading, fetchComments, addComment, editComment, deleteComment } =
-    createBugComments(error, _bumpCommentCount)
 
   async function fetchBugs(filters?: BugListFilters): Promise<void> {
     loading.value = true
@@ -147,7 +144,7 @@ export const useBugsStore = defineStore('bugs', () => {
    * this bug — currentBug, the paginated list, and every board column.
    * Counts are floored at 0 so a stale-state delete never goes negative.
    */
-  function _bumpCommentCount(bugId: string, delta: number): void {
+  function bumpCommentCount(bugId: string, delta: number): void {
     const apply = (n: number) => Math.max(0, n + delta)
     if (currentBug.value && currentBug.value.id === bugId) {
       currentBug.value.commentCount = apply(currentBug.value.commentCount ?? 0)
@@ -172,8 +169,6 @@ export const useBugsStore = defineStore('bugs', () => {
     currentBug,
     board,
     loadError,
-    comments,
-    commentsLoading,
     // bug ops
     fetchBugs,
     fetchBoard,
@@ -181,10 +176,6 @@ export const useBugsStore = defineStore('bugs', () => {
     createBug,
     updateBug,
     fetchBugsForBud,
-    // comment ops
-    fetchComments,
-    addComment,
-    editComment,
-    deleteComment,
+    bumpCommentCount,
   }
 })

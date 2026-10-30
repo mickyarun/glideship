@@ -36,7 +36,7 @@ describe('storedTiles', () => {
 
 describe('attachmentHint', () => {
   it('states the count, size and type limits', () => {
-    const limits = { maxFilesPerBug: 5, maxFileMb: 10, acceptedExtensions: ['png', 'pdf'] }
+    const limits = { maxFiles: 5, maxFileMb: 10, acceptedExtensions: ['png', 'pdf'] }
     expect(attachmentHint(limits)).toBe('Up to 5 files, 10 MB each (png, pdf).')
   })
 })

@@ -21,11 +21,11 @@ import {
   fileExtension,
   formatFileSize,
 } from './attachments'
-import type { BugAttachmentLimits } from '@/types'
+import type { AttachmentLimits } from '@/utils/attachmentWire'
 
-const LIMITS: BugAttachmentLimits = {
+const LIMITS: AttachmentLimits = {
   maxFileMb: 10,
-  maxFilesPerBug: 3,
+  maxFiles: 3,
   acceptedExtensions: ['.jpeg', '.jpg', '.pdf', '.png', '.xls', '.xlsx'],
 }
 
@@ -130,7 +130,7 @@ describe('DEFAULT_ATTACHMENT_LIMITS', () => {
     // The staged picker in the create dialog runs on these before any
     // list response arrives — drift here means a misleading hint.
     expect(DEFAULT_ATTACHMENT_LIMITS.maxFileMb).toBe(10)
-    expect(DEFAULT_ATTACHMENT_LIMITS.maxFilesPerBug).toBe(10)
+    expect(DEFAULT_ATTACHMENT_LIMITS.maxFiles).toBe(10)
     expect(DEFAULT_ATTACHMENT_LIMITS.acceptedExtensions).toEqual([
       '.jpeg',
       '.jpg',
