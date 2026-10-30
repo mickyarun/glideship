@@ -29,7 +29,7 @@
       <AppTag :color="CATEGORY_COLORS[item.value as StageCategory]">{{ item.title }}</AppTag>
     </template>
     <template #item="{ item, props: itemProps }">
-      <v-list-item v-bind="itemProps" :title="undefined">
+      <v-list-item v-bind="itemProps" :title="undefined" :aria-label="item.title">
         <AppTag :color="CATEGORY_COLORS[item.value as StageCategory]">{{ item.title }}</AppTag>
       </v-list-item>
     </template>

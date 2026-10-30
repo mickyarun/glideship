@@ -18,7 +18,7 @@
 
 import api from '@/services/api'
 import { boardUrl } from '@/services/boardsApi'
-import type { BoardDetail, BoardRole, LabelRead, MembersRead, StageRead } from '@/types/boards'
+import type { BoardDetail, BoardRole, LabelRead, MembersRead, StageRead, TeamOptions } from '@/types/boards'
 import type {
   BoardUpdate, LabelCreate, LabelUpdate, StageCreate, StageUpdate,
 } from '@/types/boards/settings'
@@ -49,6 +49,8 @@ export const boardSettingsApi = {
     (await api.delete<MembersRead>(`${boardUrl(key)}/members/${userId}`)).data,
   putTeam: async (key: string, teamId: string, role: BoardRole) =>
     (await api.put<MembersRead>(`${boardUrl(key)}/teams/${teamId}`, { role })).data,
+  /** The org's active teams with their sizes, for a board admin's team picker. */
+  teamOptions: async (key: string) => (await api.get<TeamOptions>(`${boardUrl(key)}/teams/options`)).data,
   removeTeam: async (key: string, teamId: string) =>
     (await api.delete<MembersRead>(`${boardUrl(key)}/teams/${teamId}`)).data,
 

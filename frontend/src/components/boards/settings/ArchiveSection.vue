@@ -38,6 +38,7 @@
       :title="`Archive ${board.name}?`"
       body="Everyone keeps read access, and an admin can restore it at any time."
       action="Archive board"
+      color="error"
       :busy="status.saving.value"
       @confirm="archive"
     />
@@ -67,7 +68,7 @@ const confirming = ref(false)
 
 function apply(work: (key: string) => Promise<BoardDetail>, done: string): Promise<boolean> {
   return props.status.run(async key => {
-    page.board.detail.value = await work(key)
+    page.board.replace(await work(key))
     void boards.fetchNav()
   }, done, { refresh: false })
 }

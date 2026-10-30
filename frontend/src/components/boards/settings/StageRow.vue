@@ -15,52 +15,68 @@
  -->
 
 <!-- One stage in the settings list: drag handle and one-step moves, name,
-     category, WIP limit, the default radio, its handover role and delete.
-     Name and WIP limit save when the field is left or Enter is pressed;
-     a change the board's rules refuse is explained here and not sent. -->
+     category, WIP limit, the default radio, delete, and under them its
+     handover role and open cards. Name and WIP limit save when the field
+     is left or Enter is pressed; a change the board's rules refuse is
+     explained here and not sent, and the note clears once a change goes
+     through. Stacked (a narrow list), each field shows its label. -->
 <template>
   <div class="stage-row" :data-stage-row="stage.id">
     <div class="stage-row__order">
-      <v-icon icon="mdi-drag-vertical" class="stage-row__handle" :class="{ 'stage-row__handle--off': disabled || reordering }" role="img" aria-label="Drag to reorder" />
-      <v-btn icon="mdi-arrow-up" variant="text" size="small" :disabled="disabled || reordering || index === 0" :aria-label="`Move ${stage.name} up`" @click="emit('step', -1)" />
-      <v-btn icon="mdi-arrow-down" variant="text" size="small" :disabled="disabled || reordering || index === count - 1" :aria-label="`Move ${stage.name} down`" @click="emit('step', 1)" />
+      <v-icon icon="mdi-drag-vertical" class="stage-row__handle" :class="{ 'stage-row__handle--off': reordering }" role="img" aria-label="Drag to reorder" />
+      <v-btn icon="mdi-arrow-up" variant="text" size="small" :disabled="reordering || index === 0" :aria-label="`Move ${stage.name} up`" @click="emit('step', -1)" />
+      <v-btn icon="mdi-arrow-down" variant="text" size="small" :disabled="reordering || index === count - 1" :aria-label="`Move ${stage.name} down`" @click="emit('step', 1)" />
     </div>
-    <v-text-field
-      v-model="name"
-      :aria-label="`Name of ${stage.name}`"
-      :maxlength="nameMax ?? undefined"
-      :disabled="disabled"
-      density="compact"
-      hide-details
-      @blur="commitName"
-      @keydown.enter.prevent="leave"
-      @keydown.esc="name = stage.name"
-    />
-    <StageCategorySelect :model-value="stage.category" :aria-label="`Category of ${stage.name}`" :disabled="disabled" @update:model-value="pickCategory" />
-    <v-text-field
-      v-model="wip"
-      type="number"
-      min="1"
-      :max="wipMax"
-      placeholder="None"
-      :aria-label="`WIP limit of ${stage.name}`"
-      :disabled="disabled"
-      density="compact"
-      hide-details
-      @blur="commitWip"
-      @keydown.enter.prevent="leave"
-    />
-    <label class="stage-row__default">
-      <input :key="`${radioVersion}-${stage.is_default}`" type="radio" :name="radioGroup" :checked="stage.is_default" :disabled="disabled" @change="emit('default')" />
-      <span class="stage-row__default-text" aria-hidden="true">Default</span>
-      <span class="d-sr-only">New cards land in {{ stage.name }}</span>
+    <label class="stage-row__cell">
+      <span class="stage-row__label" aria-hidden="true">Name</span>
+      <v-text-field
+        v-model="name"
+        :aria-label="`Name of ${stage.name}`"
+        :maxlength="nameMax ?? undefined"
+        density="compact"
+        hide-details
+        @blur="commitName"
+        @keydown.enter.prevent="($event.target as HTMLElement).blur()"
+        @keydown.esc="name = stage.name"
+      />
     </label>
+    <div class="stage-row__cell">
+      <span class="stage-row__label" aria-hidden="true">Category</span>
+      <StageCategorySelect :model-value="stage.category" :aria-label="`Category of ${stage.name}`" @update:model-value="pickCategory" />
+    </div>
+    <label class="stage-row__cell">
+      <span class="stage-row__label" aria-hidden="true">WIP limit</span>
+      <v-text-field
+        v-model="wip"
+        type="number"
+        min="1"
+        :max="wipMax"
+        placeholder="None"
+        :aria-label="`WIP limit of ${stage.name}`"
+        density="compact"
+        hide-details
+        @blur="commitWip"
+        @keydown.enter.prevent="($event.target as HTMLElement).blur()"
+      />
+    </label>
+    <label class="stage-row__default">
+      <input
+        :key="`${radioVersion}-${stage.is_default}`"
+        type="radio"
+        :name="radioGroup"
+        :value="stage.id"
+        :checked="stage.is_default"
+        :aria-label="`Default stage: ${stage.name}`"
+        @change="emit('default')"
+      />
+      <span class="stage-row__default-text" aria-hidden="true">Default</span>
+    </label>
+    <v-btn icon="mdi-delete-outline" variant="text" size="small" :aria-label="`Delete ${stage.name}`" @click="askDelete" />
     <div class="stage-row__tags">
       <AppTag v-if="stage.id === board.handover_stage_id" color="category-done">Handover stage</AppTag>
       <AppTag v-if="stage.id === board.return_stage_id" color="category-todo">Return stage</AppTag>
       <span class="stage-row__cards">{{ plural(stage.open_cards, 'open card') }}</span>
     </div>
-    <v-btn icon="mdi-delete-outline" variant="text" size="small" :disabled="disabled" :aria-label="`Delete ${stage.name}`" @click="askDelete" />
     <p v-if="problem" class="stage-row__problem" role="alert">{{ problem }}</p>
   </div>
 </template>
@@ -70,8 +86,9 @@ import { ref, watch } from 'vue'
 import StageCategorySelect from '@/components/boards/settings/StageCategorySelect.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import type { BoardRead, StageCategory, StageRead } from '@/types/boards'
-import { categoryBlock, nameBlock, parseWip, removalBlock } from '@/utils/boardStageRules'
+import { categoryBlock, parseWip, removalBlock } from '@/utils/boardStageRules'
 import { plural } from '@/utils/format'
+import { uniqueNameBlock } from '@/utils/uniqueName'
 
 const props = defineProps<{
   stage: StageRead
@@ -84,7 +101,8 @@ const props = defineProps<{
   reordering: boolean
   nameMax: number | null
   wipMax: number
-  disabled: boolean
+  /** Changes that went through so far; a new one clears this row's note. */
+  successes: number
 }>()
 const emit = defineEmits<{
   rename: [name: string]
@@ -102,16 +120,11 @@ const problem = ref('')
 // The board's copy wins once it changes (a save here, or someone else's).
 watch(() => props.stage.name, next => (name.value = next))
 watch(() => props.stage.wip_limit, next => (wip.value = next === null ? '' : String(next)))
-
-/** Enter saves by leaving the field, so the blur that follows doesn't save twice. */
-function leave(event: KeyboardEvent): void {
-  const field = event.target as HTMLElement
-  field.blur()
-}
+watch(() => props.successes, () => (problem.value = ''))
 
 function commitName(): void {
   if (name.value.trim() === props.stage.name) return
-  problem.value = nameBlock(props.stages, name.value, props.stage.id) ?? ''
+  problem.value = uniqueNameBlock(props.stages, name.value, props.stage.id, 'stage') ?? ''
   if (!problem.value) emit('rename', name.value.trim())
 }
 
@@ -132,74 +145,4 @@ function askDelete(): void {
 }
 </script>
 
-<style scoped>
-.stage-row {
-  display: grid;
-  grid-template-columns: var(--stage-cols);
-  gap: 12px;
-  align-items: center;
-  padding: 10px 20px;
-  border-top: 1px solid rgb(var(--v-theme-rule));
-  background: rgb(var(--v-theme-surface));
-}
-.stage-row__order {
-  display: flex;
-  align-items: center;
-}
-.stage-row__handle {
-  cursor: grab;
-  color: rgb(var(--v-theme-on-surface-variant));
-}
-.stage-row__handle--off {
-  cursor: default;
-  opacity: 0.4;
-}
-.stage-row__default {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 36px;
-}
-.stage-row__default-text {
-  display: none;
-  margin-left: 8px;
-  font-size: 13px;
-}
-.stage-row__default input {
-  width: 18px;
-  height: 18px;
-  accent-color: rgb(var(--v-theme-primary));
-}
-.stage-row__tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.stage-row__cards {
-  font-size: 12px;
-  color: rgb(var(--v-theme-on-surface-variant));
-}
-.stage-row__problem {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: 13px;
-  color: rgb(var(--v-theme-error));
-}
-@media (max-width: 760px) {
-  .stage-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    padding: 12px 16px;
-  }
-  .stage-row__order {
-    grid-column: 1 / -1;
-  }
-  .stage-row__default {
-    justify-content: flex-start;
-  }
-  .stage-row__default-text {
-    display: inline;
-  }
-}
-</style>
+<style scoped src="./stage-row.css"></style>

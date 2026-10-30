@@ -34,8 +34,12 @@
     back-label="Back to the board"
     @save="save"
   >
+    <template #crumbs>
+      <BoardCrumbs :board="detail.board" current="Settings" />
+    </template>
     <template #header-actions>
-      <span class="board-settings__status" role="status" aria-live="polite">{{ status.announcement.value }}</span>
+      <span class="board-settings__status">{{ statusLine }}</span>
+      <span class="d-sr-only" role="status" aria-live="polite">{{ status.announcement.value }}</span>
     </template>
     <div class="board-settings">
       <BoardSettingsNav :board-key="detail.board.key" :section="section" />
@@ -45,7 +49,8 @@
           {{ board.can('archive_board') ? 'Restore it to change its settings.' : 'Its settings can be read but not changed.' }}
         </AppCallout>
         <AppCallout v-else-if="!isAdmin" variant="info" icon="mdi-eye-outline" role="note">
-          Only the board's admins can change its settings. {{ rolePhrase(detail.role) }}.
+          Only the board's admins can change its settings{{ adminNames ? `: ask ${adminNames}` : '' }}.
+          {{ rolePhrase(detail.role) }}.
         </AppCallout>
         <AppCallout v-if="status.error.value" variant="error" role="alert">{{ status.error.value }}</AppCallout>
         <GeneralSection v-if="section === 'general'" :form="general" :board="detail.board" :limits="limits" :disabled="!board.can('edit_settings')" />
@@ -82,6 +87,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import BoardCrumbs from '@/components/boards/BoardCrumbs.vue'
 import ArchiveSection from '@/components/boards/settings/ArchiveSection.vue'
 import BoardSettingsNav from '@/components/boards/settings/BoardSettingsNav.vue'
 import GeneralSection from '@/components/boards/settings/GeneralSection.vue'
@@ -95,10 +101,13 @@ import SettingsPageShell from '@/components/settings/SettingsPageShell.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
 import { useGeneralForm, useHandoverForm } from '@/composables/useBoardSettingsForms'
 import { useBoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
+import { useNow } from '@/composables/useNow'
 import { useUnsavedGuard } from '@/composables/useUnsavedGuard'
 import { rolePhrase } from '@/constants/boards'
 import { useBoardsStore } from '@/stores/boards'
-import { SECTION_QUERY_KEY, sectionFrom } from '@/utils/boardSettingsSections'
+import { SAVES_AS_YOU_GO, SECTION_QUERY_KEY, sectionFrom } from '@/utils/boardSettingsSections'
+import { relativeTime } from '@/utils/date'
+import { wordList } from '@/utils/format'
 
 const page = useBoardContext()
 const { board } = page
@@ -124,11 +133,22 @@ const guard = useUnsavedGuard(
   ['key'],
 )
 
-// Leaving a section (after the guard, when it had edits) drops its edits and its error.
+// Leaving a section (after the guard, when it had edits) drops its edits,
+// its error and its status.
 watch(section, () => {
   general.reset()
   handover.reset()
-  status.clearError()
+  status.clear()
+})
+
+const now = useNow()
+const adminNames = computed(() => wordList(page.members.value.filter(m => m.role === 'admin').map(m => m.name), 'or'))
+/** Saved as you go, or with Save: what the open section has done lately. */
+const statusLine = computed(() => {
+  const saved = status.savedAt.value
+  const lately = status.saving.value ? 'Saving…' : saved ? `Saved ${relativeTime(saved, now.value)}` : ''
+  if (SAVES_AS_YOU_GO.has(section.value)) return ['Changes save as you go', lately].filter(Boolean).join(' · ')
+  return form.value?.dirty.value ? 'Unsaved changes' : lately
 })
 
 onMounted(() => void boards.ensureLimits())

@@ -61,14 +61,6 @@ export function categoryBlock(
   return null
 }
 
-/** Why a stage name can't be used, or null when it can. Names are trimmed first. */
-export function nameBlock(stages: StageRead[], name: string, exceptId: string | null = null): string | null {
-  const trimmed = name.trim()
-  if (!trimmed) return 'Give the stage a name.'
-  const taken = stages.some(s => s.id !== exceptId && s.name.trim() === trimmed)
-  return taken ? 'Another stage on this board already has that name.' : null
-}
-
 export type WipParse = { ok: true; value: number | null } | { ok: false; error: string }
 
 /** A WIP limit as typed: empty means no limit, otherwise a whole number from 1 to ``max``. */

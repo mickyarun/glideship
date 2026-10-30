@@ -23,11 +23,13 @@
          …
        </AppPage>
 
-     The #subtitle slot replaces the subtitle prop when it needs markup. -->
+     The #subtitle slot replaces the subtitle prop when it needs markup, and
+     #eyebrow sits above the title (a breadcrumb). -->
 <template>
   <div class="app-page">
     <header class="app-page__head">
       <div class="app-page__intro">
+        <slot name="eyebrow" />
         <h1 class="app-page__title">{{ title }}</h1>
         <p v-if="subtitle || $slots.subtitle" class="app-page__sub">
           <slot name="subtitle">{{ subtitle }}</slot>

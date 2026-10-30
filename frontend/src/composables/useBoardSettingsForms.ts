@@ -23,7 +23,7 @@ import { useSettingsDraft } from '@/composables/useSettingsDraft'
 import { boardSettingsApi } from '@/services/boardSettingsApi'
 import { useBoardsStore } from '@/stores/boards'
 import type { BoardLimits } from '@/types/boards'
-import type { BoardUpdate, HandoverTarget } from '@/types/boards/settings'
+import type { BoardUpdate } from '@/types/boards/settings'
 
 function tooLong(text: string, max: number | undefined, what: string): string {
   return max && text.length > max ? `Keep the ${what} to ${max} characters.` : ''
@@ -56,7 +56,7 @@ export function useGeneralForm(page: BoardPage, status: BoardSettingsStatus, lim
       return true
     }
     return status.run(async key => {
-      page.board.detail.value = await boardSettingsApi.update(key, body)
+      page.board.replace(await boardSettingsApi.update(key, body))
       form.reset()
       // The sidebar and switcher list boards by name.
       if (body.name) void boards.fetchNav()
@@ -75,7 +75,7 @@ export function useHandoverForm(page: BoardPage, status: BoardSettingsStatus) {
           enabled: board.handover_enabled,
           stageId: board.handover_stage_id,
           returnId: board.return_stage_id,
-          target: board.handover_target_status as HandoverTarget,
+          target: board.handover_target_status,
         }
       : null
   })
@@ -87,7 +87,7 @@ export function useHandoverForm(page: BoardPage, status: BoardSettingsStatus) {
 
   const stageError = computed(() =>
     form.draft.value?.enabled && !form.draft.value.stageId
-      ? 'Pick the Done stage cards are handed over from.'
+      ? 'Pick the Done stage handed-over cards move to.'
       : '',
   )
   const valid = computed(() => form.dirty.value && !stageError.value)
@@ -101,7 +101,7 @@ export function useHandoverForm(page: BoardPage, status: BoardSettingsStatus) {
     if (changed.returnId !== undefined) body.return_stage_id = changed.returnId
     if (changed.target !== undefined) body.handover_target_status = changed.target
     return status.run(async key => {
-      page.board.detail.value = await boardSettingsApi.update(key, body)
+      page.board.replace(await boardSettingsApi.update(key, body))
       form.reset()
     }, 'Saved the handover settings', { refresh: false })
   }

@@ -20,6 +20,7 @@ import type { BoardPage } from '@/composables/useBoardPage'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
 import { boardSettingsApi } from '@/services/boardSettingsApi'
 import type { LabelColor, LabelRead } from '@/types/boards'
+import { uniqueNameBlock } from '@/utils/uniqueName'
 
 export function useLabelSettings(page: BoardPage, status: BoardSettingsStatus) {
   const labels = computed(() =>
@@ -28,10 +29,7 @@ export function useLabelSettings(page: BoardPage, status: BoardSettingsStatus) {
 
   /** Why a label name can't be used, or null when it can. */
   function nameBlock(name: string, exceptId: string | null = null): string | null {
-    const trimmed = name.trim()
-    if (!trimmed) return 'Give the label a name.'
-    const taken = labels.value.some(l => l.id !== exceptId && l.name === trimmed)
-    return taken ? 'This board already has a label with that name.' : null
+    return uniqueNameBlock(labels.value, name, exceptId, 'label')
   }
 
   function create(name: string, color: LabelColor): Promise<boolean> {

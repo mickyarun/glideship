@@ -64,7 +64,7 @@ describe('BoardSettingsView: Labels and Handover', () => {
     const name = form.find('input')
     await name.setValue('Bug')
     await form.trigger('submit')
-    expect(wrapper.text()).toContain('This board already has a label with that name.')
+    expect(wrapper.text()).toContain('Another label on this board already has that name.')
     expect(settings.createLabel).not.toHaveBeenCalled()
 
     settings.createLabel.mockResolvedValue({ id: 'l3', name: 'Urgent', color: 'purple' })
@@ -115,7 +115,7 @@ describe('BoardSettingsView: Labels and Handover', () => {
     const { wrapper } = await mountSettings('/boards/OPS/settings?section=handover')
     wrapper.findComponent(VSwitch).vm.$emit('update:modelValue', true)
     await flushPromises()
-    expect(wrapper.text()).toContain('Pick the Done stage cards are handed over from.')
+    expect(wrapper.text()).toContain('Pick the Done stage handed-over cards move to.')
     expect(button('Save changes').disabled).toBe(true)
 
     const [handoverStage, returnStage] = wrapper.findAllComponents(VSelect)

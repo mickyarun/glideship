@@ -20,8 +20,9 @@
 import { describe, expect, it } from 'vitest'
 import { makeStage } from '@/components/boards/__tests__/fixtures'
 import {
-  addBlock, categoryBlock, defaultMoveTarget, moveItem, movedId, nameBlock, parseWip, removalBlock,
+  addBlock, categoryBlock, defaultMoveTarget, moveItem, movedId, parseWip, removalBlock,
 } from '@/utils/boardStageRules'
+import { uniqueNameBlock } from '@/utils/uniqueName'
 
 const todo = makeStage('a', { name: 'Ideas', category: 'todo', is_default: true })
 const doing = makeStage('b', { name: 'Doing', category: 'in_progress' })
@@ -77,12 +78,14 @@ describe('categoryBlock', () => {
   })
 })
 
-describe('nameBlock', () => {
+describe('uniqueNameBlock', () => {
+  const nameBlock = (items: typeof stages, name: string, except: string | null = null) => uniqueNameBlock(items, name, except, 'stage')
   it('needs a name that is not taken, trimmed', () => {
     expect(nameBlock(stages, '   ')).toBe('Give the stage a name.')
     expect(nameBlock(stages, ' Doing ')).toBe('Another stage on this board already has that name.')
     expect(nameBlock(stages, 'Doing', 'b')).toBeNull()
     expect(nameBlock(stages, 'Review')).toBeNull()
+    expect(uniqueNameBlock([{ id: 'l1', name: 'Bug' }], 'Bug', null, 'label')).toBe('Another label on this board already has that name.')
   })
 })
 

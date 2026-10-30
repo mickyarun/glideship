@@ -33,14 +33,14 @@ vi.mock('@/services/boardsApi', () => ({
   boardsApi: { get: vi.fn(), cards: vi.fn(), members: vi.fn(), switcher: vi.fn(), limits: vi.fn(), savePrefs: vi.fn() },
 }))
 vi.mock('@/services/boardSettingsApi', () => ({
-  boardSettingsApi: { update: vi.fn(), putMember: vi.fn(), removeMember: vi.fn(), putTeam: vi.fn(), removeTeam: vi.fn() },
+  boardSettingsApi: {
+    update: vi.fn(), putMember: vi.fn(), removeMember: vi.fn(), putTeam: vi.fn(), removeTeam: vi.fn(), teamOptions: vi.fn(),
+  },
 }))
 vi.mock('@/services/api', () => ({
   default: {
     get: vi.fn(async (url: string) => ({
-      data: url === '/v1/teams'
-        ? [{ id: 't1', name: 'Design team', status: 'active' }, { id: 't2', name: 'Product team', status: 'active' }]
-        : { name: 'Northwind' },
+      data: url === '/v1/teams' ? [] : { name: 'Northwind' },
     })),
   },
 }))
@@ -65,7 +65,6 @@ import { adminDetail, button, LIMITS, mountSettings } from './settingsHarness'
 const api = vi.mocked(boardsApi)
 const settings = vi.mocked(boardSettingsApi)
 const PATH = '/boards/OPS/settings?section=members'
-const TEAMS = ['boards:view', 'workspace:engineering', 'team:view']
 
 const GRANTS: MembersRead = {
   members: [
@@ -88,13 +87,16 @@ describe('BoardSettingsView: Members and visibility', () => {
     api.members.mockResolvedValue(GRANTS)
     api.switcher.mockResolvedValue({ starred: [], recent: [], other: [], delivery: null })
     api.limits.mockResolvedValue(LIMITS)
+    settings.teamOptions.mockResolvedValue({ items: [
+      { id: 't1', name: 'Design team', member_count: 3 }, { id: 't2', name: 'Product team', member_count: 1 },
+    ] })
   })
   afterEach(() => {
     document.body.innerHTML = ''
   })
 
   it('lists people and teams and keeps the only admin', async () => {
-    const { wrapper } = await mountSettings(PATH, { permissions: TEAMS })
+    const { wrapper } = await mountSettings(PATH)
     const rows = wrapper.findAllComponents(GrantRow)
     expect(rows.map(r => r.text())).toEqual([
       expect.stringContaining('Arjun Mehta'), expect.stringContaining('Sam Rivera'), expect.stringContaining('Design team'),
@@ -105,7 +107,7 @@ describe('BoardSettingsView: Members and visibility', () => {
   })
 
   it('adds a person and a team with the chosen role', async () => {
-    const { wrapper } = await mountSettings(PATH, { permissions: TEAMS })
+    const { wrapper } = await mountSettings(PATH)
     const picker = wrapper.findComponent(VAutocomplete)
     const items = picker.props('items') as { value: string }[]
     expect(items.map(i => i.value)).toEqual(['person:u3', 'team:t2'])
@@ -127,10 +129,12 @@ describe('BoardSettingsView: Members and visibility', () => {
     expect(settings.putTeam).toHaveBeenCalledWith('OPS', 't2', 'viewer')
   })
 
-  it('lists only people when the org\'s teams are out of reach', async () => {
-    const { wrapper } = await mountSettings(PATH)
-    expect(wrapper.text()).toContain('Add people')
-    expect((wrapper.findComponent(VAutocomplete).props('items') as { value: string }[]).map(i => i.value)).toEqual(['person:u3'])
+  it("offers the org's teams from the board, with their sizes, to an admin outside engineering", async () => {
+    const { wrapper } = await mountSettings(PATH, { permissions: ['boards:view'] })
+    expect(settings.teamOptions).toHaveBeenCalledWith('OPS')
+    const items = wrapper.findComponent(VAutocomplete).props('items') as { value: string; subtitle: string }[]
+    expect(items.map(i => [i.value, i.subtitle])).toEqual([['person:u3', 'lena@example.com'], ['team:t2', 'Team · 1 person']])
+    expect(wrapper.findAllComponents(GrantRow)[2].text()).toContain('Team · 3 people')
   })
 
   it('changes a role and shows the server\'s refusal', async () => {
@@ -161,8 +165,9 @@ describe('BoardSettingsView: Members and visibility', () => {
     settings.removeTeam.mockResolvedValue({ members: [GRANTS.members[0]], teams: [] })
     button('Remove Design team').click()
     await flushPromises()
+    expect(document.body.textContent).toContain('Remove the Design team?')
     expect(document.body.textContent).toContain("Its members lose the role this team gives them.")
-    confirmButton().click()
+    button('Remove team').click()
     await flushPromises()
     expect(settings.removeTeam).toHaveBeenCalledWith('OPS', 't1')
   })
@@ -174,6 +179,11 @@ describe('BoardSettingsView: Members and visibility', () => {
     membersOnly.board.visibility = 'members'
     settings.update.mockResolvedValue(membersOnly)
     document.querySelector<HTMLInputElement>('input[type="radio"][value="members"]')!.click()
+    await flushPromises()
+    expect(settings.update).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Make Ops members only?')
+    expect(document.body.textContent).toContain('Everyone in Northwind without a role here loses access now')
+    button('Make members only').click()
     await flushPromises()
     expect(settings.update).toHaveBeenCalledWith('OPS', { visibility: 'members' })
     expect(wrapper.find('[role="status"]').text()).toBe('Only members can see this board now')

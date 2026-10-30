@@ -140,8 +140,11 @@ describe('BoardSettingsView: General and access', () => {
   it('shows a non-admin the settings read-only, with no Save', async () => {
     api.get.mockResolvedValue(adminDetail({ role: 'viewer', capabilities: VIEWER_CAPS }))
     const { wrapper } = await mountSettings()
-    expect(wrapper.text()).toContain("Only the board's admins can change its settings. You're a viewer.")
-    expect(nameInput().disabled).toBe(true)
+    expect(wrapper.text()).toContain("Only the board's admins can change its settings")
+    expect(wrapper.text()).toContain("You're a viewer.")
+    // Values read as text, with no fields to type in.
+    expect(wrapper.find('dl.general__facts').text()).toContain('Ops')
+    expect(document.querySelector('input[type="text"]')).toBeNull()
     expect(wrapper.text()).not.toContain('Save changes')
   })
 

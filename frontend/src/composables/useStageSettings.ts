@@ -111,7 +111,8 @@ export function useStageSettings(page: BoardPage, status: BoardSettingsStatus, l
     const done = moveTo && stage.open_cards
       ? `Deleted ${stage.name} and moved its cards to ${moveTo.name}`
       : `Deleted the ${stage.name} stage`
-    return status.run(key => boardSettingsApi.deleteStage(key, stage.id, moveTo?.id ?? null), done)
+    // The delete dialog shows its own refusal.
+    return status.run(key => boardSettingsApi.deleteStage(key, stage.id, moveTo?.id ?? null), done, { inline: true })
   }
 
   return { list, reordering, addError, add, rename, setCategory, setWip, makeDefault, reorder, step, remove }

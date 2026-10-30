@@ -21,11 +21,14 @@ export type BoardSettingsSection = 'general' | 'stages' | 'members' | 'labels' |
 export const BOARD_SETTINGS_SECTIONS: { value: BoardSettingsSection; title: string }[] = [
   { value: 'general', title: 'General' },
   { value: 'stages', title: 'Stages' },
+  { value: 'handover', title: 'Handover' },
   { value: 'members', title: 'Members and visibility' },
   { value: 'labels', title: 'Labels' },
-  { value: 'handover', title: 'Handover' },
   { value: 'archive', title: 'Archive board' },
 ]
+
+/** Sections whose changes save as they're made (the others use Save). */
+export const SAVES_AS_YOU_GO: ReadonlySet<BoardSettingsSection> = new Set(['stages', 'members', 'labels', 'archive'])
 
 /** The query key holding the open section. */
 export const SECTION_QUERY_KEY = 'section'

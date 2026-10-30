@@ -14,7 +14,8 @@
 
 // A person's saved filters and stars, the switcher's groups, a board's
 // members and the server's limits. Mirrors backend/app/schemas/boards/
-// filters.py, prefs.py, member.py and limits.py.
+// filters.py, prefs.py, member.py (with the team picker's options) and
+// limits.py.
 
 import type { BUDPriority } from '@/types'
 import type { BoardRole, CustomBoardItem, DeliveryBoardItem } from '@/types/boards/board'
@@ -50,6 +51,17 @@ export interface MemberRead {
 export interface MembersRead {
   members: MemberRead[]
   teams: { team_id: string; name: string; role: BoardRole }[]
+}
+
+/** A team in the org, for giving it a role on a board. */
+export interface TeamOption {
+  id: string
+  name: string
+  member_count: number
+}
+
+export interface TeamOptions {
+  items: TeamOption[]
 }
 
 /** Lengths and caps from ``GET /boards/limits``; never copied into the UI. */

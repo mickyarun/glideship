@@ -21,16 +21,15 @@ import { computed, onMounted, ref, watch } from 'vue'
 import type { BoardPage } from '@/composables/useBoardPage'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
-import { usePermissions } from '@/composables/usePermissions'
 import { useTopicChannel } from '@/composables/useTopicChannel'
 import { ROLE_LABELS } from '@/constants/boards'
 import { boardSettingsApi } from '@/services/boardSettingsApi'
 import { boardsApi } from '@/services/boardsApi'
-import { useTeamsStore } from '@/stores/teams'
 import {
-  boardTopic, type BoardRole, type BoardSocketMessage, type BoardVisibility, type MembersRead,
+  boardTopic, type BoardRole, type BoardSocketMessage, type BoardVisibility, type MembersRead, type TeamOption,
 } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
+import { plural } from '@/utils/format'
 
 export type GrantKind = 'person' | 'team'
 
@@ -41,6 +40,8 @@ export interface Grant {
   name: string
   role: BoardRole
   avatarUrl: string | null
+  /** A team's size, when known. */
+  memberCount?: number | null
 }
 
 /** Someone who could be given a role: an org member or a team. */
@@ -57,10 +58,9 @@ export function useMemberSettings(page: BoardPage, status: BoardSettingsStatus) 
   const loading = ref(false)
   const loadError = ref('')
   const directory = useMemberDirectory()
-  const teams = useTeamsStore()
-  const perms = usePermissions()
-  // The team list lives in the engineering workspace.
-  const canListTeams = computed(() => perms.canAccessEngineering.value && perms.hasPermission('team:view'))
+  // The org's teams come from the board (for its admins), whatever workspace they're in.
+  const teamOptions = ref<TeamOption[]>([])
+  const canListTeams = computed(() => page.board.can('manage_members'))
   const detail = computed(() => page.board.detail.value)
   let seq = 0
 
@@ -82,6 +82,17 @@ export function useMemberSettings(page: BoardPage, status: BoardSettingsStatus) 
     }
   }
 
+  async function loadTeams(): Promise<void> {
+    const key = detail.value?.board.key
+    if (!key) return
+    try {
+      teamOptions.value = (await boardSettingsApi.teamOptions(key)).items
+    } catch (err) {
+      // Without the list people can still be added; teams can't.
+      console.error('[boards] team options fetch failed:', err)
+    }
+  }
+
   const topic = computed(() => (detail.value ? boardTopic(detail.value.board.id) : null))
   useTopicChannel<BoardSocketMessage>(topic, { member_changed: () => void load() }, () => void load(), {
     ignoreOwn: true,
@@ -89,7 +100,7 @@ export function useMemberSettings(page: BoardPage, status: BoardSettingsStatus) 
   watch(() => detail.value?.board.key, () => void load(), { immediate: true })
   onMounted(() => {
     void directory.ensureLoaded()
-    if (canListTeams.value) void teams.fetchTeams()
+    if (canListTeams.value) void loadTeams()
   })
 
   const rows = computed<Grant[]>(() => [
@@ -98,6 +109,7 @@ export function useMemberSettings(page: BoardPage, status: BoardSettingsStatus) 
     })),
     ...grants.value.teams.map(t => ({
       kind: 'team' as const, id: t.team_id, name: t.name, role: t.role, avatarUrl: null,
+      memberCount: teamOptions.value.find(o => o.id === t.team_id)?.member_count ?? null,
     })),
   ])
 
@@ -114,13 +126,19 @@ export function useMemberSettings(page: BoardPage, status: BoardSettingsStatus) 
       ...directory.entries.value
         .filter(e => !people.has(e.id))
         .map(e => ({ value: `person:${e.id}`, kind: 'person' as const, id: e.id, title: e.name, subtitle: e.email })),
-      ...(canListTeams.value ? teams.activeTeams : [])
+      ...teamOptions.value
         .filter(t => !onBoard.has(t.id))
-        .map(t => ({ value: `team:${t.id}`, kind: 'team' as const, id: t.id, title: t.name, subtitle: 'Team' })),
+        .map(t => ({
+          value: `team:${t.id}`, kind: 'team' as const, id: t.id, title: t.name,
+          subtitle: `Team · ${plural(t.member_count, 'person', 'people')}`,
+        })),
     ]
   })
 
   function apply(reply: MembersRead): void {
+    // Newer than any load on its way, which mustn't land over it.
+    seq++
+    loading.value = false
     grants.value = reply
     page.members.value = reply.members
   }
@@ -154,7 +172,7 @@ export function useMemberSettings(page: BoardPage, status: BoardSettingsStatus) 
     if (visibility === detail.value?.board.visibility) return Promise.resolve(true)
     const done = visibility === 'members' ? 'Only members can see this board now' : 'Everyone in the org can see this board now'
     return status.run(async key => {
-      page.board.detail.value = await boardSettingsApi.update(key, { visibility })
+      page.board.replace(await boardSettingsApi.update(key, { visibility }))
     }, done, { refresh: false })
   }
 

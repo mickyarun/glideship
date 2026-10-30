@@ -1,0 +1,108 @@
+/* Copyright 2025-2026 Arun Rajkumar
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Styles for StageRow.vue (loaded as its scoped stylesheet). A row of the
+ * stages table; in a narrow list (the ``stages`` container, set by
+ * StagesSection.vue) the row stacks and each field shows its label.
+ */
+
+.stage-row {
+  display: grid;
+  grid-template-columns: var(--stage-cols);
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 20px;
+  border-top: 1px solid rgb(var(--v-theme-rule));
+  background: rgb(var(--v-theme-surface));
+}
+.stage-row__order {
+  display: flex;
+  align-items: center;
+}
+.stage-row__handle {
+  cursor: grab;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.stage-row__handle--off {
+  cursor: default;
+  opacity: 0.4;
+}
+.stage-row__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.stage-row__label {
+  display: none;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.stage-row__default {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 36px;
+}
+.stage-row__default-text {
+  display: none;
+  margin-left: 8px;
+  font-size: 13px;
+}
+.stage-row__default input {
+  width: 18px;
+  height: 18px;
+  accent-color: rgb(var(--v-theme-primary));
+}
+.stage-row__tags {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.stage-row__cards {
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.stage-row__problem {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+  color: rgb(var(--v-theme-error));
+}
+@container stages (max-width: 720px) {
+  .stage-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 12px 16px;
+  }
+  .stage-row__order,
+  .stage-row__tags {
+    grid-column: 1 / -1;
+  }
+  .stage-row__label,
+  .stage-row__default-text {
+    display: inline;
+  }
+  .stage-row__default {
+    justify-content: flex-start;
+  }
+}
+@media (pointer: coarse) {
+  .stage-row :deep(.v-btn) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

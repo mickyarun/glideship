@@ -15,7 +15,8 @@
  -->
 
 <!-- A person or team holding a role on the board: change the role or take
-     it away. The board's last admin can't be lowered or removed. -->
+     it away. The board's last admin can't be lowered or removed. Without
+     the right to change members, the role reads as text. -->
 <template>
   <li class="grant-row">
     <AppMonogram :name="grant.name" :src="grant.avatarUrl" :square="grant.kind === 'team'" :size="32" />
@@ -23,17 +24,19 @@
       <span class="grant-row__name">{{ grant.name }}</span>
       <span class="grant-row__meta">{{ meta }}</span>
     </div>
+    <span v-if="disabled" class="grant-row__role-text">{{ ROLE_LABELS[grant.role] }}</span>
     <v-select
+      v-else
       :model-value="grant.role"
       :items="roles"
       :aria-label="`Role for ${grant.name}`"
-      :disabled="disabled || last"
+      :disabled="last"
       density="compact"
       hide-details
       class="grant-row__role"
       @update:model-value="emit('role', $event)"
     />
-    <v-btn variant="text" :disabled="disabled || last" :aria-label="`Remove ${grant.name}`" @click="emit('remove')">
+    <v-btn v-if="!disabled" variant="text" :disabled="last" :aria-label="`Remove ${grant.name}`" @click="emit('remove')">
       Remove
     </v-btn>
   </li>
@@ -45,14 +48,18 @@ import AppMonogram from '@/components/common/AppMonogram.vue'
 import type { Grant } from '@/composables/useMemberSettings'
 import { BOARD_ROLES, ROLE_LABELS } from '@/constants/boards'
 import type { BoardRole } from '@/types/boards'
+import { plural } from '@/utils/format'
 
 const props = defineProps<{ grant: Grant; last: boolean; disabled: boolean }>()
 const emit = defineEmits<{ role: [role: BoardRole]; remove: [] }>()
 
 const roles = BOARD_ROLES.map(value => ({ value, title: ROLE_LABELS[value] }))
 const meta = computed(() => {
-  const kind = props.grant.kind === 'team' ? 'Team' : 'Person'
-  return props.last ? `${kind} · only admin` : kind
+  const { kind, memberCount } = props.grant
+  const parts = [kind === 'team' ? 'Team' : 'Person']
+  if (kind === 'team' && memberCount != null) parts.push(plural(memberCount, 'person', 'people'))
+  if (props.last) parts.push('last admin')
+  return parts.join(' · ')
 })
 </script>
 
@@ -85,7 +92,10 @@ const meta = computed(() => {
   .grant-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
-  .grant-row__role {
+  .grant-row__role-text {
+  font-size: 14px;
+}
+.grant-row__role {
     grid-column: 2 / 3;
   }
 }

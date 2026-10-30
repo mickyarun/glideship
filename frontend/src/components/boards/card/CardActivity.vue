@@ -19,7 +19,7 @@
      time the tab opens. -->
 <template>
   <AppPanel title="Activity">
-    <AppCallout v-if="activity.error.value" variant="error" class="mb-3">
+    <AppCallout v-if="activity.error.value" variant="error" role="alert" title="Activity didn't load" class="mb-3">
       {{ activity.error.value }}
       <template #actions>
         <v-btn variant="outlined" size="small" @click="activity.load()">Try again</v-btn>

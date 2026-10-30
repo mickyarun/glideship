@@ -20,7 +20,15 @@
 <template>
   <AppPanel title="General">
     <DraftConflictNote :show="form.conflict.value" class="mb-4" @reload="form.reset()" />
-    <div v-if="form.draft.value" class="general">
+    <dl v-if="disabled" class="general__facts">
+      <dt>Name</dt>
+      <dd>{{ board.name }}</dd>
+      <dt>Key</dt>
+      <dd>{{ board.key }}</dd>
+      <dt>Description</dt>
+      <dd>{{ board.description || 'None' }}</dd>
+    </dl>
+    <div v-else-if="form.draft.value" class="general">
       <v-text-field
         v-model="form.draft.value.name"
         label="Name"
@@ -68,6 +76,21 @@ defineProps<{
 </script>
 
 <style scoped>
+.general__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 20px;
+  margin: 0;
+  font-size: 14px;
+}
+.general__facts dt {
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.general__facts dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .general {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);

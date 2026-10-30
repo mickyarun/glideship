@@ -31,7 +31,12 @@
       <LabelColorSelect v-model="color" label="Colour" />
       <v-btn type="submit" variant="outlined" prepend-icon="mdi-plus" :loading="adding">Add label</v-btn>
     </form>
-    <ul v-if="labels.labels.value.length" class="labels__list" aria-label="Labels">
+    <ul v-if="disabled && labels.labels.value.length" class="labels__tags" aria-label="Labels">
+      <li v-for="label in labels.labels.value" :key="label.id">
+        <AppTag :color="labelColor(label.color)">{{ label.name }}</AppTag>
+      </li>
+    </ul>
+    <ul v-else-if="labels.labels.value.length" class="labels__list" aria-label="Labels">
       <LabelRow
         v-for="label in labels.labels.value"
         :key="label.id"
@@ -50,6 +55,7 @@
       :title="`Delete the ${deleting?.name ?? ''} label?`"
       body="Cards carrying it lose it. This can't be undone."
       action="Delete label"
+      color="error"
       :busy="status.saving.value"
       @confirm="confirmDelete"
     />
@@ -66,7 +72,8 @@ import AppPanel from '@/components/common/AppPanel.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
 import { useLabelSettings } from '@/composables/useLabelSettings'
-import { LABEL_COLORS } from '@/constants/boards'
+import AppTag from '@/components/common/AppTag.vue'
+import { LABEL_COLORS, labelColor } from '@/constants/boards'
 import type { BoardLimits, LabelColor, LabelRead } from '@/types/boards'
 import { plural } from '@/utils/format'
 
@@ -112,6 +119,14 @@ async function confirmDelete(): Promise<void> {
 </script>
 
 <style scoped>
+.labels__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 .labels__add {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 160px auto;

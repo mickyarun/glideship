@@ -18,8 +18,10 @@
 // as a plain line until they get rows of their own.
 
 import { CATEGORY_COLORS, DOC_NAMES } from '@/constants/boards'
-import type { CardDocKind, CardEventRead, StageCategory } from '@/types/boards'
-import { actor, plainRow, section, text, type ActivityPart, type ActivityRenderers, type ActivityRow } from '@/utils/activity'
+import type { CardDocKind, CardEventRead, CardEventType, StageCategory } from '@/types/boards'
+import {
+  actor, plainRow, section, text, type ActivityPart, type ActivityRenderer, type ActivityRenderers, type ActivityRow,
+} from '@/utils/activity'
 import { wordList } from '@/utils/format'
 
 export interface CardTimelineNames {
@@ -62,47 +64,49 @@ export function cardTimelineRenderers(names: CardTimelineNames): ActivityRendere
     }
   }
 
-  return {
-    byType: {
-      created: { icon: 'mdi-plus-circle', color: 'success', row: said('created this card') },
-      imported: { icon: 'mdi-import', color: 'info', row: said('imported this card') },
-      moved: {
-        icon: 'mdi-swap-horizontal',
-        color: 'primary',
-        row: e => ({
-          primary: [
-            ...actor(who(e)), text('moved'), stage(e.from_stage_id, e.from_category), { kind: 'arrow' },
-            stage(e.to_stage_id, e.to_category),
-          ],
-        }),
-      },
-      moved_board: { icon: 'mdi-swap-horizontal', color: 'primary', row: said('moved this card from another board') },
-      edited: {
-        icon: 'mdi-pencil',
-        color: 'primary',
-        row: e => ({
-          primary: [...actor(who(e)), text('edited'), section(wordList(strings(e.detail.fields).map(f => FIELD_WORDS[f] ?? f)))],
-        }),
-      },
-      assigned: {
-        icon: 'mdi-account-check',
-        color: 'primary',
-        row: e => ({ primary: [...actor(who(e)), text('assigned'), section(people(e))] }),
-      },
-      unassigned: {
-        icon: 'mdi-account-remove',
-        color: 'muted',
-        row: e => ({ primary: [...actor(who(e)), text('unassigned'), section(people(e))] }),
-      },
-      commented: { icon: 'mdi-comment-text', color: 'muted', row: said('commented') },
-      archived: { icon: 'mdi-archive-outline', color: 'muted', row: said('archived this card') },
-      restored: { icon: 'mdi-archive-arrow-up-outline', color: 'primary', row: said('restored this card') },
-      doc_updated: { icon: 'mdi-file-document-edit-outline', color: 'primary', row: docRow },
-      handed_over: { icon: 'mdi-truck-delivery-outline', color: 'primary', row: said('handed this card over to Delivery') },
-      returned: { icon: 'mdi-keyboard-return', color: 'warning', row: said('sent this card back from Delivery') },
-      delivered: { icon: 'mdi-check-all', color: 'success', row: () => plainRow(null, 'Delivered') },
-      ai_run: { icon: 'mdi-robot', color: 'info', row: () => plainRow(null, 'AI ran on this card') },
+  // Every event type the backend sends has a row: a new one fails the type check here.
+  const byType: Record<CardEventType, ActivityRenderer<CardEventRead>> = {
+    created: { icon: 'mdi-plus-circle', color: 'success', row: said('created this card') },
+    imported: { icon: 'mdi-import', color: 'info', row: said('imported this card') },
+    moved: {
+      icon: 'mdi-swap-horizontal',
+      color: 'primary',
+      row: e => ({
+        primary: [
+          ...actor(who(e)), text('moved'), stage(e.from_stage_id, e.from_category), { kind: 'arrow' },
+          stage(e.to_stage_id, e.to_category),
+        ],
+      }),
     },
+    moved_board: { icon: 'mdi-swap-horizontal', color: 'primary', row: said('moved this card from another board') },
+    edited: {
+      icon: 'mdi-pencil',
+      color: 'primary',
+      row: e => ({
+        primary: [...actor(who(e)), text('edited'), section(wordList(strings(e.detail.fields).map(f => FIELD_WORDS[f] ?? f)))],
+      }),
+    },
+    assigned: {
+      icon: 'mdi-account-check',
+      color: 'primary',
+      row: e => ({ primary: [...actor(who(e)), text('assigned'), section(people(e))] }),
+    },
+    unassigned: {
+      icon: 'mdi-account-remove',
+      color: 'muted',
+      row: e => ({ primary: [...actor(who(e)), text('unassigned'), section(people(e))] }),
+    },
+    commented: { icon: 'mdi-comment-text', color: 'muted', row: said('commented') },
+    archived: { icon: 'mdi-archive-outline', color: 'muted', row: said('archived this card') },
+    restored: { icon: 'mdi-archive-arrow-up-outline', color: 'primary', row: said('restored this card') },
+    doc_updated: { icon: 'mdi-file-document-edit-outline', color: 'primary', row: docRow },
+    handed_over: { icon: 'mdi-truck-delivery-outline', color: 'primary', row: said('handed this card over to Delivery') },
+    returned: { icon: 'mdi-keyboard-return', color: 'warning', row: said('sent this card back from Delivery') },
+    delivered: { icon: 'mdi-check-all', color: 'success', row: () => plainRow(null, 'Delivered') },
+    ai_run: { icon: 'mdi-robot', color: 'info', row: () => plainRow(null, 'AI ran on this card') },
+  }
+  return {
+    byType,
     fallback: { icon: 'mdi-circle-small', color: 'muted', row: said('changed this card') },
   }
 }

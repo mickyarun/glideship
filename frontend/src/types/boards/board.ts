@@ -17,8 +17,8 @@
 // in models/board_enums.py and services/boards/constants.py. Wire fields
 // stay snake_case (there's no axios case transform).
 
-import type { BUDStatus } from '@/types'
 import type { SavedFilters } from '@/types/boards/prefs'
+import type { HandoverTarget } from '@/types/boards/settings'
 
 export type BoardRole = 'viewer' | 'editor' | 'admin'
 export type BoardVisibility = 'org' | 'members'
@@ -106,7 +106,7 @@ export interface BoardRead {
   handover_enabled: boolean
   handover_stage_id: string | null
   return_stage_id: string | null
-  handover_target_status: BUDStatus
+  handover_target_status: HandoverTarget
   ai_enabled: boolean
   created_at: string
   updated_at: string

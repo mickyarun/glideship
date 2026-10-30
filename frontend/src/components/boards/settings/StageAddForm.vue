@@ -50,7 +50,8 @@ import { computed, nextTick, ref } from 'vue'
 import StageCategorySelect from '@/components/boards/settings/StageCategorySelect.vue'
 import type { NewStage } from '@/composables/useStageSettings'
 import type { StageCategory, StageRead } from '@/types/boards'
-import { nameBlock, parseWip } from '@/utils/boardStageRules'
+import { parseWip } from '@/utils/boardStageRules'
+import { uniqueNameBlock } from '@/utils/uniqueName'
 
 const props = defineProps<{
   stages: StageRead[]
@@ -72,7 +73,7 @@ const off = computed(() => props.disabled || !!props.full)
 
 async function submit(): Promise<void> {
   const parsed = parseWip(wip.value, props.wipMax)
-  problem.value = nameBlock(props.stages, name.value) ?? (parsed.ok ? '' : parsed.error)
+  problem.value = uniqueNameBlock(props.stages, name.value, null, 'stage') ?? (parsed.ok ? '' : parsed.error)
   if (problem.value || !parsed.ok) return
   busy.value = true
   const ok = await props.add({ name: name.value, category: category.value, wip: parsed.value })

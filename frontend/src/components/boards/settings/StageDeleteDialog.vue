@@ -22,10 +22,11 @@
     :title="stage ? `Delete ${stage.name}?` : ''"
     :action="cards ? 'Move cards and delete' : 'Delete stage'"
     :busy="busy"
+    color="error"
     @confirm="confirm"
   >
     <template #body>
-      <template v-if="cards">{{ plural(cards, 'open card is', 'open cards are') }} in this stage. Choose where they go first.</template>
+      <template v-if="cards">{{ plural(cards, 'card is', 'cards are') }} in this stage. Move them first:</template>
       <template v-else>It has no open cards. This can't be undone.</template>
     </template>
     <v-select

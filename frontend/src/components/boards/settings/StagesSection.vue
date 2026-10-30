@@ -16,13 +16,14 @@
 
 <!-- Stages: the board's columns, left to right. Reorder by dragging a
      row's handle or with its arrow buttons; each change saves as it's
-     made. Deleting a stage with cards asks where they go. -->
+     made. Deleting a stage with cards asks where they go. Anyone who
+     can't change them reads them as text. -->
 <template>
   <AppPanel title="Stages" :note="note" flush>
-    <div class="stages" :style="{ '--stage-cols': COLUMNS }">
+    <StageTextList v-if="disabled" :stages="stages.list.value" :board="board" />
+    <div v-else class="stages" :style="{ '--stage-cols': COLUMNS }">
       <div class="stages__head" aria-hidden="true">
-        <span>Order</span><span>Name</span><span>Category</span><span>WIP limit</span>
-        <span>Default</span><span /><span />
+        <span>Order</span><span>Name</span><span>Category</span><span>WIP limit</span><span>Default</span><span />
       </div>
       <VueDraggable
         :model-value="stages.list.value"
@@ -30,7 +31,7 @@
         :animation="DRAG_ANIMATION_MS"
         :delay="DRAG_TOUCH_DELAY_MS"
         :delay-on-touch-only="true"
-        :disabled="disabled || stages.reordering.value"
+        :disabled="stages.reordering.value"
         @update:model-value="(next: StageRead[]) => stages.reorder(next)"
       >
         <StageRow
@@ -45,8 +46,8 @@
           :radio-version="radioVersion"
           :name-max="limits?.stage_name_max ?? null"
           :wip-max="wipMax"
-          :disabled="disabled"
           :reordering="stages.reordering.value"
+          :successes="status.successes.value"
           @rename="name => stages.rename(stage, name)"
           @category="category => stages.setCategory(stage, category)"
           @wip="limit => stages.setWip(stage, limit)"
@@ -60,11 +61,11 @@
         :name-max="limits?.stage_name_max ?? null"
         :wip-max="wipMax"
         :full="stages.addError.value"
-        :disabled="disabled"
+        :disabled="false"
         :add="stages.add"
       />
     </div>
-    <StageDeleteDialog v-model="deleteOpen" :stage="deleting" :stages="stages.list.value" :busy="status.saving.value" :error="status.error.value" @confirm="remove" />
+    <StageDeleteDialog v-model="deleteOpen" :stage="deleting" :stages="stages.list.value" :busy="status.saving.value" :error="status.inlineError.value" @confirm="remove" />
   </AppPanel>
 </template>
 
@@ -74,6 +75,7 @@ import { VueDraggable } from 'vue-draggable-plus'
 import StageAddForm from '@/components/boards/settings/StageAddForm.vue'
 import StageDeleteDialog from '@/components/boards/settings/StageDeleteDialog.vue'
 import StageRow from '@/components/boards/settings/StageRow.vue'
+import StageTextList from '@/components/boards/settings/StageTextList.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
@@ -82,8 +84,8 @@ import { DRAG_ANIMATION_MS, DRAG_TOUCH_DELAY_MS } from '@/constants/boards'
 import type { BoardLimits, BoardRead, StageRead } from '@/types/boards'
 import { plural } from '@/utils/format'
 
-/** Order, name, category, WIP limit, default, tags, delete. */
-const COLUMNS = '112px minmax(0, 1.3fr) minmax(0, 1fr) 96px 64px minmax(0, 1fr) 40px'
+/** Order, name, category, WIP limit, default, delete; tags go on a line under. */
+const COLUMNS = '108px minmax(140px, 1.4fr) minmax(150px, 1fr) 88px 64px 44px'
 
 const props = defineProps<{
   board: BoardRead
@@ -108,7 +110,7 @@ const wipMax = computed(() => props.limits?.wip_limit_max ?? Number.MAX_SAFE_INT
 
 const note = computed(() => {
   const count = plural(stages.list.value.length, 'stage')
-  const max = props.limits ? ` · at most ${props.limits.max_stages}` : ''
+  const max = props.limits ? ` · max ${props.limits.max_stages}` : ''
   return `${count}${max} · keep at least one To do and one Done`
 })
 
@@ -128,6 +130,9 @@ async function remove(moveTo: StageRead | null): Promise<void> {
 </script>
 
 <style scoped>
+.stages {
+  container: stages / inline-size;
+}
 .stages__head {
   display: grid;
   grid-template-columns: var(--stage-cols);
@@ -137,7 +142,10 @@ async function remove(moveTo: StageRead | null): Promise<void> {
   color: rgb(var(--v-theme-on-surface-variant));
 }
 @media (max-width: 760px) {
-  .stages__head {
+  .stages {
+  container: stages / inline-size;
+}
+.stages__head {
     display: none;
   }
 }

@@ -58,11 +58,23 @@ export function useBoard() {
     }
   }
 
+  /**
+   * Show a board the server just sent back (a settings save's reply). It
+   * takes a ticket like a load, so a load already on its way can't land
+   * over it with older settings.
+   */
+  function replace(next: BoardDetail): void {
+    seq++
+    loading.value = false
+    detail.value = next
+    notFound.value = false
+  }
+
   function can(action: BoardAction): boolean {
     return detail.value?.capabilities.includes(action) ?? false
   }
 
   const archived = computed(() => detail.value?.board.status === 'archived')
 
-  return { detail, loading, error, notFound, archived, load, can }
+  return { detail, loading, error, notFound, archived, load, replace, can }
 }

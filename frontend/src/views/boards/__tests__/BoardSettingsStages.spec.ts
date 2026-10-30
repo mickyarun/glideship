@@ -14,8 +14,8 @@
 
 /**
  * The Stages section: add, rename, reorder by drag and by the arrow
- * buttons, category, WIP limit (0 and empty), the default stage, deleting
- * a stage whose cards must go somewhere, the rules that are explained
+ * buttons, category, WIP limit (0 and empty), the default stage (deleting
+ * is in BoardSettingsStageDelete.spec.ts), the rules that are explained
  * before anything is sent, and the board refreshing after each change.
  */
 import { flushPromises } from '@vue/test-utils'
@@ -158,36 +158,6 @@ describe('BoardSettingsView: Stages', () => {
     radios[2].click()
     await flushPromises()
     expect(settings.updateStage).toHaveBeenCalledWith('OPS', 's3', { is_default: true })
-  })
-
-  it('asks where a deleted stage\'s cards go', async () => {
-    const { wrapper } = await open()
-    button('Delete To do').click()
-    await flushPromises()
-    expect(wrapper.text()).toContain('Make another stage the default before deleting this one.')
-    button('Delete Doing').click()
-    await flushPromises()
-    expect(document.body.textContent).toContain('3 open cards are in this stage. Choose where they go first.')
-    settings.deleteStage.mockRejectedValueOnce(httpError(409, 'This stage is used for handover; change that setting first.'))
-    button('Move cards and delete').click()
-    await flushPromises()
-    expect(settings.deleteStage).toHaveBeenCalledWith('OPS', 's2', 's1')
-    expect(document.querySelector('.app-confirm')?.textContent).toContain('This stage is used for handover')
-    settings.deleteStage.mockResolvedValue(undefined)
-    button('Move cards and delete').click()
-    await flushPromises()
-    expect(wrapper.find('[role="status"]').text()).toBe('Deleted Doing and moved its cards to To do')
-  })
-
-  it('deletes an empty stage after a plain confirm', async () => {
-    await open()
-    settings.deleteStage.mockResolvedValue(undefined)
-    button('Delete Dropped').click()
-    await flushPromises()
-    expect(document.body.textContent).toContain('It has no open cards.')
-    button('Delete stage').click()
-    await flushPromises()
-    expect(settings.deleteStage).toHaveBeenCalledWith('OPS', 's4', 's1')
   })
 
   it('adds a stage, and stops at the stage cap', async () => {

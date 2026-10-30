@@ -15,8 +15,9 @@
  -->
 
 <!-- Members and visibility: who can see the board, then the people and
-     teams holding a role on it. Each change saves as it's made; removing
-     someone asks first. -->
+     teams holding a role on it. Each change saves as it's made; making the
+     board members-only, removing someone and lowering my own admin role
+     ask first. -->
 <template>
   <div class="members">
     <AppPanel title="Visibility">
@@ -24,7 +25,7 @@
         :model-value="visibility"
         legend="Who can see this board"
         :disabled="!canEditVisibility"
-        @update:model-value="members.setVisibility"
+        @update:model-value="pickVisibility"
       />
     </AppPanel>
     <AppPanel title="Members" note="If someone is in two places, their highest role wins.">
@@ -48,7 +49,7 @@
           :grant="grant"
           :last="isLast(grant)"
           :disabled="!canEditMembers"
-          @role="role => members.setRole(grant, role)"
+          @role="role => pickRole(grant, role)"
           @remove="askRemove(grant)"
         />
       </ul>
@@ -64,11 +65,21 @@
     </AppPanel>
     <AppConfirmDialog
       v-model="removeOpen"
-      :title="`Remove ${removing?.name ?? ''}?`"
+      :title="removeTitle"
       :body="removeBody"
-      action="Remove"
+      :action="removing?.kind === 'team' ? 'Remove team' : 'Remove'"
+      color="error"
       :busy="status.saving.value"
       @confirm="confirmRemove"
+    />
+    <AppConfirmDialog
+      :model-value="!!asking"
+      :title="asking?.title ?? ''"
+      :body="asking?.body ?? ''"
+      :action="asking?.action ?? ''"
+      :color="asking?.color ?? 'primary'"
+      @update:model-value="open => !open && (asking = null)"
+      @confirm="confirmAsk"
     />
   </div>
 </template>
@@ -84,6 +95,7 @@ import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
+import { useMemberConfirms } from '@/composables/useMemberConfirms'
 import { useMemberSettings, type Grant } from '@/composables/useMemberSettings'
 import type { BoardVisibility } from '@/types/boards'
 
@@ -94,13 +106,22 @@ const props = defineProps<{
   canEditVisibility: boolean
 }>()
 
-const members = useMemberSettings(useBoardContext(), props.status)
+const page = useBoardContext()
+const members = useMemberSettings(page, props.status)
+const { asking, pickVisibility, pickRole, confirmAsk } = useMemberConfirms(page, members, () => props.visibility)
 const removing = ref<Grant | null>(null)
 const removeOpen = computed({
   get: () => removing.value !== null,
   set: open => {
     if (!open) removing.value = null
   },
+})
+
+// "Remove the Design team?", whether or not the team's name ends in "team".
+const removeTitle = computed(() => {
+  const grant = removing.value
+  if (grant?.kind !== 'team') return `Remove ${grant?.name ?? ''}?`
+  return `Remove the ${grant.name}${/\bteam$/i.test(grant.name) ? '' : ' team'}?`
 })
 
 const removeBody = computed(() =>
