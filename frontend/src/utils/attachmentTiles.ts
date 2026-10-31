@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** Tile rows and the limits hint for the attachment strip. */
-import type { AttachmentLimits, StoredAttachment } from '@/utils/attachmentWire'
+/** Tile rows for the attachment strip. */
+import type { StoredAttachment } from '@/utils/attachmentWire'
 
 /** One tile in the attachment strip, staged (``file``) or stored (``fetchPath``). */
 export interface AttachmentTileRow {
@@ -50,10 +50,4 @@ export function storedTiles(
     fetchPath: pathFor(a.id),
     file: null,
   }))
-}
-
-/** "10 MB each · png, jpg, pdf" */
-export function attachmentHint(limits: AttachmentLimits): string {
-  // The file count sits beside the heading ("2 / 5"), so the hint skips it.
-  return `${limits.maxFileMb} MB each · ${limits.acceptedExtensions.join(', ')}`
 }

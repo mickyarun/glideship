@@ -16,12 +16,8 @@ import { computed, ref, watch } from 'vue'
 import { useBugAttachments } from '@/composables/useBugAttachments'
 import { filesOf, type AttachmentWire } from '@/utils/attachmentWire'
 import { acceptAttribute, attachmentRejectionReason } from '@/utils/attachments'
-import {
-  type AttachmentTileRow,
-  attachmentHint,
-  stagedTiles,
-  storedTiles,
-} from '@/utils/attachmentTiles'
+import { attachmentHint, nearFileLimit } from '@/utils/attachmentHint'
+import { type AttachmentTileRow, stagedTiles, storedTiles } from '@/utils/attachmentTiles'
 
 /**
  * Where the strip's files live: a stored parent (its API path, e.g.
@@ -67,6 +63,7 @@ export function useAttachmentStrip(source: AttachmentStripSource) {
   const isFull = computed(() => count.value >= effectiveLimits.value.maxFiles)
   const accept = computed(() => acceptAttribute(effectiveLimits.value))
   const hint = computed(() => attachmentHint(effectiveLimits.value))
+  const nearLimit = computed(() => nearFileLimit(count.value, effectiveLimits.value.maxFiles))
 
   // One message slot, fed by whichever layer failed — a client-side
   // rejection, a failed request, or a tile that couldn't fetch its blob.
@@ -163,7 +160,7 @@ export function useAttachmentStrip(source: AttachmentStripSource) {
   )
 
   return {
-    loading, uploading, effectiveLimits, count, isFull, accept, hint, message, tiles, items, links,
-    addFiles, removeTile, addLink, removeLink, flush, reload,
+    loading, uploading, effectiveLimits, count, isFull, nearLimit, accept, hint, message, tiles, items,
+    links, addFiles, removeTile, addLink, removeLink, flush, reload,
   }
 }

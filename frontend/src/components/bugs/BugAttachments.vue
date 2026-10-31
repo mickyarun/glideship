@@ -16,9 +16,14 @@
 
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-2">
+    <!-- Viewers get no upload affordances. Uploaders get the short limits
+         line beside Attach, and the file count only once it nears the
+         limit, when it starts to matter. -->
+    <div v-if="!headless || !readonly" class="d-flex flex-wrap align-center ga-2 mb-2">
       <span v-if="!headless" class="text-caption text-medium-emphasis font-weight-medium">Attachments</span>
-      <span class="text-caption text-medium-emphasis">{{ count }} / {{ effectiveLimits.maxFiles }}</span>
+      <span v-if="!readonly" class="text-caption text-medium-emphasis">
+        {{ hint }}<template v-if="nearLimit"> · {{ count }} / {{ effectiveLimits.maxFiles }} files</template>
+      </span>
       <v-spacer />
       <v-btn
         v-if="!readonly"
@@ -55,11 +60,13 @@
       />
     </div>
 
-    <div v-else class="text-caption text-medium-emphasis">
-      {{ readonly ? 'No attachments.' : hint }}
+    <!-- In a panel, the empty line matches the panel's other empty notes. -->
+    <div
+      v-else-if="readonly && !links.length"
+      :class="headless ? 'text-body-2 text-muted' : 'text-caption text-medium-emphasis'"
+    >
+      Nothing attached.
     </div>
-
-    <div v-if="!readonly && count" class="text-caption text-medium-emphasis mt-2">{{ hint }}</div>
 
     <AttachmentLinks
       v-if="wire.links && baseUrl"
@@ -131,8 +138,8 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: 'update:modelValue', files: File[]): void }>()
 
 const {
-  loading, uploading, effectiveLimits, count, isFull, accept, hint, message, tiles, items, links,
-  addFiles, removeTile, addLink, removeLink, flush, reload,
+  loading, uploading, effectiveLimits, count, isFull, nearLimit, accept, hint, message, tiles, items,
+  links, addFiles, removeTile, addLink, removeLink, flush, reload,
 } = useAttachmentStrip({
   baseUrl: () => props.baseUrl,
   staged: () => props.modelValue,

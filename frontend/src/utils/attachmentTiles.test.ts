@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { BugAttachment } from '@/types'
-import { attachmentHint, stagedTiles, storedTiles } from './attachmentTiles'
+import { stagedTiles, storedTiles } from './attachmentTiles'
 
 describe('stagedTiles', () => {
   it('keys picked files by position, name and modified time', () => {
@@ -31,12 +31,5 @@ describe('storedTiles', () => {
     expect(storedTiles([item], id => `/dl/${id}`)).toEqual([
       { key: 'a1', filename: 'log.txt', mimeType: 'text/plain', sizeBytes: 12, fetchPath: '/dl/a1', file: null },
     ])
-  })
-})
-
-describe('attachmentHint', () => {
-  it('states the size and type limits', () => {
-    const limits = { maxFiles: 5, maxFileMb: 10, acceptedExtensions: ['png', 'pdf'] }
-    expect(attachmentHint(limits)).toBe('10 MB each · png, pdf')
   })
 })
