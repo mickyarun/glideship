@@ -132,7 +132,22 @@ describe('import checks', () => {
     expect(stageCountProblem(rows, 1, 3)).toContain('at most 3 stages; this import would make 4')
   })
 
-  it('puts a refused key or stage name on its field', () => {
+  it('places a coded refusal by its code and facts, not its words', () => {
+    const rows = listRows(makeDiscovery(), null)
+    const taken = importFailure(apiError(409, 'Pick another.', {}, { code: 'BOARD_KEY_TAKEN', field: 'key' }), 'x')
+    expect(fieldRefusals(taken, true, rows)).toEqual({ key: 'Pick another.', rows: {} })
+    // Into an existing board there's no key field to mark.
+    expect(fieldRefusals(taken, false, rows)).toEqual({ key: null, rows: {} })
+    const stageTaken = importFailure(
+      apiError(409, 'Clash.', {}, { code: 'STAGE_NAME_TAKEN', group_id: 'l2', stage_name: 'Doing' }), 'x',
+    )
+    expect(fieldRefusals(stageTaken, false, rows)).toEqual({ key: null, rows: { l2: 'Clash.' } })
+    // Any other code (even one whose words mention a key) stays in the callout.
+    const other = importFailure(apiError(409, 'Another key is busy.', {}, { code: 'TOO_MANY_OPEN_IMPORTS', scope: 'user' }), 'x')
+    expect(fieldRefusals(other, true, rows)).toEqual({ key: null, rows: {} })
+  })
+
+  it('puts a refused key or stage name on its field when the server sends no code', () => {
     const rows = listRows(makeDiscovery(), null)
     const taken = importFailure(apiError(409, 'That key or name is already used by another board.'), 'x')
     expect(fieldRefusals(taken, true, rows).key).toContain('already used')

@@ -33,6 +33,18 @@ import type {
 } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
 
+/** A refused new board; ``field`` is the form field it's about (BOARD_KEY_TAKEN names "key"). */
+export class BoardCreateError extends Error {
+  constructor(message: string, readonly field: string | null) {
+    super(message)
+  }
+}
+
+function refusedField(err: unknown): string | null {
+  const data = (err as { response?: { data?: { code?: unknown; field?: unknown } } } | null)?.response?.data
+  return data?.code === 'BOARD_KEY_TAKEN' && typeof data.field === 'string' ? data.field : null
+}
+
 export const useBoardsStore = defineStore('boards', () => {
   const items = ref<BoardListItem[]>([])
   const loaded = ref(false)
@@ -96,7 +108,7 @@ export const useBoardsStore = defineStore('boards', () => {
       void fetchNav()
       return detail
     } catch (err) {
-      throw new Error(extractApiError(err, "Couldn't create the board. Try again."))
+      throw new BoardCreateError(extractApiError(err, "Couldn't create the board. Try again."), refusedField(err))
     }
   }
 

@@ -22,6 +22,7 @@ vi.mock('@/services/boardsApi', () => ({
 vi.mock('@/services/api', () => ({ default: { get: vi.fn().mockResolvedValue({ data: { name: 'Northwind' } }) } }))
 
 import { httpError, makeDetail } from '@/components/boards/__tests__/fixtures'
+import { apiError } from '@/components/boards/imports/__tests__/importFixtures'
 import { boardTestPlugins } from '@/components/boards/__tests__/mountHelpers'
 import NewBoardDialog from '@/components/boards/index/NewBoardDialog.vue'
 import { boardsApi } from '@/services/boardsApi'
@@ -102,5 +103,20 @@ describe('NewBoardDialog', () => {
     createButton().click()
     await flushPromises()
     expect(document.body.textContent).toContain('That key or name is already used by another board.')
+  })
+
+  it('marks the key field when the server says the key is taken, until the key changes', async () => {
+    api.create.mockRejectedValue(apiError(409, 'That key or name is already used by another board.', {}, { code: 'BOARD_KEY_TAKEN', field: 'key' }))
+    const { field } = await openDialog()
+    await type(field('Name'), 'Ops desk')
+    createButton().click()
+    await flushPromises()
+    const keyField = [...document.querySelectorAll('.v-text-field')].find(f => f.textContent?.includes('Key'))!
+    expect(keyField.textContent).toContain('already used by another board')
+    expect(document.querySelector('.v-alert, .app-callout--error')).toBeNull()
+    expect(createButton().disabled).toBe(true)
+    await type(field('Key'), 'ODX')
+    expect(keyField.textContent).not.toContain('already used')
+    expect(createButton().disabled).toBe(false)
   })
 })

@@ -15,11 +15,12 @@
 // The new-board dialog's form: the key follows the name until someone
 // edits it, the first template is picked, and the board is created with
 // org visibility unless they choose members-only. Errors come back from
-// the server as text (a taken key or name reads the same either way).
+// the server as text (a taken key or name reads the same either way); a
+// taken one (BOARD_KEY_TAKEN) shows on the key field until the key changes.
 
 import { computed, ref } from 'vue'
 import { useBoardKeyFields } from '@/composables/useBoardKeyFields'
-import { useBoardsStore } from '@/stores/boards'
+import { BoardCreateError, useBoardsStore } from '@/stores/boards'
 import type { BoardDetail, BoardVisibility } from '@/types/boards'
 
 export function useNewBoardForm() {
@@ -31,12 +32,15 @@ export function useNewBoardForm() {
   const saving = ref(false)
   const error = ref('')
   const loadError = ref('')
+  const refusedKey = ref<{ key: string; message: string } | null>(null)
+  const keyError = computed(() => (refusedKey.value?.key === key.value ? refusedKey.value.message : null))
 
   async function reset(): Promise<void> {
     fields.reset()
     visibility.value = 'org'
     error.value = ''
     loadError.value = ''
+    refusedKey.value = null
     void store.ensureLimits()
     try {
       const templates = await store.ensureTemplates()
@@ -47,7 +51,7 @@ export function useNewBoardForm() {
   }
 
   const canSubmit = computed(
-    () => fields.complete.value && !!template.value && !saving.value,
+    () => fields.complete.value && !!template.value && !saving.value && !keyError.value,
   )
 
   /** Create the board; resolves to it, or null with `error` set. */
@@ -55,6 +59,7 @@ export function useNewBoardForm() {
     if (!canSubmit.value) return null
     saving.value = true
     error.value = ''
+    refusedKey.value = null
     try {
       return await store.createBoard({
         name: name.value.trim(),
@@ -63,7 +68,9 @@ export function useNewBoardForm() {
         visibility: visibility.value,
       })
     } catch (err) {
-      error.value = (err as Error).message
+      const message = (err as Error).message
+      if (err instanceof BoardCreateError && err.field === 'key') refusedKey.value = { key: key.value, message }
+      else error.value = message
       return null
     } finally {
       saving.value = false
@@ -71,7 +78,7 @@ export function useNewBoardForm() {
   }
 
   return {
-    name, key, keyHint, keyLimits, template, visibility, saving, error, loadError, canSubmit,
+    name, key, keyHint, keyLimits, template, visibility, saving, error, loadError, keyError, canSubmit,
     setKey, reset, submit,
   }
 }

@@ -23,7 +23,7 @@
       <h2 id="new-board-title" class="new-board__title mb-2">New board</h2>
       <v-card-text class="new-board__body">
         <AppCallout v-if="form.loadError.value" variant="error">{{ form.loadError.value }}</AppCallout>
-        <BoardNameKeyFields :fields="form" :limits="limits" autofocus />
+        <BoardNameKeyFields :fields="form" :limits="limits" :key-error="form.keyError.value" autofocus />
         <TemplatePicker v-model="form.template.value" :templates="store.templates" />
         <BoardVisibilityField v-model="form.visibility.value" />
         <AppCallout v-if="form.error.value" variant="error">{{ form.error.value }}</AppCallout>

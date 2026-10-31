@@ -18,7 +18,7 @@
 // board's stage count. And where the server's own refusal belongs, so it
 // shows on the field it's about.
 
-import type { ImportFailure } from '@/utils/importErrors'
+import { IMPORT_CODES, type ImportFailure } from '@/utils/importErrors'
 import { choiceStageId, nameKey, type ListRow, type StageOption } from '@/utils/importMapping'
 
 export interface StageCheckLimits {
@@ -70,14 +70,30 @@ export interface FieldRefusals {
   rows: Record<string, string>
 }
 
+/** The new-stage rows a taken stage name belongs on: the list named, and any asking for the same name. */
+function rowsNamed(rows: ListRow[], groupId: string | null, stageName: string | null): ListRow[] {
+  const name = stageName ? nameKey(stageName) : null
+  return rows.filter(r => r.choice === 'new' && (r.list.id === groupId || (name !== null && nameKey(r.name) === name)))
+}
+
 /**
- * Where a refused review belongs: a taken key on the key field, a stage
- * name the board already has on the lists that use it. Anything else
- * stays in the step's callout only.
+ * Where a refused review belongs: a taken key on the key field
+ * (BOARD_KEY_TAKEN), a stage name the board already has on the lists that
+ * use it (STAGE_NAME_TAKEN). Anything else stays in the step's callout
+ * only. A refusal without a code (an older server) is placed by its words.
  */
 export function fieldRefusals(failure: ImportFailure | null, newBoard: boolean, rows: ListRow[]): FieldRefusals {
   const found: FieldRefusals = { key: null, rows: {} }
   if (failure?.status !== 409) return found
+  if (failure.code === IMPORT_CODES.boardKeyTaken) {
+    if (newBoard) found.key = failure.message
+    return found
+  }
+  if (failure.code === IMPORT_CODES.stageNameTaken) {
+    for (const r of rowsNamed(rows, failure.facts.groupId, failure.facts.stageName)) found.rows[r.list.id] = failure.message
+    return found
+  }
+  if (failure.code) return found
   const text = failure.message.toLowerCase()
   if (newBoard) {
     if (/\bkey\b/.test(text)) found.key = failure.message

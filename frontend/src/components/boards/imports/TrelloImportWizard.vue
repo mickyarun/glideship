@@ -115,7 +115,7 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import { useTrelloImportWizard } from '@/composables/useTrelloImportWizard'
 import type { BoardDetail } from '@/types/boards'
 import { plural } from '@/utils/format'
-import { STAGE_GONE } from '@/utils/importErrors'
+import { asksForReview } from '@/utils/importErrors'
 import { isStopped, wizardProblem, wizardSteps, wizardSubtitle } from '@/utils/importWizardText'
 
 const props = withDefaults(defineProps<{ board?: BoardDetail | null }>(), { board: null })
@@ -126,10 +126,7 @@ const session = computed(() => w.imp.session.value)
 const step = computed(() => w.imp.step.value)
 const stopped = computed(() => isStopped(session.value, step.value))
 // Resume refused because the board changed under the mapping: review it again.
-const canReview = computed(() => {
-  const f = w.imp.failure.value
-  return stopped.value && f?.status === 409 && (!f.code || f.code === STAGE_GONE)
-})
+const canReview = computed(() => stopped.value && asksForReview(w.imp.failure.value))
 
 const steps = computed(() => wizardSteps(session.value?.mode ?? null, w.canConnect.value))
 const stepTitle = computed(() => {

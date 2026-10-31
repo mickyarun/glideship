@@ -30,7 +30,7 @@ import { boardImportsApi } from '@/services/boardImportsApi'
 import { boardsApi } from '@/services/boardsApi'
 import { useBoardsStore } from '@/stores/boards'
 import type { BoardDetail } from '@/types/boards'
-import { failureLog } from '@/utils/importErrors'
+import { failureLog, tooManyOfMine } from '@/utils/importErrors'
 
 export const SESSION_QUERY_KEY = 'session'
 
@@ -127,13 +127,19 @@ export function useTrelloImportWizard(board: Ref<BoardDetail | null>, hooks: { o
     if (id) void imp.load(id)
   }
 
+  /** Create an import; refused because too many of mine are open, offer one to continue or discard. */
+  async function create(request: Parameters<typeof imp.queue>[0], fallback: string): Promise<boolean> {
+    const ok = await imp.queue(request, fallback)
+    if (!ok && tooManyOfMine(imp.failure.value)) await offerOpen()
+    return ok
+  }
   const upload = (file: File) => {
     via.value = 'upload'
-    return imp.queue(() => boardImportsApi.upload(file), "Couldn't upload that file. Try again.")
+    return create(() => boardImportsApi.upload(file), "Couldn't upload that file. Try again.")
   }
   const readFromTrello = (trelloBoardId: string) => {
     via.value = 'api'
-    return imp.queue(() => boardImportsApi.fromTrello(trelloBoardId), "Couldn't read that board from Trello. Try again.")
+    return create(() => boardImportsApi.fromTrello(trelloBoardId), "Couldn't read that board from Trello. Try again.")
   }
 
   /** Save the review, then start the import; once, however often it's clicked. */
@@ -152,7 +158,8 @@ export function useTrelloImportWizard(board: Ref<BoardDetail | null>, hooks: { o
         form.showRefusal(imp.failure.value)
         return
       }
-      await imp.start()
+      // Starting into a new board can still find its key taken.
+      if (!(await imp.start())) form.showRefusal(imp.failure.value)
     } finally {
       starting.value = false
     }

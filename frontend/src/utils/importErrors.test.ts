@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest'
 import { apiError, makeSession } from '@/components/boards/imports/__tests__/importFixtures'
 import { MAX_RETRY_AFTER_SECONDS } from '@/constants/imports'
-import { failureLog, importFailure, parseRetryAfter } from '@/utils/importErrors'
+import { asksForReview, failureLog, importFailure, parseRetryAfter, tooManyOfMine } from '@/utils/importErrors'
 import { importSourceLabel, skippedLine, unmatchedLine } from '@/utils/importSummary'
 
 describe('import failures', () => {
@@ -45,20 +45,43 @@ describe('import failures', () => {
     expect(importFailure(apiError(409, 'A stage is gone.', {}, { code: 'STAGE_GONE' }), 'x').code).toBe('STAGE_GONE')
   })
 
+  it('reads the facts a coded refusal sends', () => {
+    const taken = importFailure(apiError(409, 'Clash.', {}, { code: 'STAGE_NAME_TAKEN', group_id: 'l2', stage_name: 'Doing' }), 'x')
+    expect(taken.facts).toEqual({ field: null, groupId: 'l2', stageName: 'Doing', scope: null })
+    const cap = importFailure(apiError(409, 'Full.', {}, { code: 'TOO_MANY_OPEN_IMPORTS', scope: 'org' }), 'x')
+    expect(cap.facts.scope).toBe('org')
+    expect(importFailure(apiError(409, '', {}, { code: 'IMPORT_STILL_WORKING' }), 'x').message).toContain('still working')
+  })
+
+  it('offers Review again for a gone stage, or any 409 from a server without codes', () => {
+    expect(asksForReview(importFailure(apiError(409, 'Gone.', {}, { code: 'STAGE_GONE' }), 'x'))).toBe(true)
+    expect(asksForReview(importFailure(apiError(409, 'Gone.'), 'x'))).toBe(true)
+    expect(asksForReview(importFailure(apiError(409, 'Busy.', {}, { code: 'IMPORT_STILL_WORKING' }), 'x'))).toBe(false)
+    expect(asksForReview(importFailure(apiError(422, 'No.'), 'x'))).toBe(false)
+  })
+
+  it('offers my open imports only when my own cap is full', () => {
+    const cap = (scope?: string) => importFailure(apiError(409, 'Full.', {}, { code: 'TOO_MANY_OPEN_IMPORTS', scope }), 'x')
+    expect(tooManyOfMine(cap('user'))).toBe(true)
+    expect(tooManyOfMine(cap('org'))).toBe(false)
+    expect(tooManyOfMine(importFailure(apiError(409, 'Full.'), 'x'))).toBe(false)
+  })
+
   it('logs a failure by message and status only', () => {
     expect(failureLog(apiError(500, 'secret detail', { authorization: 'Bearer t' }))).toBe('failed (HTTP 500)')
     expect(failureLog(new Error('offline'))).toBe('offline')
   })
 
   it('keeps the wait on 429 and 503 only', () => {
+    const noFacts = { field: null, groupId: null, stageName: null, scope: null }
     expect(importFailure(apiError(429, 'Slow down', { 'retry-after': '12' }), 'x')).toEqual({
-      message: 'Slow down', status: 429, code: null, retryAfter: 12,
+      message: 'Slow down', status: 429, code: null, facts: noFacts, retryAfter: 12,
     })
     expect(importFailure(apiError(503, '', { 'retry-after': '5' }), 'x')).toMatchObject({
       message: 'Imports are busy right now. Try again in a moment.', retryAfter: 5,
     })
     expect(importFailure(apiError(409, 'You have 3 imports still open.', { 'retry-after': '9' }), 'x')).toEqual({
-      message: 'You have 3 imports still open.', status: 409, code: null, retryAfter: null,
+      message: 'You have 3 imports still open.', status: 409, code: null, facts: noFacts, retryAfter: null,
     })
   })
 })

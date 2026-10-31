@@ -19,7 +19,7 @@
 import type { WizardStep } from '@/components/boards/imports/ImportStepper.vue'
 import type { ImportStep } from '@/composables/useImportSession'
 import type { ImportMode, ImportSessionRead } from '@/types/boards'
-import type { ImportFailure } from '@/utils/importErrors'
+import { IMPORT_CODES, type ImportFailure } from '@/utils/importErrors'
 import { plural } from '@/utils/format'
 
 export interface WizardProblem {
@@ -40,6 +40,22 @@ const SOURCE_TITLES: Record<number, string> = {
 const RUN_TITLES: Record<number, string> = {
   429: 'Try again shortly',
   503: 'Imports are busy',
+}
+
+/** Titles for coded refusals, whatever the step. */
+const CODE_TITLES: Record<string, string> = {
+  [IMPORT_CODES.tooManyOpen]: 'Too many imports open',
+  [IMPORT_CODES.boardKeyTaken]: 'That key is taken',
+  [IMPORT_CODES.stageNameTaken]: 'A stage name is taken',
+  [IMPORT_CODES.stillWorking]: 'Still importing',
+}
+
+/** What a full open-imports cap says to do about it. */
+function capAdvice(failure: ImportFailure): string {
+  if (failure.code !== IMPORT_CODES.tooManyOpen) return ''
+  return failure.facts.scope === 'org'
+    ? ' Your team has too many imports running right now; try again later.'
+    : ' Continue or discard one of yours to start another.'
 }
 
 export function wizardSteps(mode: ImportMode | null, canConnect: boolean): WizardStep[] {
@@ -75,7 +91,8 @@ export function wizardProblem(
   if (isStopped(session, step)) return null
   if (failure) {
     const titles = step === 'source' ? SOURCE_TITLES : RUN_TITLES
-    return { title: (failure.status && titles[failure.status]) || '', text: failure.message, retry: false }
+    const title = (failure.code && CODE_TITLES[failure.code]) || (failure.status && titles[failure.status]) || ''
+    return { title, text: `${failure.message}${capAdvice(failure)}`, retry: false }
   }
   if (session?.status === 'failed' && step === 'source') {
     return {

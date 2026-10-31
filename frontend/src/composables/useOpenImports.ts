@@ -58,7 +58,8 @@ export function useOpenImports(boardId: Ref<string | null>) {
     error.value = ''
     try {
       await boardImportsApi.discard(id)
-      offer.value = null
+      // The next one I left open, if any (the cap counts them all).
+      offer.value = await check()
     } catch (err) {
       // The server's words when it has them (a file it couldn't remove: try again).
       error.value = importFailure(err, "Couldn't discard that import. Try again.").message

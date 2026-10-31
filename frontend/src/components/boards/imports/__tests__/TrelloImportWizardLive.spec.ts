@@ -31,7 +31,7 @@ import { makeDetail } from '@/components/boards/__tests__/fixtures'
 import { apiError, makeSession } from '@/components/boards/imports/__tests__/importFixtures'
 import { tracked } from '@/components/boards/imports/__tests__/jobSocketStub'
 import { channels, reconnects, sendToBoard } from '@/components/boards/imports/__tests__/liveStubs'
-import { button, mountWizard, pageText } from '@/components/boards/imports/__tests__/wizardHarness'
+import { button, chooseFile, mountWizard, pageText } from '@/components/boards/imports/__tests__/wizardHarness'
 import { IMPORT_POLL_MS } from '@/constants/imports'
 import { boardImportsApi } from '@/services/boardImportsApi'
 import { boardsApi } from '@/services/boardsApi'
@@ -156,10 +156,33 @@ describe('TrelloImportWizard, following a session', () => {
 
     imports.discard.mockResolvedValue()
     await mountWizard()
+    // Once discarded the server no longer lists it, so nothing else is offered.
+    imports.open.mockResolvedValue([])
     button('Discard')!.click()
     await flushPromises()
     expect(imports.discard).toHaveBeenCalledWith('s9')
     expect(pageText()).not.toContain('Continue your import')
+  })
+
+  it('when my own open-imports cap is full, offers one of mine to continue or discard', async () => {
+    imports.open.mockResolvedValue([])
+    const first = await mountWizard()
+    imports.open.mockResolvedValue([summary()])
+    imports.upload.mockRejectedValue(apiError(409, 'You have 3 imports open.', {}, { code: 'TOO_MANY_OPEN_IMPORTS', scope: 'user' }))
+    await chooseFile()
+    expect(pageText()).toContain('Too many imports open')
+    expect(pageText()).toContain('Continue or discard one of yours to start another.')
+    expect(pageText()).toContain('Continue your import from')
+    first.wrapper.unmount()
+  })
+
+  it("says the team's cap is full without offering mine", async () => {
+    imports.open.mockResolvedValue([])
+    await mountWizard()
+    imports.upload.mockRejectedValue(apiError(409, 'The org has 20 imports open.', {}, { code: 'TOO_MANY_OPEN_IMPORTS', scope: 'org' }))
+    await chooseFile()
+    expect(pageText()).toContain('Your team has too many imports running right now; try again later.')
+    expect(imports.open).toHaveBeenCalledTimes(1)
   })
 
   it("in a board's settings, shows the import running into it", async () => {

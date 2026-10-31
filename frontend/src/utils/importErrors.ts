@@ -15,16 +15,31 @@
 // What an import call's failure means to the person: the server's own
 // message when it sent one (it names the cap, the stage or the limit),
 // a plain sentence when it didn't, and how long to wait before trying
-// again when the server said (Retry-After on 429 and 503, capped).
+// again when the server said (Retry-After on 429 and 503, capped). A 409
+// the page acts on carries a code (BoardErrorCode in backend/app/services/
+// boards/errors.py) and its facts: the field or list it's about, or whose
+// open-imports cap was reached.
 
 import { MAX_RETRY_AFTER_SECONDS } from '@/constants/imports'
 import { extractApiError } from '@/utils/errors'
+
+/** What a coded refusal names besides its code; each null when not sent. */
+export interface FailureFacts {
+  /** BOARD_KEY_TAKEN: the form field the clash belongs to ("key"). */
+  field: string | null
+  /** STAGE_NAME_TAKEN: the first list whose new stage clashes, and the name it asked for. */
+  groupId: string | null
+  stageName: string | null
+  /** TOO_MANY_OPEN_IMPORTS: whose cap it is. */
+  scope: 'user' | 'org' | null
+}
 
 export interface ImportFailure {
   message: string
   status: number | null
   /** The server's machine-readable reason (e.g. STAGE_GONE), when it sent one. */
   code: string | null
+  facts: FailureFacts
   /** Seconds the server asked us to wait, or null to retry at will. */
   retryAfter: number | null
 }
@@ -32,8 +47,21 @@ export interface ImportFailure {
 /** Sentences for one call's statuses, ahead of the general ones. */
 export type FailureTexts = Partial<Record<number, string>>
 
-/** A stage the mapping uses was removed from the board: the review must change. */
-export const STAGE_GONE = 'STAGE_GONE'
+/** The codes a board or import refusal can carry. */
+export const IMPORT_CODES = {
+  /** A stage the mapping uses was removed from the board: the review must change. */
+  stageGone: 'STAGE_GONE',
+  boardKeyTaken: 'BOARD_KEY_TAKEN',
+  stageNameTaken: 'STAGE_NAME_TAKEN',
+  tooManyOpen: 'TOO_MANY_OPEN_IMPORTS',
+  stillWorking: 'IMPORT_STILL_WORKING',
+} as const
+export const STAGE_GONE = IMPORT_CODES.stageGone
+
+/** Sentences for a code when the server sends no detail, ahead of the status ones. */
+const CODE_FALLBACK: Record<string, string> = {
+  [IMPORT_CODES.stillWorking]: 'This import is still working. Wait for it to stop, then discard it.',
+}
 
 const FALLBACK: Record<number, string> = {
   404: "This import isn't there any more. Start a new one.",
@@ -48,7 +76,7 @@ interface HttpLike {
   message?: unknown
   response?: {
     status?: number
-    data?: { code?: unknown }
+    data?: Record<string, unknown>
     headers?: Record<string, unknown> & { get?: (name: string) => unknown }
   }
 }
@@ -80,11 +108,27 @@ function header(err: HttpLike, name: string): unknown {
 export function importFailure(err: unknown, fallback: string, texts: FailureTexts = {}): ImportFailure {
   const response = (err as HttpLike | null)?.response
   const status = response?.status ?? null
-  const own = status === null ? undefined : texts[status] ?? FALLBACK[status]
+  const data = response?.data ?? {}
+  const code = text(data.code)
+  const own = (code && CODE_FALLBACK[code]) || (status === null ? undefined : texts[status] ?? FALLBACK[status])
   const message = extractApiError(err, own || fallback)
   const retryAfter = status === 429 || status === 503 ? parseRetryAfter(header(err as HttpLike, 'retry-after')) : null
-  const code = typeof response?.data?.code === 'string' ? response.data.code : null
-  return { message, status, code, retryAfter }
+  const scope = data.scope === 'user' || data.scope === 'org' ? data.scope : null
+  const facts: FailureFacts = { field: text(data.field), groupId: text(data.group_id), stageName: text(data.stage_name), scope }
+  return { message, status, code, facts, retryAfter }
+}
+
+const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
+
+/** A stopped import can be reviewed again: a stage went away (or, from an older server, any 409). */
+export function asksForReview(failure: ImportFailure | null): boolean {
+  if (failure?.status !== 409) return false
+  return failure.code === STAGE_GONE || !failure.code
+}
+
+/** The cap on my own open imports was reached, so the open ones are worth offering. */
+export function tooManyOfMine(failure: ImportFailure | null): boolean {
+  return failure?.code === IMPORT_CODES.tooManyOpen && failure.facts.scope !== 'org'
 }
 
 /** What to log about a failed call: its message and status, never the request or response. */
