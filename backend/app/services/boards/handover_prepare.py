@@ -79,7 +79,7 @@ async def prepare(
     create = BUDCreate(
         title=title,
         requirements_md=requirements or None,
-        priority=draft.priority,
+        priority=body.priority or draft.priority,
         figma_url=draft.figma_url,
         auto_generate_phases={s.value: on for s, on in body.auto_generate_phases.items()},
         stage_skill_overrides=body.stage_skill_overrides,

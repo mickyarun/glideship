@@ -85,9 +85,14 @@ class HandoverOverrides(BaseModel):
 
 
 class HandoverConfirm(HandoverRequest):
-    """Hand the card over. A retry with the same ``idempotency_key`` returns the first result."""
+    """Hand the card over. A retry with the same ``idempotency_key`` returns the first result.
+
+    ``priority`` is the new (or reopened) BUD's; omitted, it's the card's,
+    else P2. A link leaves the existing BUD as it is, so it ignores it.
+    """
 
     idempotency_key: uuid.UUID
+    priority: BUDPriority | None = None
     overrides: HandoverOverrides | None = None
     # The card's first handover completes it; confirm moving it with open items.
     confirm_open_checklist: bool = False

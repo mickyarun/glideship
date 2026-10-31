@@ -1439,6 +1439,8 @@ the next section.
     `NO_REQUIREMENTS`, `CHECKLIST_OPEN` (the first handover would complete a card with open
     items). A link preview shows the BUD as it is and no similar list.
   - `POST` (confirm, 201): body `HandoverConfirm` = the request plus `idempotency_key` (UUID),
+    `priority?` (`BUDPriority`; omitted: the card's, else P2; a create or a re-handover applies
+    it, a link ignores it and leaves the BUD's own),
     `overrides? {title?, requirements_md?, impacted_repo_ids?}`, `confirm_open_checklist`,
     `auto_generate_phases` (as on BUD create; default all off) → `HandoverResult {handover:
     HandoverRead, card: CardDetail, design_available}`. `HandoverRead {id, card_id, status,
@@ -1573,6 +1575,13 @@ the next section.
   handover), `delivered` (every live BUD at prod or closed), else `in_progress`. Loaded in the
   summary query as one correlated `jsonb_agg` (`repositories/board_card_handover_chips.py`),
   so a page stays one statement. `CardDetail` inherits both.
+- **Origin chips on the Delivery board.** `GET /api/v1/buds/` items carry `origin:
+  {card_key, board_key, can_open} | null`: the BUD's live origin card (`live_handover`), only
+  when the caller holds a role on that card's board (so `can_open` is always true when set);
+  anyone else, a sent-back BUD and a BUD never handed over all get null, so a members-only
+  board's key never leaks. One statement for the page
+  (`repositories/board_handover_origins.py`, joined to `BoardAccessRepository.role_subquery`),
+  through `services/boards/bud_list_origins.list_origins`.
 - **Origin panel.** `GET /api/v1/buds/{bud_id}/origin?cursor&limit` (`buds:view`) →
   `BUDOrigin {card: {key, number, title, board: {key, name}}, hidden: false, comments:
   CommentPage (newest first), handovers: HandoverRead[]}` for the live origin card (else the

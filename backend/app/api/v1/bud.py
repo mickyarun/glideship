@@ -35,6 +35,7 @@ from app.api.v1.bud_qa import router as qa_router
 from app.api.v1.bud_todos import router as todos_router
 from app.api.v1.bud_versions import router as versions_router
 from app.api.v1.bud_workflows import router as workflows_router
+from app.core.board_deps import board_caller
 from app.core.deps import get_current_user, get_db, get_user_permissions, require_permissions
 from app.database import AsyncSessionLocal
 from app.models.bud import (
@@ -95,6 +96,8 @@ from app.services.agent_task_cancel import (
     cancel_task,
     is_task_terminal,
 )
+from app.services.boards.access import BoardCaller
+from app.services.boards.bud_list_origins import list_origins
 from app.services.bud_agent_trigger import (
     create_agent_task_for_stage,
     should_auto_generate_phase,
@@ -163,9 +166,10 @@ async def list_buds(
         None, description="Sort key. Omit for default (bud_number desc)."
     ),
     current_user: User = Depends(get_current_user),
+    caller: BoardCaller = Depends(board_caller),
     db: AsyncSession = Depends(get_db),
 ) -> list[BUDDocument]:
-    """List BUDs for the current user's organization."""
+    """List BUDs for the current user's organization, each with its visible origin card."""
     if status_filter:
         try:
             BUDStatus(status_filter)
@@ -183,12 +187,15 @@ async def list_buds(
 
     # Batch-fetch open bug counts for all BUDs in one query
     bug_repo = BugRepository(db, org_id=current_user.org_id)
-    bug_counts = await bug_repo.open_bug_counts_by_bud([b.id for b in buds])
+    bud_ids = [b.id for b in buds]
+    bug_counts = await bug_repo.open_bug_counts_by_bud(bud_ids)
+    origins = await list_origins(db, caller, bud_ids)
 
-    # Inject open_bug_count as a transient attribute so Pydantic's
-    # from_attributes picks it up alongside the ORM columns.
+    # Inject open_bug_count and origin as transient attributes so Pydantic's
+    # from_attributes picks them up alongside the ORM columns.
     for b in buds:
         b.open_bug_count = bug_counts.get(b.id, 0)  # type: ignore[attr-defined]
+        b.origin = origins.get(b.id)  # type: ignore[attr-defined]
     return buds
 
 

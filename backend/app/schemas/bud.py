@@ -301,8 +301,24 @@ class BUDLearningRead(BaseModel):
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
+class BUDListOrigin(BaseModel):
+    """The card a listed BUD was handed over from (its live origin), for the Delivery board.
+
+    Sent only to a caller who holds a role on the card's board, so
+    ``can_open`` is always true; anyone else gets ``origin: null``, the same
+    as a BUD that was never handed over, and learns nothing about the board.
+    """
+
+    card_key: str
+    board_key: str
+    can_open: bool = True
+
+
 class BUDListItem(BaseModel):
-    """Schema for BUD list view (no full content)."""
+    """Schema for BUD list view (no full content).
+
+    ``origin`` is the BUD's live origin card when the caller can open its board.
+    """
 
     id: uuid.UUID
     bud_number: int
@@ -316,6 +332,7 @@ class BUDListItem(BaseModel):
     assignee_name: str | None = None
     assignee_avatar_url: str | None = None
     open_bug_count: int = 0
+    origin: BUDListOrigin | None = None
     created_at: datetime
     updated_at: datetime
 
