@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Whether a handover's BUD can be opened (and its title shown) by me. The
-// server says so on each handover (``can_open_bud``); a reply without it
-// falls back to the same rule here: ``buds:view`` with engineering access.
+// Whether a handover's BUD can be opened (and its title shown) by me, as
+// the server says on each handover (``can_open_bud``: ``buds:view`` with
+// engineering access), and whether I may hand a card over at all.
 
 import { usePermissions } from '@/composables/usePermissions'
 import type { HandoverRead } from '@/types/boards'
@@ -23,8 +23,7 @@ export function useBudAccess() {
   const { hasPermission, canAccessEngineering } = usePermissions()
 
   function canOpen(h: Pick<HandoverRead, 'can_open_bud' | 'bud_id'>): boolean {
-    if (!h.bud_id) return false
-    return h.can_open_bud ?? (hasPermission('buds:view') && canAccessEngineering.value)
+    return !!h.bud_id && h.can_open_bud
   }
 
   /** The BUD's title, only when I may open it. */
@@ -32,5 +31,15 @@ export function useBudAccess() {
     return canOpen(h) ? h.bud_title ?? null : null
   }
 
-  return { canOpen, titleOf }
+  /**
+   * What the server checks, besides my role on the board, before a
+   * handover, its preview or a retry: engineering access with permission
+   * to create and to view BUDs. The server re-checks; this only decides
+   * whether to offer it.
+   */
+  function mayHandOver(): boolean {
+    return canAccessEngineering.value && hasPermission('buds:create') && hasPermission('buds:view')
+  }
+
+  return { canOpen, titleOf, mayHandOver }
 }

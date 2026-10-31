@@ -47,11 +47,13 @@ export function handover(over: Partial<HandoverRead> = {}): HandoverRead {
   return {
     id: 'h1', card_id: CARD.id, status: 'active', linked_existing: false, target_status: 'design', bud_id: 'b123',
     bud_key: 'BUD-123', bud_title: 'Saved filters', bud_status: 'design', can_open_bud: true, handed_over_by: 'u1',
-    handed_over_at: '2026-10-31T10:00:00Z', returned_at: null, return_reason: null, stage_start_failed: false, ...over,
+    handed_over_at: '2026-10-31T10:00:00Z', returned_at: null, return_reason: null, stage_start_failed: false, history: [], ...over,
   }
 }
 
-export const RESULT: HandoverResult = { handover: handover(), card: makeCardDetail('14', { key: 'SEO-14', stage_id: 'done' }) }
+export const RESULT: HandoverResult = {
+  handover: handover(), card: makeCardDetail('14', { key: 'SEO-14', stage_id: 'done' }), design_available: false,
+}
 
 const skill = (id: string, agentType: AgentSkill['agentType'], isDefault: boolean) =>
   ({ id, agentType, isDefault, name: `Skill ${id}`, skillSlug: id }) as AgentSkill

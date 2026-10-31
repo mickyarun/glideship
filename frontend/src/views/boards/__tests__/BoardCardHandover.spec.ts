@@ -89,10 +89,10 @@ describe('BoardCardView: Delivery panel', () => {
       can_hand_over: true,
     })
     const { wrapper } = await openCard()
-    const link = panel()?.querySelector('a.handover-row__key')
+    const link = panel()?.querySelector('a.handover-row__link')
     expect(link?.getAttribute('href')).toBe('/buds/b123')
     expect(panel()?.textContent).toContain('Saved filters')
-    expect(panel()?.querySelectorAll('a.handover-row__key')).toHaveLength(1)
+    expect(panel()?.querySelectorAll('a.handover-row__link')).toHaveLength(1)
     expect(panel()?.textContent).toContain('BUD-009')
     expect(panel()?.textContent).toContain('Testing')
     expect(panel()?.textContent).not.toContain('Secret title')
@@ -107,13 +107,13 @@ describe('BoardCardView: Delivery panel', () => {
     })
     const { wrapper } = await openCard()
     expect(panel()?.textContent).toContain('Returned')
-    expect(panel()?.textContent).toContain('“Unclear scope”')
+    expect(panel()?.textContent).toContain('Sent back Oct 30, 2026: “Unclear scope”')
     expect(buttonsWith(wrapper, 'Hand over again (brings back BUD-123)')).toHaveLength(1)
   })
 
   it('opens the dialog from the board menu, then shows the result at once', async () => {
-    const moved = makeCardDetail('3', { stage_id: 's2', handovers: [{ bud_id: 'b123', bud_key: 'BUD-123', status: 'design', handover_status: 'active', can_open_bud: true }] })
-    api.confirm.mockResolvedValue({ handover: handover(), card: moved })
+    const moved = makeCardDetail('3', { stage_id: 's2', handovers: [{ bud_id: 'b123', bud_key: 'BUD-123', status: 'design', handover_status: 'active', can_open_bud: true, history: [] }] })
+    api.confirm.mockResolvedValue({ handover: handover(), card: moved, design_available: false })
     const { router } = await openCard('/boards/OPS/cards/3?handover=1')
     await vi.waitFor(() => expect(router.currentRoute.value.query.handover).toBeUndefined())
     expect(api.preview).toHaveBeenCalled()
@@ -128,7 +128,7 @@ describe('BoardCardView: Delivery panel', () => {
 
   it("retries a stage whose agents didn't start", async () => {
     api.list.mockResolvedValue({ items: [handover({ stage_start_failed: true })], can_hand_over: true })
-    api.retryStart.mockResolvedValue({ handover: handover(), card: CARD })
+    api.retryStart.mockResolvedValue({ handover: handover(), card: CARD, design_available: false })
     await openCard()
     expect(panel()?.textContent).toContain("Couldn't start Design agents")
     api.list.mockResolvedValue({ items: [handover()], can_hand_over: true })

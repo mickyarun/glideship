@@ -17,7 +17,7 @@
 // ``can_open_bud: false``) without losing what the last fetch said.
 
 import { BUD_STATUS_LABELS, type BUDStatus } from '@/types'
-import type { CardSummary, HandoverChip } from '@/types/boards'
+import type { CardSummary, HandoverChip, HandoverRead } from '@/types/boards'
 
 export type ChipTone = 'done' | 'off' | 'active'
 
@@ -31,6 +31,17 @@ export function canSendBack(status: BUDStatus | null | undefined): boolean {
 
 export function isShipped(status: BUDStatus | null | undefined): boolean {
   return !!status && SHIPPED.includes(status)
+}
+
+/**
+ * Whether a handover still counts on its card, as the server's
+ * ``live_handover`` decides: active, its BUD still there and not discarded.
+ * A BUD discarded on the Delivery board keeps its row active (a restore
+ * brings it back) but no longer moves the card or counts toward delivery.
+ */
+export function isLive(h: HandoverChip | HandoverRead): boolean {
+  const [state, bud] = 'handover_status' in h ? [h.handover_status, h.status] : [h.status, h.bud_status]
+  return state === 'active' && !!h.bud_id && !!bud && bud !== 'discarded'
 }
 
 /** Shipped is done, discarded (or sent back) is off, anything else is moving. */
@@ -57,7 +68,7 @@ export function chipLabel(chip: HandoverChip): string {
 
 /** "2 of 3 in prod" over the live handovers; null with none live. */
 export function deliveryRollup(chips: HandoverChip[]): string | null {
-  const live = chips.filter(c => c.handover_status === 'active')
+  const live = chips.filter(isLive)
   if (!live.length) return null
   return `${live.filter(c => isShipped(c.status)).length} of ${live.length} in prod`
 }

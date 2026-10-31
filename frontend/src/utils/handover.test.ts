@@ -16,12 +16,19 @@
 import { AxiosError, AxiosHeaders } from 'axios'
 import { describe, expect, it } from 'vitest'
 import { makeCard } from '@/components/boards/__tests__/fixtures'
-import type { HandoverChip } from '@/types/boards'
-import { canSendBack, chipLabel, deliveryRollup, keepBudAccess, statusColor } from '@/utils/handoverChips'
+import type { HandoverChip, HandoverRead } from '@/types/boards'
+import { canSendBack, chipLabel, deliveryRollup, isLive, keepBudAccess, statusColor } from '@/utils/handoverChips'
+import { historyLine } from '@/utils/handoverHistory'
 import { handoverFailure } from '@/utils/handoverErrors'
 
 const chip = (over: Partial<HandoverChip> = {}): HandoverChip => ({
-  bud_id: 'b1', bud_key: 'BUD-001', status: 'design', handover_status: 'active', can_open_bud: true, ...over,
+  bud_id: 'b1', bud_key: 'BUD-001', status: 'design', handover_status: 'active', can_open_bud: true, history: [], ...over,
+})
+
+const handover = (over: Partial<HandoverRead> = {}): HandoverRead => ({
+  id: 'h1', card_id: 'c1', status: 'active', linked_existing: false, target_status: 'design', bud_id: 'b1',
+  bud_key: 'BUD-001', bud_title: null, bud_status: 'design', can_open_bud: false, handed_over_by: null,
+  handed_over_at: '2026-10-28T10:00:00Z', returned_at: null, return_reason: null, stage_start_failed: false, history: [], ...over,
 })
 
 function refused(status: number, data: Record<string, unknown>): AxiosError {
@@ -48,6 +55,25 @@ describe('handover chips', () => {
     const held = makeCard('1', { handovers: [chip()] })
     const incoming = makeCard('1', { handovers: [chip({ can_open_bud: false }), chip({ bud_id: 'new', can_open_bud: false })] })
     expect(keepBudAccess(incoming, held).handovers.map(c => c.can_open_bud)).toEqual([true, false])
+  })
+
+  it('counts a handover live as the server does: active, with a BUD that is not discarded', () => {
+    expect(isLive(chip())).toBe(true)
+    expect(isLive(chip({ status: 'discarded' }))).toBe(false)
+    expect(isLive(chip({ handover_status: 'returned' }))).toBe(false)
+    expect(isLive(handover())).toBe(true)
+    expect(isLive(handover({ bud_status: 'discarded' }))).toBe(false)
+    expect(isLive(handover({ bud_id: null, bud_status: null }))).toBe(false)
+    expect(deliveryRollup([chip({ status: 'prod' }), chip({ bud_id: 'b2', status: 'discarded' })])).toBe('1 of 1 in prod')
+  })
+
+  it('tells a handover history oldest first, falling back to the returned fields', () => {
+    const again = handover({
+      history: [{ at: '2026-10-31T10:00:00Z', kind: 'handed_over_again' }, { at: '2026-10-30T10:00:00Z', kind: 'returned', reason: 'Not now' }],
+    })
+    expect(historyLine(again)).toBe('Sent back Oct 30, 2026: “Not now” · handed over again Oct 31, 2026')
+    expect(historyLine(handover({ status: 'returned', returned_at: '2026-10-29T10:00:00Z', return_reason: null }))).toBe('Sent back Oct 29, 2026')
+    expect(historyLine(handover())).toBe('')
   })
 
   it('sends back only before development', () => {

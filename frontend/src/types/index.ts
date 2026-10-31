@@ -211,8 +211,20 @@ export interface BUDListItem {
   assignee_name: string | null
   assignee_avatar_url?: string | null
   open_bug_count: number
+  /**
+   * The board card this BUD was handed over from, when I can open that
+   * board; null otherwise. Sent on the BUD list only, not on one BUD's read.
+   */
+  origin?: BUDListOrigin | null
   created_at: string
   updated_at: string
+}
+
+/** A listed BUD's live origin card (``BUDListOrigin``). */
+export interface BUDListOrigin {
+  card_key: string
+  board_key: string
+  can_open: boolean
 }
 
 export interface BUDAgentTask {
@@ -285,6 +297,9 @@ export interface BUDDocument extends BUDListItem {
   // empty placeholder for BUDs that haven't been closed (or that
   // closed with the Learning Agent opted out).
   has_learning?: boolean
+  // Handed over straight to design with design generation on and no
+  // design yet: whoever opens the BUD starts generating them.
+  design_pending: boolean
 }
 
 export type AutoGeneratePhases = Record<string, boolean>

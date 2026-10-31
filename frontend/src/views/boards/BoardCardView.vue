@@ -82,9 +82,7 @@
               :wanted="focus.wanted.value" @show-me="focus.showWanted" @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels" @repo="actions.setRepo"
               @priority="actions.setPriority" @due-done="actions.setDueDone"
             />
-            <CardHandoverPanel
-              v-if="board.board.handover_enabled" :card="card" :board="board" :feedback="feedback" :doc-max="limits?.doc_max ?? null"
-            />
+            <CardHandoverPanel :card="card" :board="board" :feedback="feedback" :doc-max="limits?.doc_max ?? null" />
           </aside>
         </div>
       </div>

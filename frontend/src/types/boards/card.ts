@@ -18,6 +18,15 @@
 import type { BUDPriority, BUDStatus } from '@/types'
 import type { StageRequiredField } from '@/types/boards/board'
 
+/** A send-back or a re-handover of one of the card's BUDs. */
+export interface HandoverHistoryEntry {
+  at: string
+  kind: 'returned' | 'handed_over_again'
+  /** A send-back's reason. */
+  reason?: string | null
+  by_name?: string | null
+}
+
 /**
  * A BUD the card was handed over to: its key and statuses, never its
  * title. Socket copies always say ``can_open_bud: false``; merging one
@@ -29,6 +38,8 @@ export interface HandoverChip {
   status: BUDStatus
   handover_status: 'active' | 'returned'
   can_open_bud: boolean
+  /** Newest first, on the card's own detail; empty on board pages and sockets. */
+  history: HandoverHistoryEntry[]
 }
 
 /** How far the card's live handovers are: none, some still in dev, all in prod. */

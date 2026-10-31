@@ -48,7 +48,7 @@ import { mountBoardPage } from './boardViewHarness'
 const api = vi.mocked(boardsApi)
 const cardApi = vi.mocked(boardCardApi)
 const chip = (n: number, status: HandoverChip['status'], can = true): HandoverChip => ({
-  bud_id: `b${n}`, bud_key: `BUD-${n}`, status, handover_status: 'active', can_open_bud: can,
+  bud_id: `b${n}`, bud_key: `BUD-${n}`, status, handover_status: 'active', can_open_bud: can, history: [],
 })
 const send = (data: object) => listeners.get('board:b1')?.({ actor_id: 'someone', origin: 'other-tab', ...data })
 const tile = (id: string) => document.querySelector(`[data-card-id="${id}"]`)
@@ -63,6 +63,8 @@ describe('BoardView BUD chips', () => {
             makeCard('1', { handovers: [chip(12, 'design')], delivery: 'in_progress' }),
             makeCard('2', { handovers: [chip(1, 'prod'), chip(2, 'prod'), chip(3, 'testing')], delivery: 'in_progress' }),
             makeCard('3', { handovers: [chip(4, 'prod')], delivery: 'delivered' }),
+            // A BUD discarded on the Delivery board keeps its row active but no longer counts.
+            makeCard('4', { handovers: [chip(5, 'prod'), chip(6, 'discarded')], delivery: 'delivered' }),
           ]
         : [],
       next_cursor: null,
@@ -82,16 +84,23 @@ describe('BoardView BUD chips', () => {
     expect(tile('1')?.textContent).toContain('BUD-12')
     expect(tile('2')?.textContent).toContain('2 of 3 in prod')
     expect(tile('3')?.textContent).toContain('Delivered')
+    expect(tile('4')?.textContent).toContain('Delivered')
+    expect(tile('4')?.textContent).not.toContain('of 2')
+    expect(tile('1')?.querySelector('.bud-chips__chip')?.getAttribute('title')).toBe('BUD-12 · Design')
   })
 
-  it('offers Hand over in the card menu only with engineering access and permission to create BUDs', async () => {
+  it('offers Hand over in the card menu only with engineering access and permission to create and view BUDs', async () => {
     const { wrapper, router } = await mountBoardPage()
     await wrapper.find('[data-card-id="1"] .card-menu__btn').trigger('click')
     await flushPromises()
-    expect(document.body.textContent).not.toContain('Hand over to Delivery…')
+    expect(document.body.textContent).not.toContain('Hand over')
     useAuthStore().user = { id: 'me', permissions: ['buds:create', 'workspace:engineering'] } as never
     await flushPromises()
-    const item = [...document.querySelectorAll<HTMLElement>('.v-list-item')].find(i => i.textContent?.includes('Hand over to Delivery…'))
+    expect(document.body.textContent).not.toContain('Hand over')
+    useAuthStore().user = { id: 'me', permissions: ['buds:create', 'buds:view', 'workspace:engineering'] } as never
+    await flushPromises()
+    // The card already holds a live BUD, so this one is another.
+    const item = [...document.querySelectorAll<HTMLElement>('.v-list-item')].find(i => i.textContent?.includes('Hand over another…'))
     expect(item).toBeTruthy()
     item?.click()
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/boards/OPS/cards/1?handover=1'))

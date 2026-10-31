@@ -14,15 +14,16 @@
  * limitations under the License.
  -->
 
-<!-- A card's Delivery panel, on boards that hand cards over: the BUDs it
-     was handed over to (oldest first, sent-back ones with their reason),
-     "Hand over to Delivery" (then "Hand over another") for whoever may,
-     and a note that the card's later edits don't reach the BUDs. The
-     board's card menu opens the dialog here with ``?handover=1``. After a
-     handover the card shows its chip and new stage at once, and a message
-     names the BUD with Open BUD when I may open it. -->
+<!-- A card's Delivery panel: the BUDs it was handed over to (oldest first,
+     each with its history), "Hand over to Delivery" (then "Hand over
+     another") when the server says I may, and a note that the card's later
+     edits don't reach the BUDs. Shown while the board hands cards over, and
+     for a card that holds handovers even after the board stops, so their
+     history stays. The dialog outlives the panel while it's open, so a
+     confirm in flight isn't lost. The board's card menu opens the dialog
+     with ``?handover=1``. -->
 <template>
-  <AppPanel title="Delivery">
+  <AppPanel v-if="shown" title="Delivery">
     <template v-if="rollup" #action><span class="handover-panel__rollup">{{ rollup }}</span></template>
     <div class="handover-panel">
       <AppCallout v-if="list.error.value" variant="error">{{ list.error.value }}</AppCallout>
@@ -34,7 +35,7 @@
       </ul>
       <p v-else-if="list.loaded.value" class="handover-panel__text">{{ emptyText }}</p>
       <v-btn
-        v-if="list.canHandOver.value"
+        v-if="canHandOver"
         :variant="live.length ? 'outlined' : 'flat'" color="primary" class="handover-panel__cta" @click="open = true"
       >
         {{ ctaLabel }}
@@ -43,31 +44,31 @@
         Edits here don't reach the BUDs. Discuss delivery on the BUD.
       </p>
     </div>
-    <HandoverDialog
-      v-if="detail"
-      v-model="open" :card="detail" :board="board" :holds-live="live.length > 0" :held-bud-ids="heldIds"
-      :can-link="hasPermission('buds:edit')" :doc-max="docMax" @done="done" @fix="fix" @failed="reread"
-    />
   </AppPanel>
+  <HandoverDialog
+    v-if="detail && (shown || open)"
+    v-model="open" :card="detail" :board="board" :holds-live="live.length > 0" :held-bud-ids="heldIds"
+    :can-link="hasPermission('buds:edit')" :doc-max="docMax" @done="done" @fix="fix" @failed="reread"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HandoverBudRow from '@/components/boards/handover/HandoverBudRow.vue'
 import HandoverDialog from '@/components/boards/handover/HandoverDialog.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import type { BoardCard } from '@/composables/useBoardCard'
-import { useBoardFeedback } from '@/composables/useBoardFeedback'
+import type { useBoardFeedback } from '@/composables/useBoardFeedback'
 import { useBudAccess } from '@/composables/useBudAccess'
 import { useCardHandovers } from '@/composables/useCardHandovers'
+import { useHandoverOutcome } from '@/composables/useHandoverOutcome'
+import { useHandoverQuery } from '@/composables/useHandoverQuery'
 import { usePermissions } from '@/composables/usePermissions'
-import { HANDOVER_QUERY_KEY } from '@/constants/boards'
-import { useBUDStore } from '@/stores/bud'
 import type { BoardDetail, HandoverRead, HandoverResult, StageRequiredField } from '@/types/boards'
 import { ENTER_QUERY_KEY, FOCUS_QUERY_KEY } from '@/utils/cardFocus'
-import { deliveryRollup } from '@/utils/handoverChips'
+import { deliveryRollup, isLive } from '@/utils/handoverChips'
 
 const props = defineProps<{
   card: BoardCard
@@ -79,24 +80,28 @@ const props = defineProps<{
 const route = useRoute()
 const router = useRouter()
 const { hasPermission } = usePermissions()
-const { canOpen } = useBudAccess()
-const budStore = useBUDStore()
+const { mayHandOver } = useBudAccess()
+const outcome = useHandoverOutcome(() => props.feedback)
 const detail = computed(() => props.card.detail.value)
+const enabled = computed(() => props.board.board.handover_enabled)
+// Read the handovers while the board hands over, or while the card holds some.
 const list = useCardHandovers(() => {
   const d = detail.value
-  return d ? { id: d.id, key: d.key, number: d.number } : null
+  return d && (enabled.value || d.handovers.length) ? { id: d.id, key: d.key, number: d.number } : null
 })
 const open = ref(false)
+const shown = computed(() => enabled.value || !!detail.value?.handovers.length || list.items.value.length > 0)
 
-const live = computed(() => list.items.value.filter(h => h.status === 'active'))
+const live = computed(() => list.items.value.filter(isLive))
 const heldIds = computed(() => list.items.value.flatMap(h => (h.bud_id && h.status === 'active' ? [h.bud_id] : [])))
-// "1 of 2 in prod" once there are several, or every one is live.
+// "1 of 2 in prod" once there are several, or the server says every one is in.
 const rollup = computed(() => {
   const card = detail.value
   if (!card || (live.value.length < 2 && card.delivery !== 'delivered')) return null
   return deliveryRollup(card.handovers)
 })
-const canRetry = computed(() => props.board.capabilities.includes('hand_over') && hasPermission('buds:create'))
+const canHandOver = computed(() => enabled.value && list.canHandOver.value)
+const canRetry = computed(() => props.board.capabilities.includes('hand_over') && mayHandOver())
 const emptyText = computed(() =>
   list.canHandOver.value
     ? 'When this is ready to build, hand it over. It becomes a BUD on the Delivery board, and this card tracks its progress.'
@@ -109,18 +114,19 @@ const ctaLabel = computed(() => {
   return 'Hand over to Delivery'
 })
 
+useHandoverQuery({
+  shown: () => shown.value,
+  loaded: list.loaded,
+  allowed: () => canHandOver.value,
+  cardKey: () => detail.value?.key ?? '',
+  open: () => (open.value = true),
+  feedback: () => props.feedback,
+})
+
 function done(result: HandoverResult): void {
-  const { handover } = result
-  list.added(handover)
+  list.added(result.handover)
   props.card.detail.value = result.card
-  const key = result.card.key
-  const text = handover.linked_existing ? `${key} linked to ${handover.bud_key}` : `${key} handed over as ${handover.bud_key}`
-  const budId = handover.bud_id
-  props.feedback.show({
-    text,
-    action: budId && canOpen(handover) ? { label: 'Open BUD', run: () => void router.push(`/buds/${budId}`) } : undefined,
-  })
-  props.feedback.announce(text)
+  outcome.handedOver(result)
 }
 
 /** A confirm that failed may still have committed: read the card and its handovers again. */
@@ -135,25 +141,15 @@ function fix(field: StageRequiredField, stageId: string): void {
 }
 
 async function retry(handover: HandoverRead): Promise<void> {
-  const outcome = await list.retryStart(handover)
-  if (typeof outcome === 'string') {
-    props.feedback.fail(outcome)
+  const result = await list.retryStart(handover)
+  if (typeof result === 'string') {
+    props.feedback.fail(result)
     return
   }
-  if (!outcome) return
-  props.card.detail.value = outcome.card
-  if (outcome.design_available && outcome.handover.bud_id) budStore.designPendingFor = outcome.handover.bud_id
-  props.feedback.announce(`Started the agents for ${outcome.handover.bud_key}`)
+  if (!result) return
+  props.card.detail.value = result.card
+  outcome.restarted(result)
 }
-
-// The board's card menu asked for the dialog: open it once I'm known to be allowed.
-watch([() => route.query[HANDOVER_QUERY_KEY], list.loaded], ([asked, loaded]) => {
-  if (!asked || !loaded) return
-  const query = { ...route.query }
-  delete query[HANDOVER_QUERY_KEY]
-  void router.replace({ query })
-  if (list.canHandOver.value) open.value = true
-}, { immediate: true })
 </script>
 
 <style scoped>

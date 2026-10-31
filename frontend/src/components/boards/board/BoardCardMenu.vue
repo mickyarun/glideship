@@ -62,7 +62,10 @@
         title="Move to another board…"
         @click="emit('move-board')"
       />
-      <v-list-item v-if="canHandOver" prepend-icon="mdi-truck-delivery-outline" title="Hand over to Delivery…" @click="handOver" />
+      <v-list-item
+        v-if="canHandOver" prepend-icon="mdi-truck-delivery-outline"
+        :title="card.handovers.some(isLive) ? 'Hand over another…' : 'Hand over to Delivery…'" @click="handOver"
+      />
       <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
       <template v-if="canArchive">
         <v-list-item
@@ -82,6 +85,7 @@ import { useRouter } from 'vue-router'
 import { CATEGORY_COLORS, HANDOVER_QUERY_KEY } from '@/constants/boards'
 import type { CardSummary, StageRead } from '@/types/boards'
 import { copyText } from '@/utils/clipboard'
+import { isLive } from '@/utils/handoverChips'
 import { blockReason } from '@/utils/stageRules'
 
 const props = defineProps<{

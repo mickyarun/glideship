@@ -81,11 +81,12 @@ import CardRepoChip from '@/components/boards/board/CardRepoChip.vue'
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
+import { useBudAccess } from '@/composables/useBudAccess'
 import { useCardQuickEdit } from '@/composables/useCardQuickEdit'
-import { usePermissions } from '@/composables/usePermissions'
 import { labelColor } from '@/constants/boards'
 import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
 import { dateChip } from '@/utils/cardChips'
+import { isLive } from '@/utils/handoverChips'
 
 const props = defineProps<{
   card: CardSummary
@@ -108,7 +109,7 @@ const emit = defineEmits<{
 
 const { canEdit } = useCardQuickEdit()
 const { repos, board } = useBoardContext()
-const { hasPermission, canAccessEngineering } = usePermissions()
+const { mayHandOver } = useBudAccess()
 // Unknown until the board's repositories load (or after an unlink): no chip.
 const repo = computed(() => repos.find(props.card.repo_id))
 
@@ -120,11 +121,10 @@ const labels = computed(() =>
   props.card.label_ids.map(id => props.labelsById.get(id)).filter((l): l is LabelRead => !!l),
 )
 const date = computed(() => dateChip(props.card, props.now))
-const handedOver = computed(() => props.card.handovers?.some(c => c.handover_status === 'active') ?? false)
+const handedOver = computed(() => props.card.handovers.some(isLive))
 // The server re-checks; this only decides whether the menu offers it.
 const canHandOver = computed(
-  () => !!board.detail.value?.board.handover_enabled && board.can('hand_over') && !props.card.archived_at
-    && hasPermission('buds:create') && canAccessEngineering.value,
+  () => !!board.detail.value?.board.handover_enabled && board.can('hand_over') && !props.card.archived_at && mayHandOver(),
 )
 // Editors pick assignees and the due date right here; archived cards stay as they are.
 const quickEdits = computed(() => canEdit.value && !props.card.archived_at)

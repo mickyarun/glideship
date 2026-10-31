@@ -19,7 +19,7 @@
 
 import type { BUDPriority, BUDStatus } from '@/types'
 import type { CardCommentPage } from '@/types/boards/cardDetail'
-import type { CardDetail } from '@/types/boards/card'
+import type { CardDetail, HandoverHistoryEntry } from '@/types/boards/card'
 import type { HandoverTarget } from '@/types/boards/settings'
 
 export type HandoverMode = 'create' | 'link'
@@ -58,6 +58,8 @@ export interface HandoverOverrides {
 export interface HandoverConfirm extends HandoverRequest {
   /** One per dialog opening, so a retry or a double click returns the first result. */
   idempotency_key: string
+  /** The new (or reopened) BUD's; left out: the card's, else P2. A link ignores it. */
+  priority?: BUDPriority
   overrides?: HandoverOverrides
   confirm_open_checklist?: boolean
   auto_generate_phases?: Record<string, boolean>
@@ -99,7 +101,7 @@ export interface HandoverPreview {
   impacted_repos: ImpactedRepo[]
   similar: SimilarBUD[]
   warnings: HandoverWarning[]
-  reopens?: HandoverReopens | null
+  reopens: HandoverReopens | null
 }
 
 export interface HandoverRead {
@@ -110,24 +112,29 @@ export interface HandoverRead {
   target_status: HandoverTarget | null
   bud_id: string | null
   bud_key: string | null
-  /** Only for someone who may open the BUD. */
-  bud_title?: string | null
+  /** Null unless ``can_open_bud``. */
+  bud_title: string | null
   bud_status: BUDStatus | null
   /** ``buds:view`` with engineering access. */
-  can_open_bud?: boolean
+  can_open_bud: boolean
   handed_over_by: string | null
   handed_over_at: string
   returned_at: string | null
   return_reason: string | null
   /** The target stage's agents didn't start; a retry starts them. */
-  stage_start_failed?: boolean
+  stage_start_failed: boolean
+  /** Send-backs and re-handovers, newest first; empty on board pages and sockets. */
+  history: HandoverHistoryEntry[]
 }
+
+/** The summary a board topic carries; fetch the card for the rest. */
+export type HandoverSocketSummary = Pick<HandoverRead, 'id' | 'bud_id' | 'bud_key' | 'bud_status' | 'status'>
 
 export interface HandoverResult {
   handover: HandoverRead
   card: CardDetail
   /** The BUD entered design with generation on and no designs yet: start them as the BUD page does. */
-  design_available?: boolean
+  design_available: boolean
 }
 
 export interface HandoverList {

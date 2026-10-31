@@ -20,7 +20,7 @@
 import type { BoardRead, LabelRead } from '@/types/boards/board'
 import type { CardSummary } from '@/types/boards/card'
 import type { CardDocKind } from '@/types/boards/doc'
-import type { HandoverRead } from '@/types/boards/handover'
+import type { HandoverSocketSummary } from '@/types/boards/handover'
 import type { ImportResult, ImportStatus } from '@/types/boards/imports'
 import type { BoardRepoRead } from '@/types/boards/repo'
 
@@ -48,8 +48,8 @@ export type BoardSocketMessage =
   // its old key (GET /boards/cards/by-key), which hides boards I can't see.
   | (Base<'card_left_board'> & { card_id: string })
   // Handovers carry ids, keys and statuses only; fetch the card for the rest.
-  | (Base<'card_handed_over'> & { card_id: string; handover: Partial<HandoverRead> })
-  | (Base<'card_handover_returned'> & { card_id: string; handover: Partial<HandoverRead> })
+  | (Base<'card_handed_over'> & { card_id: string; handover: HandoverSocketSummary })
+  | (Base<'card_handover_returned'> & { card_id: string; handover: HandoverSocketSummary })
   // A BUD the card holds changed status (may arrive twice): refetch the card.
   | (Base<'card_handovers_changed'> & { card_id: string })
   | (Base<'doc_updated'> & { card_id: string; kind: CardDocKind; version: number })

@@ -16,8 +16,10 @@
 
 <!-- The BUDs a card on the board was handed over to, kept quiet: each live
      one's key with a status dot (up to a few), or the "2 of 3 in prod"
-     roll-up when there are more; "Delivered" once every one is in prod.
-     Text only: the card's own link covers the tile. -->
+     roll-up when there are more; "Delivered" when the server says every
+     live one is in prod. Live is the server's rule (isLive): a BUD
+     discarded on the Delivery board drops out. Text only: the card's own
+     link covers the tile. -->
 <template>
   <span v-if="chips.length" class="bud-chips">
     <span class="d-sr-only">{{ summary }}</span>
@@ -26,7 +28,7 @@
     </span>
     <span v-else-if="chips.length > max" class="bud-chips__chip" aria-hidden="true">{{ deliveryRollup(card.handovers) }}</span>
     <template v-else>
-      <span v-for="chip in chips" :key="chip.bud_id" class="bud-chips__chip" aria-hidden="true">
+      <span v-for="chip in chips" :key="chip.bud_id" class="bud-chips__chip" :title="chipLabel(chip)" aria-hidden="true">
         <span class="bud-chips__dot" :style="{ background: `rgb(var(--v-theme-${statusColor(chip.status)}))` }" />
         {{ chip.bud_key }}
       </span>
@@ -38,12 +40,12 @@
 import { computed } from 'vue'
 import { BUD_CHIPS_SHOWN } from '@/constants/boards'
 import type { CardSummary } from '@/types/boards'
-import { chipLabel, deliveryRollup, statusColor } from '@/utils/handoverChips'
+import { chipLabel, deliveryRollup, isLive, statusColor } from '@/utils/handoverChips'
 
 const props = defineProps<{ card: CardSummary }>()
 const max = BUD_CHIPS_SHOWN
 
-const chips = computed(() => (props.card.handovers ?? []).filter(c => c.handover_status === 'active'))
+const chips = computed(() => props.card.handovers.filter(isLive))
 const summary = computed(() => {
   const all = chips.value.map(chipLabel).join(', ')
   return props.card.delivery === 'delivered' ? `Delivered: ${all}` : `Handed over: ${all}`
