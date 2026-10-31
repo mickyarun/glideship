@@ -86,6 +86,8 @@ async def granted_card(
         board.key, card.number
     ):
         raise CardGrantError(OTHER_CARD)
+    # Card, then run: the same order a move between boards and AI switched off take.
+    await BoardCardRepository(db, org_id=grant.org_id).lock(card)
     if card.archived_at is not None:
         raise CardGrantError(CARD_ARCHIVED)
     runs = BoardCardAgentRunRepository(db, org_id=grant.org_id)

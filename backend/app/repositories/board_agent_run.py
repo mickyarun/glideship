@@ -110,17 +110,17 @@ class BoardCardAgentRunRepository(BaseRepository[BoardCardAgentRun]):
             stmt = stmt.where(BoardCardAgentRun.triggered_by == triggered_by)
         return int((await self._db.execute(self._scoped(stmt))).scalar_one())
 
-    async def active_on_board(self, board_id: uuid.UUID) -> list[BoardCardAgentRun]:
-        """The board's cards' pending and running runs, locked for the transaction."""
-        stmt = self._scoped(
-            select(BoardCardAgentRun)
+    async def active_ids_on_board(self, board_id: uuid.UUID) -> list[uuid.UUID]:
+        """The ids of the board's cards' pending and running runs (not locked)."""
+        stmt = (
+            select(BoardCardAgentRun.id)
             .join(BoardCard, BoardCard.id == BoardCardAgentRun.card_id)
             .where(
+                BoardCardAgentRun.org_id == self._org_id,
                 BoardCard.board_id == board_id,
                 BoardCardAgentRun.status.in_(ACTIVE_RUN_STATUSES),
             )
             .order_by(BoardCardAgentRun.id)
-            .with_for_update(of=BoardCardAgentRun)
         )
         return list((await self._db.execute(stmt)).scalars().all())
 

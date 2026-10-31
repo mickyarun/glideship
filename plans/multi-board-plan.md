@@ -1760,7 +1760,8 @@ nothing changes on the card until then. The AI never moves a card and never hand
   repositories by name.
 - **Scoped MCP grant** (`app/mcp/token_grants.py`): `InternalTokenGrant(org_id, tools, card_id,
   run_id, expires_at)`. A card run's token covers `write_card_doc`, `get_card_context`, and the
-  skill's declared tools that are in `CARD_RUN_READ_TOOLS` (read-only org tools); it expires at
+  skill's declared tools that are in `CARD_RUN_READ_TOOLS` (read-only org tools; replaced by the
+  board-run allowlist below); it expires at
   the deadline plus `BOARDS_AGENT_TOKEN_GRACE_SECONDS` and is revoked when the run ends.
   `/mcp/tools/*` refuses other tools (403, audited), `/mcp/sse` refuses them too, and the
   in-process tool loop honours the grant. Org-wide internal tokens are unchanged.
@@ -1780,6 +1781,81 @@ nothing changes on the card until then. The AI never moves a card and never hand
 - **Notices** after commit to the card's assignees who can still open the board:
   `board_ai_draft` ("An AI draft is ready to review") or `board_ai_failed` ("An AI run failed"),
   category `board_cards`. Runs award no XP or SP.
+
+### As built (backend): skills, code context, AI switches and guard rails
+
+- **Board skills.** `agents/skills/board-prd-writer.md` (`boardPrd`, writes `prd`) and
+  `board-design-helper.md` (`boardDesign`, writes `design_brief`) are seeded through
+  `AGENT_SKILL_MAP` like every other skill. Neither declares built-in tools (`tools:` is empty; an
+  empty line now loads as no tools rather than `["None"]`). Their `mcp_tools` are the card tools,
+  `get_features`/`check_feature_exists` or the design-system reads, and `code_query`/`code_context`.
+  A unit test checks that the inline deny list blocks nothing any skill declares, and that the board
+  skills lose nothing to the allowlist.
+- **Stage picker.** `GET /api/v1/boards/{key}/skills` (admin, `configure_agents`):
+  `[{id, name, slug, agent_type, suggested, output_kind}]`, every skill in the org's library. The two
+  board skills come first with `suggested: true`; the rest follow by name. `output_kind` comes from
+  the agent type (`AGENT_OUTPUT_KINDS`, otherwise `notes`), not from frontmatter.
+- **Board-run allowlist** (`services/boards/agents/tools.py`). A run's MCP tools are the card tools
+  plus `skill.mcp_tools ∩ BOARD_RUN_ALLOWLIST`. The allowlist is the card tools, the engineering
+  reads (`get_features`, `check_feature_exists`, `search_bugs`, `list_design_systems`,
+  `get_design_system`) and the code tools (`code_impact`, `code_query`, `code_context`,
+  `code_community`, `code_god_nodes`, `code_stats`). Nothing on it writes outside the card.
+  `get_team_context` is left off because it returns emails. The engineering reads and code tools
+  are dropped unless the run's `triggered_by` holds `workspace:engineering`. `triggered_by` is the
+  person who clicked Run, or the person whose move, create or move between boards caused the
+  entry. A run with nobody behind it gets only the card tools.
+- **Code context.** The run's grant carries `repos`: the board's active linked repositories
+  (`InternalTokenGrant.repos`). A code tool naming any other `repo_id` is refused with 403 on
+  `/mcp/tools`, an RPC error on `/mcp/sse`, or an error in the Ollama loop. That covers an unlinked
+  repo, a removed one, another org's, or a name instead of an id. The token's tool list
+  (`GET /mcp/tools` with the run's bearer token) shows only its tools, with `repo_id` narrowed to an
+  `enum` of those ids. The prompt lists them with their ids. A board with no active linked repo
+  gets no code tools.
+- **No built-in tools.** Card runs set `ClaudeRunnerConfig.builtin_tools=[]`. The Claude CLI then
+  gets `--tools ""` and a `--disallowedTools` rule for every built-in
+  (`claude_guard/tool_scope.py`). Under `--dangerously-skip-permissions`, CLI 2.0.54's init event
+  listed no tools with the flag and 18 without it. With an MCP server attached it listed only
+  `mcp__bodhiorchard__<tool>`. Copilot gets `--available-tools=bodhiorchard-<tool>,…`. A provider
+  that can't drop its tools (`scopes_builtin_tools=False`: Codex) refuses the run in the capability
+  gate. BUD agents are unchanged (`builtin_tools=None`).
+- **Scoped tokens.** The store holds at most `BOARDS_AGENT_TOKENS_MAX` (200) live tokens. Expired
+  ones are pruned. Live ones are never evicted, and a full store fails the new run.
+  `MCPServerConfig.grant` carries the grant. The Ollama loop refuses to start when the token no
+  longer resolves to it, re-checks it on every call, refuses tools not in `tool_names`, and writes
+  `mcp_audit_log` rows (`transport` `ollama`). Scoped calls' audit rows add `grant_run_id` and
+  `grant_card_id` to `params`. `/mcp/dev-activity` and `/mcp/agent-activity` refuse scoped tokens
+  (403). Tool calls log parameter names and size, not values.
+- **Run caps.** `BOARDS_AGENT_RUNS_PER_ORG_MAX` (20) and `BOARDS_AGENT_RUNS_PER_USER_MAX` (5)
+  count pending and running runs. From the Run button, going over is 429 `AGENT_RUN_LIMIT` with
+  `Retry-After`, and no run is written. An `on_enter` entry over a cap records the run as `failed`
+  with the reason, so the card's panel shows it and Retry can start it later. The move still goes
+  ahead. The counts aren't locked, so the caps bound load rather than being exact.
+- **Drafts.** A draft over `CARD_DOC_MAX_CHARS` fails the run. `write_card_doc` already refused it,
+  and `write_draft` checks it too. The card tools lock the card and then the run row, then refuse
+  an archived card or a run that's no longer `running`. That closes the race with a cancel.
+- **Board AI off.** `PATCH /boards/{key}` turning `ai_enabled` from on to off cancels the board's
+  pending and running runs in the same request (`agents/switch_off.py`). Each is settled `canceled`
+  ("AI was switched off on this board, so this run stopped."), gets an `ai_run` card event and
+  publishes `agent_run_updated`. Its job is canceled after the commit: a queued one never starts,
+  and a running one goes through the executor's cancel path, finds the run settled and saves
+  nothing. Locks are taken card first, then run.
+- **Delivery AI switch.** The org config `delivery` section is `{ai_enabled}`, default on. It's read
+  and written only by `services/delivery_settings.py`. `GET /api/v1/settings/delivery`
+  (`buds:view`) and `PATCH` (`org:edit_settings`, body `{ai_enabled}`, extra fields 422) both sit
+  behind `workspace:engineering`. When it's off, `create_agent_task_for_stage` returns `None`
+  before anything else, so no BUD stage agent starts. When it's on, behaviour is unchanged and
+  each BUD's `auto_generate_phases` still decides.
+- **Origin.** `GET /buds/{id}/origin` now includes the card's current stage, `card.stage {id, name,
+  category}`, when the caller can open the board.
+- **Tests.** Integration tests now drain background work at teardown (`_drain_background` in
+  `tests/integration/conftest.py`). That covers `background.spawn` tasks and fake-Slack sends a
+  test left queued, and runs while the test's patches and engine are still up. The "coroutine
+  'send_dm' was never awaited" warnings are gone (0 across the agent, board, MCP, skill and BUD
+  integration tests).
+- **Open.** The learning-recap and code-review regenerate routes answer 409 "no agent configured"
+  when Delivery AI is off; they should name the switch instead. Copilot's `--available-tools` MCP
+  naming hasn't been tried against a live CLI. If the names don't match, the model has no tools and
+  the run falls back to saving the reply.
 
 ### Building WordPress pages for SEO
 

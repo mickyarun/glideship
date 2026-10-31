@@ -90,6 +90,7 @@ from app.api.v1.roles import router as roles_router
 from app.api.v1.scans import router as scans_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.settings_claude import router as settings_claude_router
+from app.api.v1.settings_delivery import router as settings_delivery_router
 from app.api.v1.settings_github_members import router as settings_gh_members_router
 from app.api.v1.settings_mcp_tokens import router as settings_mcp_tokens_router
 from app.api.v1.settings_repos import router as settings_repos_router
@@ -205,6 +206,7 @@ engineering_router.include_router(settings_repos_local_router, prefix="/api/v1/s
 engineering_router.include_router(settings_slack_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_trello_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_claude_router, prefix="/api/v1/settings")
+engineering_router.include_router(settings_delivery_router, prefix="/api/v1/settings")
 engineering_router.include_router(ai_settings_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_gh_members_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_mcp_tokens_router, prefix="/api/v1/settings")

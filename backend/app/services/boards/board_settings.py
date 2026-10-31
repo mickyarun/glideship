@@ -21,6 +21,7 @@ from app.repositories.board import BoardRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.board import BoardDetail, BoardRead, BoardUpdate
 from app.services.boards.access import BoardAccess
+from app.services.boards.agents.switch_off import cancel_board_runs
 from app.services.boards.constants import HANDOVER_LANDING_STATUSES
 from app.services.boards.errors import BOARD_TAKEN, BoardConflictError, BoardRuleError
 from app.services.boards.live import BoardChanges, BoardSocketEvent
@@ -38,7 +39,8 @@ async def update_board(db: AsyncSession, access: BoardAccess, body: BoardUpdate)
 
     The board's stages are locked before the board row is touched: card
     writes take a stage lock and then the board row (for numbering), so
-    the same order here can't deadlock with them.
+    the same order here can't deadlock with them. Switching AI off cancels
+    the runs going on the board's cards (:mod:`.agents.switch_off`).
     """
     board, changes = access.board, BoardChanges.of(access)
     stages = await BoardStageRepository(db, org_id=access.org_id).lock_board_stages(board.id)
@@ -49,6 +51,7 @@ async def update_board(db: AsyncSession, access: BoardAccess, body: BoardUpdate)
             raise BoardConflictError(BOARD_TAKEN)
         board.name = body.name
     was_org_wide = board.visibility is BoardVisibility.ORG
+    had_ai = board.ai_enabled
     for field in _NULLABLE:
         if field in sent:
             setattr(board, field, getattr(body, field))
@@ -64,6 +67,9 @@ async def update_board(db: AsyncSession, access: BoardAccess, body: BoardUpdate)
     )
     if not await repo.save(board):
         raise BoardConflictError(BOARD_TAKEN)
+    if had_ai and not board.ai_enabled:
+        # Still under the board's stage locks, so no card on it moves meanwhile.
+        await cancel_board_runs(db, board)
     if was_org_wide and board.visibility is BoardVisibility.MEMBERS:
         changes.recheck_access(None)
     changes.emit(BoardSocketEvent.BOARD_UPDATED, board=_board_json(access))

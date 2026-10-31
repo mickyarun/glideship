@@ -37,7 +37,7 @@ from tests.integration.board_handover_return_support import (
     handed,
     send_back,
 )
-from tests.integration.board_handover_support import card, desk, hand_over, stubbed
+from tests.integration.board_handover_support import card, card_stage, desk, hand_over, stubbed
 from tests.integration.board_notify_support import fake_slack
 from tests.integration.bud_lifecycle_reads import load_bud
 from tests.integration.bud_lifecycle_support import (
@@ -138,6 +138,8 @@ async def test_the_origin_panel_shows_the_card_to_its_board(
     origin_url = f"{BUDS}/{bud_of(made)}/origin"
 
     first = ok(await client.get(origin_url, params={"limit": 2}, headers=d.pm.headers))
+    in_stage = str(await card_stage(pg_session_factory, made["card"]["id"]))
+    now = next(st for st in d.board["stages"] if st["id"] == in_stage)
     cursor = first["comments"]["next_cursor"]
     rest = ok(
         await client.get(origin_url, params={"limit": 2, "cursor": cursor}, headers=d.pm.headers)
@@ -149,6 +151,7 @@ async def test_the_origin_panel_shows_the_card_to_its_board(
         "number": made["card"]["number"],
         "title": "Pricing page",
         "board": {"key": d.key, "name": d.board["board"]["name"]},
+        "stage": {k: now[k] for k in ("id", "name", "category")},
     }
     assert [c["body"] for c in first["comments"]["items"]] == ["three", "two"]
     assert [c["body"] for c in rest["comments"]["items"]] == ["one"]

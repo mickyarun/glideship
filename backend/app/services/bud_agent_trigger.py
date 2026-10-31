@@ -26,6 +26,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bud import BUDDocument
+from app.services.delivery_settings import delivery_ai_enabled
 
 if TYPE_CHECKING:
     from app.models.bud_agent_task import BUDAgentTask
@@ -74,8 +75,13 @@ async def create_agent_task_for_stage(
         already has content, or an agent is already running). Callers
         that need to confirm a task actually started — e.g. a user-facing
         regenerate endpoint — branch on this; the fire-and-forget
-        transition callers ignore it.
+        transition callers ignore it. Also ``None`` when the Delivery
+        board's AI switch (``delivery.ai_enabled``) is off.
     """
+    if not await delivery_ai_enabled(db, org_id):
+        logger.info("agent_skip_delivery_ai_off", bud_id=str(bud.id), status=bud_status)
+        return None
+
     from app.agents.skill_mapping import BUD_STAGE_AGENT_TYPE, resolve_skill_for_agent
     from app.models.bud import BUDStatus
     from app.models.bud_agent_task import AgentTaskStatus, BUDAgentTask

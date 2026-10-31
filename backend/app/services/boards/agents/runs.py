@@ -95,10 +95,19 @@ async def cancel_active_run(
     settle(run, BoardAgentRunStatus.CANCELED, error=reason)
     await db.flush()
     queue_run_event(db, card.board_id, run)
+    stop_job_after_commit(db, run, reason)
+    return run
+
+
+def stop_job_after_commit(db: AsyncSession, run: BoardCardAgentRun, reason: str) -> None:
+    """Cancel the run's job once ``db`` commits: a queued one never starts, a running one stops.
+
+    A running job then goes through the executor's cancel path, which finds
+    the run already settled and only revokes its token.
+    """
     job_id = run.job_id
     if job_id is not None:
         call_after_commit(db, lambda: _stop(job_id, reason))
-    return run
 
 
 def _stop(job_id: str, reason: str) -> None:

@@ -60,6 +60,8 @@ ADMIN_READS = {
     f"{PREFIX}/{{key}}/repos/options": BoardAction.MANAGE_REPOS,
     # A stage's agent setup; a card's Run menu reads its own stage's agents.
     f"{PREFIX}/{{key}}/stages/{{stage_id}}/agents": BoardAction.CONFIGURE_AGENTS,
+    # The skill library the stage picker offers.
+    f"{PREFIX}/{{key}}/skills": BoardAction.CONFIGURE_AGENTS,
 }
 ADMIN = BoardMemberRole.ADMIN
 

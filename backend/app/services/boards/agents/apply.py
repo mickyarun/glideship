@@ -160,7 +160,12 @@ async def finish_failed(db: AsyncSession, refs: RunRefs, error: str) -> bool:
     return True
 
 
+async def settle_canceled(db: AsyncSession, refs: RunRefs, reason: str) -> bool:
+    """Mark a still-active run canceled and record it on the card; the caller commits."""
+    return await _settle(db, refs, BoardAgentRunStatus.CANCELED, error=reason)
+
+
 async def finish_canceled(db: AsyncSession, refs: RunRefs, reason: str) -> None:
     """Mark a still-active run canceled, with no notice, and commit."""
-    await _settle(db, refs, BoardAgentRunStatus.CANCELED, error=reason)
+    await settle_canceled(db, refs, reason)
     await db.commit()

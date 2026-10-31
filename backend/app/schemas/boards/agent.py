@@ -56,6 +56,22 @@ class StageAgentRead(BaseModel):
     order: int
 
 
+class StageSkillRead(BaseModel):
+    """A library skill a board admin can put on a stage.
+
+    ``suggested`` marks the two board skills (``BOARD_AGENT_TYPES``);
+    ``output_kind`` is the card document the skill's runs write, from its
+    agent type (``AGENT_OUTPUT_KINDS``, anything else ``notes``).
+    """
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    agent_type: AgentType
+    suggested: bool
+    output_kind: BoardCardDocKind
+
+
 class AgentRunRead(BaseModel):
     """One agent run on a card."""
 

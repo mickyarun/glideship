@@ -15,7 +15,7 @@
 """A BUD's Origin panel: the card it came from, that card's comments and handovers.
 
 The card is the BUD's live origin, else the card it was most recently
-handed over from. Its comments and handovers are shown only to a caller
+handed over from, with the stage it's in now. Its comments and handovers are shown only to a caller
 who can open the card's board now; anyone else learns only that it's
 hidden, never the board's name or key.
 """
@@ -30,9 +30,10 @@ from app.repositories.board_access import BoardAccessRepository
 from app.repositories.board_card import BoardCardRepository
 from app.repositories.board_card_thread import BoardCardCommentRepository
 from app.repositories.board_handover import BoardHandoverRepository
+from app.repositories.board_stage import BoardStageRepository
 from app.repositories.bud import BUDRepository
 from app.schemas.boards.card_detail import CommentPage
-from app.schemas.boards.handover_return import BUDOrigin, OriginBoard, OriginCard
+from app.schemas.boards.handover_return import BUDOrigin, OriginBoard, OriginCard, OriginStage
 from app.services.boards.access import BoardCaller
 from app.services.boards.comment_service import read_comments
 from app.services.boards.cursor import decode_time_cursor, encode_cursor
@@ -72,12 +73,16 @@ async def bud_origin(
     if board is None or role is None:
         return BUDOrigin(card=None, hidden=True)
     history = await history_by_bud(db, org_id, card.id)
+    stage = await BoardStageRepository(db, org_id=org_id).get_in_board(board.id, card.stage_id)
     return BUDOrigin(
         card=OriginCard(
             key=card_key(board.key, card.number),
             number=card.number,
             title=card.title,
             board=OriginBoard(key=board.key, name=board.name),
+            stage=None
+            if stage is None
+            else OriginStage(id=stage.id, name=stage.name, category=stage.category),
         ),
         comments=await _comments(db, org_id, card.id, cursor=cursor, limit=limit),
         handovers=[

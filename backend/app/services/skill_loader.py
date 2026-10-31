@@ -142,8 +142,9 @@ def load_skill(skill_name: str) -> Skill:
         name=frontmatter.get("name", skill_name),
         slug=skill_name,
         description=frontmatter.get("description", ""),
-        tools=_parse_list(frontmatter.get("tools", "")),
-        mcp_tools=_parse_list(frontmatter.get("mcp_tools", "")),
+        # An empty ``tools:`` line is YAML null, which means none.
+        tools=_parse_list(frontmatter.get("tools") or ""),
+        mcp_tools=_parse_list(frontmatter.get("mcp_tools") or ""),
         prompt=body.strip(),
         max_turns=int(frontmatter.get("max_turns", 0)),
         timeout_seconds=int(frontmatter.get("timeout_seconds", 0)),

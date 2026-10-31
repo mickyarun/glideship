@@ -14,8 +14,11 @@
 
 """Sending a BUD back to its card, and the BUD's Origin panel."""
 
+import uuid
+
 from pydantic import BaseModel, ConfigDict
 
+from app.models.board_enums import BoardStageCategory
 from app.schemas.boards.card_detail import CommentPage
 from app.schemas.boards.handover import HandoverRead
 from app.schemas.boards.text import ReturnReason
@@ -36,13 +39,22 @@ class OriginBoard(BaseModel):
     name: str
 
 
+class OriginStage(BaseModel):
+    """The stage the origin card is in now."""
+
+    id: uuid.UUID
+    name: str
+    category: BoardStageCategory
+
+
 class OriginCard(BaseModel):
-    """The card a BUD was handed over from."""
+    """The card a BUD was handed over from, and the stage it's in now."""
 
     key: str
     number: int
     title: str
     board: OriginBoard
+    stage: OriginStage | None = None
 
 
 class BUDOrigin(BaseModel):

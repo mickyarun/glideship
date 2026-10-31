@@ -56,9 +56,25 @@ class Slack:
         return [text for who, text in self.posts if who == slack_id]
 
 
+# Every fake made in the current test; the integration conftest flushes them at teardown.
+_open_fakes: list[Slack] = []
+
+
+async def flush_open_fakes() -> None:
+    """Run the sends a test left queued, so none is dropped un-awaited; forget the fakes."""
+    while _open_fakes:
+        slack = _open_fakes.pop()
+        while slack.pending:
+            queued = slack.pending[:]
+            slack.pending.clear()
+            # A test may have made a send fail on purpose; it already asserted that.
+            await asyncio.gather(*queued, return_exceptions=True)
+
+
 def fake_slack(monkeypatch: pytest.MonkeyPatch, factory: Factory) -> Slack:
     """Queue notice sends for :meth:`Slack.flush` and record DMs instead of posting them."""
     slack = Slack()
+    _open_fakes.append(slack)
 
     async def _open(_token: str, slack_id: str) -> str:
         return f"D-{slack_id}"

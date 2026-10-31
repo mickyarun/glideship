@@ -27,14 +27,24 @@ from app.schemas.boards.agent import (
     CardAgents,
     StageAgentRead,
     StageAgentWrite,
+    StageSkillRead,
 )
 from app.services.boards.access import BoardAccess, CardAccess
-from app.services.boards.agents import config, trigger
+from app.services.boards.agents import config, library, trigger
 
 router = APIRouter(tags=["boards"])
 
 STAGE_AGENTS = "/{key}/stages/{stage_id}/agents"
 CARD_AGENTS = "/{key}/cards/{number}/agents"
+
+
+@router.get("/{key}/skills", response_model=list[StageSkillRead])
+async def list_stage_skills(
+    access: BoardAccess = Depends(can.configure_agents_read),
+    db: AsyncSession = Depends(get_db),
+) -> list[StageSkillRead]:
+    """The org's skills a stage can run, the suggested board skills first (board admins)."""
+    return await library.stage_skills(db, access)
 
 
 @router.get(STAGE_AGENTS, response_model=list[StageAgentRead])
