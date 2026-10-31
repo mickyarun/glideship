@@ -24,7 +24,7 @@ import { makeBoardItem } from '@/components/boards/__tests__/fixtures'
 import { boardTestPlugins } from '@/components/boards/__tests__/mountHelpers'
 import BoardsNav from '@/components/layout/BoardsNav.vue'
 import { useBoardSwitcher } from '@/composables/useBoardSwitcher'
-import { SIDEBAR_RECENT_LIMIT, SIDEBAR_STARRED_LIMIT } from '@/constants/boards'
+import { ALL_BOARDS_ICON, SIDEBAR_RECENT_LIMIT, SIDEBAR_STARRED_LIMIT } from '@/constants/boards'
 import { boardsApi } from '@/services/boardsApi'
 import { useBoardsStore } from '@/stores/boards'
 
@@ -74,6 +74,14 @@ describe('BoardsNav', () => {
     expect(wrapper.find('.boards-nav__count').text()).toBe('12 boards')
     expect(wrapper.find('.boards-nav__count .d-sr-only').text()).toBe('boards')
     expect(api.list).not.toHaveBeenCalled()
+  })
+
+  it('gives "All boards" an icon of its own, not the Dashboard grid', async () => {
+    api.switcher.mockResolvedValue({ starred: [], recent: [], other: [], delivery: null })
+    const wrapper = await mountNav(3)
+    const allBoards = wrapper.find('a[href="/boards"]')
+    expect(allBoards.find(`.${ALL_BOARDS_ICON}`).exists()).toBe(true)
+    expect(ALL_BOARDS_ICON).not.toMatch(/dashboard|grid/)
   })
 
   it('lists Delivery first, with its key, for engineering members', async () => {

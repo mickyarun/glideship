@@ -129,3 +129,9 @@ export const DELIVERY_BOARD = {
   type: 'Delivery board',
   path: '/buds',
 } as const
+
+/**
+ * The sidebar's "All boards" icon: a row of boards, so it doesn't read as
+ * Dashboard's tiled grid (mdi-view-dashboard-outline).
+ */
+export const ALL_BOARDS_ICON = 'mdi-view-carousel-outline'

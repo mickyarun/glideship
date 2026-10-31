@@ -47,7 +47,7 @@
       </template>
     </v-list-item>
     <v-list-item
-      prepend-icon="mdi-view-grid-outline"
+      :prepend-icon="ALL_BOARDS_ICON"
       title="All boards"
       :to="{ name: 'boards' }"
       exact
@@ -78,6 +78,7 @@ import { computed, onMounted } from 'vue'
 import NavHeading from '@/components/layout/NavHeading.vue'
 import { useBoardSwitcher } from '@/composables/useBoardSwitcher'
 import {
+  ALL_BOARDS_ICON,
   DELIVERY_BOARD,
   SIDEBAR_RECENT_LIMIT,
   SIDEBAR_STARRED_LIMIT,
