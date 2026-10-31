@@ -22,6 +22,13 @@ both rules; restoring an archived card, moving a deleted stage's cards on,
 importing, and a BUD sent back to the board (which moves its card to the
 return stage) place cards without anyone choosing the stage, so they skip
 them.
+
+The same table says which entries start the stage's ``on_enter`` agent
+(:mod:`app.services.boards.agents.trigger`): a person moving the card there
+on its board or from another, or creating it there. A handover doesn't: the
+card's work has gone to its BUD, whose own stage agents take over. Nor do
+the placements above, so an import, a restore, a stage delete or a BUD sent
+back never starts an agent.
 """
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -93,10 +100,11 @@ class EntryRules:
 
     required_fields: bool
     open_checklist: bool
+    on_enter_agents: bool
 
 
-_CHOSEN = EntryRules(required_fields=True, open_checklist=True)
-_PLACED = EntryRules(required_fields=False, open_checklist=False)
+_CHOSEN = EntryRules(required_fields=True, open_checklist=True, on_enter_agents=True)
+_PLACED = EntryRules(required_fields=False, open_checklist=False, on_enter_agents=False)
 
 ENTRY_RULES: Final[Mapping[EntryCause, EntryRules]] = MappingProxyType(
     {
@@ -106,8 +114,11 @@ ENTRY_RULES: Final[Mapping[EntryCause, EntryRules]] = MappingProxyType(
         EntryCause.RESTORE: _PLACED,
         EntryCause.STAGE_DELETE: _PLACED,
         EntryCause.IMPORT: _PLACED,
-        # A card's first handover moves it to the handover stage like any move.
-        EntryCause.HANDOVER: _CHOSEN,
+        # A card's first handover moves it to the handover stage like any
+        # move, but starts no agent there: the work went to the BUD.
+        EntryCause.HANDOVER: EntryRules(
+            required_fields=True, open_checklist=True, on_enter_agents=False
+        ),
         # A BUD sent back puts its card in the return stage: nobody chose
         # the stage, and the card must reach it whatever it lacks.
         EntryCause.RETURN: _PLACED,

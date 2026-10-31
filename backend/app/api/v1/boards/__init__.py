@@ -17,6 +17,7 @@
 from fastapi import APIRouter, Depends
 
 from app.api.v1.boards import (
+    agents,
     attachments,
     boards,
     cards,
@@ -56,5 +57,6 @@ for part in (
     attachments,
     docs,
     handovers,
+    agents,
 ):
     router.include_router(part.router, prefix=PREFIX)

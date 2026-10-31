@@ -29,6 +29,7 @@ from app.core.deps import get_db, member_has_permission
 from app.core.permissions import WORKSPACE_ENGINEERING
 from app.core.security import hash_password, verify_password
 from app.database import AsyncSessionLocal
+from app.mcp.token_grants import InternalTokenGrant, scoped_grant
 from app.models.organization import Organization
 from app.models.user import User
 from app.repositories.organization import OrganizationRepository
@@ -85,6 +86,8 @@ class MCPAuthResult:
     org: Organization
     user: User | None = None
     token_id: uuid.UUID | None = None
+    # Set for a scoped server-minted token; it limits tools and cards.
+    grant: InternalTokenGrant | None = None
     # Plain copies of the ORM ids, taken while the request session is
     # healthy. A handler whose flush fails rolls the session back and
     # expires ``org`` and ``user``; reading ``org.id`` after that raises,
@@ -182,10 +185,11 @@ async def verify_mcp_token(
     """Verify the bearer token from an MCP request.
 
     Resolution order:
-    1. Internal tokens (in-memory, scan pipeline) → org only.
-       Expiry/scope checks are intentionally skipped — internal tokens
-       are server-minted, never leave the host, and represent trusted
-       full-access scope for the scan pipeline.
+    1. Internal tokens (in-memory, server-minted) → org, and a grant for
+       a scoped one. Org-wide tokens skip expiry/scope checks: they never
+       leave the host and carry the scan pipeline's trusted full access.
+       A scoped token (a board card run, :mod:`app.mcp.token_grants`)
+       expires and limits tools and cards.
     2. Per-user tokens (UserMCPToken table) → org + user.
        Rejected if ``expires_at`` has passed; ``last_used_at`` is
        updated in the background on success.
@@ -217,14 +221,16 @@ async def verify_mcp_token(
 
     org_repo = OrganizationRepository(db)
 
-    # 1. Check internal tokens first (fast, in-memory). No expiry check —
-    # internal tokens are server-minted for the scan pipeline.
+    # 1. Check internal tokens first (fast, in-memory). Org-wide ones never
+    # expire and carry no grant; scoped ones (a board card run) carry theirs.
     internal_org_id = _internal_tokens.get(token)
-    if internal_org_id is not None:
-        org = await org_repo.get_by_id(internal_org_id)
+    grant = None if internal_org_id is not None else scoped_grant(token)
+    owner_id = internal_org_id or (grant.org_id if grant else None)
+    if owner_id is not None:
+        org = await org_repo.get_by_id(owner_id)
         if org:
             logger.debug("mcp_auth_internal", org_id=str(org.id))
-            return MCPAuthResult(org=org)
+            return MCPAuthResult(org=org, grant=grant)
 
     # 2. Check per-user tokens — filter by prefix (indexed), then bcrypt.
     # Expired rows still go through bcrypt to keep the timing consistent

@@ -109,6 +109,7 @@ READS: dict[str, dict[str, str]] = {
     f"{CARD}/docs/{{kind}}/versions": {},
     f"{CARD}/docs/{{kind}}/versions/{{version}}": {},
     f"{CARD}/handovers": {},
+    f"{CARD}/agents": {},
 }
 
 # Editor routes that also need engineering permissions this editor lacks;
@@ -117,6 +118,14 @@ HANDOVER_EDITS = {
     ("POST", f"{CARD}/handovers"),
     ("POST", f"{CARD}/handovers/preview"),
     ("POST", f"{CARD}/handovers/{{handover_id}}/retry-start"),
+}
+
+# Editor routes that need the board's AI on, an agent or a waiting draft;
+# the test_board_agent_* suites cover them.
+AGENT_EDITS = {
+    ("POST", f"{CARD}/agents/{{agent_id}}/run"),
+    ("POST", f"{CARD}/docs/{{kind}}/drafts/{{version_id}}/accept"),
+    ("POST", f"{CARD}/docs/{{kind}}/drafts/{{version_id}}/reject"),
 }
 
 # In order: later rows rely on earlier ones (restore after archive, delete last).
@@ -164,7 +173,7 @@ def test_the_tables_cover_every_read_and_every_editor_route() -> None:
         and board_dep(r) is not None
         and board_dep(r).board_min_role is BoardMemberRole.EDITOR
     }
-    assert editor_routes == {(m, p) for m, p, _ in EDITS} | HANDOVER_EDITS
+    assert editor_routes == {(m, p) for m, p, _ in EDITS} | HANDOVER_EDITS | AGENT_EDITS
 
 
 async def test_viewers_read_and_editors_edit(

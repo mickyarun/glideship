@@ -35,6 +35,7 @@ from app.services.boards.constants import (
 from tests.api.route_walk import ServedRoute, depends_on, served_routes
 
 BOARD_API_MODULES = (
+    "agents",
     "attachments",
     "boards",
     "cards",
@@ -57,6 +58,8 @@ PREFIX = "/api/v1/boards"
 ADMIN_READS = {
     f"{PREFIX}/{{key}}/teams/options": BoardAction.MANAGE_MEMBERS,
     f"{PREFIX}/{{key}}/repos/options": BoardAction.MANAGE_REPOS,
+    # A stage's agent setup; a card's Run menu reads its own stage's agents.
+    f"{PREFIX}/{{key}}/stages/{{stage_id}}/agents": BoardAction.CONFIGURE_AGENTS,
 }
 ADMIN = BoardMemberRole.ADMIN
 

@@ -25,6 +25,12 @@ from app.models.backend_route_cache import BackendRouteCache
 from app.models.backlash import BacklashMatch, BacklashPlayerStats
 from app.models.base import Base, BaseModel
 from app.models.board import Board, BoardLabel, BoardStage
+from app.models.board_agent import (
+    BoardAgentRunStatus,
+    BoardAgentTrigger,
+    BoardCardAgentRun,
+    BoardStageAgent,
+)
 from app.models.board_card import (
     BoardCard,
     BoardCardAssignee,
@@ -183,7 +189,11 @@ __all__ = [
     "Base",
     "BaseModel",
     "Board",
+    "BoardAgentRunStatus",
+    "BoardAgentTrigger",
     "BoardAttachmentKind",
+    "BoardCardAgentRun",
+    "BoardStageAgent",
     "BoardCard",
     "BoardCardAssignee",
     "BoardCardAttachment",

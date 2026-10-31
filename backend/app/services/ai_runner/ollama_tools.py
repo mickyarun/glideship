@@ -152,6 +152,9 @@ async def dispatch_tool(
         # The model invented a tool. Tell it so, rather than failing the run.
         logger.warning("ollama_tool_not_found", tool=name)
         return json.dumps({"error": f"No such tool: {name}"})
+    if auth.grant is not None and not auth.grant.allows(name):
+        logger.warning("ollama_tool_outside_grant", tool=name)
+        return json.dumps({"error": f"This run may not call {name}"})
 
     try:
         if auth_handler is not None:

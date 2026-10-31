@@ -32,6 +32,7 @@ import structlog
 
 from app.database import AsyncSessionLocal
 from app.mcp.auth import MCPAuthResult
+from app.mcp.token_grants import scoped_grant
 from app.repositories.organization import OrganizationRepository
 from app.services.ai_runner.ollama_chat import OllamaChatError, chat
 from app.services.ai_runner.ollama_models import (
@@ -190,7 +191,8 @@ class OllamaProvider:
                 )
             # Handlers read their org from this, never from a token — so there
             # is nothing to mint, and no cross-process token to go stale.
-            auth = MCPAuthResult(org=org, user=None)
+            # A scoped run token (a board card run) keeps its grant in-process.
+            auth = MCPAuthResult(org=org, user=None, grant=scoped_grant(config.mcp.mcp_token))
 
             for _turn in range(turns):
                 message = await chat(

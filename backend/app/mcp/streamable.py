@@ -337,6 +337,9 @@ async def _dispatch(
         tool_args = params.get("arguments") or {}
         if not isinstance(tool_name, str) or tool_name not in REMOTE_TOOLS:
             raise _RPCError(_METHOD_NOT_FOUND, f"Tool not available remotely: {tool_name!r}")
+        # A scoped server-minted token (a board card run) keeps its grant here too.
+        if auth.grant is not None and not auth.grant.allows(tool_name):
+            raise _RPCError(_METHOD_NOT_FOUND, f"Tool not in this token's grant: {tool_name!r}")
         # Import locally to avoid a circular import with server.py's
         # TOOL_HANDLERS dict (server.py imports this module to mount it).
         from app.mcp.server import AUTH_TOOL_HANDLERS, TOOL_HANDLERS

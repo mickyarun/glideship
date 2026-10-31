@@ -35,6 +35,7 @@ from app.repositories.board_card_summary import BoardCardSummaryRepository, Card
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.card import CardDetail, CardMove
 from app.services.boards.access import CardAccess
+from app.services.boards.agents.trigger import queue_entry_agents
 from app.services.boards.card_checks import check_open
 from app.services.boards.card_place import STALE_NEIGHBOURS, place_card
 from app.services.boards.card_timing import enter_category
@@ -103,6 +104,9 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
             from_stage=from_stage,
             to_stage=to_stage,
         )
+        await queue_entry_agents(
+            db, board=access.board, card=card, stage=to_stage, cause=EntryCause.MOVE
+        )
     detail = await card_detail(
         db, access.board, card, known=known, opens_buds=opens_buds(access.perms)
     )
@@ -143,6 +147,9 @@ async def set_card_archived(db: AsyncSession, target: CardAccess, *, archived: b
             changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(stage.id))
         await enter_stage(stage, cause=EntryCause.RESTORE)
         card.archived_at, card.position = None, placement.position
+        await queue_entry_agents(
+            db, board=access.board, card=card, stage=stage, cause=EntryCause.RESTORE
+        )
         event, socket = BoardCardEventType.RESTORED, BoardSocketEvent.CARD_RESTORED
     await record_event(db, card, event, actor_id=access.user_id)
     detail = await card_detail(db, access.board, card, opens_buds=opens_buds(access.perms))

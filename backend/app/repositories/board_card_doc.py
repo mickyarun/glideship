@@ -104,3 +104,54 @@ class BoardCardDocRepository(BaseRepository[BoardCardDoc]):
             .execution_options(synchronize_session="fetch")
         )
         await self._db.execute(stmt)
+
+    async def drafts(self, card_id: uuid.UUID) -> list[BoardCardDoc]:
+        """The card's ``pending_review`` versions, newest first."""
+        stmt = self._scoped(
+            select(BoardCardDoc)
+            .where(
+                BoardCardDoc.card_id == card_id,
+                BoardCardDoc.state == BoardCardDocState.PENDING_REVIEW,
+            )
+            .order_by(BoardCardDoc.created_at.desc(), BoardCardDoc.version.desc())
+        )
+        return list((await self._db.execute(stmt)).scalars().all())
+
+    async def get_draft(
+        self, card_id: uuid.UUID, kind: BoardCardDocKind, doc_id: uuid.UUID
+    ) -> BoardCardDoc | None:
+        """One ``pending_review`` version of one kind, if it is still waiting."""
+        stmt = self._scoped(
+            select(BoardCardDoc).where(
+                BoardCardDoc.id == doc_id,
+                BoardCardDoc.card_id == card_id,
+                BoardCardDoc.kind == kind,
+                BoardCardDoc.state == BoardCardDocState.PENDING_REVIEW,
+            )
+        )
+        return (await self._db.execute(stmt)).scalar_one_or_none()
+
+    async def supersede_drafts(self, card_id: uuid.UUID, kind: BoardCardDocKind) -> None:
+        """Retire the kind's waiting drafts; a newer draft replaces them."""
+        stmt = (
+            update(BoardCardDoc)
+            .where(
+                BoardCardDoc.org_id == self._org_id,
+                BoardCardDoc.card_id == card_id,
+                BoardCardDoc.kind == kind,
+                BoardCardDoc.state == BoardCardDocState.PENDING_REVIEW,
+            )
+            .values(state=BoardCardDocState.SUPERSEDED)
+            .execution_options(synchronize_session="fetch")
+        )
+        await self._db.execute(stmt)
+
+    async def written_by_run(self, run_id: uuid.UUID) -> BoardCardDoc | None:
+        """The newest version a run wrote, if it wrote one."""
+        stmt = self._scoped(
+            select(BoardCardDoc)
+            .where(BoardCardDoc.agent_run_id == run_id)
+            .order_by(BoardCardDoc.version.desc())
+            .limit(1)
+        )
+        return (await self._db.execute(stmt)).scalar_one_or_none()

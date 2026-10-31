@@ -63,7 +63,15 @@ class BoardCardDoc(BaseModel):
         pg_enum(BUDEditSource, "bud_edit_source", create_type=False), nullable=False
     )
     # The stage-agent run that wrote this version, when one did.
-    agent_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    agent_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "board_card_agent_runs.id",
+            ondelete="SET NULL",
+            name="fk_board_card_docs_agent_run",
+        ),
+        nullable=True,
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

@@ -43,6 +43,7 @@ JOB_JIRA_ENRICH = "jira_enrich"
 # Board imports, for every source (Trello first).
 JOB_IMPORT_DISCOVER = "import_discover"
 JOB_IMPORT_RUN = "import_run"
+JOB_BOARD_AGENT_RUN = "board_agent_run"
 JOB_SCAN = "scan"  # Future
 JOB_AGENT_RUN = "agent_run"  # Future
 JOB_REPO_BULK_ONBOARD = "repo_bulk_onboard"

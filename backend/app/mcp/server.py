@@ -31,6 +31,7 @@ from app.core.deps import get_db
 from app.mcp.audit import emit_audit
 from app.mcp.auth import MCPAuthResult, verify_mcp_token
 from app.mcp.handlers_agent_activity import handle_agent_activity
+from app.mcp.handlers_board_cards import CARD_TOOL_DEFINITIONS, CARD_TOOL_HANDLERS
 from app.mcp.handlers_bud import (
     handle_get_bud_context,
     handle_write_bud,
@@ -82,6 +83,7 @@ from app.mcp.synthesis_queue import (  # noqa: F401
     remove_from_queue,
     set_synthesis_queue,
 )
+from app.mcp.token_grants import require_tool_grant
 from app.schemas.agent_activity import (
     AgentActivityHookRequest,
     AgentActivityHookResponse,
@@ -1007,6 +1009,7 @@ MCP_TOOLS: list[MCPToolDefinition] = [
         },
     ),
 ]
+MCP_TOOLS += [MCPToolDefinition(**tool) for tool in CARD_TOOL_DEFINITIONS]
 
 
 # --- Route handlers ---
@@ -1061,6 +1064,22 @@ async def call_tool(
     # throttled (otherwise the 404 path is free-to-spam).
     try:
         await enforce_rate_limit(request=request, auth=auth, tool_name=tool_name)
+    except HTTPException as exc:
+        emit_audit(
+            request=request,
+            auth=auth,
+            org_id=auth.org_id,
+            token_id=auth.token_id,
+            tool_name=tool_name,
+            transport="http",
+            params=body.params,
+            status_code=exc.status_code,
+        )
+        raise
+
+    # A scoped token (a board card run) may call only the tools it was granted.
+    try:
+        require_tool_grant(auth, tool_name)
     except HTTPException as exc:
         emit_audit(
             request=request,
@@ -1177,6 +1196,8 @@ AUTH_TOOL_HANDLERS: dict[str, Any] = {
     "write_bud": handle_write_bud,
     # Needs the caller identity to attribute the design_updated event.
     "write_bud_design": handle_write_bud_design,
+    # Need the token's card grant: only a board card run can use them.
+    **CARD_TOOL_HANDLERS,
 }
 
 

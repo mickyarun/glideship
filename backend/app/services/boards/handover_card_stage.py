@@ -36,6 +36,7 @@ from app.repositories.board_card import BoardCardRepository
 from app.repositories.board_card_summary import BoardCardSummaryRepository, CardSummaryRow
 from app.repositories.board_stage import BoardStageRepository
 from app.services.boards.access import CardAccess
+from app.services.boards.agents.trigger import queue_entry_agents
 from app.services.boards.card_checks import check_open
 from app.services.boards.card_place import STALE_NEIGHBOURS, place_card
 from app.services.boards.card_timing import enter_category
@@ -118,6 +119,10 @@ async def move_on_first_handover(
     card.position = placement.position
     card.stage_id = to_stage.id
     enter_category(card, to_stage.category, datetime.now(UTC))
+    # ENTRY_RULES: a handover starts no agent on the handover stage.
+    await queue_entry_agents(
+        db, board=access.board, card=card, stage=to_stage, cause=EntryCause.HANDOVER
+    )
     return CardStage(from_stage=from_stage, to_stage=to_stage, rebalanced=placement.rebalanced)
 
 

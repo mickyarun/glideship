@@ -22,7 +22,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
-from app.models.board_enums import BoardMemberRole, StageRequiredField
+from app.models.agent_skill import AgentType
+from app.models.board_enums import BoardCardDocKind, BoardMemberRole, StageRequiredField
 from app.models.bud import BUDStatus
 
 BOARD_KEY_MIN_LENGTH: Final = 2
@@ -83,6 +84,36 @@ HANDOVER_LANDING_STATUSES: Final = tuple(_BUD_ORDER[: _BUD_ORDER.index(BUDStatus
 # BUD ("Sent back from BUD-012: "), so it leaves room for that lead.
 HANDOVER_RETURN_LEAD_MAX_CHARS: Final = 100
 HANDOVER_RETURN_REASON_MAX_CHARS: Final = COMMENT_MAX_CHARS - HANDOVER_RETURN_LEAD_MAX_CHARS
+
+# Stage agents. Any skill in the org's library can run on a stage; these
+# two are the suggested defaults the stage picker offers first.
+BOARD_AGENT_TYPES: Final = (AgentType.BOARD_PRD, AgentType.BOARD_DESIGN)
+# The document a skill of each type writes; any other type writes notes.
+AGENT_OUTPUT_KINDS: Final = MappingProxyType(
+    {
+        AgentType.BOARD_PRD: BoardCardDocKind.PRD,
+        AgentType.BOARD_DESIGN: BoardCardDocKind.DESIGN_BRIEF,
+        AgentType.BUD: BoardCardDocKind.PRD,
+        AgentType.DESIGN: BoardCardDocKind.DESIGN_BRIEF,
+    }
+)
+DEFAULT_AGENT_OUTPUT_KIND: Final = BoardCardDocKind.NOTES
+# A card run's token always covers these two, for its one card.
+WRITE_CARD_DOC_TOOL: Final = "write_card_doc"
+GET_CARD_CONTEXT_TOOL: Final = "get_card_context"
+CARD_RUN_TOOLS: Final = frozenset({WRITE_CARD_DOC_TOOL, GET_CARD_CONTEXT_TOOL})
+# Org-wide read tools a card run's skill may also use when it declares them.
+# Nothing here writes, so a BUD skill picked for a stage can't change BUDs.
+CARD_RUN_READ_TOOLS: Final = frozenset(
+    {
+        "get_features",
+        "check_feature_exists",
+        "search_bugs",
+        "get_team_context",
+        "list_design_systems",
+        "get_design_system",
+    }
+)
 
 
 class BoardAction(StrEnum):

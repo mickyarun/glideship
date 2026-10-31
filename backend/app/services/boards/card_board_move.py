@@ -25,7 +25,9 @@ Locks: the kept repository's link, then both stages in id order, then the
 card, then the kept labels, then the target board's number counter (late,
 as a create takes it). Each person may move only
 ``BoardsConfig.move_board_limit`` cards per window. Nobody is notified:
-removed assignees aren't told, and the others hear nothing new.
+removed assignees aren't told, and the others hear nothing new. An agent
+run going on the card is canceled (its job stopped after the commit), and
+the target stage's ``on_enter`` agent may start.
 """
 
 import uuid
@@ -42,6 +44,8 @@ from app.repositories.board_repo import BoardRepoRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.card import CardDetail, CardMoveBoard
 from app.services.boards.access import BoardAccess, CardAccess, resolve_board_access
+from app.services.boards.agents.runs import cancel_active_run
+from app.services.boards.agents.trigger import queue_entry_agents
 from app.services.boards.card_carry import Carry, carry_over, pick_stage
 from app.services.boards.card_checks import check_open
 from app.services.boards.card_place import STALE_NEIGHBOURS
@@ -103,8 +107,13 @@ async def move_to_board(db: AsyncSession, source: CardAccess, body: CardMoveBoar
         facts=partial(_facts, db, access, card.id, carry),
         confirm_open_checklist=body.confirm_open_checklist,
     )
+    # A run going on the card stops: its draft would land on another board.
+    await cancel_active_run(db, card)
     move = Relocation(access.board, target.board, from_stage, to_stage, carry)
     placed = await relocate_card(db, card, move, actor_id=access.user_id)
+    await queue_entry_agents(
+        db, board=target.board, card=card, stage=to_stage, cause=EntryCause.MOVE_BOARD
+    )
     detail = await card_detail(db, target.board, card, opens_buds=opens_buds(target.perms))
     left = BoardChanges.of(access)
     # Only the id: the target may be a board some of the source's

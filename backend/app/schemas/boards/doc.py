@@ -55,7 +55,11 @@ class DocVersionRead(BaseModel):
     state: BoardCardDocState
     version: int
     source: BUDEditSource
+    # The stage-agent run that wrote it, and who accepted or rejected a draft.
+    agent_run_id: uuid.UUID | None = None
     created_by: uuid.UUID | None
+    reviewed_by: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
     created_at: datetime
 
 
@@ -73,6 +77,11 @@ class DocVersionPage(BaseModel):
 
 
 class DocList(BaseModel):
-    """The current version of each document on a card."""
+    """The current version of each document on a card, and the drafts awaiting review.
+
+    ``drafts`` are ``pending_review`` versions an agent wrote, newest first;
+    none of them is part of the card until someone accepts it.
+    """
 
     items: list[DocRead]
+    drafts: list[DocRead] = []

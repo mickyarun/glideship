@@ -79,16 +79,34 @@ async def stage_card_notice(
     ``category``, so each kind of card notice can be muted on its own.
     """
     wanted = user_ids - {access.user_id}
-    repo = BoardAccessRepository(db, org_id=access.org_id)
-    recipients = await repo.users_with_access(access.board.id, wanted)
+    if not wanted:
+        return None
+    lead = f"{await _actor_name(db, access)} {verb}"
+    return await stage_board_card_notice(
+        db, access.board, card, wanted, kind=kind, category=category, title=title, lead=lead
+    )
+
+
+async def stage_board_card_notice(
+    db: AsyncSession,
+    board: Board,
+    card: BoardCard,
+    user_ids: set[uuid.UUID],
+    *,
+    kind: NotificationType,
+    category: NotificationCategory,
+    title: str,
+    lead: str,
+) -> Notice | None:
+    """Tell those of ``user_ids`` who can still open the board "<lead> <card>"; None if nobody."""
+    repo = BoardAccessRepository(db, org_id=card.org_id)
+    recipients = await repo.users_with_access(board.id, user_ids)
     if not recipients:
         return None
-    board = access.board
-    lead = f"{await _actor_name(db, access)} {verb}"
     key = card_key(board.key, card.number)
     return stage_notice(
         db,
-        org_id=access.org_id,
+        org_id=card.org_id,
         user_ids=recipients,
         kind=kind,
         category=category,

@@ -1684,6 +1684,103 @@ nothing changes on the card until then. The AI never moves a card and never hand
   covers user flows, screens, states and edge cases, as a starting point for a designer. At
   handover it travels into the BUD, so the BUD's design stage starts from it.
 
+### As built (backend): the engine
+
+- **Shared executor.** `services/agents/executor.execute_agent_run(job_id, run, subject)` runs
+  every agent job: load, prompt, MCP grant, mark started, `ai_runner.run_agent_for_org_id`,
+  review (the BUD side's git-auth retry), then save the output or record the failure; a cancel
+  rolls back, records and re-raises. `AgentSubject` (`services/agents/subject.py`) is the
+  protocol. The BUD handler is `BudAgentSubject` (`bud_agent_handler.py`, with
+  `bud_agent_registry.py` and `bud_agent_records.py`); the BUD agent suites ran unchanged
+  (unit 4149 passed before and after; agent integration 73 passed + 1 xfailed before and after).
+  The card side is `CardAgentSubject` (`services/boards/agents/subject.py`).
+- **Tables.** `board_stage_agents(org_id, board_id, stage_id, skill_id, execution_order, trigger,
+  enabled, created_by)`: composite keys to the board and to `board_stages(id, board_id)`, unique
+  `(stage_id, execution_order)`, partial unique `(stage_id) WHERE trigger = 'on_enter'`.
+  `board_card_agent_runs(org_id, card_id, stage_id, stage_agent_id, skill_id, trigger, status,
+  job_id, attempt, result_summary, error_message, triggered_by, started_at, finished_at)`: card
+  composite key, the rest `SET NULL`, partial unique `(card_id) WHERE status IN ('pending',
+  'running')`. `board_card_docs.agent_run_id` now references the run (`SET NULL`). PG enums
+  `board_agent_trigger` (`on_enter`, `manual`) and `board_agent_run_status` (`pending`,
+  `running`, `completed`, `failed`, `canceled`); `agent_type` gains `boardPrd` and `boardDesign`
+  (`ALTER TYPE` in an autocommit block). One migration, `36159a3584f1`.
+- **Skills.** Any row of the org's `agent_skills` may sit on a stage. `BOARD_AGENT_TYPES` lists
+  the two suggested types; `AGENT_SKILL_MAP` names their seed slugs (`board-prd-writer`,
+  `board-design-helper`), whose `.md` files come with the skills. The document a skill writes is
+  `AGENT_OUTPUT_KINDS[agent_type]` (`boardPrd`/`bud` → `prd`, `boardDesign`/`design` →
+  `design_brief`, anything else → `notes`).
+- **Which entries start `on_enter` agents** (the `on_enter_agents` column of `ENTRY_RULES`):
+
+  | Cause | Entry rules | Starts `on_enter` |
+  |---|---|---|
+  | `move` (drag, Move to…) | yes | yes |
+  | `move_board` | yes | yes (the target stage's) |
+  | `create` | yes | yes |
+  | `handover` | yes | **no**: the work went to the BUD, whose stage agents take over |
+  | `restore`, `stage_delete`, `import`, `return` | no | no |
+
+  Staying in the same stage isn't an entry. With AI off, no switched-on `on_enter` agent, or a run
+  already active, the move goes ahead and nothing starts (`INSERT … ON CONFLICT DO NOTHING`
+  against the partial index). The run row is written with the move; its job is enqueued after the
+  commit (`call_after_commit`), so the job always finds it. A full queue fails the run with "Too
+  many agent runs are queued" (Retry restarts it); from the Run button that's 503 with
+  `Retry-After` (`BOARDS_AGENT_BUSY_RETRY_AFTER_SECONDS`). A restart fails interrupted runs
+  (`recover_stuck_board_agent_runs`, startup step 6d).
+- **Moving between boards** cancels the card's active run in the same transaction (status
+  `canceled`, "The card moved to another board…") and `cancel_job` runs after the commit; a run
+  canceled meanwhile saves nothing.
+- **API** (under `/api/v1/boards`):
+  - `GET /{key}/stages/{stage_id}/agents` (admin, `configure_agents`) and `PUT` the same path with
+    a body of `[{skill_id, trigger, enabled, order}]` (at most `BOARDS_STAGE_AGENTS_MAX`), which
+    replaces the list and returns `[{id, stage_id, skill_id, skill_name, skill_slug, agent_type,
+    output_kind, trigger, enabled, order}]` in order. 422 for two `on_enter` agents or a repeated
+    order, 422 `SKILL_NOT_IN_LIBRARY {skill_ids}` for a skill outside the org, 404 for a stage on
+    another board.
+  - `GET /{key}/cards/{number}/agents` (viewer): `{ai_enabled, agents (the card stage's
+    switched-on agents), runs (latest BOARDS_AGENT_RUNS_PAGE_SIZE, newest first), active}`.
+  - `POST /{key}/cards/{number}/agents/{agent_id}/run` (editor, `run_agent`): 202 `{job_id, run}`
+    (also Retry; `attempt` counts the agent's runs on the card). 409 `AI_DISABLED`, 409
+    `AGENT_RUN_ACTIVE {run_id}`, 404 for an agent on another board, 422 when the agent is off or
+    belongs to another stage, 409 for an archived card.
+  - `GET /{key}/cards/{number}/docs` now returns `{items, drafts}`; versions carry
+    `agent_run_id`, `reviewed_by`, `reviewed_at`.
+  - `POST …/docs/{kind}/drafts/{version_id}/accept` (editor, `review_draft`) with `{base_version,
+    body_md?}`: a new current version (source `agent`, or `ui` when edited), the draft marked
+    `superseded` with its reviewer; 409 when the current version isn't `base_version`, 404 when
+    the draft was already reviewed or replaced. `…/reject`: the draft becomes `rejected`, the card
+    keeps its current version. A newer draft of a kind retires the waiting one. `has_prd` follows
+    only current versions.
+- **Board AI switch:** `PATCH /boards/{key}` `ai_enabled` (admin). A run queued before it was
+  switched off is canceled when its job starts.
+- **Run job** `board_agent_run` (`JOB_BOARD_AGENT_WORKERS`, default 2), payload `{org_id,
+  run_id}`. Deadline: the skill's `timeout_seconds`, else `BOARDS_AGENT_TIMEOUT_SECONDS` (600);
+  turns: the skill's, else `BOARDS_AGENT_MAX_TURNS` (20). No repository checkout yet; the prompt
+  is the skill's prompt, then the card context as JSON (card, stage, current docs, the newest
+  `BOARDS_AGENT_CONTEXT_COMMENTS` comments, checklist, attachment metadata) and the board's linked
+  repositories by name.
+- **Scoped MCP grant** (`app/mcp/token_grants.py`): `InternalTokenGrant(org_id, tools, card_id,
+  run_id, expires_at)`. A card run's token covers `write_card_doc`, `get_card_context`, and the
+  skill's declared tools that are in `CARD_RUN_READ_TOOLS` (read-only org tools); it expires at
+  the deadline plus `BOARDS_AGENT_TOKEN_GRACE_SECONDS` and is revoked when the run ends.
+  `/mcp/tools/*` refuses other tools (403, audited), `/mcp/sse` refuses them too, and the
+  in-process tool loop honours the grant. Org-wide internal tokens are unchanged.
+- **MCP tools** (not in `REMOTE_TOOLS`): `get_card_context({card_id|card_key})` and
+  `write_card_doc({card_id|card_key, kind, content_md})`, which saves a `pending_review` draft
+  (never the current version). Both refuse (403) a token with no card grant, another card (by id,
+  key or another org's id), or a run that is no longer `running`.
+- **Output fallback.** When the run wrote no draft through the tool, a non-empty reply is saved as
+  a draft of the skill's kind; an empty one fails the run ("The agent finished without writing a
+  draft.").
+- **Events.** `board:<id>`: `agent_run_updated {card_id, run}` on queued, running, completed,
+  failed and canceled; `doc_updated {card_id, kind, version, state}` (`state` is `current`,
+  `pending_review` or `rejected`); `stage_agents_changed {stage_id}` when an admin replaces a
+  stage's agents. `agent_activity:<org_id>`: `skill_invoked`, `skill_completed`, `skill_failed`
+  with the run id as `task_id` and `card_key` only for org-visible boards. The card's history gets
+  an `ai_run` event (`actor_id` null; detail `run_id`, `skill`, `status`, the summary or error).
+- **Notices** after commit to the card's assignees who can still open the board:
+  `board_ai_draft` ("An AI draft is ready to review") or `board_ai_failed` ("An AI run failed"),
+  category `board_cards`. Runs award no XP or SP.
+
 ### Building WordPress pages for SEO
 
 A skill that drafts and publishes WordPress pages for SEO cards gets its own follow-up plan. The

@@ -63,6 +63,9 @@ class AgentType(StrEnum):
     DESIGN = "design"
     SLACK_TRIAGE = "slackTriage"
     SLACK_FEATURE_QA = "slackFeatureQa"
+    # Board card agents: the PRD writer and the design helper.
+    BOARD_PRD = "boardPrd"
+    BOARD_DESIGN = "boardDesign"
 
 
 class AgentSkill(BaseModel):

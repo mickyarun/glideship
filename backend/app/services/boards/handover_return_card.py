@@ -36,6 +36,7 @@ from app.models.board_enums import BoardStatus
 from app.repositories.board import BoardRepository
 from app.repositories.board_card import BoardCardRepository
 from app.repositories.board_stage import BoardStageRepository
+from app.services.boards.agents.trigger import queue_entry_agents
 from app.services.boards.card_place import STALE_NEIGHBOURS, place_card
 from app.services.boards.card_timing import enter_category
 from app.services.boards.comment_service import post_comment
@@ -101,6 +102,10 @@ async def move_to_return_stage(db: AsyncSession, locked: ReturnCard) -> ReturnMo
     card.position = placement.position
     card.stage_id = to_stage.id
     enter_category(card, to_stage.category, datetime.now(UTC))
+    # ENTRY_RULES: a BUD sent back starts no agent on the return stage.
+    await queue_entry_agents(
+        db, board=locked.board, card=card, stage=to_stage, cause=EntryCause.RETURN
+    )
     return ReturnMove(to_stage=to_stage, rebalanced=placement.rebalanced)
 
 

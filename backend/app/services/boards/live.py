@@ -65,9 +65,16 @@ class BoardSocketEvent(StrEnum):
     # A BUD the card was handed over to changed status: ``card_id`` only;
     # open boards refetch the card's summary for its chips.
     CARD_HANDOVERS_CHANGED = "card_handovers_changed"
+    # ``state`` says which: ``current`` (saved or accepted), ``pending_review``
+    # (an agent's draft), ``rejected``.
     DOC_UPDATED = "doc_updated"
+    # A stage agent's run on a card was queued, started, finished, failed or
+    # was canceled: the ``run`` read.
+    AGENT_RUN_UPDATED = "agent_run_updated"
     STAGE_CHANGED = "stage_changed"
     STAGE_REORDERED = "stage_reordered"
+    # A stage's agents were replaced: ``stage_id``; settings tabs refetch.
+    STAGE_AGENTS_CHANGED = "stage_agents_changed"
     LABEL_CHANGED = "label_changed"
     MEMBER_CHANGED = "member_changed"
     # Who can open the board changed (a member, a team's role or a team's

@@ -12,14 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A card's documents, edited by hand: every save is a new current version.
+"""A card's documents: every save is a new current version.
 
+Saves come from people editing by hand, restoring an old version, or
+accepting an agent's draft (:mod:`app.services.boards.agents.drafts`).
 Writes lock the card row first, so two saves can't claim the same version
 number. Restoring copies an old version's text into a new current version;
 history is never rewritten. A version of only whitespace is refused, so a
 card "has" a document exactly when it has a current version. Every save
 announces ``doc_updated`` and the card's fresh summary (``card_updated``).
 """
+
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,11 +47,24 @@ DOC_CHANGED = "This document changed since you opened it; reload it and try agai
 DOC_BLANK = "A document can't be empty; write something before saving it."
 
 
+@dataclass(frozen=True)
+class NewVersion:
+    """What a save writes: the text, where it came from, and what its event records."""
+
+    body_md: str
+    source: BUDEditSource
+    detail: dict[str, object] = field(default_factory=dict)
+    agent_run_id: uuid.UUID | None = None
+    reviewed: bool = False
+
+
 async def list_docs(db: AsyncSession, target: CardAccess) -> DocList:
-    """The current version of each document on the card."""
+    """The current version of each document on the card, and the drafts awaiting review."""
     repo = BoardCardDocRepository(db, org_id=target.access.org_id)
+    card_id = target.card.id
     return DocList(
-        items=[DocRead.model_validate(d) for d in await repo.current_docs(target.card.id)]
+        items=[DocRead.model_validate(d) for d in await repo.current_docs(card_id)],
+        drafts=[DocRead.model_validate(d) for d in await repo.drafts(card_id)],
     )
 
 
@@ -88,7 +107,8 @@ async def write_doc(
     base_version: int | None,
 ) -> DocRead:
     """Save ``body_md`` as the new current version; the old one is superseded."""
-    return await _new_current(db, target, kind, body_md, base_version, restored_from=None)
+    new = NewVersion(body_md=body_md, source=BUDEditSource.UI)
+    return await save_current(db, target, kind, new, base_version)
 
 
 async def restore_version(
@@ -104,22 +124,29 @@ async def restore_version(
     old = await repo.get_version(target.card.id, kind, version)
     if old is None:
         raise BoardItemNotFoundError(VERSION_NOT_FOUND)
-    return await _new_current(db, target, kind, old.body_md, base_version, restored_from=version)
+    new = NewVersion(
+        body_md=old.body_md, source=BUDEditSource.REVERT, detail={"restored_from": version}
+    )
+    return await save_current(db, target, kind, new, base_version)
 
 
-async def _new_current(
+async def save_current(
     db: AsyncSession,
     target: CardAccess,
     kind: BoardCardDocKind,
-    body_md: str,
+    new: NewVersion,
     base_version: int | None,
-    *,
-    restored_from: int | None,
 ) -> DocRead:
+    """Write ``new`` as the kind's current version, record it, announce it and commit.
+
+    Raises:
+        BoardRuleError: The text is blank.
+        BoardConflictError: The current version isn't ``base_version`` any more.
+    """
     access, card = target.access, target.card
     await BoardCardRepository(db, org_id=access.org_id).lock(card)
     check_open(card)
-    if not body_md.strip():
+    if not new.body_md.strip():
         raise BoardRuleError(DOC_BLANK)
     repo = BoardCardDocRepository(db, org_id=access.org_id)
     current = await repo.current(card.id, kind)
@@ -134,21 +161,26 @@ async def _new_current(
             kind=kind,
             state=BoardCardDocState.CURRENT,
             version=version,
-            body_md=body_md,
-            source=BUDEditSource.REVERT if restored_from is not None else BUDEditSource.UI,
+            body_md=new.body_md,
+            source=new.source,
+            agent_run_id=new.agent_run_id,
             created_by=access.user_id,
+            reviewed_by=access.user_id if new.reviewed else None,
+            reviewed_at=datetime.now(UTC) if new.reviewed else None,
         )
     )
-    detail: dict[str, object] = {"kind": kind.value, "version": version}
-    if restored_from is not None:
-        detail["restored_from"] = restored_from
+    detail: dict[str, object] = {"kind": kind.value, "version": version, **new.detail}
     await record_event(
         db, card, BoardCardEventType.DOC_UPDATED, actor_id=access.user_id, detail=detail
     )
     read = DocRead.model_validate(doc)
     changes = BoardChanges.of(access)
     changes.emit(
-        BoardSocketEvent.DOC_UPDATED, card_id=str(card.id), kind=kind.value, version=version
+        BoardSocketEvent.DOC_UPDATED,
+        card_id=str(card.id),
+        kind=kind.value,
+        version=version,
+        state=BoardCardDocState.CURRENT.value,
     )
     # The summary's has_prd follows the current PRD.
     await changes.card_summary(db, access.board, card)
