@@ -15,12 +15,14 @@
  -->
 
 <!-- Upload a Trello board export: drop the .json file here or choose it.
-     The size cap comes from the server's limits; without one the line
-     leaves the number out rather than guess. -->
+     A click anywhere on the zone opens the file picker; from the keyboard
+     that's its Choose file button. The size cap comes from the server's
+     limits; without one the line leaves the number out rather than guess. -->
 <template>
   <div
     class="drop-zone"
-    :class="{ 'drop-zone--over': over }"
+    :class="{ 'drop-zone--over': over, 'drop-zone--off': disabled }"
+    @click="pick"
     @dragover.prevent="over = !disabled"
     @dragleave="over = false"
     @drop.prevent="drop"
@@ -35,7 +37,7 @@
       class="drop-zone__pick"
       :loading="busy"
       :disabled="disabled"
-      @click="input?.click()"
+      @click.stop="pick"
     >
       Choose file
     </v-btn>
@@ -46,6 +48,7 @@
       class="d-sr-only"
       tabindex="-1"
       aria-label="Trello board export (.json)"
+      @click.stop
       @change="picked"
     >
     <p class="drop-zone__note">Works for anyone. Only the last 1,000 actions come with it; attachments as links.</p>
@@ -60,6 +63,10 @@ const emit = defineEmits<{ file: [file: File] }>()
 
 const input = ref<HTMLInputElement | null>(null)
 const over = ref(false)
+
+function pick(): void {
+  if (!props.disabled && !props.busy) input.value?.click()
+}
 
 function send(file: File | undefined | null): void {
   if (file && !props.disabled) emit('file', file)
@@ -87,6 +94,10 @@ function drop(event: DragEvent): void {
   border-radius: 10px;
   border: 1px dashed rgb(var(--v-theme-primary));
   background: rgba(var(--v-theme-primary), 0.06);
+  cursor: pointer;
+}
+.drop-zone--off {
+  cursor: default;
 }
 .drop-zone--over {
   background: rgba(var(--v-theme-primary), 0.14);

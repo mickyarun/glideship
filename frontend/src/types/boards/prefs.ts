@@ -100,6 +100,6 @@ export interface BoardLimits {
   stage_page_size: number
   recent_done_days: number
   attachments: { max_file_mb: number; max_files: number; accepted_extensions: string[] }
-  /** The largest board export an import takes, when the server says. */
-  import_max_upload_mb?: number
+  /** The largest board export an upload import takes, in whole MB. */
+  import_max_upload_mb: number
 }

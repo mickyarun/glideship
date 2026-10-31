@@ -29,9 +29,16 @@ export interface WizardProblem {
   retry: boolean
 }
 
-const TITLES: Record<number, string> = {
+/** Titles for a refused request while choosing a source (creating an import). */
+const SOURCE_TITLES: Record<number, string> = {
   413: 'That file is too large',
   429: 'Too many imports started',
+  503: 'Imports are busy',
+}
+
+/** Titles once an import exists (saving its review, starting it). */
+const RUN_TITLES: Record<number, string> = {
+  429: 'Try again shortly',
   503: 'Imports are busy',
 }
 
@@ -58,10 +65,18 @@ export function wizardSubtitle(session: ImportSessionRead | null): string | unde
   return `"${found.board_name}" from Trello · ${how} · ${sizes}`
 }
 
+/** An import stopped part-way: its own step says why, so no separate callout. */
+export const isStopped = (session: ImportSessionRead | null, step: ImportStep) =>
+  step === 'import' && session?.status === 'failed'
+
 export function wizardProblem(
   failure: ImportFailure | null, session: ImportSessionRead | null, step: ImportStep,
 ): WizardProblem | null {
-  if (failure) return { title: (failure.status && TITLES[failure.status]) || '', text: failure.message, retry: false }
+  if (isStopped(session, step)) return null
+  if (failure) {
+    const titles = step === 'source' ? SOURCE_TITLES : RUN_TITLES
+    return { title: (failure.status && titles[failure.status]) || '', text: failure.message, retry: false }
+  }
   if (session?.status === 'failed' && step === 'source') {
     return {
       title: "The board couldn't be read",

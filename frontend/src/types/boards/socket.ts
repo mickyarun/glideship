@@ -20,7 +20,7 @@
 import type { BoardRead, LabelRead } from '@/types/boards/board'
 import type { CardSummary } from '@/types/boards/card'
 import type { CardDocKind } from '@/types/boards/doc'
-import type { ImportStatus } from '@/types/boards/imports'
+import type { ImportResult, ImportStatus } from '@/types/boards/imports'
 
 interface Base<E extends string> {
   event: E
@@ -48,8 +48,9 @@ export type BoardSocketMessage =
   | (Base<'stage_reordered'> & { stage_id: string })
   | (Base<'label_changed'> & { label?: LabelRead; label_id?: string; deleted?: boolean })
   | Base<'member_changed'>
-  // One summary when an import run ends (completed, or failed with cards left).
-  | (Base<'board_imported'> & { session_id: string; status: ImportStatus; error?: string })
+  // One summary when an import run ends (completed, or failed with cards
+  // left). A run that wrote every batch also carries its result counts.
+  | (Base<'board_imported'> & { session_id: string; status: ImportStatus; error?: string | null } & Partial<ImportResult>)
 
 export type BoardSocketEvent = BoardSocketMessage['event']
 

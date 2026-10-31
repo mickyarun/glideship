@@ -14,13 +14,12 @@
  * limitations under the License.
  -->
 
-<!-- A finished import: the counts, what was skipped and who wasn't
+<!-- A finished import (the wizard's heading says it's ready): the counts, what was skipped and who wasn't
      matched, the board to open, and a short checklist for finishing the
      move (the checks are only for the person reading; nothing is saved). -->
 <template>
   <div class="done-step">
     <div class="done-step__main">
-      <p class="done-step__headline">{{ boardName }} is ready: {{ plural(session.result?.imported ?? 0, 'card') }} imported</p>
       <dl class="done-step__stats">
         <div v-for="stat in stats" :key="stat.label" class="done-step__stat">
           <dt>{{ stat.label }}</dt>
@@ -45,7 +44,6 @@
 import { computed } from 'vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import type { ImportSessionRead } from '@/types/boards'
-import { plural } from '@/utils/format'
 import { importStats, skippedLine, unmatchedLine } from '@/utils/importSummary'
 
 const props = defineProps<{ session: ImportSessionRead; boardName: string }>()
@@ -74,11 +72,6 @@ const unmatched = computed(() => unmatchedLine(props.session))
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-.done-step__headline {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
 }
 .done-step__stats {
   display: grid;
@@ -116,6 +109,10 @@ const unmatched = computed(() => unmatchedLine(props.session))
 .done-step__cutover {
   flex: 1 1 320px;
   min-width: 0;
+}
+.done-step__cutover :deep(.v-label) {
+  font-size: 14px;
+  opacity: 1;
 }
 @media (max-width: 600px) {
   .done-step__stats {

@@ -23,7 +23,7 @@ import type { CardCommentRead } from '@/types/boards'
 import { CARD_COMMENT_WIRE } from '@/utils/boardCardWire'
 
 const wire = (over: Partial<CardCommentRead>): CardCommentRead => ({
-  id: 'c1', author_id: null, author_label: 'Priya (Trello)', author_name: null, author_avatar_url: null,
+  id: 'c1', author_id: null, author_label: 'Priya (Trello)', author_name: null, author_avatar_url: null, import_source: null,
   body: 'Shipped the fix', edited_at: null, deleted_at: null, created_at: '2026-10-01T00:00:00Z', ...over,
 })
 

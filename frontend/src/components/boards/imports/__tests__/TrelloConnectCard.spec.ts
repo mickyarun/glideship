@@ -65,6 +65,7 @@ describe('TrelloConnectCard', () => {
     const { wrapper } = await mountCard()
     await wrapper.findAll('button').find(b => b.text() === 'Connect')!.trigger('click')
     expect(field('Token').type).toBe('password')
+    expect(field('API key').type).toBe('password')
     await type(field('API key'), KEY)
     await type(field('Token'), TOKEN)
     await wrapper.find('form').trigger('submit')
@@ -90,11 +91,22 @@ describe('TrelloConnectCard', () => {
     expect(document.body.textContent).not.toContain('Read board and review')
   })
 
-  it('disconnects', async () => {
+  it('disconnects for the whole organisation only once that is confirmed', async () => {
     settings.get.mockResolvedValue({ configured: true, member_username: 'kanna', connected_at: null })
     settings.disconnect.mockResolvedValue()
     const { wrapper } = await mountCard()
     await wrapper.findAll('button').find(b => b.text() === 'Disconnect')!.trigger('click')
+    await flushPromises()
+    expect(settings.disconnect).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('for everyone in the organisation')
+    const dialogButtons = [...document.querySelectorAll<HTMLButtonElement>('.v-overlay button')]
+    dialogButtons.find(b => b.textContent?.trim() === 'Cancel')!.click()
+    await flushPromises()
+    expect(settings.disconnect).not.toHaveBeenCalled()
+
+    await wrapper.findAll('button').find(b => b.text() === 'Disconnect')!.trigger('click')
+    await flushPromises()
+    ;[...document.querySelectorAll<HTMLButtonElement>('.v-overlay button')].find(b => b.textContent?.trim() === 'Disconnect')!.click()
     await flushPromises()
     expect(settings.disconnect).toHaveBeenCalledOnce()
     expect(wrapper.findAll('button').some(b => b.text() === 'Connect')).toBe(true)

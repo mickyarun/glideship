@@ -29,7 +29,10 @@ export async function mountWizard(
   useAuthStore().user = {
     id: 'me', org_id: 'org1', permissions: options.permissions ?? ['boards:view', 'boards:create'],
   } as never
-  await router.push({ name: 'board-import-new', query: options.query ?? {} })
+  const query = options.query ?? {}
+  await router.push(options.board
+    ? { name: 'board-import', params: { key: options.board.board.key }, query }
+    : { name: 'board-import-new', query })
   const wrapper = mount(TrelloImportWizard, {
     global: { plugins: plugins as never[] },
     props: { board: options.board ?? null },
@@ -51,3 +54,9 @@ export async function chooseFile(file = new File(['{}'], 'board.json', { type: '
 }
 
 export const pageText = () => document.body.textContent ?? ''
+
+/** The error text Vuetify shows under the field labelled `label` (by aria-label). */
+export function fieldError(label: string): string {
+  const input = document.querySelector(`input[aria-label="${label}"]`)
+  return input?.closest('.v-input')?.querySelector('.v-messages')?.textContent?.trim() ?? ''
+}

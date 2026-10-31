@@ -13,19 +13,27 @@
 // limitations under the License.
 
 // One import session, followed live. The session row is the truth: every
-// job event (on the job socket) and the board's one board_imported
-// summary just re-read it, and the wizard's step comes from its status.
-// Request failures keep the server's text and its Retry-After.
+// job event (on the job socket), the board's one board_imported summary, a
+// socket reconnect and a slow poll while it reads or runs just re-read it,
+// and the wizard's step comes from its status. Request failures keep the
+// server's text and its Retry-After.
 
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref } from 'vue'
+import { IMPORT_POLL_MS } from '@/constants/imports'
 import { useJobSocket } from '@/composables/useJobSocket'
+import { usePollWhile } from '@/composables/usePollWhile'
 import { useRetryCountdown } from '@/composables/useRetryCountdown'
 import { useTopicChannel } from '@/composables/useTopicChannel'
 import { boardImportsApi } from '@/services/boardImportsApi'
+import { onSocketReconnect } from '@/services/wsReconnect'
 import { boardTopic, type BoardSocketMessage, type ImportAccepted, type ImportSessionRead } from '@/types/boards'
-import { importFailure, type ImportFailure } from '@/utils/importErrors'
+import { coalesced } from '@/utils/coalesce'
+import { importFailure, type FailureTexts, type ImportFailure } from '@/utils/importErrors'
 
 export type ImportStep = 'source' | 'map' | 'import' | 'done'
+
+/** Calls naming a session: a malformed id is one that isn't there. */
+const SESSION_TEXTS: FailureTexts = { 422: "That import wasn't found. Start a new one." }
 
 /** Where the wizard stands for a session (none yet: choosing a source). */
 export function stepFor(session: ImportSessionRead | null): ImportStep {
@@ -58,21 +66,22 @@ export function useImportSession() {
   const reading = computed(() => ['pending', 'parsing'].includes(session.value?.status ?? ''))
   const running = computed(() => session.value?.status === 'running')
 
-  function fail(err: unknown, fallback: string): void {
-    failure.value = importFailure(err, fallback)
+  function fail(err: unknown, fallback: string, texts: FailureTexts = {}): void {
+    failure.value = importFailure(err, fallback, texts)
     countdown.wait(failure.value.retryAfter)
   }
 
-  async function refresh(): Promise<void> {
+  // A failing re-read never covers a failure already shown (or its wait).
+  const refresh = coalesced(async () => {
     const id = session.value?.id
     if (!id) return
     try {
       const next = await boardImportsApi.get(id)
       if (session.value?.id === id) session.value = next
     } catch (err) {
-      fail(err, "Couldn't check on the import. Reload the page to see where it stands.")
+      if (!failure.value) fail(err, "Couldn't check on the import. Reload the page to see where it stands.", SESSION_TEXTS)
     }
-  }
+  })
 
   function follow(jobId: string | null): void {
     if (!jobId) return
@@ -99,7 +108,7 @@ export function useImportSession() {
       if (reading.value || running.value) follow(session.value.job_id)
       return true
     } catch (err) {
-      fail(err, "Couldn't open this import.")
+      fail(err, "Couldn't open this import.", SESSION_TEXTS)
       return false
     } finally {
       busy.value = false
@@ -107,7 +116,9 @@ export function useImportSession() {
   }
 
   /** Send a request that queues a job (create, start, resume) and follow it. */
-  async function queue(request: () => Promise<ImportAccepted>, fallback: string): Promise<boolean> {
+  async function queue(
+    request: () => Promise<ImportAccepted>, fallback: string, texts: FailureTexts = {},
+  ): Promise<boolean> {
     if (busy.value || countdown.waiting.value) return false
     busy.value = true
     failure.value = null
@@ -117,7 +128,7 @@ export function useImportSession() {
       follow(accepted.jobId)
       return true
     } catch (err) {
-      fail(err, fallback)
+      fail(err, fallback, texts)
       // A refused start can still change the session (a full queue marks it failed).
       await refresh()
       return false
@@ -128,7 +139,26 @@ export function useImportSession() {
 
   const start = () => {
     const id = session.value?.id
-    return id ? queue(() => boardImportsApi.start(id), "Couldn't start the import. Try again.") : Promise.resolve(false)
+    return id
+      ? queue(() => boardImportsApi.start(id), "Couldn't start the import. Try again.", SESSION_TEXTS)
+      : Promise.resolve(false)
+  }
+
+  /** Run a call on the open session that answers at once (discard, review). */
+  async function act(call: (id: string) => Promise<void>, fallback: string): Promise<boolean> {
+    const id = session.value?.id
+    if (!id || busy.value) return false
+    busy.value = true
+    failure.value = null
+    try {
+      await call(id)
+      return true
+    } catch (err) {
+      fail(err, fallback, SESSION_TEXTS)
+      return false
+    } finally {
+      busy.value = false
+    }
   }
 
   function reset(): void {
@@ -138,6 +168,22 @@ export function useImportSession() {
     countdown.wait(null)
   }
 
+  /** Drop the session for good (the server refuses while it runs), then choose a source again. */
+  async function discard(): Promise<boolean> {
+    const ok = await act(id => boardImportsApi.discard(id), "Couldn't discard this import. Try again.")
+    if (ok || failure.value?.status === 404) reset()
+    return ok
+  }
+
+  /** Take a stopped import back to its review, to change the mapping. */
+  const review = () =>
+    act(async id => {
+      session.value = await boardImportsApi.review(id)
+    }, "Couldn't reopen the review. Try again.")
+
+  usePollWhile(() => reading.value || running.value, () => void refresh(), IMPORT_POLL_MS)
+  // Whatever the board topic: a reconnect may have dropped the job's end.
+  onScopeDispose(onSocketReconnect(() => void refresh()))
   // The board hears one summary when a run ends; it covers a dropped job socket.
   useTopicChannel<BoardSocketMessage>(
     () => (session.value?.board_id ? boardTopic(session.value.board_id) : null),
@@ -146,12 +192,14 @@ export function useImportSession() {
         if (message.session_id === session.value?.id) void refresh()
       },
     },
-    () => void refresh(),
+    // The reconnect hook above already re-reads.
+    () => {},
+    { onRevoked: () => void refresh() },
   )
 
   return {
     session, step, reading, running, busy, failure, countdown,
-    load, queue, start, refresh, reset, fail,
+    load, queue, start, refresh, reset, discard, review, fail,
   }
 }
 

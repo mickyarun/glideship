@@ -16,9 +16,10 @@
 
 <!-- Import a Trello board into this board (Settings › Import from Trello),
      inside the board route's shell. Only the board's admins may import, as
-     the server checks; anyone else is told so and sent back. -->
+     the server checks; anyone else is told so and sent back. When the
+     wizard asks, the board (its stages) is read again. -->
 <template>
-  <TrelloImportWizard v-if="detail && board.can('import')" :board="detail" />
+  <TrelloImportWizard v-if="detail && board.can('import')" :board="detail" @reload-board="reload" />
   <AppPage v-else-if="detail" title="Import from Trello">
     <template #eyebrow>
       <BoardCrumbs :board="detail.board" :via="{ label: 'Settings', to: settingsRoute }" current="Import from Trello" />
@@ -42,5 +43,8 @@ import { useBoardContext } from '@/composables/useBoardContext'
 
 const { board } = useBoardContext()
 const detail = computed(() => board.detail.value)
+const reload = () => {
+  if (detail.value) void board.load(detail.value.board.key, { quiet: true })
+}
 const settingsRoute = computed(() => ({ name: 'board-settings', params: { key: detail.value?.board.key ?? '' } }))
 </script>

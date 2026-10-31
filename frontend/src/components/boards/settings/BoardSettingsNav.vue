@@ -17,7 +17,7 @@
 <!-- The sections of a board's settings: the settings list beside the page
      on wide screens, a select above it on narrow ones. Either way the open
      section lives in the URL. Admins also get Import from Trello, its own
-     page under settings. -->
+     page under settings, listed just above Archive board. -->
 <template>
   <SettingsSectionNav
     v-if="mdAndUp"
@@ -48,7 +48,7 @@ import {
   BOARD_SETTINGS_SECTIONS, importPath, sectionPath, type BoardSettingsSection,
 } from '@/utils/boardSettingsSections'
 
-const IMPORT = 'import'
+const IMPORT = 'import' as const
 
 const props = withDefaults(
   defineProps<{ boardKey: string; section: BoardSettingsSection; canImport?: boolean }>(),
@@ -58,25 +58,21 @@ const props = withDefaults(
 const router = useRouter()
 const { mdAndUp } = useDisplay()
 
-const importItem = computed(() =>
-  props.canImport ? [{ title: 'Import from Trello', to: importPath(props.boardKey) }] : [],
-)
-const groups = computed(() => [
-  {
-    label: '',
-    items: [
-      ...BOARD_SETTINGS_SECTIONS.map(s => ({ title: s.title, to: sectionPath(props.boardKey, s.value) })),
-      ...importItem.value,
-    ],
-  },
-])
-const selectItems = computed(() => [
-  ...BOARD_SETTINGS_SECTIONS,
-  ...(props.canImport ? [{ value: IMPORT, title: 'Import from Trello' }] : []),
-])
+const LAST: BoardSettingsSection = 'archive'
+
+/** The sections, with Import from Trello (for admins) just before Archive board. */
+const entries = computed<{ value: BoardSettingsSection | typeof IMPORT; title: string }[]>(() => {
+  const plain = BOARD_SETTINGS_SECTIONS.filter(s => s.value !== LAST)
+  const last = BOARD_SETTINGS_SECTIONS.filter(s => s.value === LAST)
+  return [...plain, ...(props.canImport ? [{ value: IMPORT, title: 'Import from Trello' }] : []), ...last]
+})
+const pathOf = (value: BoardSettingsSection | typeof IMPORT) =>
+  value === IMPORT ? importPath(props.boardKey) : sectionPath(props.boardKey, value)
+const groups = computed(() => [{ label: '', items: entries.value.map(e => ({ title: e.title, to: pathOf(e.value) })) }])
+const selectItems = entries
 
 function open(section: BoardSettingsSection | typeof IMPORT): void {
-  void router.push(section === IMPORT ? importPath(props.boardKey) : sectionPath(props.boardKey, section))
+  void router.push(pathOf(section))
 }
 </script>
 

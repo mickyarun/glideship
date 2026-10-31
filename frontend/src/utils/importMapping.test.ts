@@ -14,16 +14,38 @@
 
 /** The review rows: defaults from the parse, the card count, local checks and the mapping sent. */
 import { describe, expect, it } from 'vitest'
-import { makeDiscovery } from '@/components/boards/imports/__tests__/importFixtures'
+import { apiError, makeDiscovery } from '@/components/boards/imports/__tests__/importFixtures'
+import { fieldRefusals, rowProblems, stageCountProblem } from '@/utils/importChecks'
+import { importFailure } from '@/utils/importErrors'
 import {
-  buildMapping, cardsToImport, listRows, personRows, personState, rowProblem, stageChoice,
+  buildMapping, cardsToImport, listRows, personRows, personState, stageChoice, type StageOption,
 } from '@/utils/importMapping'
+
+const stage = (id: string, name: string, category: StageOption['category'], position: number): StageOption =>
+  ({ id, name, category, position })
+const LIMITS = { nameMax: 40, maxStages: null }
 
 describe('import mapping', () => {
   it('skips archived lists, keeps the suggestions, and merges into a stage of the same name', () => {
-    const rows = listRows(makeDiscovery(), null, [{ id: 'st-done', name: 'done' }])
+    const rows = listRows(makeDiscovery(), null, [stage('st-done', 'done', 'done', 0)])
     expect(rows.map(r => r.choice)).toEqual(['new', 'new', stageChoice('st-done'), 'skip'])
     expect(rows[1]).toMatchObject({ name: 'Doing', category: 'in_progress' })
+  })
+
+  it('into an existing board, sends each list to the first stage of its category', () => {
+    const stages = [
+      stage('st-later', 'Later', 'todo', 2), stage('st-next', 'Next', 'todo', 1),
+      stage('st-wip', 'Building', 'in_progress', 3),
+    ]
+    const rows = listRows(makeDiscovery(), null, stages)
+    // No done stage on the board: Done stays a new stage; the archived list stays skipped.
+    expect(rows.map(r => r.choice)).toEqual([stageChoice('st-next'), stageChoice('st-wip'), 'new', 'skip'])
+  })
+
+  it('restores a saved new stage the board has since gained as that stage', () => {
+    const saved = buildMapping({ kind: 'new', name: 'Ops', key: 'OPS', visibility: 'org' }, listRows(makeDiscovery(), null), [], 'skip')
+    const rows = listRows(makeDiscovery(), saved, [stage('st-inbox', 'Inbox', 'todo', 0)])
+    expect(rows.map(r => r.choice)).toEqual([stageChoice('st-inbox'), 'new', 'new', 'skip'])
   })
 
   it('restores a saved mapping', () => {
@@ -46,24 +68,33 @@ describe('import mapping', () => {
     expect(cardsToImport(found, all, 'archive').cards).toBe(190)
   })
 
-  it('needs a name for a new stage, within the limit', () => {
-    const [row] = listRows(makeDiscovery(), null)
-    expect(rowProblem({ ...row!, name: '  ' }, 40)).toBe('Give the new stage a name.')
-    expect(rowProblem({ ...row!, name: 'x'.repeat(41) }, 40)).toBe('Stage names are at most 40 characters.')
-    expect(rowProblem({ ...row!, choice: 'skip', name: '' }, 40)).toBeNull()
+  it('counts exactly from per-list archived cards when a skipped open list holds some', () => {
+    const base = makeDiscovery()
+    const perList = [3, 0, 9, 38]
+    const found = makeDiscovery({ lists: base.lists.map((l, i) => ({ ...l, archived_card_count: perList[i] })) })
+    const rows = listRows(found, null).map((r, i) => (i === 0 ? { ...r, choice: 'skip' as const } : r))
+    expect(cardsToImport(found, rows, 'skip')).toEqual({ cards: 102, archived: 9 })
+    expect(cardsToImport(found, rows, 'archive')).toEqual({ cards: 111, archived: 9 })
+    // A parse without per-list counts: the figure runs high, never low.
+    const blind = makeDiscovery({ lists: base.lists.map(l => ({ ...l, archived_card_count: undefined as unknown as number })) })
+    expect(cardsToImport(blind, rows, 'skip').cards).toBeGreaterThanOrEqual(102)
+    expect(cardsToImport(blind, listRows(blind, null), 'skip')).toEqual({ cards: 140, archived: 12 })
   })
 
-  it('suggests only people who may be picked, and says how sure each row is', () => {
+  it('a matched suggestion is the one person with the full name; another name asks to confirm', () => {
     const found = makeDiscovery()
     const rows = personRows(found, null, new Set(['u-tom']))
     expect(rows.map(r => r.userId)).toEqual(['u-tom', null])
-    expect(rows.map(personState)).toEqual(['suggested', 'unassigned'])
-    expect(personState({ ...rows[0]!, confirmed: true })).toBe('matched')
+    expect(personState(rows[0]!, 'Tom Okafor')).toBe('matched')
+    expect(personState(rows[0]!, null)).toBe('matched')
+    expect(personState(rows[0]!, 'Tom O.')).toBe('suggested')
+    expect(personState({ ...rows[0]!, confirmed: true }, 'Tom O.')).toBe('matched')
+    expect(personState(rows[1]!)).toBe('unassigned')
   })
 
   it('builds the mapping in the server vocabulary', () => {
     const found = makeDiscovery()
-    const rows = listRows(found, null, [{ id: 'st-done', name: 'Done' }])
+    const rows = listRows(found, null, [stage('st-done', 'Done', 'done', 0)])
     const body = buildMapping({ kind: 'existing', key: 'OPS' }, rows, personRows(found, null, null), 'skip')
     expect(body.groups).toEqual([
       { group_id: 'l1', action: 'new', name: 'Inbox', category: 'todo' },
@@ -73,5 +104,40 @@ describe('import mapping', () => {
     ])
     expect(body.members).toEqual([{ member_id: 'm1', user_id: 'u-tom' }, { member_id: 'm2', user_id: null }])
     expect(body.archived_cards).toBe('skip')
+  })
+})
+
+describe('import checks', () => {
+  it('needs a name for a new stage, within the limit', () => {
+    const [row] = listRows(makeDiscovery(), null)
+    expect(rowProblems([{ ...row!, name: '  ' }], [], LIMITS)).toEqual(['Give the new stage a name.'])
+    expect(rowProblems([{ ...row!, name: 'x'.repeat(41) }], [], LIMITS)).toEqual(['Stage names are at most 40 characters.'])
+    expect(rowProblems([{ ...row!, choice: 'skip', name: '' }], [], LIMITS)).toEqual([null])
+  })
+
+  it('refuses a new stage the board already has, a category clash and a stage that is gone', () => {
+    const [inbox, doing] = listRows(makeDiscovery(), null)
+    const stages = [stage('st-done', 'Done', 'done', 0)]
+    expect(rowProblems([{ ...inbox!, name: ' done ' }], stages, LIMITS)[0]).toContain('already has a stage called "Done"')
+    const twin = { ...doing!, name: 'INBOX' }
+    expect(rowProblems([inbox!, twin], [], LIMITS)[1]).toBe('Lists going into "INBOX" must share one category.')
+    // Same name and category: the two lists share one stage.
+    expect(rowProblems([inbox!, { ...twin, category: 'todo' }], [], LIMITS)).toEqual([null, null])
+    expect(rowProblems([{ ...inbox!, choice: stageChoice('gone') }], stages, LIMITS)[0]).toContain('no longer on the board')
+  })
+
+  it('keeps the board within its stage limit', () => {
+    const rows = listRows(makeDiscovery(), null)
+    expect(stageCountProblem(rows, 0, 3)).toBeNull()
+    expect(stageCountProblem(rows, 1, 3)).toContain('at most 3 stages; this import would make 4')
+  })
+
+  it('puts a refused key or stage name on its field', () => {
+    const rows = listRows(makeDiscovery(), null)
+    const taken = importFailure(apiError(409, 'That key or name is already used by another board.'), 'x')
+    expect(fieldRefusals(taken, true, rows).key).toContain('already used')
+    const stageTaken = importFailure(apiError(409, "The target board already has a stage called 'Doing'; map the list to it."), 'x')
+    expect(fieldRefusals(stageTaken, false, rows)).toEqual({ key: null, rows: { l2: stageTaken.message } })
+    expect(fieldRefusals(importFailure(apiError(422, 'Nope'), 'x'), true, rows)).toEqual({ key: null, rows: {} })
   })
 })

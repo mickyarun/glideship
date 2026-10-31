@@ -26,6 +26,7 @@ import { boardsApi } from '@/services/boardsApi'
 import { useBoardCardsStore } from '@/stores/boardCards'
 import { useBoardsStore } from '@/stores/boards'
 import { boardTopic, type BoardSocketMessage, type CardEvent, type MemberRead } from '@/types/boards'
+import { coalesced } from '@/utils/coalesce'
 
 export function useBoardPage(key: Ref<string>) {
   const board = useBoard()
@@ -84,9 +85,15 @@ export function useBoardPage(key: Ref<string>) {
     }
   }
 
-  async function resync(): Promise<void> {
+  // An import's end and a reconnect can land together: one resync runs (and
+  // at most one more after it); while a board opens, its own load is enough.
+  const resyncOnce = coalesced(async () => {
     await refreshBoard()
-    void cards.loadAll({ keep: true })
+    await cards.loadAll({ keep: true })
+  })
+  async function resync(): Promise<void> {
+    if (opening > 0) return
+    await resyncOnce()
   }
 
   const topic = computed(() => (board.detail.value ? boardTopic(board.detail.value.board.id) : null))

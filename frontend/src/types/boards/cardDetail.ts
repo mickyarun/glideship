@@ -48,7 +48,7 @@ export interface CardCommentRead {
   author_name: string | null
   author_avatar_url: string | null
   /** Where an imported comment came from; null for one written here. */
-  import_source?: ImportSourceKind | null
+  import_source: ImportSourceKind | null
   body: string
   edited_at: string | null
   deleted_at: string | null

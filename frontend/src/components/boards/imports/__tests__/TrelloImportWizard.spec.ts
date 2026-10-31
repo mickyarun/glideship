@@ -16,23 +16,15 @@
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/services/boardImportsApi', () => ({
-  boardImportsApi: { upload: vi.fn(), fromTrello: vi.fn(), trelloBoards: vi.fn(), get: vi.fn(), saveMapping: vi.fn(), start: vi.fn() },
-  trelloSettingsApi: { get: vi.fn(), connect: vi.fn(), disconnect: vi.fn() },
-}))
-vi.mock('@/services/boardsApi', () => ({ boardsApi: { limits: vi.fn(), people: vi.fn() } }))
-vi.mock('@/services/api', () => ({
-  default: {
-    get: vi.fn((url: string) => Promise.resolve({
-      data: url.includes('directory') ? [{ id: 'u-tom', name: 'Tom Okafor', email: 't@x' }] : { name: 'Northwind' },
-    })),
-  },
-}))
+vi.mock('@/services/boardImportsApi', async () => (await import('./liveStubs')).importsApiMock())
+vi.mock('@/services/boardsApi', async () => (await import('./liveStubs')).boardsApiMock())
+vi.mock('@/services/api', async () => (await import('./liveStubs')).apiMock())
+vi.mock('@/services/wsReconnect', async () => (await import('./liveStubs')).wsReconnectMock())
 vi.mock('@/composables/useJobSocket', async () => ({ useJobSocket: (await import('./jobSocketStub')).jobSocketStub }))
-vi.mock('@/composables/useTopicChannel', () => ({ useTopicChannel: vi.fn() }))
+vi.mock('@/composables/useTopicChannel', async () => ({ useTopicChannel: (await import('./liveStubs')).topicChannelStub }))
 
 import { apiError, makeSession } from '@/components/boards/imports/__tests__/importFixtures'
-import { tracked } from '@/components/boards/imports/__tests__/jobSocketStub'
+import { stopTracking, tracked } from '@/components/boards/imports/__tests__/jobSocketStub'
 import { button, chooseFile, mountWizard, pageText } from '@/components/boards/imports/__tests__/wizardHarness'
 import { boardImportsApi, trelloSettingsApi } from '@/services/boardImportsApi'
 import { boardsApi } from '@/services/boardsApi'
@@ -45,6 +37,7 @@ describe('TrelloImportWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     tracked.length = 0
+    imports.open.mockResolvedValue([])
     vi.mocked(boardsApi.limits).mockResolvedValue({ board_key_min: 2, board_key_max: 5, stage_name_max: 40 } as never)
   })
   afterEach(() => {
@@ -126,6 +119,45 @@ describe('TrelloImportWizard', () => {
     await flushPromises()
     expect(pageText()).not.toContain('try again in')
     expect(button('Choose file')!.disabled).toBe(false)
+  })
+
+  it('stops part-way with Open the board and Start over, which discards it and drops ?session=', async () => {
+    imports.get.mockResolvedValueOnce(makeSession({
+      status: 'failed', board_key: 'OR', processed_count: 131, total_cards: 140, error: 'Trello stopped answering.',
+      mapping: { target: { kind: 'new', name: 'Ops', key: 'OR', visibility: 'org' }, groups: [], members: [], archived_cards: 'skip' },
+    }))
+    imports.discard.mockResolvedValue()
+    const { router } = await mountWizard({ query: { session: 's1' } })
+    expect(document.querySelector('.progress-step__bar--stopped')).toBeTruthy()
+    expect(document.querySelector('a[href="/boards/OR"]')!.textContent).toContain('Open the board')
+    button('Start over')!.click()
+    await flushPromises()
+    expect(imports.discard).toHaveBeenCalledWith('s1')
+    expect(stopTracking).toHaveBeenCalled()
+    await vi.waitFor(() => expect(router.currentRoute.value.query.session).toBeUndefined())
+    expect(router.currentRoute.value.fullPath).toBe('/boards/imports/trello')
+    expect(pageText()).toContain('Choose a source')
+  })
+
+  it('offers Review again when Resume is refused because a stage is gone', async () => {
+    const stoppedRun = makeSession({
+      status: 'failed', processed_count: 20, total_cards: 140, error: 'The import stopped unexpectedly.',
+      mapping: { target: { kind: 'new', name: 'Ops', key: 'OPS', visibility: 'org' }, groups: [], members: [], archived_cards: 'skip' },
+    })
+    imports.get.mockResolvedValue(stoppedRun)
+    imports.start.mockRejectedValue(apiError(409, 'A stage this import maps cards into is no longer on the board. Review it again.', {}, { code: 'STAGE_GONE' }))
+    await mountWizard({ query: { session: 's1' } })
+    expect(button('Review again')).toBeUndefined()
+    button('Resume')!.click()
+    await flushPromises()
+    expect(pageText()).toContain('no longer on the board')
+    // One callout for the stopped run: the refusal reads inside it.
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1)
+    imports.review.mockResolvedValue(makeSession({ mapping: stoppedRun.mapping }))
+    button('Review again')!.click()
+    await flushPromises()
+    expect(imports.review).toHaveBeenCalledWith('s1')
+    expect(pageText()).toContain('Review the import')
   })
 
   it('resumes an import that stopped part-way', async () => {

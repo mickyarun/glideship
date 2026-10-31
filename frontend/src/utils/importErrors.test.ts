@@ -15,7 +15,8 @@
 /** Import failures keep the server's words and its Retry-After; comments say where they came from. */
 import { describe, expect, it } from 'vitest'
 import { apiError, makeSession } from '@/components/boards/imports/__tests__/importFixtures'
-import { importFailure, parseRetryAfter } from '@/utils/importErrors'
+import { MAX_RETRY_AFTER_SECONDS } from '@/constants/imports'
+import { failureLog, importFailure, parseRetryAfter } from '@/utils/importErrors'
 import { importSourceLabel, skippedLine, unmatchedLine } from '@/utils/importSummary'
 
 describe('import failures', () => {
@@ -26,15 +27,38 @@ describe('import failures', () => {
     expect(parseRetryAfter('soon')).toBeNull()
   })
 
+  it('caps Retry-After at an hour', () => {
+    expect(parseRetryAfter('999999')).toBe(MAX_RETRY_AFTER_SECONDS)
+    expect(parseRetryAfter(new Date(Date.UTC(2027, 0, 1)).toUTCString(), Date.UTC(2026, 0, 1))).toBe(MAX_RETRY_AFTER_SECONDS)
+    expect(importFailure(apiError(429, 'Slow down', { 'retry-after': '86400' }), 'x').retryAfter).toBe(3600)
+  })
+
+  it('says something plain when the server sends no detail', () => {
+    expect(importFailure(apiError(413, ''), 'x').message).toContain('too large')
+    expect(importFailure(apiError(422, ''), 'x').message).toBe("That file doesn't look like a Trello board export.")
+    // A call that names a session: a malformed id is an import that isn't there.
+    expect(importFailure(apiError(422, ''), 'x', { 422: "That import wasn't found." }).message).toBe("That import wasn't found.")
+    expect(importFailure(apiError(422, 'Map every list.'), 'x', { 422: 'other' }).message).toBe('Map every list.')
+  })
+
+  it('keeps the server code', () => {
+    expect(importFailure(apiError(409, 'A stage is gone.', {}, { code: 'STAGE_GONE' }), 'x').code).toBe('STAGE_GONE')
+  })
+
+  it('logs a failure by message and status only', () => {
+    expect(failureLog(apiError(500, 'secret detail', { authorization: 'Bearer t' }))).toBe('failed (HTTP 500)')
+    expect(failureLog(new Error('offline'))).toBe('offline')
+  })
+
   it('keeps the wait on 429 and 503 only', () => {
     expect(importFailure(apiError(429, 'Slow down', { 'retry-after': '12' }), 'x')).toEqual({
-      message: 'Slow down', status: 429, retryAfter: 12,
+      message: 'Slow down', status: 429, code: null, retryAfter: 12,
     })
     expect(importFailure(apiError(503, '', { 'retry-after': '5' }), 'x')).toMatchObject({
       message: 'Imports are busy right now. Try again in a moment.', retryAfter: 5,
     })
     expect(importFailure(apiError(409, 'You have 3 imports still open.', { 'retry-after': '9' }), 'x')).toEqual({
-      message: 'You have 3 imports still open.', status: 409, retryAfter: null,
+      message: 'You have 3 imports still open.', status: 409, code: null, retryAfter: null,
     })
   })
 })

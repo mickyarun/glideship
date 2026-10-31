@@ -15,16 +15,21 @@
 // The review step's form: each Trello list's stage, each member's person,
 // archived cards, and (for a new board) its name, key and visibility. It
 // fills from the parse (or the mapping saved before), checks what it can
-// here and builds the mapping; the server checks the rest and its answer
-// is shown as it comes (a stage name the board already has, a taken key).
+// here and builds the mapping; the server checks the rest, and a refusal
+// about one field (a taken key, a stage name the board has) shows on it
+// until that field changes.
 
 import { computed, ref, watch, type Ref } from 'vue'
 import { useBoardKeyFields } from '@/composables/useBoardKeyFields'
 import type {
-  ArchivedChoice, BoardVisibility, ImportSessionRead, ImportTarget, TrelloDiscovery,
+  ArchivedChoice, BoardVisibility, ImportDiscovery, ImportSessionRead, ImportTarget,
 } from '@/types/boards'
 import {
-  buildMapping, cardsToImport, listRows, personRows, rowProblem, type ListRow, type PersonRow,
+  fieldRefusals, newStageNames, rowProblems, stageCountProblem, type StageCheckLimits,
+} from '@/utils/importChecks'
+import type { ImportFailure } from '@/utils/importErrors'
+import {
+  buildMapping, cardsToImport, listRows, personRows, type ListRow, type PersonRow, type StageOption,
 } from '@/utils/importMapping'
 
 export interface PickablePerson {
@@ -37,9 +42,9 @@ export function useImportMappingForm(
   options: {
     existingKey: Ref<string | null>
     /** The existing board's stages (none for a new board). */
-    stages: Ref<{ id: string; name: string }[]>
+    stages: Ref<StageOption[]>
     people: Ref<PickablePerson[] | null>
-    stageNameMax: Ref<number | null>
+    limits: Ref<StageCheckLimits>
   },
 ) {
   const rows = ref<ListRow[]>([])
@@ -47,9 +52,12 @@ export function useImportMappingForm(
   const archived = ref<ArchivedChoice>('skip')
   const board = useBoardKeyFields()
   const visibility = ref<BoardVisibility>('org')
+  // A refusal holds the value it was about, so editing the field clears it.
+  const refusedKey = ref<{ key: string; message: string } | null>(null)
+  const refusedRows = ref<Record<string, { name: string; message: string }>>({})
   let filledFor: string | null = null
 
-  const discovery = computed<TrelloDiscovery | null>(() => session.value?.discovery ?? null)
+  const discovery = computed<ImportDiscovery | null>(() => session.value?.discovery ?? null)
 
   function fill(): void {
     const s = session.value
@@ -82,17 +90,33 @@ export function useImportMappingForm(
   const counts = computed(() =>
     discovery.value ? cardsToImport(discovery.value, rows.value, archived.value) : { cards: 0, archived: 0 },
   )
-  const problems = computed(() => rows.value.map(r => rowProblem(r, options.stageNameMax.value)))
+  const keyError = computed(() =>
+    refusedKey.value && refusedKey.value.key === board.key.value ? refusedKey.value.message : null,
+  )
+  const problems = computed(() => {
+    const local = rowProblems(rows.value, options.stages.value, options.limits.value)
+    return rows.value.map((r, i) => {
+      const refused = refusedRows.value[r.list.id]
+      return local[i] ?? (refused && refused.name === r.name.trim() && r.choice === 'new' ? refused.message : null)
+    })
+  })
+  const stageProblem = computed(() =>
+    stageCountProblem(rows.value, options.stages.value.length, options.limits.value.maxStages),
+  )
   const target = computed<ImportTarget>(() =>
     options.existingKey.value
       ? { kind: 'existing', key: options.existingKey.value }
       : { kind: 'new', name: board.name.value.trim(), key: board.key.value, visibility: visibility.value },
   )
+  // An import with no cards still makes sense when it creates stages.
+  const somethingToImport = computed(() => counts.value.cards > 0 || newStageNames(rows.value).size > 0)
   const valid = computed(
     () =>
       problems.value.every(p => !p) &&
+      !stageProblem.value &&
+      !keyError.value &&
       (!!options.existingKey.value || board.complete.value) &&
-      counts.value.cards > 0,
+      somethingToImport.value,
   )
 
   function pick(row: PersonRow, userId: string | null): void {
@@ -100,9 +124,21 @@ export function useImportMappingForm(
     row.confirmed = true
   }
 
+  /** Put a refused review's message on the field it's about, if it's about one. */
+  function showRefusal(failure: ImportFailure | null): void {
+    const found = fieldRefusals(failure, !options.existingKey.value, rows.value)
+    refusedKey.value = found.key ? { key: board.key.value, message: found.key } : null
+    refusedRows.value = Object.fromEntries(
+      rows.value.filter(r => found.rows[r.list.id]).map(r => [r.list.id, { name: r.name.trim(), message: found.rows[r.list.id]! }]),
+    )
+  }
+
   const mapping = () => buildMapping(target.value, rows.value, people.value, archived.value)
 
-  return { rows, people, archived, board, visibility, discovery, counts, problems, valid, pick, mapping }
+  return {
+    rows, people, archived, board, visibility, discovery, counts, problems, stageProblem, keyError,
+    valid, pick, mapping, showRefusal,
+  }
 }
 
 export type ImportMappingForm = ReturnType<typeof useImportMappingForm>

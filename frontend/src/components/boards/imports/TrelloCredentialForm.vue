@@ -27,6 +27,8 @@
     <v-text-field
       v-model="apiKey"
       label="API key"
+      type="password"
+      density="compact"
       autocomplete="off"
       spellcheck="false"
       class="trello-creds__mono"
@@ -37,6 +39,7 @@
       v-model="token"
       label="Token"
       type="password"
+      density="compact"
       autocomplete="off"
       spellcheck="false"
       class="trello-creds__mono"

@@ -16,8 +16,9 @@
 
 <!-- Import over a Trello connection (full comment history and real files),
      for people who may configure integrations. Not connected: Connect
-     opens the key and token form. Connected: who as, Disconnect, and a
-     picker of the connected member's boards to read. -->
+     opens the key and token form. Connected: who as, Disconnect (after a
+     confirm, as it's for the whole organisation), and a picker of the
+     connected member's boards to read. -->
 <template>
   <div class="connect-card">
     <h3 class="connect-card__title">Connect Trello</h3>
@@ -31,10 +32,11 @@
       @connected="entering = false"
     />
     <template v-else-if="connected">
+      <AppCallout v-if="connection.error.value" variant="error" role="alert">{{ connection.error.value }}</AppCallout>
       <div class="connect-card__status">
         <AppTag color="success">Connected</AppTag>
         <span v-if="connection.settings.value?.member_username">as @{{ connection.settings.value.member_username }}</span>
-        <v-btn variant="text" size="small" :loading="connection.saving.value" @click="connection.disconnect()">Disconnect</v-btn>
+        <v-btn variant="text" size="small" :loading="connection.saving.value" @click="confirming = true">Disconnect</v-btn>
       </div>
       <v-select
         v-model="boardId"
@@ -57,6 +59,15 @@
       <v-btn color="primary" class="connect-card__go" @click="entering = true">Connect</v-btn>
       <p class="connect-card__note">Connected once for everyone in the organisation.</p>
     </template>
+    <AppConfirmDialog
+      v-model="confirming"
+      title="Disconnect Trello?"
+      body="This removes the Trello connection for everyone in the organisation. Imports over it stop working until someone connects again; uploads still work."
+      action="Disconnect"
+      color="error"
+      :busy="connection.saving.value"
+      @confirm="disconnect"
+    />
   </div>
 </template>
 
@@ -64,6 +75,7 @@
 import { computed, onMounted, ref } from 'vue'
 import TrelloCredentialForm from '@/components/boards/imports/TrelloCredentialForm.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
+import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import type { TrelloConnection } from '@/composables/useTrelloConnection'
 
@@ -71,8 +83,14 @@ const props = defineProps<{ connection: TrelloConnection; busy: boolean; disable
 const emit = defineEmits<{ read: [trelloBoardId: string] }>()
 
 const entering = ref(false)
+const confirming = ref(false)
 const boardId = ref<string | null>(null)
 const connected = computed(() => !!props.connection.settings.value?.configured)
+
+async function disconnect(): Promise<void> {
+  await props.connection.disconnect()
+  confirming.value = false
+}
 
 onMounted(() => {
   if (!props.connection.settings.value) void props.connection.load()

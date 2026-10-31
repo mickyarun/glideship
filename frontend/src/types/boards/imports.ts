@@ -35,6 +35,8 @@ export interface DiscoveredList {
   name: string
   closed: boolean
   card_count: number
+  /** Of card_count, the cards archived in Trello. */
+  archived_card_count: number
   suggested_name: string
   suggested_category: StageCategory
   suggested_skip: boolean
@@ -81,6 +83,12 @@ export interface TrelloDiscovery {
   dropped: DroppedCounts
   warnings: TrelloWarning[]
 }
+
+/**
+ * What a parse found, one shape per source, keyed on source_kind. Add a
+ * source by adding its discovery here.
+ */
+export type ImportDiscovery = TrelloDiscovery
 
 export type StageChoice = 'new' | 'existing' | 'skip'
 export type ArchivedChoice = 'skip' | 'archive'
@@ -142,11 +150,29 @@ export interface ImportSessionRead {
   last_processed_index: number | null
   job_id: string | null
   error: string | null
-  discovery: TrelloDiscovery | null
+  discovery: ImportDiscovery | null
   mapping: ImportMapping | null
   result: ImportResult | null
   created_at: string
   updated_at: string
+}
+
+/** One session in a list (GET /boards/imports), without discovery, mapping or result. */
+export interface ImportSessionSummary {
+  id: string
+  source_kind: ImportSourceKind
+  mode: ImportMode
+  status: ImportStatus
+  board_id: string | null
+  total_cards: number | null
+  processed_count: number
+  error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ImportSessionList {
+  items: ImportSessionSummary[]
 }
 
 /** One of the connected Trello member's open boards. */

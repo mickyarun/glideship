@@ -16,7 +16,8 @@
 
 <!-- Choose where the Trello board comes from: an uploaded export (anyone
      who may import) or a Trello connection (people who may configure
-     integrations). While the board is read, says so. -->
+     integrations). From Boards it also asks where the cards go (a new
+     board, or a board I admin). While the board is read, says so. -->
 <template>
   <div class="source-step">
     <div v-if="reading" class="source-step__reading" role="status">
@@ -33,16 +34,18 @@
         @read="id => emit('read', id)"
       />
     </div>
+    <ImportTargetChoice v-if="!intoBoard && !reading" />
     <p class="source-step__target">
       <v-icon icon="mdi-view-column-outline" size="16" aria-hidden="true" />
-      <template v-if="intoBoard">Cards go into <strong>{{ intoBoard }}</strong>; you'll choose a stage for each list next.</template>
-      <template v-else>The cards go into a new board; you'll name it next.</template>
+      <span v-if="intoBoard">Cards go into <strong>{{ intoBoard }}</strong>; you'll choose a stage for each list next.</span>
+      <span v-else>The cards go into a new board; you'll name it next.</span>
     </p>
   </div>
 </template>
 
 <script setup lang="ts">
 import ImportDropZone from '@/components/boards/imports/ImportDropZone.vue'
+import ImportTargetChoice from '@/components/boards/imports/ImportTargetChoice.vue'
 import TrelloConnectCard from '@/components/boards/imports/TrelloConnectCard.vue'
 import type { TrelloConnection } from '@/composables/useTrelloConnection'
 

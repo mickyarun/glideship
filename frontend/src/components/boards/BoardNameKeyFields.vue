@@ -16,7 +16,7 @@
 
 <!-- A new board's name and key side by side, with what the key will do
      under them. The fields come from useBoardKeyFields; the lengths from
-     the server's board limits. -->
+     the server's board limits; `keyError` is the server refusing the key. -->
 <template>
   <div>
     <div class="name-key__row">
@@ -33,7 +33,8 @@
         class="name-key__key"
         :maxlength="limits?.board_key_max"
         :aria-describedby="hintId"
-        hide-details
+        :error-messages="keyError ?? undefined"
+        :hide-details="!keyError"
         @update:model-value="fields.setKey"
       />
     </div>
@@ -51,8 +52,9 @@ withDefaults(
     fields: Pick<BoardKeyFields, 'name' | 'key' | 'keyHint' | 'setKey'>
     limits: BoardLimits | null
     autofocus?: boolean
+    keyError?: string | null
   }>(),
-  { autofocus: false },
+  { autofocus: false, keyError: null },
 )
 
 const hintId = useId()

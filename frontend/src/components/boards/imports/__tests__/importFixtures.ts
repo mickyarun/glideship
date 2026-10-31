@@ -25,10 +25,10 @@ export function makeDiscovery(over: Partial<TrelloDiscovery> = {}): TrelloDiscov
     board_name: 'Ops requests',
     board_url: null,
     lists: [
-      { id: 'l1', name: 'Inbox', closed: false, card_count: 41, suggested_name: 'Inbox', suggested_category: 'todo', suggested_skip: false },
-      { id: 'l2', name: 'Doing', closed: false, card_count: 9, suggested_name: 'Doing', suggested_category: 'in_progress', suggested_skip: false },
-      { id: 'l3', name: 'Done', closed: false, card_count: 102, suggested_name: 'Done', suggested_category: 'done', suggested_skip: false },
-      { id: 'l4', name: 'Old ideas', closed: true, card_count: 38, suggested_name: 'Old ideas', suggested_category: 'todo', suggested_skip: true },
+      { id: 'l1', archived_card_count: 0, name: 'Inbox', closed: false, card_count: 41, suggested_name: 'Inbox', suggested_category: 'todo', suggested_skip: false },
+      { id: 'l2', archived_card_count: 0, name: 'Doing', closed: false, card_count: 9, suggested_name: 'Doing', suggested_category: 'in_progress', suggested_skip: false },
+      { id: 'l3', archived_card_count: 12, name: 'Done', closed: false, card_count: 102, suggested_name: 'Done', suggested_category: 'done', suggested_skip: false },
+      { id: 'l4', archived_card_count: 38, name: 'Old ideas', closed: true, card_count: 38, suggested_name: 'Old ideas', suggested_category: 'todo', suggested_skip: true },
     ],
     labels: [{ id: 'x1', name: 'bug', color: 'red', mapped_color: 'red' }],
     members: [
@@ -64,14 +64,16 @@ export function makeSession(over: Partial<ImportSessionRead> = {}): ImportSessio
   }
 }
 
-/** An axios error with a status, the server's detail and response headers. */
-export function apiError(status: number, detail: string, headers: Record<string, string> = {}): AxiosError {
+/** An axios error with a status, the server's detail (and other body fields) and response headers. */
+export function apiError(
+  status: number, detail: string, headers: Record<string, string> = {}, body: Record<string, unknown> = {},
+): AxiosError {
   const config = { headers: new AxiosHeaders() }
   return new AxiosError('failed', String(status), config, null, {
     status,
     statusText: '',
     headers,
     config,
-    data: { detail },
+    data: { detail, ...body },
   })
 }

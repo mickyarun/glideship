@@ -41,7 +41,7 @@ const file = (id: string, uploaded_by: string | null, over: Partial<CardAttachme
 const link = (id: string, url: string): CardAttachmentRead =>
   ({ ...file(id, 'me'), kind: 'link', filename: `Link ${id}`, url, mime_type: null, size_bytes: null })
 const comment = (id: string, body: string, author = 'me'): CardCommentRead => ({
-  id, author_id: author, author_label: null, author_name: `Person ${author}`, author_avatar_url: null, body,
+  id, author_id: author, author_label: null, author_name: `Person ${author}`, author_avatar_url: null, import_source: null, body,
   edited_at: null, deleted_at: null, created_at: '2026-10-01T00:00:00Z',
 })
 let attachments: CardAttachmentRead[] = []

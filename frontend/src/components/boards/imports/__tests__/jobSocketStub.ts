@@ -22,11 +22,14 @@ import type { JobStatusRead } from '@/types'
 /** Jobs the wizard followed, newest last, with the callbacks it gave. */
 export const tracked: { id: string; cbs: TrackerCallbacks<JobStatusRead> }[] = []
 
+/** Every stand-in's stopTracking, to check the wizard let go of its job. */
+export const stopTracking = vi.fn()
+
 export function jobSocketStub() {
   return {
     status: { value: null },
     isActive: { value: false },
     startTracking: (id: string, cbs: TrackerCallbacks<JobStatusRead>) => tracked.push({ id, cbs }),
-    stopTracking: vi.fn(),
+    stopTracking,
   }
 }

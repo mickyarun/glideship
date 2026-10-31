@@ -23,6 +23,7 @@
       :model-value="archived === 'archive'"
       density="compact"
       hide-details
+      class="options__archived"
       @update:model-value="(on: boolean | null) => (archived = on ? 'archive' : 'skip')"
     >
       <template #label>Also import {{ plural(archivedCount, 'archived card') }}, as archived</template>
@@ -53,6 +54,10 @@ const droppedLine = computed(() => {
 </script>
 
 <style scoped>
+.options__archived :deep(.v-label) {
+  font-size: 14px;
+  opacity: 1;
+}
 .options__note {
   margin: 4px 0 0;
   font-size: 12px;

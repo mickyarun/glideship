@@ -129,4 +129,16 @@ describe('useBoardPage', () => {
     expect(api.cards).toHaveBeenCalledTimes(2)
     scope.stop()
   })
+
+  it('runs one resync (and one more) when an import ends during a reconnect', async () => {
+    const { scope } = await openBoard()
+    api.get.mockClear()
+    reconnects.forEach(cb => cb())
+    send({ event: 'board_imported', session_id: 's1', status: 'completed' })
+    send({ event: 'board_imported', session_id: 's1', status: 'completed' })
+    await flush()
+    // One in flight, one more after it for what arrived meanwhile; never three.
+    expect(api.get).toHaveBeenCalledTimes(2)
+    scope.stop()
+  })
 })

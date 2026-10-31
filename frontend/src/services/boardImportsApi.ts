@@ -20,6 +20,7 @@ import api from '@/services/api'
 import type {
   ImportAccepted,
   ImportMapping,
+  ImportSessionList,
   ImportSessionRead,
   TrelloBoardOption,
   TrelloCredentialsWrite,
@@ -44,6 +45,15 @@ export const boardImportsApi = {
     (await api.post<ImportAccepted>(`${TRELLO}/api`, { trello_board_id: trelloBoardId })).data,
   trelloBoards: async () => (await api.get<TrelloBoardOption[]>(`${TRELLO}/boards`)).data,
   get: async (id: string) => (await api.get<ImportSessionRead>(session(id))).data,
+  /** My imports still pending, parsing, in review or running, newest first. */
+  open: async () =>
+    (await api.get<ImportSessionList>(IMPORTS, { params: { status: 'open' } })).data.items,
+  /** Drop a session and its file (409 while it's read or runs; 502 if the file stayed). */
+  discard: async (id: string) => {
+    await api.delete(session(id))
+  },
+  /** Take an import that stopped after its board was read back to review, mapping kept. */
+  review: async (id: string) => (await api.post<ImportSessionRead>(`${session(id)}/review`)).data,
   saveMapping: async (id: string, body: ImportMapping) =>
     (await api.put<ImportSessionRead>(`${session(id)}/mapping`, body)).data,
   /** Start the import, or resume one that stopped part-way. */

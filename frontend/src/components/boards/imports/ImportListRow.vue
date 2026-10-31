@@ -16,7 +16,10 @@
 
 <!-- One Trello list and what it becomes: a new stage (its name and
      category, guessed from the list's name), an existing stage of the
-     target board, or not imported. Stacks on phones. -->
+     target board, or not imported. The columns come from
+     --import-list-columns, which the list's header row shares, so the
+     controls carry aria-labels instead of their own floating labels.
+     Stacks on phones. -->
 <template>
   <div class="list-row" role="group" :aria-label="`List ${row.list.name}`">
     <div class="list-row__source">
@@ -29,22 +32,24 @@
     <v-select
       v-model="row.choice"
       :items="choices"
-      label="Becomes"
+      :aria-label="`What ${row.list.name} becomes`"
       density="compact"
-      hide-details
+      :error-messages="row.choice !== 'new' ? problem ?? undefined : undefined"
+      :hide-details="row.choice === 'new' || !problem"
       class="list-row__choice"
     />
-    <div v-if="row.choice === 'new'" class="list-row__new">
+    <template v-if="row.choice === 'new'">
       <v-text-field
         v-model="row.name"
-        label="Stage name"
+        :aria-label="`New stage name for ${row.list.name}`"
+        placeholder="Stage name"
         :maxlength="nameMax ?? undefined"
         density="compact"
         :error-messages="problem ?? undefined"
         :hide-details="!problem"
       />
       <StageCategorySelect v-model="row.category" :aria-label="`Category for ${row.list.name}`" />
-    </div>
+    </template>
     <div v-else class="list-row__note">
       <AppTag v-if="existing" :color="CATEGORY_COLORS[existing.category]">{{ CATEGORY_LABELS[existing.category] }}</AppTag>
       <span v-else>Not imported</span>
@@ -57,14 +62,13 @@ import { computed } from 'vue'
 import StageCategorySelect from '@/components/boards/settings/StageCategorySelect.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '@/constants/boards'
-import type { StageRead } from '@/types/boards'
 import { plural } from '@/utils/format'
-import { stageChoice, type ListRow } from '@/utils/importMapping'
+import { stageChoice, type ListRow, type StageOption } from '@/utils/importMapping'
 
 const props = defineProps<{
   row: ListRow
   /** The target board's stages; empty for a new board. */
-  stages: Pick<StageRead, 'id' | 'name' | 'category'>[]
+  stages: StageOption[]
   problem: string | null
   nameMax: number | null
 }>()
@@ -80,8 +84,8 @@ const existing = computed(() => props.stages.find(s => stageChoice(s.id) === pro
 <style scoped>
 .list-row {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) 16px minmax(136px, 1fr) minmax(0, 1.9fr);
-  align-items: center;
+  grid-template-columns: var(--import-list-columns);
+  align-items: start;
   gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid rgb(var(--v-theme-rule));
@@ -93,6 +97,7 @@ const existing = computed(() => props.stages.find(s => stageChoice(s.id) === pro
   display: flex;
   flex-direction: column;
   min-width: 0;
+  padding-top: 4px;
 }
 .list-row__name {
   font-size: 14px;
@@ -103,14 +108,13 @@ const existing = computed(() => props.stages.find(s => stageChoice(s.id) === pro
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
-.list-row__arrow {
-  color: rgb(var(--v-theme-on-surface-variant));
+.list-row__note {
+  grid-column: span 2;
+  align-self: center;
 }
-.list-row__new {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, auto);
-  gap: 8px;
-  align-items: start;
+.list-row__arrow {
+  margin-top: 10px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 @media (max-width: 760px) {
   .list-row {
@@ -120,8 +124,8 @@ const existing = computed(() => props.stages.find(s => stageChoice(s.id) === pro
   .list-row__arrow {
     display: none;
   }
-  .list-row__new {
-    grid-template-columns: minmax(0, 1fr);
+  .list-row__note {
+    grid-column: auto;
   }
 }
 </style>
