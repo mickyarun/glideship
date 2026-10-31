@@ -18,6 +18,7 @@
 
 import type { TimelineEvent } from '@/types'
 import { actor, plainRow, section, text, type ActivityPart, type ActivityRenderers, type ActivityRow } from '@/utils/activity'
+import { HANDOVER_ROWS } from '@/utils/budHandoverTimelineRows'
 import {
   DEFAULT_CONFIG, EVENT_MAP, continuityTooltip, formatAgent, formatFeatureTitles, formatRole, formatSection,
   formatShortDate, formatSingleFeatureTitle, statusColor, statusLabel, type Detail,
@@ -137,6 +138,7 @@ function prRow(e: TimelineEvent, d: Detail): ActivityRow {
 }
 ROWS.pr_opened = prRow
 ROWS.pr_merged = prRow
+Object.assign(ROWS, HANDOVER_ROWS)
 
 export const BUD_TIMELINE_RENDERERS: ActivityRenderers<TimelineEvent> = {
   byType: Object.fromEntries(

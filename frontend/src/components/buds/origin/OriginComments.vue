@@ -15,8 +15,8 @@
  -->
 
 <!-- The origin card's comments on a BUD, read only and newest first, as
-     plain text, with "Show older" while there are more. Replies go on the
-     card. -->
+     plain text, with "Show older" while there are more (and why, when
+     that failed). Replies go on the card. -->
 <template>
   <section class="origin-comments" aria-label="Card comments">
     <span class="origin-comments__label">Card comments · read only</span>
@@ -30,8 +30,9 @@
         <span v-else class="origin-comments__body">{{ c.body }}</span>
       </li>
     </ol>
+    <p v-if="error" class="origin-comments__error" role="alert">{{ error }}</p>
     <v-btn v-if="hasMore" variant="text" size="small" :loading="loading" class="align-self-start" @click="emit('more')">
-      Show older
+      {{ error ? 'Try again' : 'Show older' }}
     </v-btn>
   </section>
 </template>
@@ -40,7 +41,7 @@
 import type { CardCommentRead } from '@/types/boards'
 import { formatDate } from '@/utils/date'
 
-defineProps<{ comments: CardCommentRead[]; hasMore: boolean; loading: boolean }>()
+defineProps<{ comments: CardCommentRead[]; hasMore: boolean; loading: boolean; error: string }>()
 const emit = defineEmits<{ more: [] }>()
 </script>
 
@@ -75,6 +76,11 @@ const emit = defineEmits<{ more: [] }>()
 .origin-comments__body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.origin-comments__error {
+  margin: 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-error));
 }
 .origin-comments__empty {
   margin: 0;

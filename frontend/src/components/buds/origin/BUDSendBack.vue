@@ -14,10 +14,10 @@
  * limitations under the License.
  -->
 
-<!-- "Send back to <board>" on a BUD that came from a card, while it's
-     still in requirements, design or tech arch and the card still holds
-     it, for whoever may edit BUDs. Once sent, the BUD (now discarded) and
-     its history reload, and a note says where it went. -->
+<!-- Sending a BUD that came from a card back to it, asked for from the
+     header's menu (useBudSendBack decides when it's offered). Once sent,
+     the BUD (now discarded) and its history reload, and a note says where
+     it went. -->
 <template>
   <AppCallout v-if="sentTo" variant="success">
     Sent back to {{ sentTo }}. The card's assignees see your reason.
@@ -25,14 +25,8 @@
       <v-btn icon="mdi-close" variant="text" size="small" aria-label="Dismiss" @click="sentTo = ''" />
     </template>
   </AppCallout>
-  <AppCallout v-else-if="card && offered" variant="info" icon="mdi-keyboard-return">
-    {{ budKey }} came from {{ card.key }} on the {{ card.board.name }} board. If it isn't ready to build, send it back.
-    <template #actions>
-      <v-btn variant="outlined" size="small" @click="open = true">Send back to {{ card.board.name }}…</v-btn>
-    </template>
-  </AppCallout>
   <BUDSendBackDialog
-    v-if="card" v-model="open" :bud-key="budKey" :card-key="card.key" :board-name="card.board.name" @sent="sent"
+    v-if="card" v-model="store.asking" :bud-key="budKey" :card-key="card.key" :board-name="card.board.name" @sent="sent"
   />
 </template>
 
@@ -40,29 +34,25 @@
 import { computed, ref, watch } from 'vue'
 import BUDSendBackDialog from '@/components/buds/origin/BUDSendBackDialog.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
-import { usePermissions } from '@/composables/usePermissions'
+import { useBudSendBack } from '@/composables/useBudSendBack'
 import { useBUDStore } from '@/stores/bud'
 import { useBudOriginStore } from '@/stores/budOrigin'
 import { budRef, type BUDDocument } from '@/types'
-import { canSendBack } from '@/utils/handoverChips'
 
 const props = defineProps<{ bud: BUDDocument }>()
 const emit = defineEmits<{ sent: [] }>()
 
 const store = useBudOriginStore()
 const budStore = useBUDStore()
-const { hasPermission } = usePermissions()
-const open = ref(false)
+const { card } = useBudSendBack(() => props.bud)
 const sentTo = ref('')
 
 const budKey = computed(() => budRef(props.bud.bud_number))
-const card = computed(() => (store.budId === props.bud.id ? store.origin?.card ?? null : null))
-const offered = computed(() => !!store.active && canSendBack(props.bud.status) && hasPermission('buds:edit'))
 
 // The page is reused for the next BUD: nothing of this one's send-back carries over.
 watch(() => props.bud.id, () => {
   sentTo.value = ''
-  open.value = false
+  store.asking = false
 })
 
 async function sent(): Promise<void> {

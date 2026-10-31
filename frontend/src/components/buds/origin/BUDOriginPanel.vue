@@ -25,21 +25,22 @@
   </AppPanel>
   <AppPanel v-else-if="card" title="Origin">
     <template #action>
-      <router-link :to="cardLink" class="origin__open">Open card</router-link>
+      <router-link :to="cardLink" class="origin__link">Open card</router-link>
     </template>
     <div class="origin">
-      <router-link :to="{ name: 'board', params: { key: card.board.key } }" class="origin__board">
+      <router-link :to="{ name: 'board', params: { key: card.board.key } }" class="origin__link origin__board">
         {{ card.board.name }} board
       </router-link>
-      <div class="origin__card">
+      <router-link :to="cardLink" class="origin__link origin__card">
         <span class="origin__key">{{ card.key }}</span>
         <span class="origin__title">{{ card.title }}</span>
-      </div>
+      </router-link>
       <ul v-if="others.length" class="origin__list" aria-label="Other BUDs from this card">
         <HandoverBudRow v-for="h in others" :key="h.id" :handover="h" :can-retry="false" :retrying="false" />
       </ul>
       <OriginComments
-        :comments="store.comments" :has-more="!!store.nextCursor" :loading="store.loadingMore" @more="store.more()"
+        :comments="store.comments" :has-more="!!store.nextCursor" :loading="store.loadingMore" :error="store.moreError"
+        @more="store.more()"
       />
       <p class="origin__text">{{ returnNote }}</p>
     </div>
@@ -74,8 +75,10 @@ const returnNote = computed(() => {
     : 'Development has started, so it stays here. Raise problems on the BUD, as a comment or a bug.'
 })
 
-// A status change (sent back, discarded, restored) can change the card's handovers.
-watch([() => props.budId, () => props.status], ([id]) => void store.load(id), { immediate: true })
+// Another BUD loads afresh; a status change (sent back, discarded,
+// restored) refreshes the card and handovers, keeping the comments shown.
+watch(() => props.budId, id => void store.load(id), { immediate: true })
+watch(() => props.status, () => void store.refresh(props.budId))
 </script>
 
 <style scoped>
@@ -84,10 +87,13 @@ watch([() => props.budId, () => props.status], ([id]) => void store.load(id), { 
   flex-direction: column;
   gap: 12px;
 }
-.origin__board,
-.origin__open {
+.origin__link {
   font-size: 13px;
   color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+}
+.origin__link:hover {
+  text-decoration: underline;
 }
 .origin__card {
   display: flex;
@@ -96,11 +102,11 @@ watch([() => props.budId, () => props.status], ([id]) => void store.load(id), { 
 }
 .origin__key {
   font: 500 12px var(--font-mono);
-  color: rgb(var(--v-theme-on-surface-variant));
 }
 .origin__title {
   font-size: 14px;
   font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
   overflow-wrap: anywhere;
 }
 .origin__list {

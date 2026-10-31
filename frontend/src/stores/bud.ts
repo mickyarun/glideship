@@ -174,9 +174,6 @@ export const useBUDStore = defineStore('bud', () => {
 
   // Signal that design phase was entered (frontend should show repo selection)
   const designAvailable = ref(false)
-  // The same signal for a BUD this page didn't move (a card handed over at
-  // design): its design panel starts generation when that BUD opens.
-  const designPendingFor = ref<string | null>(null)
 
   async function updateBUD(id: string, updates: Partial<BUDDocument>): Promise<BUDDocument | null> {
     error.value = ''
@@ -717,7 +714,6 @@ export const useBUDStore = defineStore('bud', () => {
     loading,
     error,
     designAvailable,
-    designPendingFor,
     budsByStatus,
     fetchBUDs,
     fetchBUD,

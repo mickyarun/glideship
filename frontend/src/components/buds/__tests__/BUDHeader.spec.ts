@@ -15,6 +15,7 @@
 /** The header shows the assignee's photo, initials without one, and an empty ring when unassigned. */
 
 import { mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
 import { createVuetify } from 'vuetify'
 import type { BUDDocument } from '@/types'
@@ -52,7 +53,7 @@ function mountHeader(assignee: { name: string | null; photo: string | null }) {
       canEditBuds: false,
     },
     global: {
-      plugins: [createVuetify()],
+      plugins: [createVuetify(), createPinia()],
       stubs: {
         RouterLink: true,
         BUDPriorityMenu: true,

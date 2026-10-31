@@ -13,10 +13,13 @@
 // limitations under the License.
 
 /**
- * Where the open BUD came from, shared by its Origin panel and its Send
- * back action: the card (or that it's on a board I can't see, or that it
+ * Where the open BUD came from, shared by its Origin panel, its header and
+ * Send back: the card (or that it's on a board I can't see, or that it
  * wasn't handed over), the card's comments a page at a time (newest
- * first), and its handovers. A reply overtaken by a later load is dropped.
+ * first), and its handovers. Opening another BUD loads afresh; a change to
+ * this one (its status, a send-back) refreshes the card and handovers and
+ * adds any newer comments, keeping the older pages already shown. A reply
+ * overtaken by a later one is dropped.
  */
 import { isAxiosError } from 'axios'
 import { defineStore } from 'pinia'
@@ -39,51 +42,78 @@ export const useBudOriginStore = defineStore('budOrigin', () => {
   const loading = ref(false)
   const loadingMore = ref(false)
   const error = ref('')
+  const moreError = ref('')
+  /** The send-back dialog is open (the header's menu asks for it). */
+  const asking = ref(false)
+  // ``seq`` counts BUDs opened (a page of older comments belongs to one);
+  // ``head`` counts reads of the card and its newest comments.
   let seq = 0
+  let head = 0
 
   /** The live handover holding this BUD, which Send back acts on. */
   const active = computed(() => origin.value?.handovers.find(h => h.status === 'active' && h.bud_id === budId.value) ?? null)
 
-  async function load(id: string): Promise<void> {
-    if (budId.value !== id) {
-      origin.value = null
-      comments.value = []
-    }
-    budId.value = id
-    const mine = ++seq
+  async function read(id: string, fresh: boolean): Promise<void> {
+    const opened = seq
+    const mine = ++head
     loading.value = true
     error.value = ''
     try {
       const got = await handoverApi.origin(id, ORIGIN_COMMENTS_PAGE)
-      if (mine !== seq) return
+      if (mine !== head || opened !== seq) return
+      const newest = got.comments?.items ?? []
+      if (fresh) {
+        comments.value = newest
+        nextCursor.value = got.comments?.next_cursor ?? null
+      } else {
+        const seen = new Set(comments.value.map(c => c.id))
+        comments.value = [...newest.filter(c => !seen.has(c.id)), ...comments.value]
+      }
       origin.value = got
-      comments.value = got.comments?.items ?? []
-      nextCursor.value = got.comments?.next_cursor ?? null
     } catch (err) {
-      if (mine !== seq) return
+      if (mine !== head || opened !== seq) return
       // No origin to show (the BUD is gone, or this server has no origins).
       if (isAxiosError(err) && err.response?.status === NOT_FOUND) origin.value = NO_ORIGIN
       else error.value = extractApiError(err, "Couldn't load where this BUD came from.")
       logFailure('buds', 'origin fetch', err)
     } finally {
-      if (mine === seq) loading.value = false
+      if (mine === head) loading.value = false
     }
   }
 
-  /** The next page of older comments (dropped if the origin reloaded meanwhile). */
+  /** Open another BUD's origin, from the first page of comments. */
+  function load(id: string): Promise<void> {
+    seq++
+    budId.value = id
+    origin.value = null
+    comments.value = []
+    nextCursor.value = null
+    moreError.value = ''
+    asking.value = false
+    return read(id, true)
+  }
+
+  /** The same BUD changed: its card and handovers again, and any newer comments. */
+  function refresh(id: string): Promise<void> {
+    return budId.value === id ? read(id, false) : load(id)
+  }
+
+  /** The next page of older comments; a failure says so beside them. */
   async function more(): Promise<void> {
     const id = budId.value
     const cursor = nextCursor.value
     if (!id || !cursor || loadingMore.value) return
     loadingMore.value = true
-    const at = seq
+    moreError.value = ''
+    const opened = seq
     try {
       const got = await handoverApi.origin(id, ORIGIN_COMMENTS_PAGE, cursor)
-      if (at !== seq) return
+      if (opened !== seq) return
       const seen = new Set(comments.value.map(c => c.id))
       comments.value = [...comments.value, ...(got.comments?.items ?? []).filter(c => !seen.has(c.id))]
       nextCursor.value = got.comments?.next_cursor ?? null
     } catch (err) {
+      if (opened === seq) moreError.value = extractApiError(err, "Couldn't load older comments. Try again.")
       logFailure('buds', 'origin comments fetch', err)
     } finally {
       loadingMore.value = false
@@ -96,7 +126,7 @@ export const useBudOriginStore = defineStore('budOrigin', () => {
     if (!id) return null
     try {
       await handoverApi.returnToBoard(id, reason)
-      await load(id)
+      await refresh(id)
       return null
     } catch (err) {
       logFailure('buds', 'send back', err)
@@ -104,5 +134,8 @@ export const useBudOriginStore = defineStore('budOrigin', () => {
     }
   }
 
-  return { budId, origin, comments, nextCursor, loading, loadingMore, error, active, load, more, sendBack }
+  return {
+    budId, origin, comments, nextCursor, loading, loadingMore, error, moreError, asking, active,
+    load, refresh, more, sendBack,
+  }
 })

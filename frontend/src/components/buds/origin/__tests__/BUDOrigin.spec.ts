@@ -28,6 +28,7 @@ import { boardTestPlugins } from '@/components/boards/__tests__/mountHelpers'
 import { handover, refusal } from '@/components/boards/handover/__tests__/handoverHarness'
 import BUDOriginPanel from '@/components/buds/origin/BUDOriginPanel.vue'
 import BUDSendBack from '@/components/buds/origin/BUDSendBack.vue'
+import { useBudSendBack } from '@/composables/useBudSendBack'
 import { handoverApi } from '@/services/handoverApi'
 import { useAuthStore } from '@/stores/auth'
 import type { BUDDocument, BUDStatus } from '@/types'
@@ -49,14 +50,28 @@ async function mountBud(status: BUDStatus, perms = ['buds:edit']) {
   const { plugins } = boardTestPlugins()
   useAuthStore().user = { id: 'me', permissions: perms } as never
   const bud = { id: BUD_ID, bud_number: 123, status } as BUDDocument
+  // The header's menu offers Send back from useBudSendBack; a button stands in for it.
   const Host = defineComponent({
-    setup: () => () => [h(BUDOriginPanel, { budId: BUD_ID, status }), h(BUDSendBack, { bud })],
+    setup: () => {
+      const offer = useBudSendBack(() => bud)
+      return () => [
+        h(BUDOriginPanel, { budId: BUD_ID, status }),
+        h(BUDSendBack, { bud }),
+        offer.offered.value ? h('button', { onClick: offer.ask }, `Send back to ${offer.card.value?.board.name}…`) : null,
+      ]
+    },
   })
   const wrapper = mount(Host, { global: { plugins: plugins as never[] }, attachTo: document.body })
   await flushPromises()
   return wrapper
 }
 const text = () => document.body.textContent ?? ''
+async function typeReason(value: string): Promise<void> {
+  const area = document.querySelector('textarea') as HTMLTextAreaElement
+  area.value = value
+  area.dispatchEvent(new Event('input'))
+  await flushPromises()
+}
 const button = (label: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim().startsWith(label))
 
 describe('BUD origin and send back', () => {
@@ -111,10 +126,15 @@ describe('BUD origin and send back', () => {
     expect(button('Discard BUD and send back')?.disabled).toBe(true)
     button('Unclear scope')?.click()
     await flushPromises()
-    const area = document.querySelector('textarea') as HTMLTextAreaElement
-    area.value = 'Unclear scope: one team or any team?'
-    area.dispatchEvent(new Event('input'))
+    // A common reason alone isn't enough; picking another replaces it.
+    expect(button('Discard BUD and send back')?.disabled).toBe(true)
+    button('Duplicate')?.click()
     await flushPromises()
+    expect((document.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Duplicate: ')
+    button('Unclear scope')?.click()
+    await flushPromises()
+    await typeReason('Unclear scope: one team or any team?')
+    expect(button('Discard BUD and send back')?.disabled).toBe(false)
     button('Discard BUD and send back')?.click()
     await flushPromises()
     expect(api.returnToBoard).toHaveBeenCalledWith(BUD_ID, 'Unclear scope: one team or any team?')
@@ -130,10 +150,12 @@ describe('BUD origin and send back', () => {
     await mountBud('design')
     button('Send back to Product')?.click()
     await flushPromises()
-    button('Unclear scope')?.click()
-    await flushPromises()
+    await typeReason('Unclear scope: which team?')
     button('Discard BUD and send back')?.click()
     await flushPromises()
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(words)
+    // The dialog stays, with my reason, so I can change course.
+    expect(text()).toContain('Send BUD-123 back to PDT-17?')
+    expect((document.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Unclear scope: which team?')
   })
 })

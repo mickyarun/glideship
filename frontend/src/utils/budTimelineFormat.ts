@@ -48,6 +48,8 @@ export const EVENT_MAP: Record<string, EventConfig> = {
   feature_linked: { icon: 'mdi-link-plus', color: 'primary', label: 'Feature linked' },
   feature_unlinked: { icon: 'mdi-link-off', color: 'muted', label: 'Feature unlinked' },
   features_auto_linked: { icon: 'mdi-robot', color: 'primary', label: 'Features auto-linked' },
+  handed_over_from_board: { icon: 'mdi-truck-delivery-outline', color: 'primary', label: 'Handed over from a board card' },
+  returned_to_board: { icon: 'mdi-keyboard-return', color: 'warning', label: 'Sent back to its board card' },
 }
 
 export const DEFAULT_CONFIG: EventConfig = { icon: 'mdi-circle-small', color: 'muted', label: 'Event' }

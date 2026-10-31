@@ -15,13 +15,15 @@
  -->
 
 <!-- One BUD on the board. The title link stretches over the whole card,
-     so the bug-count link and the Restore button sit above it and stay
-     separately clickable without nesting interactive elements. -->
+     so the origin card's link (when I can open its board), the bug-count
+     link and the Restore button sit above it and stay separately
+     clickable without nesting interactive elements. -->
 <template>
   <article class="board-card">
     <div class="board-card__top">
       <span class="board-card__ref">{{ budRef(bud.bud_number) }}</span>
       <BudPriorityChip :priority="bud.priority" />
+      <BudOriginLink v-if="bud.origin" :origin="bud.origin" />
       <span
         v-if="bud.complexity"
         class="board-card__dots"
@@ -86,6 +88,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
+import BudOriginLink from '@/components/buds/board/BudOriginLink.vue'
 import AppMonogram from '@/components/common/AppMonogram.vue'
 import { budRef, type BUDListItem } from '@/types'
 import { budAge, cardStatusLines } from '@/utils/budBoard'
@@ -100,6 +103,7 @@ const props = defineProps<{
 const emit = defineEmits<{ restore: [bud: BUDListItem] }>()
 
 const lines = computed(() => cardStatusLines(props.bud, props.now))
+
 </script>
 
 <style scoped>

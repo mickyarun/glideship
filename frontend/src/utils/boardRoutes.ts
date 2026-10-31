@@ -33,3 +33,9 @@ export function parseCardNumber(raw: unknown): number | null {
   const n = Number(raw)
   return Number.isSafeInteger(n) && n >= 1 ? n : null
 }
+
+/** The route of a card named by its key ("PDT-1") on its board; null when the key has no number. */
+export function cardRouteByKey(boardKey: string, cardKey: string) {
+  const number = parseCardNumber(cardKey.slice(cardKey.lastIndexOf('-') + 1))
+  return number ? { name: 'board-card', params: { key: boardKey, number } } : null
+}

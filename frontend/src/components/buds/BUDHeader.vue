@@ -15,9 +15,9 @@
  -->
 
 <!-- BUD detail header: breadcrumb, reference / priority / stage, the
-     title (click to rename), who owns it and when it moved, and the
-     actions: history, AI chat, move to the next stage, and the overflow
-     menu. -->
+     title (click to rename), who owns it, the card it came from and when
+     it moved, and the actions: history, AI chat, move to the next stage,
+     and the overflow menu (with Send back for a BUD from a card). -->
 <template>
   <header class="bud-header">
     <nav aria-label="Breadcrumb" class="bud-header__crumbs">
@@ -72,6 +72,7 @@
               </button>
             </template>
           </BUDAssigneeMenu>
+          <BUDOriginChip :bud-id="bud.id" />
           <span>Created {{ formatDate(bud.created_at) }}</span>
           <span>Updated {{ formatDate(bud.updated_at) }}</span>
           <span v-if="bud.prod_p70_date && !isClosed">Ships by {{ formatDate(bud.prod_p70_date) }} · 70% likely</span>
@@ -112,7 +113,9 @@
           :can-edit-buds="canEditBuds"
           :can-move-to="canMoveTo"
           :can-delete="canDelete"
+          :send-back-to="sendBack.offered.value ? sendBack.card.value?.board.name : null"
           @update-status="emit('update-status', $event)"
+          @send-back="sendBack.ask()"
           @restore="emit('restore')"
           @open-skill-settings="emit('open-skill-settings')"
           @delete="emit('delete')"
@@ -128,6 +131,8 @@ import AppMonogram from '@/components/common/AppMonogram.vue'
 import BUDAssigneeMenu from './detail/BUDAssigneeMenu.vue'
 import BUDMoreMenu from './detail/BUDMoreMenu.vue'
 import BUDPriorityMenu from './detail/BUDPriorityMenu.vue'
+import BUDOriginChip from './origin/BUDOriginChip.vue'
+import { useBudSendBack } from '@/composables/useBudSendBack'
 import { BUD_STATUS_COLORS, BUD_STATUS_LABELS, budRef } from '@/types'
 import type { BUDDocument, BUDPriority, BUDStatus } from '@/types'
 import { formatDate } from '@/utils/date'
@@ -164,6 +169,8 @@ const emit = defineEmits<{
   'open-skill-settings': []
   'open-history': []
 }>()
+
+const sendBack = useBudSendBack(() => props.bud)
 
 const assigneeLabel = computed(() =>
   `${props.bud.assignee_name ? `Assigned to ${props.bud.assignee_name}` : 'Unassigned'}. Change assignee`,

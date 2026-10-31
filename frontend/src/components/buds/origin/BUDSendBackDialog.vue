@@ -17,8 +17,8 @@
 <!-- "Send BUD-140 back to PDT-17?": says what happens (the BUD is
      discarded, the card goes back with my reason, and a later handover
      brings the same BUD back), asks for the reason (required; a common
-     one is a tap away), and sends it. A refusal stays here in its code's
-     words. -->
+     one starts it with a tap, and needs words after it), and sends it. A
+     refusal stays here, in its code's words. -->
 <template>
   <AppConfirmDialog
     :model-value="modelValue"
@@ -26,7 +26,7 @@
     action="Discard BUD and send back"
     color="error"
     :busy="busy"
-    :disabled="!reason.trim()"
+    :disabled="!said"
     @update:model-value="open => !open && emit('update:modelValue', false)"
     @confirm="submit"
   >
@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import { SEND_BACK_REASON_MAX, SEND_BACK_REASONS } from '@/constants/boards'
@@ -72,16 +72,25 @@ watch(() => props.modelValue, open => {
   failure.value = ''
 })
 
-/** A common reason starts the text (whatever I'd written stays after it), and I carry on typing. */
+const PREFIXES = SEND_BACK_REASONS.map(r => `${r}:`)
+/** What I wrote after a common reason's words (all of it when I didn't pick one). */
+const own = computed(() => {
+  const text = reason.value.trim()
+  const prefix = PREFIXES.find(p => text.startsWith(p))
+  return (prefix ? text.slice(prefix.length) : text).trim()
+})
+// A common reason alone isn't a reason yet: it needs my words after it.
+const said = computed(() => !!own.value)
+
+/** A common reason starts the text, replacing one picked before; what I'd written stays after it. */
 function start(r: string): void {
-  const rest = reason.value.trim()
-  reason.value = rest ? `${r}: ${rest}` : `${r}: `
+  reason.value = own.value ? `${r}: ${own.value}` : `${r}: `
   field.value?.focus()
 }
 
 async function submit(): Promise<void> {
   const text = reason.value.trim()
-  if (!text || busy.value) return
+  if (!said.value || busy.value) return
   busy.value = true
   failure.value = ''
   const refused = await store.sendBack(text)
