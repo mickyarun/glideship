@@ -71,7 +71,7 @@
       />
       <span class="stage-row__default-text" aria-hidden="true">Default</span>
     </label>
-    <v-btn icon="mdi-delete-outline" variant="text" size="small" :aria-label="`Delete ${stage.name}`" @click="askDelete" />
+    <v-btn icon="mdi-delete-outline" variant="text" size="small" class="stage-row__delete" :aria-label="`Delete ${stage.name}`" @click="askDelete" />
     <div class="stage-row__tags">
       <AppTag v-if="stage.id === board.handover_stage_id" color="category-done">Handover stage</AppTag>
       <AppTag v-if="stage.id === board.return_stage_id" color="category-todo">Return stage</AppTag>

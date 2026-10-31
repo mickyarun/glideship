@@ -88,9 +88,19 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     padding: 12px 16px;
   }
-  .stage-row__order,
   .stage-row__tags {
     grid-column: 1 / -1;
+  }
+  /* Order on the left of the first line, delete on its right, rather than
+     delete alone on a line of its own. */
+  .stage-row__order {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .stage-row__delete {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
   }
   .stage-row__label,
   .stage-row__default-text {
