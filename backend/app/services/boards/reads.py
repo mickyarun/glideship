@@ -34,9 +34,9 @@ from app.services.boards.access import BoardAccess
 from app.services.boards.errors import BoardItemNotFoundError
 
 
-def card_key(board: Board, number: int) -> str:
+def card_key(board_key: str, number: int) -> str:
     """A card's display key, e.g. ``SEO-14``."""
-    return f"{board.key}-{number}"
+    return f"{board_key}-{number}"
 
 
 async def board_detail(db: AsyncSession, access: BoardAccess) -> BoardDetail:
@@ -78,7 +78,7 @@ def card_summary(board: Board, row: CardSummaryRow) -> CardSummary:
     """One summary row as the API returns it."""
     return CardSummary(
         id=row.id,
-        key=card_key(board, row.number),
+        key=card_key(board.key, row.number),
         number=row.number,
         stage_id=row.stage_id,
         position=row.position,

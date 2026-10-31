@@ -17,28 +17,26 @@
 The caller edits both boards. The card lands at the bottom of a stage on
 the target (:func:`card_carry.pick_stage`) and meets that stage's entry
 rules as it will arrive there: with the labels, assignees and repository
-it keeps (:mod:`app.services.boards.card_carry`). It takes the target's
-next number, and ``board_card_key_aliases`` remembers the old key. Comments,
+it keeps (:mod:`app.services.boards.card_carry`). The write itself is
+:func:`app.services.boards.card_relocate.relocate_card`. Comments,
 checklist, attachments, docs and history stay with the row.
 
 Locks: the kept repository's link, then both stages in id order, then the
-card, then the target board's number counter (late, as a create takes it).
-Nobody is notified: removed assignees aren't told, and the others hear
-nothing new.
+card, then the kept labels, then the target board's number counter (late,
+as a create takes it). Each person may move only
+``BoardsConfig.move_board_limit`` cards per window. Nobody is notified:
+removed assignees aren't told, and the others hear nothing new.
 """
 
 import uuid
 from dataclasses import replace
-from datetime import UTC, datetime
 from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.board import BoardStage
-from app.models.board_enums import BoardCardEventType
 from app.repositories.board_card import BoardCardRepository
-from app.repositories.board_card_key import BoardCardKeyRepository
-from app.repositories.board_card_links import BoardCardLinkRepository
 from app.repositories.board_card_summary import BoardCardSummaryRepository, CardSummaryRow
 from app.repositories.board_repo import BoardRepoRepository
 from app.repositories.board_stage import BoardStageRepository
@@ -46,18 +44,24 @@ from app.schemas.boards.card import CardDetail, CardMoveBoard
 from app.services.boards.access import BoardAccess, CardAccess, resolve_board_access
 from app.services.boards.card_carry import Carry, carry_over, pick_stage
 from app.services.boards.card_checks import check_open
-from app.services.boards.card_place import STALE_NEIGHBOURS, place_card
-from app.services.boards.card_timing import enter_category
+from app.services.boards.card_place import STALE_NEIGHBOURS
+from app.services.boards.card_relocate import Relocation, relocate_card
 from app.services.boards.constants import BOARD_ACTION_MIN_ROLE, DELIVERY_BOARD_KEY, BoardAction
-from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError, BoardRuleError
-from app.services.boards.events import record_event
+from app.services.boards.errors import (
+    BoardConflictError,
+    BoardItemNotFoundError,
+    BoardRateLimitedError,
+    BoardRuleError,
+)
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 from app.services.boards.move_rules import EntryCause, enter_stage
-from app.services.boards.reads import card_detail, card_key, summary_json
+from app.services.boards.reads import card_detail, summary_json
 from app.services.boards.stage_service import STAGE_NOT_FOUND
+from app.services.fixed_window import seconds_until_allowed
 
 TO_DELIVERY = "Moving a card to Delivery is a handover."
 SAME_BOARD = "The card is already on this board."
+TOO_MANY_MOVES = "You've moved a lot of cards between boards just now. Try again in a moment."
 
 
 async def move_to_board(db: AsyncSession, source: CardAccess, body: CardMoveBoard) -> CardDetail:
@@ -69,8 +73,10 @@ async def move_to_board(db: AsyncSession, source: CardAccess, body: CardMoveBoar
         BoardNotFoundError / BoardForbiddenError / BoardArchivedError: The
             caller can't see, can't edit, or can't change the target (404/403/409).
         ChecklistOpenError: Completing there with open items, unconfirmed (409).
+        BoardRateLimitedError: Too many moves by this person lately (429).
     """
     access, card = source.access, source.card
+    await _throttle(access)
     target = await _target(db, access, body.target_board_key)
     check_open(card)
     stage_repo = BoardStageRepository(db, org_id=access.org_id)
@@ -88,62 +94,40 @@ async def move_to_board(db: AsyncSession, source: CardAccess, body: CardMoveBoar
     check_open(card)
     if (card.board_id, card.stage_id, card.repo_id) != (access.board.id, from_stage.id, repo_id):
         raise BoardConflictError(STALE_NEIGHBOURS)
-    carry = await carry_over(db, access, target, card)
-    kept_repo = repo_id if keep_repo else None
+    carry = await carry_over(db, access, target, card, keep_repo=keep_repo)
     await enter_stage(
         to_stage,
         cause=EntryCause.MOVE_BOARD,
         from_stage=from_stage,
-        facts=partial(_facts, db, access, card.id, carry, kept_repo),
+        facts=partial(_facts, db, access, card.id, carry),
         confirm_open_checklist=body.confirm_open_checklist,
     )
-    links = BoardCardLinkRepository(db, org_id=access.org_id)
-    # The old board's labels go before the card's board changes under them.
-    await links.set_labels(card, [])
-    await links.set_assignees(card, carry.assignee_ids)
-    placement = await place_card(db, access.org_id, to_stage, card_id=card.id)
-    old_key = card_key(access.board, card.number)
-    BoardCardKeyRepository(db, org_id=access.org_id).add_alias(card, access.board.id, card.number)
-    (number,) = await cards.allocate_card_numbers(target.board.id, 1)
-    # One UPDATE: board, number, stage and repository change together, so
-    # the composite keys never see the card half-moved.
-    card.board_id, card.number, card.stage_id = target.board.id, number, to_stage.id
-    card.position, card.repo_id = placement.position, kept_repo
-    enter_category(card, to_stage.category, datetime.now(UTC))
-    await db.flush()
-    await links.set_labels(card, carry.label_ids)
-    await record_event(
-        db,
-        card,
-        BoardCardEventType.MOVED_BOARD,
-        actor_id=access.user_id,
-        to_stage=to_stage,
-        detail={
-            "from_board": _board_ref(access),
-            "to_board": _board_ref(target),
-            "from_stage": {"id": str(from_stage.id), "name": from_stage.name},
-            "old_key": old_key,
-            "new_key": card_key(target.board, number),
-            "dropped_labels": carry.dropped_labels,
-            "removed_assignees": [str(u) for u in carry.removed_assignees],
-            "cleared_repo": None if keep_repo or repo_id is None else str(repo_id),
-        },
-    )
+    move = Relocation(access.board, target.board, from_stage, to_stage, carry)
+    placed = await relocate_card(db, card, move, actor_id=access.user_id)
     detail = await card_detail(db, target.board, card)
     left = BoardChanges.of(access)
-    left.emit(
-        BoardSocketEvent.CARD_LEFT_BOARD,
-        card_id=str(card.id),
-        new_key=detail.key,
-        to_board_key=target.board.key,
-    )
+    # Only the id: the target may be a board some of the source's
+    # watchers can't see, so its key and the card's new key stay out.
+    left.emit(BoardSocketEvent.CARD_LEFT_BOARD, card_id=str(card.id))
     arrived = BoardChanges.of(target)
-    if placement.rebalanced:
+    if placed.placement.rebalanced:
         arrived.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(to_stage.id))
     arrived.emit(BoardSocketEvent.CARD_CREATED, card=summary_json(detail))
     left.queue(db)
     await arrived.commit(db)
     return detail
+
+
+async def _throttle(access: BoardAccess) -> None:
+    """Count the attempt (refused ones too) against the person's move budget."""
+    cfg = settings.boards
+    wait = await seconds_until_allowed(
+        f"board_move:{access.org_id}:{access.user_id}",
+        limit=cfg.move_board_limit,
+        window_seconds=cfg.move_board_window_seconds,
+    )
+    if wait:
+        raise BoardRateLimitedError(TOO_MANY_MOVES, retry_after_seconds=wait)
 
 
 async def _target(db: AsyncSession, access: BoardAccess, raw_key: str) -> BoardAccess:
@@ -186,19 +170,11 @@ async def _lock_stages(
 
 
 async def _facts(
-    db: AsyncSession,
-    access: BoardAccess,
-    card_id: uuid.UUID,
-    carry: Carry,
-    repo_id: uuid.UUID | None,
+    db: AsyncSession, access: BoardAccess, card_id: uuid.UUID, carry: Carry
 ) -> CardSummaryRow:
     """The card's facts as it will arrive: only what it keeps on the target."""
     summaries = BoardCardSummaryRepository(db, org_id=access.org_id)
     (row,) = await summaries.summaries_by_ids(access.board.id, [card_id])
     return replace(
-        row, assignee_ids=carry.assignee_ids, label_ids=carry.label_ids, repo_id=repo_id
+        row, assignee_ids=carry.assignee_ids, label_ids=carry.label_ids, repo_id=carry.repo_id
     )
-
-
-def _board_ref(access: BoardAccess) -> dict[str, str]:
-    return {"id": str(access.board.id), "key": access.board.key, "name": access.board.name}

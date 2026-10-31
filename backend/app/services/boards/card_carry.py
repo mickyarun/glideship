@@ -38,12 +38,14 @@ from app.services.boards.stage_service import STAGE_NOT_FOUND
 
 @dataclass(frozen=True)
 class Carry:
-    """The labels and assignees a moving card keeps, and what it loses."""
+    """What a moving card keeps (labels, assignees, repository) and what it loses."""
 
     label_ids: list[uuid.UUID]
     dropped_labels: list[str]
     assignee_ids: list[uuid.UUID]
     removed_assignees: list[uuid.UUID]
+    repo_id: uuid.UUID | None
+    cleared_repo: uuid.UUID | None
 
 
 def pick_stage(
@@ -74,9 +76,20 @@ def pick_stage(
 
 
 async def carry_over(
-    db: AsyncSession, source: BoardAccess, target: BoardAccess, card: BoardCard
+    db: AsyncSession,
+    source: BoardAccess,
+    target: BoardAccess,
+    card: BoardCard,
+    *,
+    keep_repo: bool,
 ) -> Carry:
-    """Match the card's labels on the target board and keep its assignees who can edit there."""
+    """Match the card's labels on the target board and keep its assignees who can edit there.
+
+    The matched labels are held until commit, so one deleted meanwhile is
+    dropped (and listed) rather than failing the write. ``keep_repo`` says
+    whether the target links the card's repository (its link held by the
+    caller).
+    """
     org = source.org_id
     links = BoardCardLinkRepository(db, org_id=org)
     labels = BoardLabelRepository(db, org_id=org)
@@ -85,15 +98,18 @@ async def carry_over(
     by_name: dict[str, uuid.UUID] = {}
     for label in await labels.list_for_board(target.board.id):
         by_name.setdefault(label.name.casefold(), label.id)
-    kept = [by_name[n.casefold()] for n in names if n.casefold() in by_name]
-    dropped = [n for n in names if n.casefold() not in by_name]
+    matched = {n: by_name[n.casefold()] for n in names if n.casefold() in by_name}
+    held = await labels.hold_labels(target.board.id, matched.values())
     people = await links.assignee_ids(card.id)
     editors = await BoardAccessRepository(db, org_id=org).users_with_access(
         target.board.id, people, min_role=BOARD_ACTION_MIN_ROLE[BoardAction.EDIT_CARD]
     )
+    repo_id = card.repo_id
     return Carry(
-        label_ids=sorted(set(kept)),
-        dropped_labels=dropped,
+        label_ids=sorted(held),
+        dropped_labels=[n for n in names if matched.get(n) not in held],
         assignee_ids=sorted(editors),
         removed_assignees=sorted(people - editors),
+        repo_id=repo_id if keep_repo else None,
+        cleared_repo=None if keep_repo else repo_id,
     )

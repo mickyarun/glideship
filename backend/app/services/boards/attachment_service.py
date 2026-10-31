@@ -117,7 +117,7 @@ async def upload_file(
             policy(),
             get_file_storage(),
             org_id=access.org_id,
-            folder=f"board-attachments/{card_key(access.board, card.number)}",
+            folder=f"board-attachments/{card_key(access.board.key, card.number)}",
             name=name,
             data=data,
         )

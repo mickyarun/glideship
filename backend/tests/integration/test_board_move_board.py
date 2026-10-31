@@ -87,11 +87,9 @@ async def test_a_card_moves_with_a_new_key_and_its_old_key_still_opens_it(
     events = [(topic, data["event"], data) for topic, data in sent]
     source_id, target_id = two.source["board"]["id"], two.target["board"]["id"]
     (left,) = [d for t, e, d in events if e == "card_left_board"]
-    assert (left["card_id"], left["new_key"], left["to_board_key"]) == (
-        card["id"],
-        moved["key"],
-        dst,
-    )
+    # Only the id: the target's key never reaches the source board's watchers.
+    envelope = {"event", "actor_id", "origin"}
+    assert {k: v for k, v in left.items() if k not in envelope} == {"card_id": card["id"]}
     assert [t for t, e, _ in events if e == "card_left_board"] == [f"board:{source_id}"]
     (arrived,) = [(t, d) for t, e, d in events if e == "card_created"]
     assert arrived[0] == f"board:{target_id}" and arrived[1]["card"]["key"] == moved["key"]

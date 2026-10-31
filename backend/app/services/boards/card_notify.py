@@ -16,9 +16,10 @@
 
 Nobody hears about their own action. Recipients are narrowed to people who
 can still open the board, so someone removed from it stops hearing about
-its cards; Slack DMs then go through the ``board_cards`` category, which
-members can mute. Imports never call these: their writes don't go through
-the card services that stage notices.
+its cards; Slack DMs then go through the category each notice names
+(``board_cards`` for these two), which members can mute. Imports never
+call these: their writes don't go through the card services that stage
+notices.
 """
 
 import uuid
@@ -35,7 +36,8 @@ from app.repositories.user import UserRepository
 from app.services.boards.access import BoardAccess
 from app.services.boards.reads import card_key
 from app.services.notifications import NotificationCategory
-from app.services.notifications.notice import Notice, escape_mrkdwn, stage_notice
+from app.services.notifications.notice import Notice, stage_notice
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 SOMEONE = "Someone"
 
@@ -47,7 +49,7 @@ def card_path(board_key: str, number: int) -> str:
 
 def _slack_text(board: Board, card: BoardCard, lead: str) -> str:
     url = f"{settings.frontend_url}{card_path(board.key, card.number)}"
-    key = card_key(board, card.number)
+    key = card_key(board.key, card.number)
     return (
         f"{escape_mrkdwn(lead)} *{key}* {escape_mrkdwn(card.title)}"
         f" on {escape_mrkdwn(board.name)}. <{url}|Open card>"
@@ -60,16 +62,22 @@ async def _actor_name(db: AsyncSession, access: BoardAccess) -> str:
     return person.name if person else SOMEONE
 
 
-async def _stage(
+async def stage_card_notice(
     db: AsyncSession,
     access: BoardAccess,
     card: BoardCard,
     user_ids: set[uuid.UUID],
     *,
     kind: NotificationType,
+    category: NotificationCategory,
     title: str,
     verb: str,
 ) -> Notice | None:
+    """Tell ``user_ids`` (but not the actor) "<actor> <verb> <card>"; None when nobody hears.
+
+    Only people who can still open the board hear; the DM goes through
+    ``category``, so each kind of card notice can be muted on its own.
+    """
     wanted = user_ids - {access.user_id}
     repo = BoardAccessRepository(db, org_id=access.org_id)
     recipients = await repo.users_with_access(access.board.id, wanted)
@@ -77,13 +85,13 @@ async def _stage(
         return None
     board = access.board
     lead = f"{await _actor_name(db, access)} {verb}"
-    key = card_key(board, card.number)
+    key = card_key(board.key, card.number)
     return stage_notice(
         db,
         org_id=access.org_id,
         user_ids=recipients,
         kind=kind,
-        category=NotificationCategory.BOARD_CARDS,
+        category=category,
         title=title,
         message=f"{lead} {key} {card.title} on {board.name}.",
         link=card_path(board.key, card.number),
@@ -95,12 +103,13 @@ async def stage_assigned(
     db: AsyncSession, access: BoardAccess, card: BoardCard, user_ids: set[uuid.UUID]
 ) -> Notice | None:
     """People newly assigned to ``card`` by someone else; None when nobody is told."""
-    return await _stage(
+    return await stage_card_notice(
         db,
         access,
         card,
         user_ids,
         kind=NotificationType.BOARD_CARD_ASSIGNED,
+        category=NotificationCategory.BOARD_CARDS,
         title="Assigned to a card",
         verb="assigned you to",
     )
@@ -109,12 +118,13 @@ async def stage_assigned(
 async def stage_commented(db: AsyncSession, access: BoardAccess, card: BoardCard) -> Notice | None:
     """The card's assignees hear about a comment that isn't their own."""
     assignees = await BoardCardLinkRepository(db, org_id=access.org_id).assignee_ids(card.id)
-    return await _stage(
+    return await stage_card_notice(
         db,
         access,
         card,
         assignees,
         kind=NotificationType.BOARD_CARD_COMMENT,
+        category=NotificationCategory.BOARD_CARDS,
         title="New comment on your card",
         verb="commented on",
     )

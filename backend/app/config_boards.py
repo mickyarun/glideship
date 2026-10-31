@@ -72,6 +72,12 @@ class BoardsConfig(BoardImportSettings):
     due_reminder_max_cards: int = Field(
         default=15, gt=0, description="Cards one due-reminder message lists before 'and N more'."
     )
+    move_board_limit: int = Field(
+        default=30, gt=0, description="Cards one person may move between boards per window."
+    )
+    move_board_window_seconds: int = Field(
+        default=60, gt=0, description="The window move_board_limit counts over."
+    )
 
     @model_validator(mode="after")
     def _epsilon_below_gap(self) -> "BoardsConfig":

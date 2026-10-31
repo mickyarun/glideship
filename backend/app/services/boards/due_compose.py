@@ -24,7 +24,8 @@ from datetime import datetime, tzinfo
 
 from app.repositories.board_due import DueCard
 from app.services.boards.card_notify import card_path
-from app.services.notifications.notice import escape_mrkdwn
+from app.services.boards.reads import card_key
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 BOARDS_PATH = "/boards"
 
@@ -53,7 +54,7 @@ def _count(n: int, what: str) -> str:
 def _line(card: DueCard, base_url: str, zone: tzinfo, overdue: bool) -> str:
     url = f"{base_url}{card_path(card.board_key, card.number)}"
     line = (
-        f"• <{url}|{card.board_key}-{card.number}> {escape_mrkdwn(card.title)}"
+        f"• <{url}|{card_key(card.board_key, card.number)}> {escape_mrkdwn(card.title)}"
         f" · {escape_mrkdwn(card.board_name)}"
     )
     if overdue:

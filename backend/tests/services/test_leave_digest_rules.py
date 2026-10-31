@@ -23,8 +23,9 @@ from zoneinfo import ZoneInfo
 
 from app.models.leave_request import HalfDay
 from app.services.leave.digest_compose import OutToday, compose
-from app.services.leave.slack_blocks import approval_blocks, escape
+from app.services.leave.slack_blocks import approval_blocks
 from app.services.scheduling.tick_loop import due_local_date
+from app.services.slack_mrkdwn import escape_mrkdwn
 from app.services.slack_verify import verify_slack_signature
 
 KOLKATA = ZoneInfo("Asia/Kolkata")
@@ -76,7 +77,7 @@ def test_nothing_to_post_when_everyone_is_in() -> None:
 
 
 def test_names_cannot_inject_slack_markup() -> None:
-    assert escape("<!channel> & co") == "&lt;!channel&gt; &amp; co"
+    assert escape_mrkdwn("<!channel> & co") == "&lt;!channel&gt; &amp; co"
     blocks = approval_blocks("<@U1> requested leave", uuid.uuid4(), "https://app/leave")
     assert blocks[0]["text"]["text"] == "&lt;@U1&gt; requested leave"
     assert [e["action_id"] for e in blocks[1]["elements"]] == [

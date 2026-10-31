@@ -41,10 +41,14 @@ async def check_assignees(
 async def check_labels(
     db: AsyncSession, access: BoardAccess, label_ids: Iterable[uuid.UUID]
 ) -> None:
-    """A card carries only its own board's labels."""
+    """A card carries only its own board's labels.
+
+    Holds them until the write commits, so a label deleted meanwhile is
+    refused here like an unknown one instead of failing the insert.
+    """
     wanted = set(label_ids)
     repo = BoardLabelRepository(db, org_id=access.org_id)
-    if wanted - await repo.ids_in_board(access.board.id, wanted):
+    if wanted - await repo.hold_labels(access.board.id, wanted):
         raise BoardRuleError("Labels must be labels of this board.")
 
 

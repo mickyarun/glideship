@@ -31,9 +31,20 @@ from app.models.board import BoardStage
 from app.models.board_card import BoardCard
 from app.models.board_card_detail import BoardCardEvent
 from app.models.board_enums import BoardCardEventType
+from app.repositories.board_access import BoardAccessRepository
 from app.repositories.board_card_event import BoardCardEventRepository
 from app.schemas.boards.card_detail import EventPage, EventRead
-from app.services.boards.access import CardAccess
+from app.services.boards.access import BoardAccess, CardAccess
+
+# What a moved_board entry says about its source board, blanked for readers
+# who can't open that board (the old key names it too).
+_HIDDEN_SOURCE: dict[str, Any] = {
+    "from_board": None,
+    "from_stage": None,
+    "old_key": None,
+    "dropped_labels": [],
+    "cleared_repo": None,
+}
 
 
 async def record_event(
@@ -90,7 +101,40 @@ async def list_events(
     repo = BoardCardEventRepository(db, org_id=target.access.org_id)
     rows = await repo.page(target.card.id, before=before, limit=size + 1)
     page = rows[:size]
+    items = [EventRead.model_validate(r) for r in page]
     return EventPage(
-        items=[EventRead.model_validate(r) for r in page],
+        items=await _hide_unseen_sources(db, target.access, items),
         next_before=page[-1].id if len(rows) > size else None,
     )
+
+
+def _from_board(event: EventRead) -> uuid.UUID | None:
+    if event.type is not BoardCardEventType.MOVED_BOARD:
+        return None
+    ref = event.detail.get("from_board")
+    raw = ref.get("id") if isinstance(ref, dict) else None
+    try:
+        return uuid.UUID(str(raw))
+    except ValueError:
+        return None
+
+
+async def _hide_unseen_sources(
+    db: AsyncSession, access: BoardAccess, items: list[EventRead]
+) -> list[EventRead]:
+    """Blank what a ``moved_board`` entry says about a source board the reader can't open.
+
+    Its name, key, stage, labels and repository stay with people who can
+    see that board; everyone else reads "moved here from another board".
+    One role lookup for the whole page.
+    """
+    sources = {board for board in map(_from_board, items) if board is not None}
+    seen = await BoardAccessRepository(db, org_id=access.org_id).boards_with_role(
+        sources, access.user_id, access.perms
+    )
+    return [
+        item.model_copy(update={"detail": {**item.detail, **_HIDDEN_SOURCE}})
+        if (board := _from_board(item)) is not None and board not in seen
+        else item
+        for item in items
+    ]

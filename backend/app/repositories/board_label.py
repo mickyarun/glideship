@@ -49,13 +49,21 @@ class BoardLabelRepository(BaseRepository[BoardLabel]):
         )
         return (await self._db.execute(stmt)).scalar_one_or_none()
 
-    async def ids_in_board(self, board_id: uuid.UUID, ids: Iterable[uuid.UUID]) -> set[uuid.UUID]:
-        """Which of ``ids`` are labels on this board."""
+    async def hold_labels(self, board_id: uuid.UUID, ids: Iterable[uuid.UUID]) -> set[uuid.UUID]:
+        """Which of ``ids`` are labels on this board, held ``FOR KEY SHARE`` until commit.
+
+        A card write that names labels holds them first, so none can be
+        deleted between the check and the write (a key-share lock blocks a
+        delete, not a rename). One deleted before the hold is simply left out.
+        """
         wanted = set(ids)
         if not wanted:
             return set()
         stmt = self._scoped(
-            select(BoardLabel.id).where(BoardLabel.board_id == board_id, BoardLabel.id.in_(wanted))
+            select(BoardLabel.id)
+            .where(BoardLabel.board_id == board_id, BoardLabel.id.in_(wanted))
+            .order_by(BoardLabel.id)
+            .with_for_update(read=True, key_share=True)
         )
         return set((await self._db.execute(stmt)).scalars().all())
 

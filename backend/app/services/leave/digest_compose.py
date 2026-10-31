@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from app.models.leave_request import HalfDay
-from app.services.leave.slack_blocks import escape
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,7 @@ def _names(people: list[OutToday], detail: Callable[[OutToday], str]) -> str:
     parts = []
     for person in sorted(people, key=lambda p: p.name.lower()):
         extra = detail(person)
-        name = escape(person.name)
+        name = escape_mrkdwn(person.name)
         parts.append(f"{name} ({extra})" if extra else name)
     return ", ".join(parts)
 
@@ -81,5 +81,5 @@ def compose(
     if remote:
         lines.append(f"Working from home: {_names(remote, _wfh)}")
     for holiday in holidays:
-        lines.append(f"Holiday: {escape(holiday)}")
+        lines.append(f"Holiday: {escape_mrkdwn(holiday)}")
     return "\n".join(lines)
