@@ -1055,6 +1055,47 @@ These were decided on 2026-10-31 after a first hands-on test.
   picker for anyone who can edit. It lists people with access to the board and saves through
   the card PATCH, optimistically with rollback.
 
+## Linked repositories
+
+Decided on 2026-10-31. Any board can link tracked repositories.
+
+**Data.** `board_repos(board_id, repo_id, org_id)` uses composite foreign keys to
+`boards(id, org_id)` and `tracked_repositories`, following `team_repos`. Admins manage the links
+in a new "Repositories" settings section. Cards get a nullable `repo_id`, which must be one of
+the board's linked repos.
+
+**What a link does:**
+- **AI code context.** Board agent runs get the code-graph and code-search MCP tools
+  (`code_query`, `code_context`, `code_impact`, ...). The run's `InternalTokenGrant` scopes those
+  tools to the board's linked repo ids.
+- **Handover pre-fills repos.** The new BUD's `impacted_repos` starts from the card's repo, or
+  otherwise from the board's linked repos. It can be edited in the handover dialog.
+- **Cards pick a repo.** A repo chip on the card, a picker on the card page and in quick edits,
+  and a "Repo" filter on the board.
+- **Repo activity on cards.** The GitHub webhook matches card keys (e.g. `OPS-12`) in PR titles,
+  branch names and commit messages on a linked repo. It records `repo_activity` card events (PR
+  opened, merged or closed; commit pushed) with a link, publishes them live, and shows them in
+  the card's activity.
+  - The match uses the board's own key and its key aliases, so `OPS-12` can only reach a card on
+    a board that links that repo.
+  - Delivery's existing BUD matching (`bud_id` on PRs) is unchanged.
+
+## AI on every board
+
+Decided on 2026-10-31.
+
+- **One switch per board.** Every board, Delivery included, has an AI on/off switch.
+  - Custom boards: `boards.ai_enabled`.
+  - Delivery has no board row, so its switch is org config `delivery.ai_enabled`. When it's off,
+    `create_agent_task_for_stage` starts no BUD stage agents. The per-BUD
+    `auto_generate_phases` keeps working underneath it when the switch is on.
+- **Any skill from the library.** On custom boards, each stage can use any skill from the org's
+  library, including custom skills, not only the two board skills. Each agent can be switched
+  on or off.
+  - The two board skills are the suggested defaults.
+  - Prompt context for a card subject is the card, its docs, comments and the board's linked
+    repos.
+
 ## Moving cards between boards
 
 A card can move between two custom boards, for example SEO to DevOps. It's the same row moving,
@@ -1469,8 +1510,13 @@ Implementation starts once you've approved the designs.
    - Upload mode and API mode: sessions, the parse job, the review screen, the import job,
      resume, idempotent maps, encrypted credentials, paged comments, authenticated attachment
      downloads and the throttle.
-4. **Notifications and card moves.**
-   - The three categories, Slack DMs, and the in-app types with the `ALTER TYPE` lines.
+4. **Move rules, repos, notifications and card moves.**
+   - Checklist before Done and required fields per stage, on drag, menu moves and creates.
+   - Assigning and setting due dates from the board. (These two landed with the design fixes.)
+   - Linked repositories: `board_repos`, card `repo_id`, the Repositories settings section, the
+     repo chip, picker and filter.
+   - The three notification categories, Slack DMs, and the in-app types with the `ALTER TYPE`
+     lines.
    - The due-reminder scheduler.
    - Moving cards between boards, with key aliases.
 5. **Handover.**
@@ -1481,13 +1527,20 @@ Implementation starts once you've approved the designs.
      landing at `design` or `tech_arch` with the written status events and SP tests.
    - Return, re-handover through restore, the delivered hook, the BUD chips and roll-up, and the
      Origin panel.
+   - Handover pre-fills the BUD's `impacted_repos` from the card's repo or the board's repos.
 6. **Board AI.**
    - First, extract `services/agents/executor` from `bud_agent_handler.py`, with the BUD agent
      tests unchanged. Then the scoped `InternalTokenGrant` and the new `AgentType` values.
-   - Stage agent config, the run job, drafts with accept, edit and reject, `write_card_doc` with
-     scoped token grants, and the `BOARD_AGENT_TYPES` picker filter.
+   - Stage agent config, the run job, drafts with accept, edit and reject, and `write_card_doc`
+     with scoped token grants.
+   - Any skill from the org library per stage, each switchable, with the board skills as
+     defaults. The AI switch on every board, including Delivery (`delivery.ai_enabled` gating
+     BUD stage agents).
+   - Code context: code tools in the run's grant, scoped to the board's linked repos.
    - The PRD writer and design helper skills.
-7. **MCP, metrics and Garden.**
+7. **Repo activity, MCP, metrics and Garden.**
+   - Repo activity on cards: the GitHub webhook matches card keys on linked repos and records
+     `repo_activity` events.
    - The board MCP tools.
    - Board metrics and the cross-board summary.
    - The `board_activity` topic, the forwarder rule, the engine effects, and Garden access for
@@ -1651,6 +1704,13 @@ Still to decide, when the later plan is written:
   on leave.
 
 The autonomous SEO work, building WordPress pages, belongs to that later plan too.
+
+## Later: MCP connections per board
+
+After this delivery, a separate follow-up lets a board link external MCP servers or tools that
+its AI skills can connect to (for example a CMS, a monitoring tool or a ticket system). Board
+admins choose which tools each board's agents may call. This builds on the same per-run tool
+grant.
 
 ## Open questions
 
