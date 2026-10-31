@@ -50,6 +50,7 @@ def build_discovery(
     The action cap only applies to uploaded exports: API mode pages every comment.
     """
     per_list = Counter(d.group_id for d in drafts)
+    archived_per_list = Counter(d.group_id for d in drafts if d.closed)
     lists = sorted(export.lists, key=lambda x: (x.pos, x.id))
     open_ids = [lst.id for lst in lists if not lst.closed]
     last_open = open_ids[-1] if open_ids else None
@@ -70,6 +71,7 @@ def build_discovery(
                 name=lst.name,
                 closed=lst.closed,
                 card_count=per_list[lst.id],
+                archived_card_count=archived_per_list[lst.id],
                 suggested_name=stage_name(lst.name),
                 suggested_category=suggest_category(lst.name, is_last=lst.id == last_open),
                 suggested_skip=lst.closed,

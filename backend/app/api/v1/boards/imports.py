@@ -25,7 +25,7 @@ saved, and again when the import starts and runs.
 
 import uuid
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 
@@ -35,13 +35,15 @@ from app.core.deps import get_db
 from app.schemas.boards.import_mapping import ImportMapping
 from app.schemas.boards.imports import (
     ImportAccepted,
+    ImportListStatus,
+    ImportSessionList,
     ImportSessionRead,
     TrelloApiImportCreate,
     TrelloBoardOption,
 )
 from app.services.boards.access import BoardCaller
 from app.services.boards.errors import BoardRuleError
-from app.services.imports import admission, review, sessions
+from app.services.imports import admission, housekeeping, review, sessions
 from app.services.imports.session_read import session_read
 from app.services.imports.trello import intake
 
@@ -105,6 +107,37 @@ async def list_trello_boards(
 ) -> list[TrelloBoardOption]:
     """The connected Trello member's boards, for API mode."""
     return await intake.list_trello_boards(db, caller)
+
+
+@router.get(IMPORTS, response_model=ImportSessionList)
+async def list_imports(
+    state: ImportListStatus = Query(default=ImportListStatus.OPEN, alias="status"),
+    caller: BoardCaller = Depends(board_caller),
+    db: AsyncSession = Depends(get_db),
+) -> ImportSessionList:
+    """My imports in ``status`` (``open``: unfinished), newest first, to continue or discard."""
+    return await housekeeping.list_mine(db, caller, state)
+
+
+@router.delete(f"{IMPORTS}/{{session_id}}", status_code=status.HTTP_204_NO_CONTENT)
+async def discard_import(
+    session_id: uuid.UUID,
+    caller: BoardCaller = Depends(board_caller),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Discard an import that isn't being read or running (409 while it is)."""
+    await housekeeping.discard(db, caller, session_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(f"{IMPORTS}/{{session_id}}/review", response_model=ImportSessionRead)
+async def review_import_again(
+    session_id: uuid.UUID,
+    caller: BoardCaller = Depends(board_caller),
+    db: AsyncSession = Depends(get_db),
+) -> ImportSessionRead:
+    """Reopen the mapping of an import that failed after its board was read."""
+    return await housekeeping.back_to_review(db, caller, session_id)
 
 
 @router.get(f"{IMPORTS}/{{session_id}}", response_model=ImportSessionRead)

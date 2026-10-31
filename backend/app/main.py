@@ -388,8 +388,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    # Content-Disposition carries CSV export file names to a cross-origin SPA.
-    expose_headers=["X-Design-Job-Id", "Content-Disposition"],
+    # Content-Disposition carries CSV export file names to a cross-origin SPA;
+    # Retry-After tells it when a busy or rate-limited request may try again.
+    expose_headers=["X-Design-Job-Id", "Content-Disposition", "Retry-After"],
 )
 
 

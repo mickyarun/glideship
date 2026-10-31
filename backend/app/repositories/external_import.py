@@ -19,7 +19,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import datetime
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,6 +61,32 @@ class ExternalImportSessionRepository(BaseRepository[ExternalImportSession]):
         if created_by is not None:
             stmt = stmt.where(ExternalImportSession.created_by == created_by)
         return int((await self._db.execute(stmt)).scalar_one())
+
+    async def list_for(
+        self, user_id: uuid.UUID, statuses: Iterable[ExternalImportStatus], limit: int
+    ) -> list[ExternalImportSession]:
+        """Up to ``limit`` of the sessions ``user_id`` started in ``statuses``, newest first."""
+        stmt = self._scoped(
+            select(ExternalImportSession)
+            .where(
+                ExternalImportSession.created_by == user_id,
+                ExternalImportSession.status.in_(list(statuses)),
+            )
+            .order_by(ExternalImportSession.created_at.desc(), ExternalImportSession.id.desc())
+            .limit(limit)
+        )
+        return list((await self._db.execute(stmt)).scalars().all())
+
+    async def delete_in(
+        self, session_id: uuid.UUID, statuses: Iterable[ExternalImportStatus]
+    ) -> bool:
+        """Delete the session if it's in one of ``statuses``; its item maps stay."""
+        stmt = delete(ExternalImportSession).where(
+            ExternalImportSession.org_id == self._org_id,
+            ExternalImportSession.id == session_id,
+            ExternalImportSession.status.in_(list(statuses)),
+        )
+        return rowcount(await self._db.execute(stmt)) == 1
 
     async def attachment_bytes_since(self, since: datetime, *, other_than: uuid.UUID) -> int:
         """Attachment bytes copied by the org's other sessions active since ``since``."""

@@ -16,6 +16,7 @@
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -89,6 +90,36 @@ class ImportSessionRead(BaseModel):
     result: ImportResult | None
     created_at: datetime
     updated_at: datetime
+
+
+class ImportListStatus(StrEnum):
+    """Which sessions ``GET /imports`` lists."""
+
+    # Not finished yet: the ones counted against the open-import cap.
+    OPEN = "open"
+
+
+class ImportSessionSummary(BaseModel):
+    """One session in a list, without its discovery, mapping or result."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    source_kind: ImportSourceKind
+    mode: ImportMode
+    status: ExternalImportStatus
+    board_id: uuid.UUID | None
+    total_cards: int | None
+    processed_count: int
+    error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ImportSessionList(BaseModel):
+    """The caller's sessions, newest first, at most the open-import cap."""
+
+    items: list[ImportSessionSummary]
 
 
 class TrelloBoardOption(BaseModel):

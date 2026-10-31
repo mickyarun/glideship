@@ -163,6 +163,13 @@ def test_discovery_suggests_stages_people_and_warns_at_the_action_cap() -> None:
     ] is TRELLO_DEFAULT_LABEL_COLOR
     # The closed card, and the card in the archived list.
     assert found.counts.cards == 6 and found.counts.archived_cards == 2
+    # Per list, so the review can count what a skipped list or archived cards leave out.
+    assert [(lst.name, lst.card_count, lst.archived_card_count) for lst in found.lists] == [
+        ("Backlog", 2, 0),
+        ("Doing", 1, 0),
+        ("Done", 2, 1),
+        ("Old ideas", 1, 1),
+    ]
     assert found.counts.comments == 3 and found.counts.checklist_items == 3
     assert (found.dropped.custom_fields, found.dropped.power_up_data, found.dropped.covers) == (
         1,

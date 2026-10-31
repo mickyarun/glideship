@@ -138,7 +138,7 @@ def test_the_tables_cover_every_read_and_every_editor_route() -> None:
     reads = {
         r.path
         for r in board_routes()
-        if r.methods == {"GET"} and not r.path.startswith(f"{BOARDS}/imports/")
+        if r.methods == {"GET"} and not f"{r.path}/".startswith(f"{BOARDS}/imports/")
     }
     assert reads == set(READS) | set(ADMIN_READS)
     editor_routes = {

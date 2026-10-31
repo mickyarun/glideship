@@ -38,6 +38,8 @@ class DiscoveredList(BaseModel):
     name: str
     closed: bool
     card_count: int
+    # Of ``card_count``, the cards archived in Trello (``closed``).
+    archived_card_count: int
     suggested_name: str
     suggested_category: BoardStageCategory
     # Archived lists are skipped unless the reviewer says otherwise.
