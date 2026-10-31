@@ -16,10 +16,10 @@
 
 <!-- One Trello list and what it becomes: a new stage (its name and
      category, guessed from the list's name), an existing stage of the
-     target board, or not imported. The columns come from
-     --import-list-columns, which the list's header row shares, so the
-     controls carry aria-labels instead of their own floating labels.
-     Stacks on phones. -->
+     target board (its name and category in those same columns), or not
+     imported. The columns come from --import-list-columns, which the
+     list's header row shares, so the controls carry aria-labels instead
+     of their own floating labels. Stacks on phones. -->
 <template>
   <div class="list-row" role="group" :aria-label="`List ${row.list.name}`">
     <div class="list-row__source">
@@ -50,10 +50,13 @@
       />
       <StageCategorySelect v-model="row.category" :aria-label="`Category for ${row.list.name}`" />
     </template>
-    <div v-else class="list-row__note">
-      <AppTag v-if="existing" :color="CATEGORY_COLORS[existing.category]">{{ CATEGORY_LABELS[existing.category] }}</AppTag>
-      <span v-else>Not imported</span>
-    </div>
+    <template v-else-if="existing">
+      <span class="list-row__note">{{ existing.name }}</span>
+      <div class="list-row__note">
+        <AppTag :color="CATEGORY_COLORS[existing.category]">{{ CATEGORY_LABELS[existing.category] }}</AppTag>
+      </div>
+    </template>
+    <div v-else class="list-row__note list-row__note--wide">Not imported</div>
   </div>
 </template>
 
@@ -109,8 +112,12 @@ const existing = computed(() => props.stages.find(s => stageChoice(s.id) === pro
   color: rgb(var(--v-theme-on-surface-variant));
 }
 .list-row__note {
-  grid-column: span 2;
   align-self: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.list-row__note--wide {
+  grid-column: span 2;
 }
 .list-row__arrow {
   margin-top: 10px;
@@ -124,7 +131,7 @@ const existing = computed(() => props.stages.find(s => stageChoice(s.id) === pro
   .list-row__arrow {
     display: none;
   }
-  .list-row__note {
+  .list-row__note--wide {
     grid-column: auto;
   }
 }

@@ -17,6 +17,9 @@
 // agents), when an admin replaces the stage's agents or flips the board's
 // AI switch, and on a reconnect; a run's updates land as they come (the
 // board's shell marks the card's tile). A run that ends reloads the drafts.
+// Live updates never carry a run's raw failure reason, so when one fails
+// and the viewer is a board admin (who may read it under Details), the
+// card's AI is fetched once more for that run to get it.
 
 import { computed, onUnmounted, watch } from 'vue'
 import type { BoardCard } from '@/composables/useBoardCard'
@@ -24,7 +27,7 @@ import { useTopicChannel } from '@/composables/useTopicChannel'
 import { ACTIVE_RUN_STATUSES } from '@/constants/boardAgents'
 import { useBoardCardAgentsStore } from '@/stores/boardCardAgents'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
-import { boardTopic, type BoardSocketMessage } from '@/types/boards'
+import { boardTopic, type AgentRunRead, type BoardSocketMessage } from '@/types/boards'
 
 export function useCardAgentsLive(card: BoardCard) {
   const agents = useBoardCardAgentsStore()
@@ -46,6 +49,13 @@ export function useCardAgentsLive(card: BoardCard) {
   })
 
   const mine = (cardId: string) => detail.value?.id === cardId
+  const detailed = new Set<string>()
+  function fetchReason(run: AgentRunRead): void {
+    if (run.status !== 'failed' || run.error_message || detailed.has(run.id)) return
+    if (!page.board.can('configure_agents')) return
+    detailed.add(run.id)
+    void agents.load()
+  }
   const topic = computed(() => (page.board.detail.value ? boardTopic(page.board.detail.value.board.id) : null))
   useTopicChannel<BoardSocketMessage>(
     topic,
@@ -54,6 +64,7 @@ export function useCardAgentsLive(card: BoardCard) {
         if (!mine(message.card_id)) return
         agents.applyRun(message.run)
         if (!ACTIVE_RUN_STATUSES.has(message.run.status)) void docs.loadDocs()
+        fetchReason(message.run)
       },
       stage_agents_changed: message => {
         if (message.stage_id === detail.value?.stage_id) void agents.load()

@@ -43,6 +43,9 @@ describe('cardTimelineRenderers', () => {
 
   it('says which fields, people and documents changed', () => {
     expect(words(ev('edited', { detail: { fields: ['title', 'due_at', 'labels'] } }))).toBe('Asha edited title, due date and labels')
+    expect(words(ev('edited', { detail: { fields: ['repo_id', 'start_at', 'due_done'] } }))).toBe(
+      'Asha edited repository, start date and due status',
+    )
     expect(words(ev('assigned', { detail: { user_ids: ['u2'] } }))).toBe('Asha assigned Ben')
     expect(words(ev('doc_updated', { detail: { kind: 'prd', version: 4, restored_from: 2 } }))).toBe(
       'Asha restored the PRD to v2 v4',

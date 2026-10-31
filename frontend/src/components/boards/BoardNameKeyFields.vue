@@ -16,7 +16,9 @@
 
 <!-- A new board's name and key side by side, with what the key will do
      under them. The fields come from useBoardKeyFields; the lengths from
-     the server's board limits; `keyError` is the server refusing the key. -->
+     the server's board limits; `keyError` is the server refusing the key,
+     shown full width under both fields in place of the hint (the key
+     column is too narrow for it, and the hint no longer holds). -->
 <template>
   <div>
     <div class="name-key__row">
@@ -33,12 +35,13 @@
         class="name-key__key"
         :maxlength="limits?.board_key_max"
         :aria-describedby="hintId"
-        :error-messages="keyError ?? undefined"
-        :hide-details="!keyError"
+        :error="!!keyError"
+        hide-details
         @update:model-value="fields.setKey"
       />
     </div>
-    <p :id="hintId" class="name-key__hint">{{ fields.keyHint.value }}</p>
+    <p v-if="keyError" :id="hintId" class="name-key__hint name-key__hint--error" role="alert">{{ keyError }}</p>
+    <p v-else :id="hintId" class="name-key__hint">{{ fields.keyHint.value }}</p>
   </div>
 </template>
 
@@ -72,6 +75,9 @@ const hintId = useId()
   margin: 6px 0 0;
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
+}
+.name-key__hint--error {
+  color: rgb(var(--v-theme-error));
 }
 .name-key__key :deep(input) {
   font-family: var(--font-mono);

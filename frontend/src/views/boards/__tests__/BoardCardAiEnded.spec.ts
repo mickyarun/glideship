@@ -39,7 +39,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { User } from '@/types'
 import type { AgentRunRead, BoardAction } from '@/types/boards'
 import { buttonsWith, mountCardPage } from './cardPageHarness'
-import { cardDefaults, mocked } from './cardPageMocks'
+import { cardDefaults, mocked, send } from './cardPageMocks'
 
 const { cardApi } = mocked
 const RUN_CAPS: BoardAction[] = [...EDITOR_CAPS, 'run_agent', 'review_draft']
@@ -96,6 +96,32 @@ describe('BoardCardView AI panel: how a run ended', () => {
     expect(details?.querySelector('summary')?.textContent).toBe('Details')
     expect(details?.querySelector('pre')?.textContent).toBe(RAW)
     expect(panel().indexOf(RUN_ENDED_COPY.PROVIDER_FAILED)).toBeLessThan(panel().indexOf('Details'))
+  })
+
+  it('fetches the raw reason once for an admin when a run fails live, since updates leave it out', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    cardDefaults([...RUN_CAPS, 'configure_agents'])
+    cardApi.agents.mockResolvedValue(cardAgents({ runs: [] }))
+    await mountCardPage()
+    const loads = cardApi.agents.mock.calls.length
+    const live = makeRun('r1', { status: 'failed', error_code: 'PROVIDER_FAILED', error_message: null })
+    cardApi.agents.mockResolvedValue(cardAgents({ runs: [{ ...live, error_message: RAW }] }))
+    send({ event: 'agent_run_updated', card_id: '3', run: live })
+    await flushPromises()
+    expect(document.querySelector('.ai-ended__details pre')?.textContent).toBe(RAW)
+    send({ event: 'agent_run_updated', card_id: '3', run: live })
+    await flushPromises()
+    expect(cardApi.agents.mock.calls.length).toBe(loads + 1)
+  })
+
+  it('fetches nothing more for a non-admin when a run fails live', async () => {
+    cardApi.agents.mockResolvedValue(cardAgents({ runs: [] }))
+    await mountCardPage()
+    const loads = cardApi.agents.mock.calls.length
+    send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1', { status: 'failed', error_code: 'TIMEOUT' }) })
+    await flushPromises()
+    expect(panel()).toContain(RUN_ENDED_COPY.TIMEOUT)
+    expect(cardApi.agents.mock.calls.length).toBe(loads)
   })
 
   it('shows no Details to an admin when the run has no raw reason', async () => {

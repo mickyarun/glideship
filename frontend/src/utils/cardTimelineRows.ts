@@ -18,7 +18,7 @@
 // as a plain line until they get rows of their own.
 
 import { CATEGORY_COLORS, DOC_NAMES } from '@/constants/boards'
-import type { CardDocKind, CardEventRead, CardEventType, StageCategory } from '@/types/boards'
+import type { CardDocKind, CardEventRead, CardEventType, CardUpdate, StageCategory } from '@/types/boards'
 import {
   actor, plainRow, section, text, type ActivityPart, type ActivityRenderer, type ActivityRenderers, type ActivityRow,
 } from '@/utils/activity'
@@ -35,8 +35,13 @@ export interface CardTimelineNames {
   repo?: (id: string) => string | null
 }
 
-/** Edited fields as the history says them. */
-const FIELD_WORDS: Record<string, string> = {
+/**
+ * Edited fields as the history says them: every CardUpdate field, so a new
+ * one fails the type check here. Labels are recorded as ``labels``; people
+ * get assigned/unassigned rows of their own.
+ */
+type EditedField = Exclude<keyof CardUpdate, 'assignee_ids' | 'label_ids'> | 'labels'
+const FIELD_WORDS: Record<EditedField, string> = {
   title: 'title',
   description_md: 'description',
   priority: 'priority',
@@ -44,7 +49,9 @@ const FIELD_WORDS: Record<string, string> = {
   due_at: 'due date',
   due_done: 'due status',
   labels: 'labels',
+  repo_id: 'repository',
 }
+const fieldWord = (field: string) => FIELD_WORDS[field as EditedField] ?? field
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.map(String) : [])
 
@@ -89,7 +96,7 @@ export function cardTimelineRenderers(names: CardTimelineNames): ActivityRendere
       icon: 'mdi-pencil',
       color: 'primary',
       row: e => ({
-        primary: [...actor(who(e)), text('edited'), section(wordList(strings(e.detail.fields).map(f => FIELD_WORDS[f] ?? f)))],
+        primary: [...actor(who(e)), text('edited'), section(wordList(strings(e.detail.fields).map(fieldWord)))],
       }),
     },
     assigned: {

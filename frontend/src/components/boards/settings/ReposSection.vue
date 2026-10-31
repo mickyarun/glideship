@@ -40,7 +40,10 @@
         hide-details="auto"
         return-object
         @update:model-value="link"
-      />
+      >
+        <!-- A slot of its own, so picking one doesn't put its name in the box. -->
+        <template #selection />
+      </v-autocomplete>
     </form>
     <AppCallout v-if="orgHasNone" variant="info" class="repos__none">
       This org tracks no repositories yet. Add them in the org's repository settings, then link them here.
@@ -74,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import RepoLink from '@/components/boards/RepoLink.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
@@ -128,6 +131,8 @@ const unlinkBody = computed(() => {
 
 async function link(option: RepoOption | null): Promise<void> {
   if (!option || option.linked) return
+  // After the picker has finished its own update, so the box ends up empty.
+  await nextTick()
   search.value = ''
   await repos.link(option)
 }

@@ -79,6 +79,21 @@ describe('BoardSettingsView: Repositories', () => {
     expect(document.body.textContent).not.toContain('No repositories linked')
   })
 
+  it('empties the picker once a repository is picked from its list', async () => {
+    const { wrapper } = await mountSettings(PATH)
+    settings.linkRepo.mockResolvedValue({ items: [API] })
+    const input = wrapper.findComponent(VAutocomplete).find('input')
+    await input.trigger('focus')
+    await input.setValue('northwind-a')
+    await flushPromises()
+    const option = [...document.querySelectorAll<HTMLElement>('.v-overlay--active .v-list-item')]
+      .find(i => i.textContent?.includes('northwind-api'))!
+    option.click()
+    await flushPromises()
+    expect(settings.linkRepo).toHaveBeenCalledWith('OPS', 'r2')
+    expect((input.element as HTMLInputElement).value).toBe('')
+  })
+
   it('links each name to its page in a new tab, safely', async () => {
     api.repos.mockResolvedValue({ items: [WEB, API] })
     await mountSettings(PATH)

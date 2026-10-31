@@ -111,12 +111,19 @@ describe('NewBoardDialog', () => {
     await type(field('Name'), 'Ops desk')
     createButton().click()
     await flushPromises()
-    const keyField = [...document.querySelectorAll('.v-text-field')].find(f => f.textContent?.includes('Key'))!
-    expect(keyField.textContent).toContain('already used by another board')
+    const keyField = document.querySelector('.name-key__key')!
+    expect(keyField.classList).toContain('v-input--error')
+    // Full width under both fields, in place of the "Cards will be…" hint.
+    const refusal = () => document.querySelector('.name-key__hint')!
+    expect(refusal().parentElement!.querySelector(':scope > .name-key__row')).not.toBeNull()
+    expect(refusal().textContent).toContain('already used by another board')
+    expect(document.body.textContent).not.toContain('Cards will be')
+    expect(keyField.textContent).not.toContain('already used')
     expect(document.querySelector('.v-alert, .app-callout--error')).toBeNull()
     expect(createButton().disabled).toBe(true)
     await type(field('Key'), 'ODX')
-    expect(keyField.textContent).not.toContain('already used')
+    expect(keyField.classList).not.toContain('v-input--error')
+    expect(refusal().textContent).toContain('Cards will be ODX-1')
     expect(createButton().disabled).toBe(false)
   })
 })
