@@ -1414,30 +1414,50 @@ the next section.
   link), `handed_over_by/at`, `returned_by/at`, `return_reason`, `idempotency_key`. Unique
   `(card_id, bud_id)`, unique `(card_id, idempotency_key)` (per card, not per org), and a partial
   unique index on `bud_id WHERE status = 'active'`. New `BUDTimelineEventType` values
-  `handed_over_from_board`, `returned_to_board`.
-- **Access.** New `BoardAction.HAND_OVER` (editor). Preview and confirm also need
-  `workspace:engineering` and `buds:create`, plus `buds:edit` for a link, re-checked in the
-  service: 403 `{code: HANDOVER_NEEDS_PERMISSION, permission}`. Viewer 403, members-only 404, as
+  `handed_over_from_board`, `returned_to_board`. Migration `a4741b5d78b4` adds
+  `board_card_handover_keys (card_id, idempotency_key unique per card → handover_id)`, every
+  confirm's key (the row's `idempotency_key` is the one that made it live now; replays read
+  the keys table), `stage_start_failed_at`, and a plain index on `bud_id`.
+- **Access.** New `BoardAction.HAND_OVER` (editor). Preview, confirm and retry-start also need
+  `workspace:engineering`, `buds:view` (the preview lists similar BUDs by title) and
+  `buds:create`, plus `buds:edit` for a link, re-checked in the service: 403 `{code:
+  HANDOVER_NEEDS_PERMISSION, permission}`. Viewer 403, members-only 404, as
   every board route. The board must have `handover_enabled` (409 `HANDOVER_DISABLED`), the card
   must not be archived (409). Delivery has no cards (`BUD` is a reserved key, so
   `/boards/BUD/...` is 404).
 - **Routes** under `/api/v1/boards/{key}/cards/{number}/handovers`:
   - `GET` (viewer): `HandoverList {items: HandoverRead[], can_hand_over}`, oldest first.
     `can_hand_over` is the create-mode check (role, board switch, card open, permissions).
+    Each item carries `can_open_bud` and `stage_start_failed`; `bud_title` is null unless
+    `can_open_bud`.
   - `POST /preview` (writes nothing): body `HandoverRequest {mode: "create"|"link" = create,
     target_status?: "bud"|"design"|"tech_arch" (default: the board's), bud_id? (link only)}` →
     `HandoverPreview {mode, target_status, title, requirements_md, figma_url, priority,
     impacted_repos: [{repo_id, repo_name}], similar: [{bud_id, key, title, status, distance}],
-    warnings: [{code, message}]}`. Warning codes: `SIMILAR_BUDS`, `ALREADY_HANDED_OVER`,
+    warnings: [{code, message}], reopens: {bud_key, status} | null}`. `reopens` names the
+    sent-back BUD a create would restore instead of making a new one (key and status only). Warning codes: `SIMILAR_BUDS`, `ALREADY_HANDED_OVER`,
     `NO_REQUIREMENTS`, `CHECKLIST_OPEN` (the first handover would complete a card with open
     items). A link preview shows the BUD as it is and no similar list.
   - `POST` (confirm, 201): body `HandoverConfirm` = the request plus `idempotency_key` (UUID),
     `overrides? {title?, requirements_md?, impacted_repo_ids?}`, `confirm_open_checklist`,
     `auto_generate_phases` (as on BUD create; default all off) → `HandoverResult {handover:
-    HandoverRead, card: CardDetail}`. `HandoverRead {id, card_id, status, linked_existing,
-    target_status, bud_id, bud_key, bud_title, bud_status, handed_over_by, handed_over_at,
-    returned_at, return_reason}`. The same key on that card returns the first result (201),
-    concurrent double clicks included: the confirm locks the card first.
+    HandoverRead, card: CardDetail, design_available}`. `HandoverRead {id, card_id, status,
+    linked_existing, target_status, bud_id, bud_key, bud_title, bud_status, handed_over_by,
+    handed_over_at, returned_at, return_reason, can_open_bud, stage_start_failed}`.
+    `design_available` is the BUD page's `X-Design-Available`: the BUD landed at design with
+    design generation on and no ready designs, so the client starts generating them the same
+    way (set `budStore.designAvailable` before opening the BUD; the design panel's watcher
+    runs the repo picker). It isn't started server-side because the picker may need the user
+    to choose repositories. Every confirm's key is kept in `board_card_handover_keys`
+    (migration `a4741b5d78b4`, unique per card), so a retry of any earlier key on that card,
+    even one from before a send-back and a second handover, returns that handover (201) and
+    never makes a BUD; concurrent double clicks included (the key is looked up again under
+    the locks). A replay by another person passes the same permission checks first, so only
+    someone who could hand the card over gets it.
+  - `POST /{handover_id}/retry-start` (same access): starts the target stage's agent again
+    after it failed to start → `HandoverResult`; 404 for a handover not on the card, 409
+    `HANDOVER_STAGE_STARTED` when there's nothing to retry (no failure marked, the row isn't
+    live, or the BUD has left its landing status). Replaying the confirm's key does the same.
 - **Content.** Title = card title; `requirements_md` = current PRD, else description, then
   `## From the board` (checklist as a task list with group names, attachments as links, files
   named with a link to the card, the design brief, "Handed over from [SEO-14](<frontend_url>/
@@ -1450,31 +1470,44 @@ the next section.
   exact text the BUD is embedded from; a confirm with unchanged title and requirements reuses
   it, an edited one is embedded again.
 - **Refusals.** 422 `HANDOVER_NEEDS_REQUIREMENTS` for `tech_arch` with no PRD or description
-  (preview and confirm); link: 404 unknown BUD, 409 `BUD_NOT_OPEN` (closed or discarded), 409
+  (preview and confirm; an overridden text counts only above its `## From the board`
+  section); link: 404 unknown BUD, 409 `BUD_NOT_OPEN` (closed or discarded), 409
   `BUD_ALREADY_LINKED` (this card holds it), 409 `BUD_HAS_OTHER_ORIGIN` (another card's live
   origin). First handover into the handover stage: 422 `STAGE_REQUIREMENTS_MISSING` / 409
   `CHECKLIST_OPEN` as any move (`EntryCause.HANDOVER`); resend with
   `confirm_open_checklist: true`. 422 when an `impacted_repo_ids` entry isn't an active repo.
-- **One transaction.** Lock the card's stage and the handover stage, then the card; replay by
-  key; when the card holds no live handover (its first, or every earlier one was sent back)
-  move it to the bottom of `handover_stage_id`. Create: `create_bud` at `bud` (`created` source `board`, no stage
+- **One transaction.** Replay by key (no lock needed); else lock the BUD the confirm writes
+  (a link's, after its handover-row checks; a re-handover's sent-back BUD), then the card's
+  stage and the handover stage, then the card (BUD before card, as send-back and delivered
+  do), and look the key up again; when the card holds no live handover (see the live rule
+  below) move it to the bottom of `handover_stage_id`. Create: `create_bud` at `bud` (`created` source `board`, no stage
   started), `impacted_repos` set, a first `bud_versions` row (`source=ui`,
   `edited_by` = the handing-over user, reason "Handed over from SEO-14"),
   `handed_over_from_board {board_id, card_id, card_key, target_status}`, then
   `handover_landing.land`: per skipped stage `transition_feature_for_bud` and a `status_change
-  {from, to, via: "handover"}` with the handing-over user as actor. Link: lock the BUD,
+  {from, to, via: "handover"}` with the handing-over user as actor, each stamped from the
+  database clock (`bud_timeline.clock_now`, `clock_timestamp()`), as is
+  `handed_over_from_board`, so they read after `created` and in order, and the phase windows
+  give the time to the target stage. Then `auto_assign_for_phase` for the target, in the same
+  transaction, and a BUD landed past `bud` gets the estimate a finished PRD gives
+  (`bud_estimate_after_commit.schedule`, trigger `handover_landed`, spawned after the commit). Link: lock the BUD,
   `handed_over_from_board {..., linked: true}` and nothing else. Then the handover row and a
   `handed_over` card event `{bud_id, bud_key, mode, bud_status}` (with from/to stage when it
   moved).
-- **After commit.** Create only: assignment and the agent for the target stage
-  (`start_target_stage`: `start_intake` at `bud`, else `auto_assign_for_phase` +
-  `run_stage_jobs`); skipped stages' agents never run. Then the owner (the BUD's assignee, not
-  the actor) gets an in-app `board_handover` row (link `/buds/<number>`) and a DM through
-  `board_handovers`: "SEO-14 was handed over as *BUD-001* Title." The card key is named to
+- **Owner notice.** In the transaction the owner (the BUD's assignee, not the actor) gets an
+  in-app `board_handover` row (link `/buds/<number>`); the DM through `board_handovers` goes
+  after the commit: "SEO-14 was handed over as *BUD-001* Title." The card key is named to
   any owner, as the BUD's own "From the board" link and `handed_over_from_board` event already
-  name it. Failures here are logged, not raised; the handover stays saved.
+  name it.
+- **After commit.** Create only: the agent for the target stage
+  (`handover_stage_start.start_stage` → `start_target_agent`: the PM agent at `bud`, else
+  `run_stage_jobs`); skipped stages' agents never run. A failure is logged, the row gets
+  `stage_start_failed_at`, and the response says `stage_start_failed: true`; the BUD is
+  already assigned and its owner told. A replay of the key or `retry-start` runs it again
+  and clears the mark.
 - **Live events** on `board:<id>`: `stage_reordered` (if respaced), `card_moved {card,
-  from_stage_id}` (first handover only), then `card_handed_over {card_id, handover}`.
+  from_stage_id}` (first handover only), then `card_handed_over {card_id, handover: {id,
+  bud_id, bud_key, bud_status, status}}`.
 
 ### As built (backend): sending back, handing over again, delivered, chips and Origin
 
@@ -1483,8 +1516,21 @@ the next section.
   route, a board topic or a card event; chips carry `can_open_bud` (the caller holds
   `buds:view` and `workspace:engineering`), and socket summaries always send it as false, so
   a client merging one keeps the value it last fetched. Board-topic events carry ids, keys and
-  statuses only; clients fetch details. (The part-A `HandoverRead.bud_title` on the handovers
-  list, the `card_handed_over` payload and the `handed_over` event are retrofitted separately.)
+  statuses only; clients fetch details. This holds on every board route and topic: the
+  handovers list and confirm send `bud_title` only with `can_open_bud`, `card_handed_over`
+  carries `{id, bud_id, bud_key, bud_status, status}`, and the `handed_over` card event has
+  no title. BUD-side routes (send-back, Origin) are engineering's own and keep the title
+  there (Origin by the caller's `can_open_bud`). Card keys on the BUD side are accepted: the
+  `returned_to_board` and `handed_over_from_board` timeline details name the card key, as the
+  BUD's "From the board" link does.
+- **Live handover.** One predicate, `repositories/board_handover.live_handover`: the row is
+  `active`, it still has a BUD, and that BUD isn't discarded. It decides the handover-stage
+  move on confirm (and the preview's `CHECKLIST_OPEN`), the send-back's "no other live
+  handover" check, `delivery` and fully delivered. A BUD discarded on the dev side keeps its
+  row active (a restore brings it back) but no longer counts toward the card's delivery;
+  discarding it re-checks the card (`notify.recheck_after_discard`, in a SAVEPOINT), which
+  becomes fully delivered when its other live BUDs all reached prod. A hard-deleted BUD
+  leaves its row with null BUD fields and no chip.
 - **Send back.** `POST /api/v1/buds/{bud_id}/return-to-board {reason}` (`buds:edit`, under
   `workspace:engineering`; reason 1..`HANDOVER_RETURN_REASON_MAX_CHARS`, trimmed) →
   `HandoverRead`. 404 unknown BUD; 409 `HANDOVER_NOT_ACTIVE` (no live origin card, or already
@@ -1493,8 +1539,11 @@ the next section.
   card's stage and the return stage, then the card: `discard_bud`, a `returned_to_board`
   timeline event `{board_id, card_id, card_key, reason}`, the row → `returned` with
   `returned_by/at` and the reason, a card comment by the sender ("Sent back from BUD-012:
-  <reason>"), a `returned` card event `{bud_id, bud_key, comment_id}` (with stages when it
-  moved). With no other live handover the card moves to the bottom of `return_stage_id`
+  <reason>") posted through `comment_service.post_comment`, so it gets its `commented` event
+  and boards hear `card_activity` (no comment notice: the returned notice covers it), and a
+  `returned` card event `{bud_id, bud_key, comment_id}` (with stages when it moved). A BUD
+  discarded on the dev side is 409 `HANDOVER_NOT_ACTIVE` "BUD-012 was discarded; restore it
+  first". With no other live handover the card moves to the bottom of `return_stage_id`
   through `enter_stage(EntryCause.RETURN)`, which applies no entry rules (`ENTRY_RULES`, unit
   coverage in `test_board_entry_rules`); an archived card or board, or no return stage, leaves
   it. Card assignees who can open the board (not the sender) get `board_handover_returned` and
@@ -1503,12 +1552,13 @@ the next section.
   still points at a discarded BUD reuses it (`handover_rehandover.py`): `bud_restore.restore_bud`
   (extracted from the restore route's `restore_discarded_bud`, which now calls it) at `bud`
   with `status_change {restored, via: handover}`; title, requirements, priority, Figma link,
-  repositories, phase switches and embedding refreshed from the draft; a new `bud_versions` row
+  repositories, phase switches, stage skill picks (replaced; cleared when none are given, as a
+  new BUD has none) and embedding refreshed from the draft; a new `bud_versions` row
   edited by the handing-over person ("Handed over again from SEO-14");
   `handed_over_from_board {..., again: true}`; then `land` and the target stage as for a new
-  BUD. The same row goes back to `active` (returned fields cleared, new `idempotency_key` so a
-  retry replays); the card's `handed_over` event says `again: true`. Same BUD number. A BUD
-  discarded on the dev side keeps its row `active`, so a later create makes a new BUD.
+  BUD. The same row goes back to `active` (returned fields cleared, the new key recorded); the card's `handed_over` event says `again: true`. Same BUD number. A BUD
+  discarded on the dev side keeps its row `active`, so a later create makes a new BUD. A
+  sent-back BUD restored between the read and the locks is 409 `BUD_NOT_RETURNED`.
 - **Agent options.** The confirm takes `auto_generate_phases` and `stage_skill_overrides`, as
   `POST /buds` does (both default empty/none); a skill pick that doesn't fit is 422.
 - **Delivered.** `on_bud_closed` calls `services/boards/notify.notify_origin_card` first, in a
@@ -1531,10 +1581,14 @@ the next section.
 - **Design brief.** BUDs have no design context field (`BUDDesign` rows are per-repo design
   outputs), so the brief stays in the requirements' "From the board" section.
 - **Live events** on `board:<id>`: send-back emits `card_moved {card, from_stage_id}` when the
-  card moved, then `card_handover_returned {card_id, handover: {id, bud_id, bud_key,
+  card moved, `card_activity {card_id}` (the comment), then `card_handover_returned {card_id,
+  handover: {id, bud_id, bud_key,
   bud_status, status}}`. Every BUD status change through `apply_status_change`, a restore and
   the delivered hook queue `card_handovers_changed {card_id}` for each card holding the BUD
   (after the commit, deduplicated within one transaction, at least once), so chips refresh.
+  The lookup runs in a SAVEPOINT, so a failure can't abort the status change.
+  `after_commit` hooks (`publish_after_commit`, `call_after_commit`, and the estimate spawn
+  through it) fire only on the outermost commit, never when a SAVEPOINT is released.
 
 ## AI on board stages
 
