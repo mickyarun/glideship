@@ -29,8 +29,8 @@
       <v-timeline-item
         v-for="row in rows"
         :key="row.id"
-        :dot-color="row.renderer.color"
-        :icon="row.renderer.icon"
+        :dot-color="row.view.color ?? row.renderer.color"
+        :icon="row.view.icon ?? row.renderer.icon"
         size="x-small"
       >
         <div class="tl-row">

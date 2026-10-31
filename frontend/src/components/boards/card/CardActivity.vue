@@ -15,8 +15,9 @@
  -->
 
 <!-- A card's history, newest first, on the shared timeline with the
-     card's own rows, and older entries a page at a time. It loads each
-     time the tab opens. -->
+     card's own rows (pull requests and commits on its board's repositories
+     among them), and older entries a page at a time. It loads each time
+     the tab opens and again when the card's activity changes live. -->
 <template>
   <AppPanel title="Activity">
     <AppCallout v-if="activity.error.value" variant="error" role="alert" title="Activity didn't load" class="mb-3">
@@ -49,7 +50,7 @@ import ActivityTimeline from '@/components/common/ActivityTimeline.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import type { useCardActivity } from '@/composables/useCardActivity'
-import type { CardEventRead, StageRead } from '@/types/boards'
+import type { BoardRepoRead, CardEventRead, StageRead } from '@/types/boards'
 import { cardTimelineRenderers } from '@/utils/cardTimelineRows'
 
 const props = defineProps<{
@@ -58,6 +59,8 @@ const props = defineProps<{
   nameFor: (id: string) => string
   /** The board the card is read on. */
   boardId: string
+  /** The repositories the board links, to name the one a pull request or commit was on. */
+  repos?: BoardRepoRead[]
 }>()
 
 const renderers = computed(() =>
@@ -65,6 +68,7 @@ const renderers = computed(() =>
     stage: id => props.stages.find(s => s.id === id)?.name ?? 'another stage',
     person: props.nameFor,
     boardId: props.boardId,
+    repo: id => props.repos?.find(r => r.id === id)?.name ?? null,
   }),
 )
 const typeOf = (event: CardEventRead) => event.type

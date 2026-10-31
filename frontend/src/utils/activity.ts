@@ -27,6 +27,9 @@ export type ActivityPart =
   | { kind: 'link'; text: string; href: string }
 
 export interface ActivityRow {
+  /** The dot's icon and colour for this row, when they differ by event (not just by type). */
+  icon?: string
+  color?: string
   /** The main line. */
   primary: ActivityPart[]
   /** Badges or details under it. */

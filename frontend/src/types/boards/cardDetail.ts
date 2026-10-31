@@ -88,7 +88,7 @@ export interface CardAttachmentList {
 export type CardEventType =
   | 'created' | 'moved' | 'moved_board' | 'edited' | 'assigned' | 'unassigned'
   | 'commented' | 'archived' | 'restored' | 'handed_over' | 'returned' | 'delivered'
-  | 'imported' | 'doc_updated' | 'ai_run'
+  | 'imported' | 'doc_updated' | 'ai_run' | 'repo_activity'
 
 export interface CardEventRead {
   id: string

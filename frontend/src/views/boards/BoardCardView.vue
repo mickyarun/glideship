@@ -76,6 +76,7 @@
             </AppPanel>
             <CardActivity
               v-else-if="tab === 'activity'" :activity="activity" :stages="stages" :name-for="nameFor" :board-id="board.board.id"
+              :repos="page.repos.repos.value"
             />
           </div>
           <aside class="bud-page__aside" aria-label="Card details">

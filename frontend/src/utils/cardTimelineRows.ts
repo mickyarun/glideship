@@ -23,6 +23,7 @@ import {
   actor, plainRow, section, text, type ActivityPart, type ActivityRenderer, type ActivityRenderers, type ActivityRow,
 } from '@/utils/activity'
 import { movedBoardRow } from '@/utils/cardMovedBoardRow'
+import { repoActivityRow } from '@/utils/cardRepoActivityRow'
 import { wordList } from '@/utils/format'
 
 export interface CardTimelineNames {
@@ -30,6 +31,8 @@ export interface CardTimelineNames {
   person: (id: string) => string
   /** The board the history is read on, so a move between boards can say "here". */
   boardId?: string | null
+  /** A linked repository's name by id; null once the board no longer links it. */
+  repo?: (id: string) => string | null
 }
 
 /** Edited fields as the history says them. */
@@ -107,6 +110,8 @@ export function cardTimelineRenderers(names: CardTimelineNames): ActivityRendere
     returned: { icon: 'mdi-keyboard-return', color: 'warning', row: said('sent this card back from Delivery') },
     delivered: { icon: 'mdi-check-all', color: 'success', row: () => plainRow(null, 'Delivered') },
     ai_run: { icon: 'mdi-robot', color: 'info', row: () => plainRow(null, 'AI ran on this card') },
+    // Its row picks the dot by kind (pull request or commit).
+    repo_activity: { icon: 'mdi-source-repository', color: 'muted', row: e => repoActivityRow(e, names.repo ?? (() => null)) },
   }
   return {
     byType,
