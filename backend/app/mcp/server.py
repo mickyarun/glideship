@@ -30,9 +30,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db
 from app.mcp.audit import emit_audit
 from app.mcp.auth import MCPAuthResult, verify_mcp_token
+from app.mcp.board_tool_schemas import BOARD_TOOL_DEFINITIONS
 from app.mcp.grant_tools import scoped_input_schema, visible
 from app.mcp.handlers_agent_activity import handle_agent_activity
-from app.mcp.handlers_board_cards import CARD_TOOL_DEFINITIONS, CARD_TOOL_HANDLERS
+from app.mcp.handlers_board_cards import BOARD_CARD_TOOL_HANDLERS
+from app.mcp.handlers_board_docs import CARD_DOC_TOOL_HANDLERS
+from app.mcp.handlers_boards import BOARD_TOOL_HANDLERS
 from app.mcp.handlers_bud import (
     handle_get_bud_context,
     handle_write_bud,
@@ -1010,7 +1013,7 @@ MCP_TOOLS: list[MCPToolDefinition] = [
         },
     ),
 ]
-MCP_TOOLS += [MCPToolDefinition(**tool) for tool in CARD_TOOL_DEFINITIONS]
+MCP_TOOLS += [MCPToolDefinition(**tool) for tool in BOARD_TOOL_DEFINITIONS]
 
 
 # --- Route handlers ---
@@ -1211,8 +1214,11 @@ AUTH_TOOL_HANDLERS: dict[str, Any] = {
     "write_bud": handle_write_bud,
     # Needs the caller identity to attribute the design_updated event.
     "write_bud_design": handle_write_bud_design,
-    # Need the token's card grant: only a board card run can use them.
-    **CARD_TOOL_HANDLERS,
+    # Boards and cards for a personal token; each call checks the board role.
+    **BOARD_TOOL_HANDLERS,
+    **BOARD_CARD_TOOL_HANDLERS,
+    # get_card_context needs a board card run's grant; write_card_doc serves both.
+    **CARD_DOC_TOOL_HANDLERS,
 }
 
 

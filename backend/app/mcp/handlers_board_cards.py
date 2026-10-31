@@ -12,125 +12,190 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MCP tools for a board card's agent run: ``get_card_context`` and ``write_card_doc``.
 
-Only a run's own token can use them: its grant names one card and one run
-(:mod:`app.services.boards.agents.card_tools`). Anything else is 403. The
-draft written is always ``pending_review``; a person accepts it. Neither
-tool is in ``REMOTE_TOOLS``.
+"""MCP tools for working on board cards from Claude Code with a personal token.
+
+``get_card``, ``create_card``, ``update_card``, ``move_card`` and
+``comment_card`` go through the same services as the board API, so stage
+entry rules, label and repository checks and live events all apply. Each
+call checks the caller's role on the card's board again
+(:mod:`app.mcp.board_tool_access`). Old card keys resolve to the card's
+current board.
 """
 
-from typing import Any
+import uuid
+from typing import Any, Final
 
-import structlog
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.mcp.auth import MCPAuthResult
-from app.models.board_enums import BoardCardDocKind
-from app.services.boards.agents.card_tools import (
-    CardGrantError,
-    GrantedCard,
-    granted_card,
-    read_card,
-    write_card_draft,
+from app.mcp.board_tool_access import (
+    board_for,
+    board_tool,
+    card_for,
+    missing,
+    text_param,
 )
-from app.services.boards.constants import (
-    CARD_DOC_MAX_CHARS,
-    GET_CARD_CONTEXT_TOOL,
-    WRITE_CARD_DOC_TOOL,
+from app.mcp.board_tool_schemas import (
+    COMMENT_CARD_TOOL,
+    CREATE_CARD_TOOL,
+    GET_CARD_TOOL,
+    MOVE_CARD_TOOL,
+    UPDATE_CARD_TOOL,
 )
+from app.repositories.board_stage import BoardStageRepository
+from app.schemas.boards.card import CardCreate, CardDetail, CardMove, CardUpdate
+from app.schemas.boards.card_detail import CommentBody
+from app.services.boards import card_edit, card_move, card_service, comment_service
+from app.services.boards.access import BoardAccess, BoardCaller
+from app.services.boards.agents.context import card_context
+from app.services.boards.constants import BoardAction
+from app.services.boards.errors import BoardItemNotFoundError
+from app.services.boards.handover_chips import opens_buds
+from app.services.boards.reads import card_detail
 
-logger = structlog.get_logger(__name__)
-
-_CARD_REF_SCHEMA: dict[str, Any] = {
-    "card_id": {"type": "string", "description": "The card's id (from the prompt)."},
-    "card_key": {"type": "string", "description": "Or the card's key, e.g. SEO-14."},
+STAGE_NOT_FOUND: Final = "Stage not found."
+_EDIT_FIELDS: Final = (
+    "title",
+    "description_md",
+    "priority",
+    "start_at",
+    "due_at",
+    "assignee_ids",
+    "label_ids",
+    "repo_id",
+)
+_CARD_OUT: Final = {
+    "id",
+    "key",
+    "board_key",
+    "number",
+    "stage_id",
+    "title",
+    "priority",
+    "start_at",
+    "due_at",
+    "due_done",
+    "assignee_ids",
+    "label_ids",
+    "repo_id",
+    "archived_at",
 }
 
-CARD_TOOL_DEFINITIONS: list[dict[str, Any]] = [
-    {
-        "name": GET_CARD_CONTEXT_TOOL,
-        "description": (
-            "Read the board card this run works on: its fields, current documents, "
-            "newest comments, checklist, attachment names and the board's linked repos."
-        ),
-        "input_schema": {"type": "object", "properties": dict(_CARD_REF_SCHEMA)},
-    },
-    {
-        "name": WRITE_CARD_DOC_TOOL,
-        "description": (
-            "Save a draft document on the board card this run works on. The draft "
-            "waits for a person to review it; it never replaces the card's current "
-            "document by itself. kind is prd, design_brief or notes."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                **_CARD_REF_SCHEMA,
-                "kind": {"type": "string", "enum": [k.value for k in BoardCardDocKind]},
-                "content_md": {"type": "string", "description": "The document, in Markdown."},
-            },
-            "required": ["kind", "content_md"],
-        },
-    },
-]
+
+def _picked(params: dict[str, Any], names: tuple[str, ...]) -> dict[str, Any]:
+    return {name: params[name] for name in names if name in params}
 
 
-async def _granted(
-    db: AsyncSession, auth: MCPAuthResult, card_id: Any, card_key: Any
-) -> GrantedCard:
-    try:
-        return await granted_card(
-            db,
-            auth.grant,
-            card_id=card_id if isinstance(card_id, str) else None,
-            card_key_value=card_key if isinstance(card_key, str) else None,
-        )
-    except CardGrantError as exc:
-        logger.warning("mcp_card_tool_refused", org_id=str(auth.org_id), reason=str(exc))
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+def _card(detail: CardDetail) -> dict[str, Any]:
+    return {"success": True, "card": detail.model_dump(mode="json", include=_CARD_OUT)}
 
 
-async def handle_get_card_context(
-    db: AsyncSession, auth: MCPAuthResult, params: dict[str, Any]
+async def _stage_id(db: AsyncSession, access: BoardAccess, ref: str) -> uuid.UUID:
+    """The board's stage named ``ref`` (ignoring case) or with that id."""
+    stages = await BoardStageRepository(db, org_id=access.org_id).list_for_board(access.board.id)
+    wanted = ref.casefold()
+    for stage in stages:
+        if str(stage.id) == ref or stage.name.casefold() == wanted:
+            return stage.id
+    raise BoardItemNotFoundError(STAGE_NOT_FOUND)
+
+
+@board_tool
+async def handle_get_card(
+    db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
-    """The run's card and what surrounds it."""
-    granted = await _granted(db, auth, params.get("card_id"), params.get("card_key"))
-    return await read_card(db, granted)
-
-
-async def handle_write_card_doc(
-    db: AsyncSession, auth: MCPAuthResult, params: dict[str, Any]
-) -> dict[str, Any]:
-    """Save a ``pending_review`` draft on the run's card."""
-    granted = await _granted(db, auth, params.get("card_id"), params.get("card_key"))
-    raw_kind = params.get("kind")
-    content = params.get("content_md")
-    try:
-        kind = BoardCardDocKind(str(raw_kind))
-    except ValueError:
-        return {
-            "success": False,
-            "error": f"kind must be one of {[k.value for k in BoardCardDocKind]}",
+    """The card a live or old key names, with what its page shows."""
+    key = text_param(params, "card_key")
+    if not key:
+        return missing("card_key")
+    target = await card_for(db, caller, key, BoardAction.VIEW)
+    board, card = target.access.board, target.card
+    detail = await card_detail(db, board, card, opens_buds=opens_buds(caller.perms))
+    context = await card_context(db, board, card)
+    handovers = [
+        {
+            "bud_key": chip.bud_key,
+            "bud_status": chip.status.value,
+            "handover_status": chip.handover_status.value,
         }
-    if not isinstance(content, str) or not content.strip():
-        return {"success": False, "error": "content_md must be a non-empty string"}
-    if len(content) > CARD_DOC_MAX_CHARS:
-        return {"success": False, "error": f"content_md is over {CARD_DOC_MAX_CHARS} characters"}
-    result = await write_card_draft(db, granted, kind, content)
-    logger.info(
-        "mcp_write_card_doc",
-        org_id=str(auth.org_id),
-        card_id=str(granted.card.id),
-        run_id=str(granted.run.id),
-        kind=kind.value,
-        length=len(content),
+        for chip in detail.handovers
+    ]
+    summary = {
+        **context["card"],
+        "stage_id": str(detail.stage_id),
+        "start_at": detail.start_at.isoformat() if detail.start_at else None,
+        "archived": detail.archived_at is not None,
+        "delivery": detail.delivery.value,
+        "handovers": handovers,
+    }
+    return {**context, "card": summary}
+
+
+@board_tool
+async def handle_create_card(
+    db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
+) -> dict[str, Any]:
+    """A new card at the bottom of the named or default stage."""
+    key = text_param(params, "board_key")
+    if not key:
+        return missing("board_key")
+    access = await board_for(db, caller, key, BoardAction.CREATE_CARD)
+    fields = _picked(params, (*_EDIT_FIELDS, "confirm_open_checklist"))
+    stage = text_param(params, "stage")
+    if stage:
+        fields["stage_id"] = await _stage_id(db, access, stage)
+    return _card(await card_service.create_card(db, access, CardCreate.model_validate(fields)))
+
+
+@board_tool
+async def handle_update_card(
+    db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
+) -> dict[str, Any]:
+    """Edit the fields named; the rest stay."""
+    key = text_param(params, "card_key")
+    if not key:
+        return missing("card_key")
+    target = await card_for(db, caller, key, BoardAction.EDIT_CARD)
+    body = CardUpdate.model_validate(_picked(params, (*_EDIT_FIELDS, "due_done")))
+    return _card(await card_edit.update_card(db, target, body))
+
+
+@board_tool
+async def handle_move_card(
+    db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
+) -> dict[str, Any]:
+    """Move the card to the bottom of a stage on its board."""
+    key, stage = text_param(params, "card_key"), text_param(params, "stage")
+    if not key or not stage:
+        return missing("card_key" if not key else "stage")
+    target = await card_for(db, caller, key, BoardAction.MOVE_CARD)
+    body = CardMove.model_validate(
+        {
+            "stage_id": await _stage_id(db, target.access, stage),
+            **_picked(params, ("confirm_open_checklist",)),
+        }
     )
-    return result
+    return _card(await card_move.move_card(db, target, body))
 
 
-CARD_TOOL_HANDLERS: dict[str, Any] = {
-    GET_CARD_CONTEXT_TOOL: handle_get_card_context,
-    WRITE_CARD_DOC_TOOL: handle_write_card_doc,
+@board_tool
+async def handle_comment_card(
+    db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
+) -> dict[str, Any]:
+    """Post a comment on the card."""
+    key = text_param(params, "card_key")
+    if not key:
+        return missing("card_key")
+    target = await card_for(db, caller, key, BoardAction.COMMENT)
+    body = CommentBody.model_validate({"body": params.get("body")})
+    comment = await comment_service.add_comment(db, target, body.body)
+    return {"success": True, "comment": comment.model_dump(mode="json")}
+
+
+BOARD_CARD_TOOL_HANDLERS: dict[str, Any] = {
+    GET_CARD_TOOL: handle_get_card,
+    CREATE_CARD_TOOL: handle_create_card,
+    UPDATE_CARD_TOOL: handle_update_card,
+    MOVE_CARD_TOOL: handle_move_card,
+    COMMENT_CARD_TOOL: handle_comment_card,
 }

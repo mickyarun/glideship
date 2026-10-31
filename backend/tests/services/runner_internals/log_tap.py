@@ -39,7 +39,7 @@ from typing import Any
 import pytest
 
 from app.core import encryption
-from app.mcp import handlers_board_cards
+from app.mcp import handlers_board_docs
 from app.services import (
     agent_activity_logger,
     ai_runner,
@@ -86,7 +86,7 @@ CREDENTIAL_PATH: tuple[ModuleType, ...] = (
     claude_runner,
     cli_exec,
     encryption,
-    handlers_board_cards,
+    handlers_board_docs,
     job_queue,
     job_utils,
     notification_service,

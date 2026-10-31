@@ -37,6 +37,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.auth import MCPAuthResult
+from app.mcp.board_tool_access import origin_card
 from app.mcp.handler_utils import require_non_empty
 from app.models.bud import BUDDesignStatus, BUDDocument, BUDPriority, BUDStatus
 from app.models.bud_feature_link import BUDFeatureLinkSource
@@ -713,4 +714,6 @@ async def handle_get_bud_by_id(
         # update_bud, fall back to list_design_systems when this is
         # empty — both paths surface the same ``repo_id`` shape.
         "impacted_repos": bud.impacted_repos or [],
+        # The board card it was handed over from, for a person who can open that board.
+        "origin_card": await origin_card(db, auth, bud.id),
     }

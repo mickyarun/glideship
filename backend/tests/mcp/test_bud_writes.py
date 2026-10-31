@@ -28,6 +28,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.mcp import handlers_bud_writes
 from app.mcp.auth import MCPAuthResult
 from app.mcp.handlers_bud_writes import (
     handle_create_bud,
@@ -36,6 +37,16 @@ from app.mcp.handlers_bud_writes import (
 )
 from app.models.bud import BUDStatus
 from app.repositories.bud import BUDRepository, DesignTargetNotInOrgError
+
+
+@pytest.fixture(autouse=True)
+def _no_origin_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No board lookups here: the origin card has its own integration tests."""
+
+    async def _none(*_args: Any) -> None:
+        return None
+
+    monkeypatch.setattr(handlers_bud_writes, "origin_card", _none)
 
 
 def _auth(user_id: uuid.UUID | None = None) -> MCPAuthResult:

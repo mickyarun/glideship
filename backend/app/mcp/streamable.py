@@ -51,6 +51,7 @@ from app.core.deps import get_db
 from app.database import AsyncSessionLocal
 from app.mcp.audit import emit_audit
 from app.mcp.auth import MCPAuthResult, token_owner_still_allowed, verify_mcp_token
+from app.mcp.board_tool_schemas import REMOTE_BOARD_TOOLS, remote_board_tool_schemas
 from app.mcp.grant_tools import visible
 from app.mcp.handlers_prompts import CANONICAL_TASK_TYPES
 from app.mcp.rate_limit import enforce_rate_limit
@@ -81,6 +82,8 @@ REMOTE_TOOLS: frozenset[str] = frozenset(
         # todos (matching the takeover/complete family). See ``handlers_todo.py``.
         "create_todo",
         "update_todo",
+        # Board reads; each call checks the caller's role on the board.
+        *REMOTE_BOARD_TOOLS,
     }
 )
 
@@ -300,6 +303,8 @@ _REMOTE_TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
 ]
+
+_REMOTE_TOOL_SCHEMAS += remote_board_tool_schemas()
 
 # JSON-RPC error codes (subset we use).
 _PARSE_ERROR = -32700

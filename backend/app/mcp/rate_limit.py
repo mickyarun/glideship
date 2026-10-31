@@ -55,6 +55,16 @@ TOOL_COSTS: dict[str, int] = {
     # embedding), heavier than a plain read.
     "create_todo": 5,
     "update_todo": 5,
+    # Board reads: a role check plus one board (a page per stage) or one card.
+    "list_boards": 1,
+    "get_board": 3,
+    "get_card": 2,
+    # Card writes run the same services as the board API.
+    "create_card": 5,
+    "update_card": 5,
+    "move_card": 5,
+    "comment_card": 3,
+    "write_card_doc": 5,
     # Code-graph tools are pgvector-heavy; weight similarly to features.
     "code_impact": 5,
     "code_query": 3,
