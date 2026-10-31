@@ -23,29 +23,24 @@ The run itself goes through the shared executor
 BUD side of it, :class:`BudAgentSubject`.
 """
 
-import uuid as uuid_mod
 from typing import Any
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.bud_agent_task import AgentTaskStatus, BUDAgentTask
-from app.models.tracked_repository import TrackedRepository
-from app.repositories.bud import BUDRepository
-from app.schemas.bud_constants import BUD_AGENT_SECTIONS
+from app.config import settings
+from app.models.bud_agent_task import AgentTaskStatus
+from app.repositories.tracked_repository import TrackedRepoRepository
 from app.schemas.jobs import BUDAgentTaskPayload
 from app.services.agent_activity_logger import log_agent_activity
 from app.services.agent_phase_support import PHASES_NAVIGABLE_BY_GRAPH
 from app.services.agents.executor import execute_agent_run
 from app.services.agents.subject import AgentLaunch, AgentPrompt, AgentRunRef
-from app.services.bud_agent_records import BudAgentRecords
+from app.services.bud_agent_loading import BudAgentLoader
 from app.services.bud_agent_registry import (
     PROMPT_BUILDERS,
     RESULT_HANDLERS,
-    fail_designs_for_bud,
     provider_reads_files,
-    skill_from_row,
 )
 from app.services.bud_agent_retry import maybe_retry_on_git_auth_failure
 from app.services.bud_repo_paths import confirmed_repo_paths
@@ -58,71 +53,18 @@ from app.services.claude_runner import (
 )
 from app.services.github_remote_refresh import refresh_origin_tokens
 from app.services.job_utils import build_mcp_config
-from app.services.section_session import mint_session_id
 
 logger = structlog.get_logger(__name__)
 
 __all__ = ["PROMPT_BUILDERS", "RESULT_HANDLERS", "BudAgentSubject", "handle_bud_agent_job"]
 
 
-class BudAgentSubject(BudAgentRecords):
+class BudAgentSubject(BudAgentLoader):
     """A BUD stage agent task, run through the shared executor."""
 
     def log_phase(self, phase: str, **fields: Any) -> None:
         """Log one step under ``bud_agent_phase``."""
         logger.info("bud_agent_phase", phase=phase, **fields)
-
-    async def _fail_task(self, db: AsyncSession, error: str) -> str:
-        """Mark the task failed with ``error``, commit, and hand the error back."""
-        self.task.status = AgentTaskStatus.FAILED
-        self.task.error_message = error
-        await db.commit()
-        return error
-
-    async def load(self, db: AsyncSession) -> str | None:
-        """Load the task, its BUD and skill, and check a prompt builder exists."""
-        task = await db.get(BUDAgentTask, self.task_id)
-        if not task:
-            logger.error(
-                "bud_agent_task_not_found",
-                task_id=str(self.task_id),
-                job_id=self.job_id,
-                org_id=str(self.org_id),
-            )
-            return "Agent task not found"
-        # Defense-in-depth: verify task belongs to the expected org
-        if task.org_id != self.org_id:
-            return "Org mismatch"
-        self._task = task
-        bud = await BUDRepository(db, org_id=self.org_id).get_by_id(self.bud_id)
-        if not bud:
-            return await self._fail_task(db, "BUD not found")
-        self._bud = bud
-        if not task.skill:
-            return await self._fail_task(db, "Skill not found")
-
-        self.skill_slug = task.skill.skill_slug
-        self.task_type = task.task_type
-        self.bud_number = bud.bud_number
-        self.bud_title = bud.title
-        self.log_phase(
-            "task_loaded",
-            task_id=str(self.task_id),
-            task_type=self.task_type,
-            bud_id=str(self.bud_id),
-            skill_slug=self.skill_slug,
-        )
-        self._skill = skill_from_row(task)
-
-        if task.task_type not in PROMPT_BUILDERS:
-            task.status = AgentTaskStatus.FAILED
-            task.error_message = f"No prompt builder for task type: {task.task_type}"
-            # Mark any associated design rows as failed so the UI stops spinning
-            if task.task_type == "design":
-                await fail_designs_for_bud(db, self.bud_id)
-            await db.commit()
-            return task.error_message
-        return None
 
     async def build_prompt(self, db: AsyncSession) -> AgentPrompt:
         """Dispatch to the task type's prompt builder."""
@@ -138,28 +80,14 @@ class BudAgentSubject(BudAgentRecords):
         )
         return mcp
 
-    def _session_for_run(self) -> tuple[uuid_mod.UUID | None, bool]:
-        """The CLI session id to use, and whether it resumes an earlier one.
-
-        Agents owning a BUD section that chat resumes get a session id; a
-        re-run with ``resume_session_id`` resumes that session instead of
-        minting one, keeping the prompt cache warm.
-        """
-        self.session_section = BUD_AGENT_SECTIONS.get(self.task_type)
-        if self.session_section is None:
-            return None, False
-        if self.task.resume_session_id is not None:
-            return self.task.resume_session_id, True
-        return mint_session_id(), False
-
     async def prepare(
         self, db: AsyncSession, prompt: AgentPrompt, mcp: MCPServerConfig | None
     ) -> AgentLaunch:
         """Build the runner config, log the invocation and mark the task running."""
-        self.session_id, is_resume = self._session_for_run()
+        self.session_id, is_resume = self.session_for_run()
         config = ClaudeRunnerConfig(
             max_turns=max(self.skill.max_turns, 0),
-            timeout_seconds=600,
+            timeout_seconds=settings.bud_agents.timeout_seconds,
             mcp=mcp,
             model=self.skill.model or None,
             effort=self.skill.effort or None,
@@ -172,13 +100,8 @@ class BudAgentSubject(BudAgentRecords):
 
         working_dir = prompt.working_dir
         if working_dir:
-            repo_row = await db.execute(
-                select(TrackedRepository.id).where(
-                    TrackedRepository.path == working_dir,
-                    TrackedRepository.org_id == self.org_id,
-                )
-            )
-            self.repo_id = repo_row.scalar_one_or_none()
+            repo = await TrackedRepoRepository(db, org_id=self.org_id).get_by_path(working_dir)
+            self.repo_id = None if repo is None else repo.id
 
         # A separate session, so the row is visible now rather than after
         # the run (which can take minutes) commits.

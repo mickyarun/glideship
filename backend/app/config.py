@@ -22,6 +22,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app import instance_secrets
 from app.config_boards import BoardsConfig
+from app.config_bud_agents import BudAgentConfig
 
 
 class DatabaseConfig(BaseSettings):
@@ -421,6 +422,7 @@ class Settings(BaseSettings):
     file_storage: FileStorageConfig = FileStorageConfig()
     ws: WebSocketConfig = WebSocketConfig()
     boards: BoardsConfig = BoardsConfig()
+    bud_agents: BudAgentConfig = BudAgentConfig()
     colyseus: ColyseusConfig = ColyseusConfig()
 
 

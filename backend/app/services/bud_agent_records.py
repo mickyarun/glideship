@@ -12,76 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""State and run-end records for a BUD stage agent task.
+"""Run-end records for a BUD stage agent task.
 
-:class:`app.services.bud_agent_handler.BudAgentSubject` builds on this: the
-rows it loads live here, with how a run's end is written to the task row, the
-activity log, the timeline and the Garden's ``agent_activity`` topic.
+:class:`app.services.bud_agent_handler.BudAgentSubject` builds on this: how a
+run's end is written to the task row, the activity log, the timeline and the
+Garden's ``agent_activity`` topic.
 """
 
-import uuid as uuid_mod
 from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.models.bud import BUDDocument
 from app.models.bud_agent_task import AgentTaskStatus, BUDAgentTask
-from app.schemas.jobs import BUDAgentTaskPayload
 from app.services.agent_activity_logger import log_agent_activity
+from app.services.bud_agent_state import BudAgentState
 from app.services.event_bus import publish as _eb_publish
 from app.services.job_utils import record_agent_timeline
 from app.services.section_session import record_originating_session
-from app.services.skill_loader import Skill
 
 logger = structlog.get_logger(__name__)
 
 
-class BudAgentRecords:
-    """A BUD agent task's loaded rows and how its run's end is recorded."""
-
-    def __init__(self, job_id: str, payload: BUDAgentTaskPayload) -> None:
-        self.job_id = job_id
-        self.payload = payload
-        self.task_id = uuid_mod.UUID(payload.task_id)
-        self.org_id = uuid_mod.UUID(payload.org_id)
-        self.bud_id = uuid_mod.UUID(payload.bud_id)
-        # Pre-set so the failure paths can always log / write activity rows
-        # even before the real skill and task type are resolved.
-        self.skill_slug = "bud_agent"
-        self.task_type = "unknown"
-        self.bud_number: int | None = None
-        self.bud_title: str | None = None
-        self.repo_id: uuid_mod.UUID | None = None
-        self.repo_paths: list[str] = []
-        self.session_section: str | None = None
-        self.session_id: uuid_mod.UUID | None = None
-        self._task: BUDAgentTask | None = None
-        self._bud: BUDDocument | None = None
-        self._skill: Skill | None = None
-
-    @property
-    def task(self) -> BUDAgentTask:
-        """The loaded task row."""
-        assert self._task is not None  # set by load()
-        return self._task
-
-    @property
-    def bud(self) -> BUDDocument:
-        """The loaded BUD."""
-        assert self._bud is not None  # set by load()
-        return self._bud
-
-    @property
-    def skill(self) -> Skill:
-        """The loaded skill."""
-        assert self._skill is not None  # set by load()
-        return self._skill
-
-    def log_phase(self, phase: str, **fields: Any) -> None:
-        """Log one step of the run (the subject logs under its own event name)."""
-        raise NotImplementedError
+class BudAgentRecords(BudAgentState):
+    """How a BUD agent task's run end is recorded."""
 
     async def record_success(self, db: AsyncSession, summary: dict[str, Any] | None) -> None:
         """Log completion, mark the task completed and keep its CLI session."""

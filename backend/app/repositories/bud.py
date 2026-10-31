@@ -660,6 +660,20 @@ class BUDDesignRepository(BaseRepository[BUDDesign]):
         await self._db.flush()
         return rowcount(result) or 0
 
+    async def mark_generating_failed_for_bud(self, bud_id: uuid.UUID) -> int:
+        """Flip every ``generating`` design row of a BUD to ``failed``; how many.
+
+        Used when a BUD's design agent can't run at all, so the UI stops waiting.
+        """
+        stmt = (
+            update(BUDDesign)
+            .where(BUDDesign.org_id == self._org_id)
+            .where(BUDDesign.bud_id == bud_id)
+            .where(BUDDesign.status == BUDDesignStatus.GENERATING)
+            .values(status=BUDDesignStatus.FAILED)
+        )
+        return rowcount(await self._db.execute(stmt)) or 0
+
     async def mark_failed_by_job(self, job_id: str) -> int:
         """Flip every ``generating`` design row tied to ``job_id`` to failed.
 

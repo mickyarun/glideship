@@ -20,12 +20,12 @@ Adding a new agent type = add a builder + handler entry here.
 import uuid as uuid_mod
 from typing import Any, Protocol
 
-from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.prompts.learning_prompt import build_learning_prompt
-from app.models.bud import BUDDesign, BUDDocument
+from app.models.bud import BUDDocument
 from app.models.bud_agent_task import BUDAgentTask
+from app.repositories.bud import BUDDesignRepository
 from app.repositories.organization import OrganizationRepository
 from app.services.agent_prompts import (
     build_code_review_prompt,
@@ -108,15 +108,10 @@ RESULT_HANDLERS: dict[str, ResultHandler] = {
 
 
 async def fail_designs_for_bud(
-    db: Any,
-    bud_id: uuid_mod.UUID,
+    db: AsyncSession, org_id: uuid_mod.UUID, bud_id: uuid_mod.UUID
 ) -> None:
     """Mark all 'generating' design rows for a BUD as 'failed'."""
-    await db.execute(
-        sql_update(BUDDesign)
-        .where(BUDDesign.bud_id == bud_id, BUDDesign.status == "generating")
-        .values(status="failed")
-    )
+    await BUDDesignRepository(db, org_id=org_id).mark_generating_failed_for_bud(bud_id)
 
 
 def skill_from_row(task: BUDAgentTask) -> Skill:

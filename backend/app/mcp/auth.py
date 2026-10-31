@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MCP token verification for Glideship tool calls from Claude Code."""
+"""MCP token verification for Glideship tool calls from Claude Code.
+
+:class:`MCPAuthResult` and the owner checks (:mod:`app.mcp.auth_result`,
+:mod:`app.mcp.auth_owner`) are re-exported here.
+"""
 
 import asyncio
-import hashlib
 import secrets
 import uuid
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from typing import Any, NoReturn
 
 import structlog
 from fastapi import Depends, Header, HTTPException, status
@@ -29,112 +31,37 @@ from app.core.deps import get_db, member_has_permission
 from app.core.permissions import WORKSPACE_ENGINEERING
 from app.core.security import hash_password, verify_password
 from app.database import AsyncSessionLocal
-from app.mcp.token_grants import InternalTokenGrant, scoped_grant
-from app.models.organization import Organization
-from app.models.user import User
+from app.mcp.auth_owner import is_expired
+from app.mcp.auth_owner import token_owner_still_allowed as token_owner_still_allowed
+from app.mcp.auth_result import MCPAuthResult as MCPAuthResult
+from app.mcp.auth_result import compute_token_prefix as compute_token_prefix
+from app.mcp.token_grants import scoped_grant
+from app.models.user_mcp_token import UserMCPToken
 from app.repositories.organization import OrganizationRepository
 from app.repositories.user import UserRepository
 from app.repositories.user_mcp_token import UserMCPTokenRepository
 
 logger = structlog.get_logger(__name__)
 
-# Internal tokens: short-lived tokens for scan-initiated Claude CLI runs.
-# Maps token → org_id. Populated by create_internal_mcp_token(),
-# consumed by verify_mcp_token(). Tokens persist until server restart;
-# eager revocation caused race conditions with the shared token file.
+# Server-minted org-wide tokens (token → org_id) for internal CLI runs; they
+# last until restart (eager revocation raced the shared token file).
 _internal_tokens: dict[str, uuid.UUID] = {}
 _MAX_INTERNAL_TOKENS = 100
 
-# Pre-computed bcrypt hash of a fixed throwaway value. Used to equalize
-# response time on the no-prefix-match path so attackers can't enumerate
-# valid token prefixes by timing the bcrypt round-trip. Computed once at
-# import-time so verify_mcp_token() itself never blocks on the hash op.
+# A throwaway bcrypt hash, computed once, checked on the no-match path so its
+# timing can't reveal which token prefixes exist.
 _TIMING_EQUALIZER_HASH = hash_password("bodhiorchard-timing-equalizer-not-a-real-token")
 
-# Track in-flight last-used-touch tasks so they aren't garbage-collected
-# mid-flight; each task removes itself on completion.
+# In-flight last-used touches, held so they aren't garbage-collected.
 _last_used_tasks: set[asyncio.Task[None]] = set()
-
-
-def compute_token_prefix(plaintext_token: str) -> str:
-    """Compute a non-secret prefix for indexed token lookup.
-
-    Uses SHA-256 of the plaintext, truncated to 16 hex chars.
-    This is NOT a secret — it's stored in plaintext for fast filtering
-    before the expensive bcrypt verification.
-
-    Args:
-        plaintext_token: The raw token string.
-
-    Returns:
-        16-character hex prefix.
-    """
-    return hashlib.sha256(plaintext_token.encode()).hexdigest()[:16]
-
-
-@dataclass(frozen=True)
-class MCPAuthResult:
-    """Result of MCP token verification.
-
-    Always contains an org. Contains a user when the token is
-    a per-user token (UserMCPToken), None for org-level or internal tokens.
-    ``token_id`` is the UserMCPToken row id when the call was authenticated
-    by a per-user token — used by the audit log so an admin can trace any
-    recorded action back to a specific revocable credential.
-    """
-
-    org: Organization
-    user: User | None = None
-    token_id: uuid.UUID | None = None
-    # Set for a scoped server-minted token; it limits tools and cards.
-    grant: InternalTokenGrant | None = None
-    # Plain copies of the ORM ids, taken while the request session is
-    # healthy. A handler whose flush fails rolls the session back and
-    # expires ``org`` and ``user``; reading ``org.id`` after that raises,
-    # so the audit write on the error path must use these instead.
-    org_id: uuid.UUID = field(init=False)
-    user_id: uuid.UUID | None = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Snapshot the org and user ids at authentication time."""
-        object.__setattr__(self, "org_id", self.org.id)
-        object.__setattr__(self, "user_id", self.user.id if self.user else None)
-
-
-async def token_owner_still_allowed(
-    db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID
-) -> bool:
-    """Whether a per-user token's owner may still use MCP.
-
-    The owner must be active, a member of the token's org, and hold
-    engineering access — the checks :func:`verify_mcp_token` makes on every
-    call. Long-lived streams re-run them on each heartbeat, so deactivating,
-    removing or re-roling the owner cuts an open stream too, even when the
-    token row itself survived.
-    """
-    user = await UserRepository(db).get_by_id(user_id)
-    if user is None or not user.is_active:
-        return False
-    if not await UserRepository(db).is_member_of_org(user_id, org_id):
-        return False
-    return await member_has_permission(db, user_id, org_id, WORKSPACE_ENGINEERING)
 
 
 def create_internal_mcp_token(org_id: uuid.UUID) -> str:
     """Create a temporary MCP token for internal use (e.g. scan pipeline).
 
-    The token is stored in-memory and valid until server restart.
-    If the token pool exceeds ``_MAX_INTERNAL_TOKENS``, the oldest
-    entry is evicted to bound memory usage.
-
-    Args:
-        org_id: The organization UUID to associate with the token.
-
-    Returns:
-        The plaintext token string.
+    Valid until restart; past ``_MAX_INTERNAL_TOKENS`` the oldest is evicted.
     """
     token = secrets.token_urlsafe(32)
-    # Evict oldest token if at capacity
     if len(_internal_tokens) >= _MAX_INTERNAL_TOKENS:
         oldest_key = next(iter(_internal_tokens))
         _internal_tokens.pop(oldest_key)
@@ -143,21 +70,8 @@ def create_internal_mcp_token(org_id: uuid.UUID) -> str:
     return token
 
 
-def _is_expired(expires_at: datetime | None) -> bool:
-    """True if a token has an expiry that's already in the past."""
-    if expires_at is None:
-        return False
-    return expires_at <= datetime.now(UTC)
-
-
 async def _touch_last_used(token_id: uuid.UUID, org_id: uuid.UUID, user_id: uuid.UUID) -> None:
-    """Background task: bump ``last_used_at`` on a successful auth.
-
-    Uses its own session — the request's session may be torn down before
-    this background write completes. Failures are swallowed (logged WITH
-    full context so a consistent FK / column mismatch surfaces in alerts)
-    so a transient DB hiccup never breaks the user-facing auth path.
-    """
+    """Bump ``last_used_at`` on its own session; a failure is logged, never raised."""
     try:
         async with AsyncSessionLocal() as session:
             await UserMCPTokenRepository(session).touch_last_used(token_id)
@@ -178,29 +92,25 @@ def _schedule_last_used(token_id: uuid.UUID, org_id: uuid.UUID, user_id: uuid.UU
     task.add_done_callback(_last_used_tasks.discard)
 
 
+def _refuse(
+    event: str, ut: UserMCPToken, code: int, detail: str, *, level: str = "warning", **extra: Any
+) -> NoReturn:
+    """Log why a per-user token was refused, with its ids, and raise ``code``."""
+    log = getattr(logger, level)
+    log(event, token_id=str(ut.id), org_id=str(ut.org_id), user_id=str(ut.user_id), **extra)
+    raise HTTPException(status_code=code, detail=detail)
+
+
 async def verify_mcp_token(
     db: AsyncSession = Depends(get_db),
     authorization: str = Header(),
 ) -> MCPAuthResult:
     """Verify the bearer token from an MCP request.
 
-    Resolution order:
-    1. Internal tokens (in-memory, server-minted) → org, and a grant for
-       a scoped one. Org-wide tokens skip expiry/scope checks: they never
-       leave the host and carry the scan pipeline's trusted full access.
-       A scoped token (a board card run, :mod:`app.mcp.token_grants`)
-       expires and limits tools and cards.
-    2. Per-user tokens (UserMCPToken table) → org + user.
-       Rejected if ``expires_at`` has passed; ``last_used_at`` is
-       updated in the background on success.
-    3. Org-level tokens (Organization.mcp_token_hash) → org only.
-
-    Args:
-        db: The async database session.
-        authorization: The Authorization header value (Bearer <token>).
-
-    Returns:
-        MCPAuthResult with the authenticated org and optional user.
+    In order: internal tokens (in-memory, server-minted; a scoped one, for a
+    board card run, carries its grant and expires), per-user tokens (refused
+    when expired or when the owner lost access; ``last_used_at`` bumped in
+    the background), then org-level token hashes.
 
     Raises:
         HTTPException: If token is missing, invalid, or no match found.
@@ -232,77 +142,43 @@ async def verify_mcp_token(
             logger.debug("mcp_auth_internal", org_id=str(org.id))
             return MCPAuthResult(org=org, grant=grant)
 
-    # 2. Check per-user tokens — filter by prefix (indexed), then bcrypt.
-    # Expired rows still go through bcrypt to keep the timing consistent
-    # whether the token "doesn't exist" vs "exists but expired".
+    # 2. Per-user tokens: by prefix (indexed), then bcrypt (expired ones too,
+    # so timing doesn't tell "missing" from "expired").
     prefix = compute_token_prefix(token)
     candidates = await UserMCPTokenRepository(db).list_by_prefix_with_relations(prefix)
+    unauthorized = status.HTTP_401_UNAUTHORIZED
     for ut in candidates:
         if not verify_password(token, ut.token_hash):
             continue
-        if _is_expired(ut.expires_at):
-            logger.info(
-                "mcp_auth_user_token_expired",
-                token_id=str(ut.id),
-                org_id=str(ut.org_id),
-                user_id=str(ut.user_id),
+        if is_expired(ut.expires_at):
+            _refuse(
+                "mcp_auth_user_token_expired", ut, unauthorized, "Token has expired", level="info"
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-            )
-        # Defence-in-depth: ``users.is_active = False`` is a soft delete
-        # used by member-deactivation and member-merge. The token-revoke
-        # at deactivation time handles the happy path, but this check
-        # rejects any token that survives that step (race, missed call
-        # site, stale row) before it can read org data.
-        #
-        # ut.user can also be None entirely if the FK was somehow broken
-        # (e.g. data restore that didn't load the users row) — reject
-        # both cases with the same 401.
+        # Defence-in-depth behind the revoke at deactivation (a soft delete),
+        # and against a token whose user row is missing (a broken restore).
         if ut.user is None or not ut.user.is_active:
-            logger.warning(
+            _refuse(
                 "mcp_auth_user_token_user_missing_or_inactive",
-                token_id=str(ut.id),
-                org_id=str(ut.org_id),
-                user_id=str(ut.user_id),
+                ut,
+                unauthorized,
+                "Account is deactivated",
                 user_loaded=ut.user is not None,
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Account is deactivated",
-            )
-        # Token must belong to a CURRENT member of the org it claims.
-        # Catches the data-restore failure mode where users + tokens
-        # survive but org_to_user rows didn't — the dump leaves a
-        # token row pointing at a real user who isn't actually a member
-        # of the org any more. Without this check that token reads org
-        # data it has no business reading.
-        is_member = await UserRepository(db).is_member_of_org(ut.user_id, ut.org_id)
-        if not is_member:
-            logger.warning(
+        # A restore can keep users and tokens but lose their memberships.
+        if not await UserRepository(db).is_member_of_org(ut.user_id, ut.org_id):
+            _refuse(
                 "mcp_auth_user_token_not_org_member",
-                token_id=str(ut.id),
-                org_id=str(ut.org_id),
-                user_id=str(ut.user_id),
+                ut,
+                unauthorized,
+                "User is not a member of the token's organization",
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User is not a member of the token's organization",
-            )
-        # MCP tools read and write BUDs, so a per-user token is only as
-        # good as its owner's engineering access. Checked on every call so
-        # moving someone to a people-only role cuts off existing tokens.
+        # Checked on every call, so a move to a people-only role cuts it off.
         if not await member_has_permission(db, ut.user_id, ut.org_id, WORKSPACE_ENGINEERING):
-            logger.warning(
+            _refuse(
                 "mcp_auth_user_token_no_engineering_access",
-                token_id=str(ut.id),
-                org_id=str(ut.org_id),
-                user_id=str(ut.user_id),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Your role doesn't include engineering workspace access",
+                ut,
+                status.HTTP_403_FORBIDDEN,
+                "Your role doesn't include engineering workspace access",
             )
         _schedule_last_used(ut.id, ut.org_id, ut.user_id)
         logger.debug(
@@ -314,28 +190,17 @@ async def verify_mcp_token(
         return MCPAuthResult(org=ut.organization, user=ut.user, token_id=ut.id)
 
     # 3. Fall back to org-level token hashes.
-    orgs = await org_repo.get_all_with_mcp_tokens()
-    for org in orgs:
+    for org in await org_repo.get_all_with_mcp_tokens():
         if org.mcp_token_hash and verify_password(token, org.mcp_token_hash):
-            logger.debug(
-                "mcp_auth_success",
-                org_id=str(org.id),
-                slug=org.slug,
-            )
+            logger.debug("mcp_auth_success", org_id=str(org.id), slug=org.slug)
             return MCPAuthResult(org=org)
 
-    # Equalize timing: if no prefix matched AND no org token matched, run a
-    # dummy bcrypt so the response time matches the "prefix matched but
-    # bcrypt failed" path. Closes a token-prefix-enumeration side channel.
-    # Narrow except so a broken/misconfigured bcrypt backend surfaces as a
-    # WARNING rather than being hidden behind the uniform 401 below.
+    # Equalize timing with the "prefix matched, bcrypt failed" path; a broken
+    # bcrypt backend is logged rather than hidden behind the 401.
     if not candidates:
         try:
             verify_password(token, _TIMING_EQUALIZER_HASH)
         except ValueError:
             logger.warning("mcp_timing_equalizer_failed")
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired MCP token",
-    )
+    raise HTTPException(status_code=unauthorized, detail="Invalid or expired MCP token")
