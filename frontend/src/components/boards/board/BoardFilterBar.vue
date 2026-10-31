@@ -131,5 +131,11 @@ const countText = computed(() => {
   .filter-bar__search {
     flex-basis: 100%;
   }
+  /* The filters wrap; the count then closes the last row, at its end,
+     rather than leaving Archived alone on a row of its own. */
+  .filter-bar__count {
+    order: 1;
+    margin-left: auto;
+  }
 }
 </style>
