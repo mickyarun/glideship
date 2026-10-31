@@ -33,7 +33,7 @@ from app.config import settings
 from app.models.board import BoardStage
 from app.models.board_card import BoardCard
 from app.models.board_card_detail import BoardCardEvent
-from app.models.board_enums import BoardCardEventType
+from app.models.board_enums import BoardCardEventType, BoardStageCategory
 from app.repositories.board_access import BoardAccessRepository
 from app.repositories.board_card_event import BoardCardEventRepository
 from app.schemas.boards.card_detail import EventPage, EventRead
@@ -63,8 +63,15 @@ async def record_event(
     from_stage: BoardStage | None = None,
     to_stage: BoardStage | None = None,
     detail: dict[str, Any] | None = None,
+    from_category: BoardStageCategory | None = None,
 ) -> None:
-    """Add one event to the card's history."""
+    """Add one event to the card's history.
+
+    ``from_category`` freezes where the card came from when ``from_stage``
+    can't be named: a move between boards leaves a stage on another board,
+    and the event's stage ids stay on its own ``board_id``.
+    """
+    left = from_stage.category if from_stage else from_category
     await BoardCardEventRepository(db, org_id=card.org_id).add(
         BoardCardEvent(
             org_id=card.org_id,
@@ -74,13 +81,13 @@ async def record_event(
             actor_id=actor_id,
             from_stage_id=from_stage.id if from_stage else None,
             to_stage_id=to_stage.id if to_stage else None,
-            from_category=from_stage.category if from_stage else None,
+            from_category=left,
             to_category=to_stage.category if to_stage else None,
             detail=detail or {},
         )
     )
     await garden.note_card_event(
-        db, card, event_type, actor_id=actor_id, from_stage=from_stage, to_stage=to_stage
+        db, card, event_type, actor_id=actor_id, from_category=left, to_stage=to_stage
     )
 
 

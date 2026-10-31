@@ -63,16 +63,18 @@ def board_activity_topic(org_id: uuid.UUID) -> str:
 
 
 def activity_kind(
-    event_type: BoardCardEventType, from_stage: BoardStage | None, to_stage: BoardStage | None
+    event_type: BoardCardEventType,
+    from_category: BoardStageCategory | None,
+    to_stage: BoardStage | None,
 ) -> BoardActivityKind | None:
-    """The Garden activity a card event is, if any."""
+    """The Garden activity a card event is, if any (``from_category``: where it came from)."""
     if event_type is BoardCardEventType.HANDED_OVER:
         return BoardActivityKind.HANDOVER
     if event_type is BoardCardEventType.DELIVERED:
         return BoardActivityKind.BUD_DELIVERED
     done = BoardStageCategory.DONE
     entered_done = to_stage is not None and to_stage.category is done
-    from_done = from_stage is not None and from_stage.category is done
+    from_done = from_category is done
     if event_type in _STAGE_ENTRIES and entered_done and not from_done:
         return BoardActivityKind.CARD_DONE
     return None
@@ -84,11 +86,11 @@ async def note_card_event(
     event_type: BoardCardEventType,
     *,
     actor_id: uuid.UUID | None,
-    from_stage: BoardStage | None,
+    from_category: BoardStageCategory | None,
     to_stage: BoardStage | None,
 ) -> None:
     """Queue the Garden event for a card event, to go out when ``db`` commits."""
-    kind = activity_kind(event_type, from_stage, to_stage)
+    kind = activity_kind(event_type, from_category, to_stage)
     if kind is None:
         return
     board = await BoardRepository(db, org_id=card.org_id).get_by_id(card.board_id)

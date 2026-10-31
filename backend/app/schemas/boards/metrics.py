@@ -38,7 +38,7 @@ class DurationStats(BaseModel):
 
 
 class AgingCard(BaseModel):
-    """An open card in progress that hasn't changed stage category since ``since``."""
+    """An open card in progress now; ``since`` is when it first entered ``in_progress``."""
 
     key: str
     title: str

@@ -96,6 +96,8 @@ async def relocate_card(
         event_type,
         actor_id=actor_id,
         to_stage=to_stage,
+        # A done card moved to a done stage elsewhere isn't a completion.
+        from_category=move.from_stage.category,
         detail={
             "from_board": _board_ref(move.source),
             "to_board": _board_ref(move.target),

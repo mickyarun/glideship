@@ -38,7 +38,11 @@ class BoardsConfig(BoardImportSettings, BoardAgentSettings, BoardActivitySetting
     edit_coalesce_seconds: int = Field(
         default=300, ge=0, description="Edits by one person within this window merge."
     )
-    aging_days: int = Field(default=14, gt=0, description="Idle days before a card is aging.")
+    aging_days: int = Field(
+        default=14,
+        gt=0,
+        description="Days since a card first entered in progress before it is aging.",
+    )
     recent_done_days: int = Field(
         default=7, gt=0, description="Days the boards list counts finished cards over."
     )

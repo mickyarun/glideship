@@ -13,25 +13,29 @@
 # limitations under the License.
 
 
-"""Board flow metrics in SQL, for any number of boards at once, from frozen categories.
+"""Board flow metrics in SQL, for any number of boards at once.
 
-Everything reads ``board_card_events.to_category`` (the stage's category
-when the event was written) and the event's frozen ``board_id``, never
-stage names, so the numbers survive renamed or re-categorised stages and
-cards that moved board. Each method is one statement grouped by board.
+Throughput reads ``board_card_events``: ``to_category`` and
+``from_category`` (the stages' categories when the event was written) and
+the event's frozen ``board_id``, never stage names, so the numbers survive
+renamed or re-categorised stages and cards that moved board.
 
-A card's current category is the ``to_category`` of its newest event that
-has one; WIP and aging count open (unarchived) cards by it.
+WIP and aging are about now: an open (unarchived) card counts by its
+current stage's category (``board_cards.stage_id`` → ``board_stages``), so
+re-categorising a stage moves its cards with it. A card is aging while its
+stage is ``in_progress`` and it first entered ``in_progress``
+(``board_cards.started_at``, never cleared) before the cut-off. Each method
+is one statement grouped by board.
 """
 
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from sqlalchemy import ColumnElement, Subquery, func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.board import Board
+from app.models.board import Board, BoardStage
 from app.models.board_card import BoardCard
 from app.models.board_card_detail import BoardCardEvent
 from app.models.board_enums import BoardStageCategory, BoardStatus
@@ -49,7 +53,7 @@ class MetricsBoard:
 
 @dataclass(frozen=True)
 class AgingRow:
-    """An open card in progress since ``since`` without changing category."""
+    """An open card in progress, which first entered ``in_progress`` at ``since``."""
 
     board_id: uuid.UUID
     number: int
@@ -107,52 +111,63 @@ class BoardMetricsRepository:
             out.setdefault(board_id, {})[started.date()] = int(count)
         return out
 
-    def _current(self, board_ids: list[uuid.UUID]) -> Subquery:
-        """``(board_id, card_id, category, since)`` of every open card on the boards."""
-        e = BoardCardEvent
-        return (
-            select(
-                BoardCard.board_id,
-                e.card_id,
-                e.to_category.label("category"),
-                e.created_at.label("since"),
-            )
-            .join(BoardCard, BoardCard.id == e.card_id)
-            .where(
-                e.org_id == self._org_id,
-                e.to_category.is_not(None),
-                BoardCard.org_id == self._org_id,
-                BoardCard.board_id.in_(board_ids),
-                BoardCard.archived_at.is_(None),
-            )
-            .distinct(e.card_id)
-            .order_by(e.card_id, e.created_at.desc(), e.id.desc())
-            .subquery("current_category")
-        )
+    def _open_cards(self, board_ids: list[uuid.UUID]) -> list[ColumnElement[bool]]:
+        """WHERE clauses for the open cards on the boards, joined to their stage."""
+        return [
+            BoardCard.org_id == self._org_id,
+            BoardCard.board_id.in_(board_ids),
+            BoardCard.archived_at.is_(None),
+            BoardStage.org_id == self._org_id,
+        ]
+
+    @staticmethod
+    def _stage_join() -> ColumnElement[bool]:
+        return and_(BoardStage.id == BoardCard.stage_id, BoardStage.board_id == BoardCard.board_id)
 
     async def wip(
         self, board_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, dict[BoardStageCategory, int]]:
-        """Open cards per board and current category."""
-        cur = self._current(board_ids)
-        stmt = select(cur.c.board_id, cur.c.category, func.count()).group_by(
-            cur.c.board_id, cur.c.category
+        """Open cards per board and their stage's category now."""
+        stmt = (
+            select(BoardCard.board_id, BoardStage.category, func.count())
+            .join(BoardStage, self._stage_join())
+            .where(*self._open_cards(board_ids))
+            .group_by(BoardCard.board_id, BoardStage.category)
         )
         out: dict[uuid.UUID, dict[BoardStageCategory, int]] = {}
         for board_id, category, count in (await self._db.execute(stmt)).all():
             out.setdefault(board_id, {})[category] = int(count)
         return out
 
-    async def aging(self, board_ids: list[uuid.UUID], before: datetime) -> list[AgingRow]:
-        """Open cards in progress, unchanged since before ``before``, oldest first."""
-        cur = self._current(board_ids)
+    def _aging(self, board_ids: list[uuid.UUID], before: datetime) -> list[ColumnElement[bool]]:
+        """WHERE clauses for open cards in progress now, first started before ``before``."""
+        return [
+            *self._open_cards(board_ids),
+            BoardStage.category == BoardStageCategory.IN_PROGRESS,
+            BoardCard.started_at < before,
+        ]
+
+    async def aging_counts(
+        self, board_ids: list[uuid.UUID], before: datetime
+    ) -> dict[uuid.UUID, int]:
+        """How many cards are aging on each board."""
         stmt = (
-            select(cur.c.board_id, BoardCard.number, BoardCard.title, cur.c.since)
-            .join(BoardCard, BoardCard.id == cur.c.card_id)
-            .where(
-                cur.c.category == BoardStageCategory.IN_PROGRESS,
-                cur.c.since < before,
-            )
-            .order_by(cur.c.since, BoardCard.id)
+            select(BoardCard.board_id, func.count())
+            .join(BoardStage, self._stage_join())
+            .where(*self._aging(board_ids, before))
+            .group_by(BoardCard.board_id)
+        )
+        return {board_id: int(n) for board_id, n in (await self._db.execute(stmt)).all()}
+
+    async def oldest_aging(
+        self, board_id: uuid.UUID, before: datetime, limit: int
+    ) -> list[AgingRow]:
+        """The board's ``limit`` longest-running aging cards, oldest first."""
+        stmt = (
+            select(BoardCard.board_id, BoardCard.number, BoardCard.title, BoardCard.started_at)
+            .join(BoardStage, self._stage_join())
+            .where(*self._aging([board_id], before))
+            .order_by(BoardCard.started_at, BoardCard.id)
+            .limit(limit)
         )
         return [AgingRow(*row) for row in (await self._db.execute(stmt)).all()]

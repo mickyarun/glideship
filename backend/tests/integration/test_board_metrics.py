@@ -118,6 +118,14 @@ async def test_one_boards_numbers(client: AsyncClient, pg_session_factory: Facto
     await _backdate(
         pg_session_factory, stuck, BoardStageCategory.IN_PROGRESS, NOW - timedelta(days=20)
     )
+    # Aging counts from when the card first entered in progress.
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(BoardCard)
+            .where(BoardCard.id == uuid.UUID(stuck["id"]))
+            .values(started_at=NOW - timedelta(days=20))
+        )
+        await db.commit()
     await _delivered(pg_session_factory, shipped, NOW - timedelta(days=10))
 
     got = ok(await client.get(f"{BOARDS}/{key}/metrics", headers=pm.headers))

@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.board_enums import BoardStageCategory
-from app.repositories.board_metrics import AgingRow, BoardMetricsRepository, MetricsBoard
+from app.repositories.board_metrics import BoardMetricsRepository, MetricsBoard
 from app.repositories.board_metrics_durations import BoardDurationRepository, DurationRow
 from app.schemas.boards.metrics import (
     AgingCard,
@@ -90,7 +90,7 @@ class _Numbers:
     cycle: dict[uuid.UUID, DurationRow]
     lead: dict[uuid.UUID, DurationRow]
     wip: dict[uuid.UUID, dict[BoardStageCategory, int]]
-    aging: list[AgingRow]
+    aging: dict[uuid.UUID, int]
 
     def flow(self, board_id: uuid.UUID, window: _Window) -> FlowMetrics:
         weekly = self.throughput.get(board_id, {})
@@ -100,7 +100,7 @@ class _Numbers:
             cycle_time=_hours(self.cycle.get(board_id, _EMPTY)),
             lead_time=_hours(self.lead.get(board_id, _EMPTY)),
             wip={category: wip.get(category, 0) for category in BoardStageCategory},
-            aging_count=sum(1 for row in self.aging if row.board_id == board_id),
+            aging_count=self.aging.get(board_id, 0),
         )
 
 
@@ -123,7 +123,7 @@ async def _numbers(
         cycle=await durations.cycle_times(board_ids, window.since),
         lead=await durations.lead_times(board_ids, window.since),
         wip=await flow.wip(board_ids),
-        aging=await flow.aging(board_ids, window.aging_before),
+        aging=await flow.aging_counts(board_ids, window.aging_before),
     )
 
 
@@ -131,7 +131,9 @@ async def board_metrics(db: AsyncSession, access: BoardAccess) -> BoardMetrics:
     """The board's metrics and its oldest aging cards."""
     board, window = access.board, _Window.now()
     numbers = await _numbers(db, access.org_id, [board.id], window)
-    oldest = numbers.aging[: settings.boards.metrics_aging_list_limit]
+    oldest = await BoardMetricsRepository(db, org_id=access.org_id).oldest_aging(
+        board.id, window.aging_before, settings.boards.metrics_aging_list_limit
+    )
     return BoardMetrics(
         **numbers.flow(board.id, window).model_dump(),
         window=_Window.read(),
