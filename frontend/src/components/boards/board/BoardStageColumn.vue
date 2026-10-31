@@ -60,7 +60,7 @@
         {{ column.error }}
         <v-btn variant="text" size="small" color="primary" @click="emit('load', false)">Try again</v-btn>
       </p>
-      <p v-else-if="column.loaded && !column.items.length" class="stage-col__note">No cards here</p>
+      <p v-else-if="column.loaded && !column.items.length" class="stage-col__note stage-col__note--empty">No cards here</p>
 
       <div ref="sentinel" class="stage-col__sentinel" aria-hidden="true" />
       <v-btn
@@ -176,12 +176,21 @@ function onEnd(event: Parameters<typeof dropFromDragEnd>[0]): void {
   padding: 2px;
   margin: -2px;
 }
+.stage-col__scroll { position: relative; }
 .stage-col__cards {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* Room to drop into an empty column. */
+  /* The list fills the column body, so a card can be dropped anywhere in it,
+     including an empty column. */
+  flex: 1 0 auto;
   min-height: 24px;
+}
+/* Sits over the empty list without catching the drop. */
+.stage-col__note--empty {
+  position: absolute;
+  inset: 48px 0 auto;
+  pointer-events: none;
 }
 .stage-col__skeleton { background: transparent; }
 .stage-col__note {
