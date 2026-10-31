@@ -20,9 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.board import Board, BoardStage
-from app.models.board_enums import BoardMemberRole, BoardVisibility
+from app.models.board_enums import BoardMemberRole
 from app.repositories.board import BoardRepository, VisibleBoard
-from app.repositories.board_member import BoardMemberRepository
 from app.repositories.board_prefs import BoardPrefsRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.board import (
@@ -36,14 +35,10 @@ from app.schemas.boards.board import (
     TemplateRead,
 )
 from app.services.boards.access import BoardAccess, BoardCaller
+from app.services.boards.board_create import insert_board
 from app.services.boards.board_template import BoardTemplate, load_templates
-from app.services.boards.constants import (
-    BOARD_KEY_PATTERN,
-    DELIVERY_BOARD_NAME,
-    DELIVERY_BOARD_PATH,
-    RESERVED_BOARD_KEYS,
-)
-from app.services.boards.errors import BOARD_TAKEN, BoardConflictError, BoardRuleError
+from app.services.boards.constants import DELIVERY_BOARD_NAME, DELIVERY_BOARD_PATH
+from app.services.boards.errors import BoardRuleError
 from app.services.boards.reads import board_detail
 
 
@@ -100,51 +95,6 @@ def list_templates() -> list[TemplateRead]:
         )
         for template_id, t in load_templates().items()
     ]
-
-
-def normalise_key(raw: str) -> str:
-    """An upper-case board key, or :class:`BoardRuleError` when it can't be one."""
-    key = raw.strip().upper()
-    if not BOARD_KEY_PATTERN.fullmatch(key):
-        raise BoardRuleError("A board key is 2 to 10 letters, A to Z.")
-    if key in RESERVED_BOARD_KEYS:
-        raise BoardRuleError(f"{key} is reserved; pick another key.")
-    return key
-
-
-async def check_new_board(db: AsyncSession, caller: BoardCaller, *, key: str, name: str) -> str:
-    """The normalised key, once the key is valid and neither it nor ``name`` is taken."""
-    normal = normalise_key(key)
-    repo = BoardRepository(db, org_id=caller.org_id)
-    if await repo.key_or_name_taken(key=normal, name=name):
-        raise BoardConflictError(BOARD_TAKEN)
-    return normal
-
-
-async def insert_board(
-    db: AsyncSession,
-    caller: BoardCaller,
-    *,
-    key: str,
-    name: str,
-    description: str | None,
-    visibility: BoardVisibility,
-) -> Board:
-    """A new board with no stages yet and the caller as its admin; not committed."""
-    board = Board(
-        org_id=caller.org_id,
-        name=name,
-        key=await check_new_board(db, caller, key=key, name=name),
-        description=description,
-        visibility=visibility,
-        created_by=caller.user_id,
-    )
-    if not await BoardRepository(db, org_id=caller.org_id).insert(board):
-        raise BoardConflictError(BOARD_TAKEN)
-    await BoardMemberRepository(db, org_id=caller.org_id).put_member(
-        board.id, caller.user_id, BoardMemberRole.ADMIN
-    )
-    return board
 
 
 async def create_board(db: AsyncSession, caller: BoardCaller, body: BoardCreate) -> BoardDetail:
