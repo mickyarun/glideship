@@ -24,19 +24,26 @@ from app.models.bud import BUDStatus
 
 
 def skipped_by_handover(events: list[tuple[str, datetime, bool]]) -> set[str]:
-    """Phases a board handover stepped through on its way to where the BUD landed.
+    """Phases a board handover only ever stepped through.
 
     A handover writes one ``status_change`` per stage it skips, tagged
     ``via: handover`` and all at once, so the phase each one leaves lasted
     no time. Its drift would read as "finished early"; those phases keep
     their (zero) window but report no drift.
+
+    A phase counts only when every time the BUD left it, a handover step
+    did. A BUD sent back and handed over again walks from ``bud`` once
+    more (the restore and the steps are tagged too), and that walk can
+    pass a phase the team really worked in on the first pass. Such a phase
+    was also left some other way (a move by hand, the discard that sent it
+    back), so it keeps its drift.
     """
-    skipped: set[str] = set()
+    by_handover: set[str] = set()
+    otherwise: set[str] = set()
     current = BUDStatus.BUD.value
     for to_phase, _at, via_handover in events:
         if to_phase == current:
             continue
-        if via_handover:
-            skipped.add(current)
+        (by_handover if via_handover else otherwise).add(current)
         current = to_phase
-    return skipped
+    return by_handover - otherwise
