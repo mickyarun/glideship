@@ -45,7 +45,6 @@ from app.models.board_fks import board_fk, card_fk, member_fk
 from app.models.bud import BUDPriority
 
 CARD_TITLE_LENGTH = 500
-CARD_KEY_LENGTH = 32
 # Card numbers and document versions are int4 columns.
 INT4_MAX = 2**31 - 1
 
@@ -201,18 +200,27 @@ class BoardCardLabel(BaseModel):
 
 
 class BoardCardKeyAlias(BaseModel):
-    """A key a card used before it moved board, e.g. ``SEO-14``."""
+    """A key a card used before it moved board: ``SEO-14`` is (board SEO, number 14).
+
+    Numbers are never reused on a board, so an alias never names the same
+    key as a live card. The board key can't change, so the pair is stable.
+    """
 
     __tablename__ = "board_card_key_aliases"
     __table_args__ = (
-        UniqueConstraint("org_id", "key", name="uq_board_card_key_aliases_org_key"),
+        UniqueConstraint(
+            "org_id", "board_id", "number", name="uq_board_card_key_aliases_org_board_number"
+        ),
+        board_fk("board_card_key_aliases"),
         card_fk("board_card_key_aliases"),
         Index("ix_board_card_key_aliases_card_id", "card_id"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    key: Mapped[str] = mapped_column(String(CARD_KEY_LENGTH), nullable=False)
+    # The board the card was on, and its number there.
+    board_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
     card_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
     def __repr__(self) -> str:
-        return f"<BoardCardKeyAlias(key={self.key!r}, card_id={self.card_id})>"
+        return f"<BoardCardKeyAlias(board_id={self.board_id}, number={self.number})>"

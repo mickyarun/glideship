@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 import pytest
 from httpx import AsyncClient
@@ -30,9 +31,18 @@ pytestmark = pytest.mark.integration
 BY_KEY = f"{BOARDS}/cards/by-key"
 
 
-async def _alias(factory: Factory, org: uuid.UUID, key: str, card_id: str) -> None:
+async def _alias(
+    factory: Factory, org: uuid.UUID, board: dict[str, Any], number: int, card_id: str
+) -> None:
     async with factory() as db:
-        db.add(BoardCardKeyAlias(org_id=org, key=key, card_id=uuid.UUID(card_id)))
+        db.add(
+            BoardCardKeyAlias(
+                org_id=org,
+                board_id=uuid.UUID(board["board"]["id"]),
+                number=number,
+                card_id=uuid.UUID(card_id),
+            )
+        )
         await db.commit()
 
 
@@ -58,13 +68,18 @@ async def test_an_old_key_opens_the_card_only_for_people_on_its_current_board(
     hidden = (await make_board(client, pm, visibility="members"))["board"]["key"]
     await put_role(client, pm, hidden, member.id, "viewer")
     card = await make_card(client, pm, hidden, "Moved here")
-    # The card used to be OLD-7 on a board everyone could see.
-    await _alias(pg_session_factory, org, "OLDKEY-7", card["id"])
+    # The card used to be number 7 on a board everyone could see.
+    old = await make_board(client, pm)
+    await _alias(pg_session_factory, org, old, 7, card["id"])
+    old_key = f"{old['board']['key']}-7"
 
-    assert ok(await client.get(f"{BY_KEY}/OLDKEY-7", headers=member.headers))["key"] == card["key"]
-    assert (await client.get(f"{BY_KEY}/oldkey-7", headers=outsider.headers)).status_code == 404
+    assert (
+        ok(await client.get(f"{BY_KEY}/{old_key}", headers=member.headers))["key"] == card["key"]
+    )
+    lower = old_key.lower()
+    assert (await client.get(f"{BY_KEY}/{lower}", headers=outsider.headers)).status_code == 404
     foreigner = await person(pg_session_factory, other, "manager")
-    assert (await client.get(f"{BY_KEY}/OLDKEY-7", headers=foreigner.headers)).status_code == 404
+    assert (await client.get(f"{BY_KEY}/{old_key}", headers=foreigner.headers)).status_code == 404
 
 
 async def test_a_live_key_wins_over_an_alias_with_the_same_text(
@@ -72,8 +87,9 @@ async def test_a_live_key_wins_over_an_alias_with_the_same_text(
 ) -> None:
     org = await new_org(pg_session_factory)
     pm = await person(pg_session_factory, org, "pm")
-    key = (await make_board(client, pm))["board"]["key"]
+    board = await make_board(client, pm)
+    key = board["board"]["key"]
     live = await make_card(client, pm, key, "Live")
     other = await make_card(client, pm, key, "Other")
-    await _alias(pg_session_factory, org, live["key"], other["id"])
+    await _alias(pg_session_factory, org, board, live["number"], other["id"])
     assert ok(await client.get(f"{BY_KEY}/{live['key']}", headers=pm.headers))["id"] == live["id"]

@@ -16,8 +16,8 @@
 
 Every path that puts a card in a stage calls :func:`enter_stage` with why
 (:class:`EntryCause`), and ``ENTRY_RULES`` says which rules that cause
-applies. Someone moving a card or creating one in a stage meets both
-rules; restoring an archived card, moving a deleted stage's cards on and
+applies. Someone moving a card (on its board or to another) or creating
+one in a stage meets both rules; restoring an archived card, moving a deleted stage's cards on and
 importing place cards without anyone choosing the stage, so they skip them.
 """
 
@@ -75,6 +75,7 @@ class EntryCause(StrEnum):
     """Why a card is entering a stage."""
 
     MOVE = "move"
+    MOVE_BOARD = "move_board"
     CREATE = "create"
     RESTORE = "restore"
     STAGE_DELETE = "stage_delete"
@@ -95,6 +96,7 @@ _PLACED = EntryRules(required_fields=False, open_checklist=False)
 ENTRY_RULES: Final[Mapping[EntryCause, EntryRules]] = MappingProxyType(
     {
         EntryCause.MOVE: _CHOSEN,
+        EntryCause.MOVE_BOARD: _CHOSEN,
         EntryCause.CREATE: _CHOSEN,
         EntryCause.RESTORE: _PLACED,
         EntryCause.STAGE_DELETE: _PLACED,

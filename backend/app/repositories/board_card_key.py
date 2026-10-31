@@ -14,15 +14,16 @@
 
 """Find a card by its display key, live or old, with the caller's role on it.
 
-A key like ``SEO-14`` is first read as a live key (board ``SEO``, number
-14), then looked up in ``board_card_key_aliases``. Either way the role
-comes from the card's *current* board, in the same statement, so an old
-key never opens a card on a board the caller can't see.
+A key like ``SEO-14`` is board ``SEO``, number 14: first the card with
+that number on that board, else the card ``board_card_key_aliases`` says
+had it before moving away. Either way the role comes from the card's
+*current* board, in the same statement, so an old key never opens a card
+on a board the caller can't see.
 """
 
 import uuid
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -46,43 +47,55 @@ def split_card_key(key: str) -> tuple[str, int] | None:
 
 
 class BoardCardKeyRepository:
-    """Card key lookups for one org."""
+    """Card key lookups and old keys for one org."""
 
     def __init__(self, db: AsyncSession, *, org_id: uuid.UUID) -> None:
         self._db = db
         self._org_id = org_id
 
+    def add_alias(self, card: BoardCard, board_id: uuid.UUID, number: int) -> None:
+        """Remember that ``card`` was number ``number`` on ``board_id``."""
+        self._db.add(
+            BoardCardKeyAlias(
+                org_id=self._org_id, board_id=board_id, number=number, card_id=card.id
+            )
+        )
+
     async def resolve(
         self, key: str, user_id: uuid.UUID, perms: PermissionChecker
     ) -> tuple[BoardCard, Board, BoardMemberRole] | None:
         """The card ``key`` names, its current board and the caller's role there."""
-        normalised = key.strip().upper()
-        alias = (
-            select(BoardCardKeyAlias.card_id)
-            .where(BoardCardKeyAlias.org_id == self._org_id, BoardCardKeyAlias.key == normalised)
+        parts = split_card_key(key)
+        if parts is None:
+            return None
+        board_key, number = parts
+        named, live_card = aliased(Board), aliased(BoardCard)
+        live = (
+            select(live_card.id)
+            .join(named, named.id == live_card.board_id)
+            .where(
+                named.org_id == self._org_id, named.key == board_key, live_card.number == number
+            )
             .scalar_subquery()
         )
-        card_id: ColumnElement[uuid.UUID] = alias
-        parts = split_card_key(key)
-        if parts is not None:
-            live_card, live_board = aliased(BoardCard), aliased(Board)
-            live = (
-                select(live_card.id)
-                .join(live_board, live_board.id == live_card.board_id)
-                .where(
-                    live_board.org_id == self._org_id,
-                    live_board.key == parts[0],
-                    live_card.number == parts[1],
-                )
-                .scalar_subquery()
+        old_board = aliased(Board)
+        old = (
+            select(BoardCardKeyAlias.card_id)
+            .join(old_board, old_board.id == BoardCardKeyAlias.board_id)
+            .where(
+                BoardCardKeyAlias.org_id == self._org_id,
+                old_board.org_id == self._org_id,
+                old_board.key == board_key,
+                BoardCardKeyAlias.number == number,
             )
-            card_id = func.coalesce(live, alias)
+            .scalar_subquery()
+        )
         roles = BoardAccessRepository(self._db, org_id=self._org_id).role_subquery(user_id, perms)
         stmt = (
             select(BoardCard, Board, roles.c.role)
             .join(Board, Board.id == BoardCard.board_id)
             .join(roles, roles.c.board_id == Board.id)
-            .where(BoardCard.org_id == self._org_id, BoardCard.id == card_id)
+            .where(BoardCard.org_id == self._org_id, BoardCard.id == func.coalesce(live, old))
         )
         row = (await self._db.execute(stmt)).one_or_none()
         return None if row is None else (row[0], row[1], row[2])

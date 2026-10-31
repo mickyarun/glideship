@@ -51,6 +51,10 @@ class BoardSocketEvent(StrEnum):
     CARD_MOVED = "card_moved"
     CARD_ARCHIVED = "card_archived"
     CARD_RESTORED = "card_restored"
+    # The card moved to another board: ``card_id``, its ``new_key`` and the
+    # ``to_board_key``, so an open card page can follow it. The target
+    # board hears ``card_created``.
+    CARD_LEFT_BOARD = "card_left_board"
     CARD_ACTIVITY = "card_activity"
     DOC_UPDATED = "doc_updated"
     STAGE_CHANGED = "stage_changed"

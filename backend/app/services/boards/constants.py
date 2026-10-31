@@ -31,8 +31,11 @@ BOARD_KEY_MAX_LENGTH: Final = 10
 # Card keys are ``{board key}-{number}``; BUD and BUG already name BUDs and
 # bugs. The others are fixed path segments under ``/api/v1/boards``, now or
 # planned, that a board key would otherwise share.
+# The Delivery (BUD) board's key: a card goes there by handover, not a move.
+DELIVERY_BOARD_KEY: Final = "BUD"
+
 RESERVED_BOARD_KEYS: Final = frozenset(
-    {"BUD", "BUG", "CARDS", "IMPORTS", "LIMITS", "SKILLS", "SWITCHER", "TEMPLATES"}
+    {DELIVERY_BOARD_KEY, "BUG", "CARDS", "IMPORTS", "LIMITS", "SKILLS", "SWITCHER", "TEMPLATES"}
 )
 
 BOARD_KEY_PATTERN: Final = re.compile(rf"^[A-Z]{{{BOARD_KEY_MIN_LENGTH},{BOARD_KEY_MAX_LENGTH}}}$")

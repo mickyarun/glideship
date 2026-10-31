@@ -33,8 +33,10 @@ from tests.integration.board_api_support import (
     CardTeam,
     card_team,
     link_repo,
+    make_board,
     ok,
     org_of,
+    put_role,
     stage_id,
     tracked_repo,
     use_local_storage,
@@ -63,7 +65,10 @@ async def _ids(client: AsyncClient, team: CardTeam, factory: Factory) -> dict[st
     body = {"body_md": "v1", "base_version": None}
     ok(await client.put(f"{team.url}/docs/prd", json=body, headers=admin))
     card = ok(await client.get(team.url, headers=admin))
+    target = (await make_board(client, team.admin, template="blank"))["board"]["key"]
+    await put_role(client, team.admin, target, team.editor.id, "editor")
     return {
+        "target": target,
         "key": team.key,
         "number": str(card["number"]),
         "card_key": card["key"],
@@ -121,6 +126,8 @@ EDITS: list[tuple[str, str, dict[str, Any]]] = [
     ("DELETE", f"{CARD}/attachments/{{attachment_id}}", {}),
     ("POST", f"{CARD}/archive", {}),
     ("POST", f"{CARD}/restore", {}),
+    # Last: the card leaves the board.
+    ("POST", f"{CARD}/move-board", {"json": {"target_board_key": "{target}"}}),
 ]
 
 

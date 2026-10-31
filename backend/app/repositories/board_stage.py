@@ -72,12 +72,14 @@ class BoardStageRepository(BaseRepository[BoardStage]):
         """One stage of the board, locked until the transaction ends.
 
         Every card write into a stage takes this lock first, so positions
-        computed from the stage's cards can't race.
+        computed from the stage's cards can't race. A stage already loaded
+        in the session is re-read, so its rules are the locked ones.
         """
         stmt = self._scoped(
             select(BoardStage)
             .where(BoardStage.id == stage_id, BoardStage.board_id == board_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return (await self._db.execute(stmt)).scalar_one_or_none()
 

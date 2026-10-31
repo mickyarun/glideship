@@ -21,6 +21,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.models.bud import BUDPriority
 from app.schemas.boards.text import CardDescription, CardTitle, IdList
+from app.services.boards.constants import BOARD_KEY_MAX_LENGTH
 
 
 class CardCreate(BaseModel):
@@ -71,6 +72,22 @@ class CardMove(BaseModel):
     stage_id: uuid.UUID
     after_id: uuid.UUID | None = None
     before_id: uuid.UUID | None = None
+    confirm_open_checklist: bool = False
+
+
+class CardMoveBoard(BaseModel):
+    """Move a card to another board, to the bottom of a stage there.
+
+    Without ``stage_id`` the card goes to the stage with the same name, else
+    the first stage of the same category, else the target's default stage.
+    The target stage's entry rules apply, ``confirm_open_checklist`` as for
+    a move.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_board_key: str = Field(min_length=1, max_length=BOARD_KEY_MAX_LENGTH)
+    stage_id: uuid.UUID | None = None
     confirm_open_checklist: bool = False
 
 

@@ -1073,6 +1073,7 @@ These were decided on 2026-10-31 after a first hands-on test.
   | Cause | Required fields | Open checklist |
   |---|---|---|
   | `MOVE` (`POST …/move` to another stage) | yes | yes |
+  | `MOVE_BOARD` (`POST …/move-board`, in the target stage) | yes | yes |
   | `CREATE` (named or default stage) | yes | yes |
   | `RESTORE` (archived card back to its stage) | no | no |
   | `STAGE_DELETE` (cards moved off a deleted stage) | no | no |
@@ -1098,8 +1099,10 @@ These were decided on 2026-10-31 after a first hands-on test.
 - **Default stage.** The stage new cards land in can't require `prd` (a new card never has one):
   changing its fields, making a stage that requires a PRD the default, or creating one as the
   default is refused with 422.
-- **Later causes.** Moving a card to another board (`MOVE_BOARD`) will apply both rules in the
-  target stage, with the same `confirm_open_checklist` flag on its request. Handover's move to
+- **Other causes.** Moving a card to another board (`MOVE_BOARD`) applies both rules in the
+  target stage, to the card as it will arrive (the labels, assignees and repository it keeps),
+  with the same `confirm_open_checklist` flag on its request; the checklist rule compares the
+  target stage with the stage it left. Handover's move to
   `handover_stage_id` (a `done` stage) is an ordinary `MOVE` there, so the checklist rule applies
   like any move into done.
 - **Error shape.** Board errors stay `{"detail": message}`; an error a client acts on adds a
@@ -1219,6 +1222,60 @@ so its comments, checklist, attachments, docs, events and handovers all stay. Th
   board topics.
 
 Moving a card to the Delivery board isn't a move. It's a handover.
+
+### As built (backend)
+
+- **Route.** `POST /boards/{key}/cards/{number}/move-board`, body `CardMoveBoard
+  {target_board_key, stage_id?, confirm_open_checklist?}` (`target_board_key` case-insensitive).
+  Answers 200 with the card's `CardDetail` as it now is on the target (new `key`, `number`,
+  `board_key`, `stage_id`).
+- **Refusals, in order.**
+  - The source: editor (`move_card`), else 403 (404 without view); archived source 409.
+  - 422 "Moving a card to Delivery is a handover." for `BUD`; 422 "The card is already on this
+    board." for its own board.
+  - The target, through the same access rule: 404 when the caller can't see it (members-only,
+    another org, missing), 403 below editor, 409 archived.
+  - An archived card 409. `stage_id` not on the target 404 "Stage not found.".
+  - Entry rules in the target stage: 422 `STAGE_REQUIREMENTS_MISSING` / 409 `CHECKLIST_OPEN`,
+    same bodies as a move.
+  - 409 "The board changed while you were moving this card; reload and try again." when the
+    card's stage or repository changed underneath.
+- **Stage.** `stage_id` when given; else the first target stage (left to right) with the same
+  name ignoring case, else the first of the same category, else the default stage. Always the
+  bottom of that stage.
+- **Key.** The target's next number (`allocate_card_numbers`, taken late, as a create does). The
+  old key goes into `board_card_key_aliases(org_id, board_id, number, card_id)`, unique on `(org_id,
+  board_id, number)`, keys `fk_board_card_key_aliases_board_org` and `…_card_org` (migration
+  `0d20df576536` reshaped the unused key-string table). Numbers are never reused, so an alias never
+  clashes with a live key.
+- **Old keys.** `GET /boards/cards/by-key/{card_key}` resolves a live key first, then an alias, and
+  checks the caller's role on the card's *current* board in the same statement (404 otherwise,
+  org-scoped). Every old key keeps working after several moves. It answers the card with its
+  current `key` and `board_key`, so the client redirects when they differ.
+  `GET /boards/{key}/cards/{number}` stays live-only (404 for an old key): the card page should
+  fall back to by-key on a 404 and redirect.
+- **What it keeps.**
+  - Labels: matched by name, ignoring case, on the target; the rest dropped.
+  - Assignees: kept only if they can edit the target board; the rest removed.
+  - Repository: kept when the target links it (and it's active), else cleared in the same UPDATE
+    as the board change.
+  - Comments, checklist, attachments, docs, history and handovers stay with the row.
+- **History.** One `moved_board` event, recorded on the target board (`board_id`, `to_stage_id`,
+  `to_category`; `from_stage_id` null), `detail`:
+  `{from_board: {id, key, name}, to_board: {id, key, name}, from_stage: {id, name}, old_key,
+  new_key, dropped_labels: [name], removed_assignees: [user id], cleared_repo: repo id | null}`.
+  Earlier events keep the source board's id.
+- **Live, after commit.**
+  - On the source board: `card_left_board {card_id, new_key, to_board_key}`.
+  - On the target board: `card_created {card}` with the fresh summary, after `stage_reordered`
+    when placing it respaced the stage.
+  - Open point: `new_key` and `to_board_key` reach everyone on the source board, including people
+    who can't see a members-only target, so they learn its key. Sending only `card_id` (the card
+    page then asks by-key, which 404s for them) would close that; decide before the frontend
+    relies on the two fields.
+- **Notifications.** None: removed assignees aren't told, and the others hear nothing.
+- **Not yet.** Cancelling an active agent run first (no board agent runs exist yet), and
+  repo-activity matching on aliases (the webhook matching ships with repo activity).
 
 ## Handover flow
 

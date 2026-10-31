@@ -108,12 +108,18 @@ class BoardAccessRepository:
         return (await self._db.execute(stmt)).first() is not None
 
     async def users_with_access(
-        self, board_id: uuid.UUID, user_ids: set[uuid.UUID]
+        self,
+        board_id: uuid.UUID,
+        user_ids: set[uuid.UUID],
+        *,
+        min_role: BoardMemberRole = BoardMemberRole.VIEWER,
     ) -> set[uuid.UUID]:
-        """Which of ``user_ids`` are active members holding any role on the board."""
+        """Which of ``user_ids`` are active members holding ``min_role`` or more on the board."""
         if not user_ids:
             return set()
         grants = member_grants(self._org_id, user_ids, "board_grants")
         rows = highest_roles(self._org_id, grants, "board_roles")
         stmt = select(rows.c.user_id).where(rows.c.board_id == board_id)
+        if min_role is not BoardMemberRole.VIEWER:
+            stmt = stmt.where(rows.c.role >= role_literal(min_role))
         return set((await self._db.execute(stmt)).scalars().all())

@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cards on a board: list a stage, create, read, edit, move, archive, restore."""
+"""Cards on a board: list a stage, create, read, edit, move (here or to another board),
+archive, restore."""
 
 import uuid
 
@@ -24,9 +25,16 @@ from app.config import settings
 from app.core.deps import get_db
 from app.models.bud import BUDPriority
 from app.repositories.board_card_filters import CardQuery
-from app.schemas.boards.card import CardCreate, CardDetail, CardMove, CardPage, CardUpdate
+from app.schemas.boards.card import (
+    CardCreate,
+    CardDetail,
+    CardMove,
+    CardMoveBoard,
+    CardPage,
+    CardUpdate,
+)
 from app.schemas.boards.text import SEARCH_MAX_LENGTH
-from app.services.boards import card_edit, card_move, card_service
+from app.services.boards import card_board_move, card_edit, card_move, card_service
 from app.services.boards.access import BoardAccess, CardAccess
 from app.services.boards.cursor import CURSOR_MAX_LENGTH, decode_position_cursor
 from app.services.boards.reads import card_detail
@@ -102,6 +110,16 @@ async def move_card(
 ) -> CardDetail:
     """Move a card to a stage of this board, between two neighbours."""
     return await card_move.move_card(db, target, body)
+
+
+@router.post("/{key}/cards/{number}/move-board", response_model=CardDetail)
+async def move_card_to_board(
+    body: CardMoveBoard,
+    target: CardAccess = Depends(can.move_card),
+    db: AsyncSession = Depends(get_db),
+) -> CardDetail:
+    """Move a card to another board you edit; it gets that board's next key."""
+    return await card_board_move.move_to_board(db, target, body)
 
 
 @router.post("/{key}/cards/{number}/archive", response_model=CardDetail)
