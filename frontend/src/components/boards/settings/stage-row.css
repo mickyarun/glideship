@@ -83,7 +83,7 @@
   font-size: 13px;
   color: rgb(var(--v-theme-error));
 }
-@container stages (max-width: 720px) {
+@container stages (max-width: 650px) {
   .stage-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     padding: 12px 16px;

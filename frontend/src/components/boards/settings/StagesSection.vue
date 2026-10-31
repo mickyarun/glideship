@@ -85,7 +85,7 @@ import type { BoardLimits, BoardRead, StageRead } from '@/types/boards'
 import { plural } from '@/utils/format'
 
 /** Order, name, category, WIP limit, default, delete; tags go on a line under. */
-const COLUMNS = '108px minmax(140px, 1.4fr) minmax(150px, 1fr) 88px 64px 44px'
+const COLUMNS = '108px minmax(120px, 1.4fr) minmax(130px, 1fr) 88px 56px 40px'
 
 const props = defineProps<{
   board: BoardRead
@@ -142,7 +142,7 @@ async function remove(moveTo: StageRead | null): Promise<void> {
   color: rgb(var(--v-theme-on-surface-variant));
 }
 /* The rows stack below this width (stage-row.css), so the header goes. */
-@container stages (max-width: 720px) {
+@container stages (max-width: 650px) {
   .stages__head {
     display: none;
   }
