@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
-from app.mcp.audit import emit_audit
+from app.mcp.audit import emit_audit, tool_result_status
 from app.mcp.auth import MCPAuthResult, verify_mcp_token
 from app.mcp.board_tool_schemas import BOARD_TOOL_DEFINITIONS
 from app.mcp.grant_tools import scoped_input_schema, visible
@@ -1169,7 +1169,7 @@ async def call_tool(
         tool_name=tool_name,
         transport="http",
         params=body.params,
-        status_code=status.HTTP_200_OK,
+        status_code=tool_result_status(result),
     )
     return result
 

@@ -64,13 +64,15 @@ async def test_writes_create_edit_move_comment_and_document_a_card(
     said = await tool(client, d.pm, "comment_card", card_key=key, body="Shipped")
     assert said["success"] is True and said["comment"]["body"] == "Shipped"
 
-    first = await tool(client, d.pm, "write_card_doc", card_key=key, kind="prd", content_md="v1")
-    second = await tool(client, d.pm, "write_card_doc", card_key=key, kind="prd", content_md="v2")
+    doc = {"card_key": key, "kind": "prd"}
+    first = await tool(client, d.pm, "write_card_doc", **doc, content_md="v1")
     assert (first["version"], first["state"]) == (1, "current")
+    # Once the document exists, leaving base_version out doesn't write over it.
+    blind = await tool(client, d.pm, "write_card_doc", **doc, content_md="blind")
+    assert (blind["success"], blind["status"]) == (False, 409)
+    second = await tool(client, d.pm, "write_card_doc", **doc, content_md="v2", base_version=1)
     assert (second["version"], second["state"]) == (2, "current")
-    stale = await tool(
-        client, d.pm, "write_card_doc", card_key=key, kind="prd", content_md="v3", base_version=1
-    )
+    stale = await tool(client, d.pm, "write_card_doc", **doc, content_md="v3", base_version=1)
     assert (stale["success"], stale["status"]) == (False, 409)
     number = made["card"]["number"]
     docs = ok(

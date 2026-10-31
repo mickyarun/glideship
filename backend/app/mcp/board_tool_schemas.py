@@ -126,9 +126,11 @@ BOARD_TOOL_DEFINITIONS: Final[list[dict[str, Any]]] = [
     _tool(
         WRITE_CARD_DOC_TOOL,
         "Write a card's PRD, design brief or notes. With a personal token this saves a new "
-        "current version, as the card page does (base_version: the version you started "
-        "from, null for a new document; omit it to write over the current one). Inside a "
-        "board agent run it saves a draft that waits for review." + _REFUSALS,
+        "current version, as the card page does. base_version is the current version you "
+        "started from (get_card shows it); leave it out only for a new document. Once the "
+        "document exists, a missing or older base_version is refused (409): read the card "
+        "again and merge. Inside a board agent run it saves a draft that waits for review."
+        + _REFUSALS,
         {
             "card_id": {"type": "string", "description": "Agent runs: the card's id."},
             "card_key": _CARD_KEY,
@@ -136,7 +138,8 @@ BOARD_TOOL_DEFINITIONS: Final[list[dict[str, Any]]] = [
             "content_md": {"type": "string", "description": "The document, in Markdown."},
             "base_version": {
                 "type": "integer",
-                "description": "Personal tokens: the version you edited from (null: new).",
+                "description": "Personal tokens: the current version you edited from "
+                "(omit for a new document).",
             },
         },
         "kind",

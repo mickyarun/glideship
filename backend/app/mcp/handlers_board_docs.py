@@ -20,7 +20,8 @@ Inside a board agent run the token's grant names one card and one run
 saves a ``pending_review`` draft that a person accepts, and anything
 outside the grant is 403. With a personal token, ``write_card_doc`` saves a
 new current version exactly as the card page does, for an editor of the
-card's board. Neither tool is remote.
+card's board, and like the card page it needs ``base_version`` (the current
+version it started from) once the document exists. Neither tool is remote.
 """
 
 from typing import Any
@@ -32,7 +33,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.mcp.auth import MCPAuthResult
 from app.mcp.board_tool_access import board_tool, card_for, missing, stripped
 from app.models.board_enums import BoardCardDocKind
-from app.repositories.board_card_doc import BoardCardDocRepository
 from app.schemas.boards.doc import DocWrite
 from app.services.boards import doc_service
 from app.services.boards.access import BoardCaller
@@ -127,13 +127,11 @@ async def _write_as_person(
         return parsed
     kind, content = parsed
     target = await card_for(db, caller, key, BoardAction.EDIT_CARD)
-    if "base_version" in params:
-        base = params["base_version"]
-    else:
-        docs = BoardCardDocRepository(db, org_id=caller.org_id)
-        current = await docs.current(target.card.id, kind)
-        base = current.version if current else None
-    body = DocWrite.model_validate({"body_md": content, "base_version": base})
+    # As on the card page: once the document exists, base_version must name
+    # its current version (omitted is "new document", so it's 409 then).
+    body = DocWrite.model_validate(
+        {"body_md": content, "base_version": params.get("base_version")}
+    )
     doc = await doc_service.write_doc(
         db, target, kind, body.body_md, base_version=body.base_version
     )

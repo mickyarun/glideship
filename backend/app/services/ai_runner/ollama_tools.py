@@ -40,7 +40,7 @@ from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.mcp.audit import emit_audit
+from app.mcp.audit import emit_audit, tool_result_status
 from app.mcp.auth import MCPAuthResult
 from app.mcp.grant_tools import scoped_input_schema
 from app.mcp.server import AUTH_TOOL_HANDLERS, MCP_TOOLS, TOOL_HANDLERS
@@ -230,6 +230,6 @@ async def dispatch_tool(
         return json.dumps({"error": f"{name} failed: {exc}"})
 
     is_error = isinstance(result, dict) and "error" in result
-    _audit(auth, name, arguments, 200)
+    _audit(auth, name, arguments, tool_result_status(result))
     logger.info("ollama_tool_called", tool=name, ok=not is_error)
     return json.dumps(result, default=str)

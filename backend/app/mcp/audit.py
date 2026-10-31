@@ -132,10 +132,35 @@ _AUDITABLE_PARAM_KEYS: frozenset[str] = frozenset(
         "direction",
         "depth",
         "cluster_id",
+        # Board tools: which board, card, stage or document kind a call named,
+        # so a refused board call can be told apart from a working one.
+        "board_key",
+        "card_key",
+        "stage",
+        "kind",
     }
 )
 # Per-value cap so a runaway 50 KB "query" doesn't bloat the audit table.
 _AUDIT_PARAM_VALUE_MAX = 500
+# A tool result's own ``status`` is audited when it is an HTTP error status.
+_OK_STATUS = 200
+_MIN_ERROR_STATUS = 400
+_MAX_ERROR_STATUS = 599
+
+
+def tool_result_status(result: object) -> int:
+    """The status to audit for a tool call that returned ``result``.
+
+    A tool that refuses (a board tool's ``{success: false, status: 404}``)
+    still answers 200 on the wire; its own 4xx/5xx ``status`` is what the
+    audit row records, so refused calls show up as refused.
+    """
+    if not isinstance(result, dict) or result.get("success") is not False:
+        return _OK_STATUS
+    code = result.get("status")
+    if isinstance(code, bool) or not isinstance(code, int):
+        return _OK_STATUS
+    return code if _MIN_ERROR_STATUS <= code <= _MAX_ERROR_STATUS else _OK_STATUS
 
 
 def _fit_column[S: (str, str | None)](column: str, value: S) -> S:

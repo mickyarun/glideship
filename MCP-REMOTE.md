@@ -31,7 +31,7 @@ https://<your-glideship-host>/mcp/sse
 
 ## Available tools
 
-Ten tools, grouped by whether they change anything.
+Thirteen tools, grouped by whether they change anything.
 
 **Read**
 
@@ -43,6 +43,13 @@ Ten tools, grouped by whether they change anything.
 | `list_design_systems` | Design-system metadata per repo. |
 | `get_design_system` | Full HTML / CSS / tokens for a repo or the org default. |
 | `get_prompt` | Return our agent's prompt for a BUD stage (`task_type` ∈ `pm` / `design` / `tech_plan` / `testing`). Feed it to your local AI so output matches the section-editor shape. |
+| `list_boards` | The boards you hold a role on. |
+| `get_board` | One board (by key): its stages and their open cards (`BOARDS_MCP_CARDS_PER_STAGE` per stage, 50 by default). |
+| `get_card` | One card by key (`SEO-14`, or a key it had before it moved board): checklist, comments, documents, linked repositories and handover status. |
+
+The three board reads need a per-user token and check your role on the
+board on every call: a board you can't open, or a card on one, answers
+404 as if it didn't exist. Board and card writes are not remote.
 
 **Write**
 
@@ -56,8 +63,9 @@ Ten tools, grouped by whether they change anything.
 All four writes need a per-user token, and every BUD write is saved as a
 version you can see in the BUD history.
 
-That's the complete list. `write_bud`, `get_team_context`, `code_*` and
-every other internal tool are NOT reachable from this endpoint — the
+That's the complete list. `write_bud`, `get_team_context`, `code_*`, the
+board writes (`create_card`, `update_card`, `move_card`, `comment_card`,
+`write_card_doc`) and every other internal tool are NOT reachable from this endpoint — the
 transport keeps its own allowlist (`REMOTE_TOOLS` in `app/mcp/streamable.py`),
 so adding a tool to the internal handler registry never widens this surface.
 
@@ -173,9 +181,9 @@ everywhere.
 * **Token leakage.** Treat tokens like passwords. Revoke any unused
   tokens from Settings → MCP Connect; an org owner can see and revoke
   every team member's tokens from the admin settings page.
-* **Prompt injection via BUD content.** When the local AI reads BUD
-  text via `get_bud_context` or `get_bud_by_id`, a maliciously crafted
-  BUD could try to steer the LLM. The worst it can do is write through
+* **Prompt injection via BUD or card content.** When the local AI reads BUD
+  text via `get_bud_context` or `get_bud_by_id`, or a card via `get_card`,
+  a maliciously crafted BUD or card could try to steer the LLM. The worst it can do is write through
   the four write tools: new BUDs, content for the current phase of BUDs
   you're assigned to, and TODO text. It can't change status, assignment
   or any other phase, and every BUD write lands as a version you can
