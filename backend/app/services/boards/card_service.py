@@ -28,6 +28,7 @@ from app.repositories.board_card_links import BoardCardLinkRepository
 from app.repositories.board_card_summary import BoardCardSummaryRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.card import CardCreate, CardDetail, CardPage
+from app.services.boards import card_notify
 from app.services.boards.access import BoardAccess
 from app.services.boards.card_checks import (
     check_assignees,
@@ -126,12 +127,14 @@ async def create_card(db: AsyncSession, access: BoardAccess, body: CardCreate) -
             actor_id=access.user_id,
             detail={"user_ids": sorted(str(u) for u in added)},
         )
+    notice = await card_notify.stage_assigned(db, access, card, added)
     detail = await card_detail(db, board, card)
     changes = BoardChanges.of(access)
     if placement.rebalanced:
         changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(stage.id))
     changes.emit(BoardSocketEvent.CARD_CREATED, card=summary_json(detail))
     await changes.commit(db)
+    card_notify.send(notice)
     return detail
 
 

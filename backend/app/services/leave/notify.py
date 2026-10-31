@@ -26,7 +26,6 @@ even in a manager's DMs.
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -34,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.leave_request import LeaveKind, LeaveRequest, LeaveStatus
-from app.models.notification import Notification, NotificationType
+from app.models.notification import NotificationType
 from app.schemas.leave import HighLeave
 from app.services.background import spawn
 from app.services.event_bus import publish
@@ -44,6 +43,7 @@ from app.services.leave.slack_blocks import escape
 from app.services.leave.slack_prompts import refresh_prompts, send_prompts
 from app.services.leave.slack_status.apply import refresh_after_change
 from app.services.notifications import NotificationCategory
+from app.services.notifications.notice import add_notification_rows
 from app.services.slack_dm import send_dm
 
 logger = structlog.get_logger(__name__)
@@ -92,32 +92,17 @@ def stage_rows(
     link: str,
 ) -> Notice:
     """Add the in-app rows for ``notice`` to the caller's transaction (sent after commit)."""
-    for user_id in notice.user_ids:
-        note = Notification(
-            id=uuid.uuid4(),
+    notice.events.extend(
+        add_notification_rows(
+            db,
             org_id=notice.org_id,
-            user_id=user_id,
-            type=kind,
+            user_ids=notice.user_ids,
+            kind=kind,
             title=title,
             message=message,
-            deep_link=link,
+            link=link,
         )
-        db.add(note)
-        notice.events.append(
-            (
-                f"notifications:{user_id}",
-                {
-                    "id": str(note.id),
-                    "type": kind.value,
-                    "title": title,
-                    "message": message,
-                    "deepLink": link,
-                    "isRead": False,
-                    "isDismissed": False,
-                    "createdAt": datetime.now(UTC).isoformat(),
-                },
-            )
-        )
+    )
     return notice
 
 

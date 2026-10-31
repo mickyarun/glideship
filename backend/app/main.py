@@ -36,6 +36,7 @@ from app.core.event_loop import configure_event_loop_policy
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.repositories.external_import_sweep import recover_stuck_external_imports
+from app.services.boards.due_reminders import run_forever as run_board_due_reminders
 from app.services.celebrations.scheduler import run_forever as run_celebrations
 from app.services.imports.sweeper import run_forever as run_import_sweep
 from app.services.leave.carry_scheduler import run_forever as run_leave_carry_forward
@@ -316,6 +317,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 8j. Board imports left unfinished past their retention are removed with
     # their files — hourly by default, single-instance like the sweeps above.
     import_sweep_task = asyncio.create_task(run_import_sweep())
+    # 8k. Board due reminders: each morning (org time, leave digest timezone)
+    # one DM and in-app note per assignee, claimed once per person-day.
+    board_due_task = asyncio.create_task(run_board_due_reminders())
 
     # 9. PR-merge Redis-stream worker pool. One consumer per
     # (org, repo) stream; supervisor task spawns consumers lazily as
@@ -361,6 +365,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     quiz_rollup_task.cancel()
     celebrations_task.cancel()
     import_sweep_task.cancel()
+    board_due_task.cancel()
     if pr_merge_pool is not None:
         await pr_merge_pool.stop()
     await stop_workers()

@@ -23,8 +23,8 @@ from zoneinfo import ZoneInfo
 
 from app.models.leave_request import HalfDay
 from app.services.leave.digest_compose import OutToday, compose
-from app.services.leave.digest_schedule import due_local_date
 from app.services.leave.slack_blocks import approval_blocks, escape
+from app.services.scheduling.tick_loop import due_local_date
 from app.services.slack_verify import verify_slack_signature
 
 KOLKATA = ZoneInfo("Asia/Kolkata")

@@ -30,6 +30,7 @@ from app.repositories.board_card_thread import BoardCardCommentRepository
 from app.repositories.thread import is_comment_author
 from app.repositories.user import PersonCard, UserRepository
 from app.schemas.boards.card_detail import CommentPage, CommentRead
+from app.services.boards import card_notify
 from app.services.boards.access import CardAccess
 from app.services.boards.card_checks import check_open
 from app.services.boards.cursor import decode_time_cursor, encode_cursor
@@ -76,7 +77,10 @@ async def add_comment(db: AsyncSession, target: CardAccess, body: str) -> Commen
         actor_id=access.user_id,
         detail={"comment_id": str(comment.id)},
     )
-    return await _announce(db, target, comment)
+    notice = await card_notify.stage_commented(db, access, card)
+    read = await _announce(db, target, comment)
+    card_notify.send(notice)
+    return read
 
 
 async def edit_comment(

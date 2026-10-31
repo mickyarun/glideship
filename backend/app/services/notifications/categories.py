@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from app.core.permissions import WORKSPACE_ENGINEERING
+from app.core.permissions_boards import BOARDS_VIEW
 
 
 class NotificationCategory(StrEnum):
@@ -54,6 +55,9 @@ class NotificationCategory(StrEnum):
     QUIZ = "quiz"
     LEAVE_APPROVALS = "leave_approvals"
     LEAVE_UPDATES = "leave_updates"
+    BOARD_CARDS = "board_cards"
+    BOARD_HANDOVERS = "board_handovers"
+    BOARD_DUE_REMINDERS = "board_due_reminders"
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,27 @@ NOTIFICATION_CATEGORIES: tuple[CategoryDef, ...] = (
         label="Your requests",
         description="When your leave or work-from-home request is approved or rejected.",
         group="Leave & WFH",
+    ),
+    CategoryDef(
+        category=NotificationCategory.BOARD_CARDS,
+        label="Board cards",
+        description="Cards you're assigned to and comments on them.",
+        group="Boards",
+        required_permission=BOARDS_VIEW,
+    ),
+    CategoryDef(
+        category=NotificationCategory.BOARD_HANDOVERS,
+        label="Handovers",
+        description="Cards handed over to you, and BUDs from your cards coming back or shipping.",
+        group="Boards",
+        required_permission=BOARDS_VIEW,
+    ),
+    CategoryDef(
+        category=NotificationCategory.BOARD_DUE_REMINDERS,
+        label="Due dates",
+        description="One morning message with your cards due today and overdue.",
+        group="Boards",
+        required_permission=BOARDS_VIEW,
     ),
 )
 

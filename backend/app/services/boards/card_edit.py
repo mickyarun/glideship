@@ -24,6 +24,7 @@ from app.models.board_enums import BoardCardEventType
 from app.repositories.board_card import BoardCardRepository
 from app.repositories.board_card_links import BoardCardLinkRepository
 from app.schemas.boards.card import CardDetail, CardUpdate
+from app.services.boards import card_notify
 from app.services.boards.access import CardAccess
 from app.services.boards.card_checks import (
     check_assignees,
@@ -55,6 +56,7 @@ async def update_card(db: AsyncSession, target: CardAccess, body: CardUpdate) ->
     edited = _apply_fields(card, body)
     check_dates(card.start_at, card.due_at)
     links = BoardCardLinkRepository(db, org_id=access.org_id)
+    notice = None
     if body.label_ids is not None:
         await check_labels(db, access, body.label_ids)
         added, removed = await links.set_labels(card, body.label_ids)
@@ -68,10 +70,12 @@ async def update_card(db: AsyncSession, target: CardAccess, body: CardUpdate) ->
         added, removed = await links.set_assignees(card, body.assignee_ids)
         await _record_people(db, card, access.user_id, BoardCardEventType.ASSIGNED, added)
         await _record_people(db, card, access.user_id, BoardCardEventType.UNASSIGNED, removed)
+        notice = await card_notify.stage_assigned(db, access, card, added)
     await record_edit(db, card, actor_id=access.user_id, fields=edited, now=datetime.now(UTC))
     changes = BoardChanges.of(access)
     detail = await changes.card_summary(db, access.board, card)
     await changes.commit(db)
+    card_notify.send(notice)
     return detail
 
 

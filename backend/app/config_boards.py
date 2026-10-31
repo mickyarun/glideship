@@ -63,7 +63,14 @@ class BoardsConfig(BoardImportSettings):
         default=20, gt=0, description="Files one card may hold; links don't count."
     )
     due_reminder_default_time: time = Field(
-        default=time(9, 0), description="Local time due reminders go out."
+        default=time(9, 0),
+        description="Local due-reminder time unless the org sets boards.due_reminder_time.",
+    )
+    due_reminder_tick_seconds: int = Field(
+        default=60, gt=0, description="How often the due-reminder scheduler wakes."
+    )
+    due_reminder_max_cards: int = Field(
+        default=15, gt=0, description="Cards one due-reminder message lists before 'and N more'."
     )
 
     @model_validator(mode="after")
