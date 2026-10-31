@@ -29,7 +29,7 @@
           built in
         </template>
       </BoardHeadIntro>
-      <div class="bud-board-head__actions">
+      <div class="bud-board-head__actions bo-header-actions">
         <v-btn
           v-if="canConfigure"
           icon="mdi-cog-outline"

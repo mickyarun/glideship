@@ -78,7 +78,7 @@
         </div>
       </div>
 
-      <div class="bud-header__actions">
+      <div class="bud-header__actions bo-header-actions">
         <v-btn variant="text" prepend-icon="mdi-history" title="View edit history and restore earlier versions" @click="emit('open-history')">
           History
         </v-btn>

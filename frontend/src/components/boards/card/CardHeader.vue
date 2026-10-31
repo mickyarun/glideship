@@ -43,7 +43,7 @@
 
       <div class="card-header__title-row">
         <CardTitle class="card-header__title" :value="card.title" :editable="canEdit" :max-length="titleMax" :save="saveTitle" />
-        <div class="card-header__actions">
+        <div class="card-header__actions bo-header-actions">
           <v-btn v-if="xs" variant="text" icon="mdi-history" aria-label="History" title="See what changed on this card" @click="emit('history')" />
           <v-btn v-else variant="text" prepend-icon="mdi-history" title="See what changed on this card" @click="emit('history')">
             History
@@ -149,9 +149,6 @@ const next = computed(() => {
   min-width: 0;
 }
 .card-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex-shrink: 0;
 }
 .card-header__people {

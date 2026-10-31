@@ -19,7 +19,7 @@
 <template>
   <v-menu location="bottom end">
     <template #activator="{ props: menuProps }">
-      <v-btn v-bind="menuProps" variant="outlined" icon="mdi-dots-horizontal" class="more-menu__btn" aria-label="More actions" />
+      <v-btn v-bind="menuProps" variant="outlined" icon="mdi-dots-horizontal" aria-label="More actions" />
     </template>
     <v-list density="compact" min-width="200">
       <v-list-subheader>Change stage</v-list-subheader>
@@ -79,12 +79,3 @@ const emit = defineEmits<{
   delete: []
 }>()
 </script>
-
-<style scoped>
-.more-menu__btn {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-input);
-  border-color: rgb(var(--v-theme-rule));
-}
-</style>

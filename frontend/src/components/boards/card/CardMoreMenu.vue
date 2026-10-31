@@ -19,7 +19,7 @@
 <template>
   <v-menu location="bottom end">
     <template #activator="{ props: menuProps }">
-      <v-btn v-bind="menuProps" variant="outlined" icon="mdi-dots-horizontal" class="more-menu__btn" aria-label="More card actions" />
+      <v-btn v-bind="menuProps" variant="outlined" icon="mdi-dots-horizontal" aria-label="More card actions" />
     </template>
     <v-list density="compact" min-width="200" aria-label="Card actions">
       <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
@@ -46,19 +46,3 @@ async function copy(): Promise<void> {
   emit('copied', await copyText(new URL(href, window.location.origin).toString()))
 }
 </script>
-
-<style scoped>
-/* Square, at the height of History and Move beside it. */
-.more-menu__btn {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-input);
-  border-color: rgb(var(--v-theme-rule));
-}
-@media (pointer: coarse) {
-  .more-menu__btn {
-    width: 44px;
-    height: 44px;
-  }
-}
-</style>

@@ -38,7 +38,7 @@
         {{ rolePhrase(detail.role) }}
       </template>
     </BoardHeadIntro>
-    <div class="board-head__actions">
+    <div class="board-head__actions bo-header-actions">
       <v-btn
         v-if="canSettings"
         variant="outlined"
@@ -78,8 +78,6 @@ const visibility = computed(() => VISIBILITY_LABELS[props.detail.board.visibilit
   gap: 12px 16px;
 }
 .board-head__actions {
-  display: flex;
   flex-wrap: wrap;
-  gap: 8px;
 }
 </style>

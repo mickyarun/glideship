@@ -1,0 +1,58 @@
+/*
+ * Copyright 2025-2026 Arun Rajkumar
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Secondary (outlined) buttons, app-wide. Vuetify draws the edge in the
+// label's full colour, which reads as heavy as a primary button. Here the
+// edge is the label colour at low strength: a soft grey line for neutral
+// buttons, a tint of their own hue for coloured ones (error, primary). The
+// label keeps its full colour and carries the contrast (4.5:1 or more),
+// which is what WCAG asks of a button; hover and focus firm the edge up.
+// Component styles that set their own edge (scoped, so more specific) win.
+html .v-btn--variant-outlined {
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
+  transition-property: box-shadow, transform, opacity, background, border-color;
+}
+html .v-btn--variant-outlined:hover:not(.v-btn--disabled),
+html .v-btn--variant-outlined:focus-visible {
+  border-color: color-mix(in srgb, currentColor 42%, transparent);
+}
+
+// A page header's action row (BUD and card pages): text, filled, outlined
+// and the square overflow button all stand at one height, and grow to the
+// 44px touch target on touch screens.
+html .bo-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .v-btn {
+    height: 36px;
+  }
+  .v-btn--icon {
+    width: 36px;
+    border-radius: var(--radius-input);
+  }
+}
+@media (pointer: coarse) {
+  html .bo-header-actions {
+    .v-btn {
+      height: 44px;
+    }
+    .v-btn--icon {
+      width: 44px;
+    }
+  }
+}
