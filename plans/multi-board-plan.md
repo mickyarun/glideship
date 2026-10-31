@@ -1231,6 +1231,10 @@ Moving a card to the Delivery board isn't a move. It's a handover.
   `board_key`, `stage_id`).
 - **Refusals, in order.**
   - The source: editor (`move_card`), else 403 (404 without view); archived source 409.
+  - 429 with `Retry-After` past `BOARDS_MOVE_BOARD_LIMIT` (30) moves per person per
+    `BOARDS_MOVE_BOARD_WINDOW_SECONDS` (60), counting refused attempts too. It uses the same
+    Redis fixed-window limiter as leave submits and import starts (`services/fixed_window.py`),
+    which fails open when Redis is down.
   - 422 "Moving a card to Delivery is a handover." for `BUD`; 422 "The card is already on this
     board." for its own board.
   - The target, through the same access rule: 404 when the caller can't see it (members-only,
@@ -1246,7 +1250,9 @@ Moving a card to the Delivery board isn't a move. It's a handover.
 - **Key.** The target's next number (`allocate_card_numbers`, taken late, as a create does). The
   old key goes into `board_card_key_aliases(org_id, board_id, number, card_id)`, unique on `(org_id,
   board_id, number)`, keys `fk_board_card_key_aliases_board_org` and `…_card_org` (migration
-  `0d20df576536` reshaped the unused key-string table). Numbers are never reused, so an alias never
+  `0d20df576536` reshaped the unused key-string table; its upgrade fills `board_id` and `number`
+  from any key strings and its downgrade fills the key string back from the board key and number,
+  so both directions work with aliases present). Numbers are never reused, so an alias never
   clashes with a live key.
 - **Old keys.** `GET /boards/cards/by-key/{card_key}` resolves a live key first, then an alias, and
   checks the caller's role on the card's *current* board in the same statement (404 otherwise,
@@ -1254,8 +1260,16 @@ Moving a card to the Delivery board isn't a move. It's a handover.
   current `key` and `board_key`, so the client redirects when they differ.
   `GET /boards/{key}/cards/{number}` stays live-only (404 for an old key): the card page should
   fall back to by-key on a 404 and redirect.
+- **The shared write.** `services/boards/card_relocate.relocate_card(db, card, Relocation(source,
+  target, from_stage, to_stage, carry), actor_id=…, event_type=…)` swaps labels and assignees,
+  writes the alias, takes the number, places the card and records the event. The move route does
+  the access checks, locks and entry rules around it; the Delivery handover is meant to reuse it.
 - **What it keeps.**
-  - Labels: matched by name, ignoring case, on the target; the rest dropped.
+  - Labels: matched by name, ignoring case, on the target; the rest dropped. The matched target
+    labels are held `FOR KEY SHARE` (`BoardLabelRepository.hold_labels`), so one deleted during
+    the move is dropped and listed instead of failing the write. Card create and edit hold the
+    labels they name the same way: a label deleted meanwhile gets the usual 422 "Labels must be
+    labels of this board.", never a 500.
   - Assignees: kept only if they can edit the target board; the rest removed.
   - Repository: kept when the target links it (and it's active), else cleared in the same UPDATE
     as the board change.
@@ -1265,14 +1279,18 @@ Moving a card to the Delivery board isn't a move. It's a handover.
   `{from_board: {id, key, name}, to_board: {id, key, name}, from_stage: {id, name}, old_key,
   new_key, dropped_labels: [name], removed_assignees: [user id], cleared_repo: repo id | null}`.
   Earlier events keep the source board's id.
+  - Read-time redaction: someone with no role on `from_board` reads `from_board`, `from_stage`
+    and `old_key` as null, `dropped_labels` as `[]` and `cleared_repo` as null, so a members-only
+    source never leaks through the target's history. One role query covers the whole page
+    (`BoardAccessRepository.boards_with_role`). The events listing is the only place card
+    events are serialized today. The frontend renders a redacted entry as "Moved here from
+    another board".
 - **Live, after commit.**
-  - On the source board: `card_left_board {card_id, new_key, to_board_key}`.
+  - On the source board: `card_left_board {card_id}` only. Its watchers may not see the target,
+    so neither its key nor the new card key goes out; an open card page asks by-key, which
+    answers the new key to people who can see it and 404s for everyone else.
   - On the target board: `card_created {card}` with the fresh summary, after `stage_reordered`
     when placing it respaced the stage.
-  - Open point: `new_key` and `to_board_key` reach everyone on the source board, including people
-    who can't see a members-only target, so they learn its key. Sending only `card_id` (the card
-    page then asks by-key, which 404s for them) would close that; decide before the frontend
-    relies on the two fields.
 - **Notifications.** None: removed assignees aren't told, and the others hear nothing.
 - **Not yet.** Cancelling an active agent run first (no board agent runs exist yet), and
   repo-activity matching on aliases (the webhook matching ships with repo activity).
@@ -1689,6 +1707,14 @@ inside `op.get_context().autocommit_block()`, following `z4_add_code_review_and_
     Operations."
   - Comment: the card's assignees when someone else comments (not edits or deletes). Title "New
     comment on your card"; "Pat commented on OPS-12 …". The comment text isn't copied.
+  - Both go through `card_notify.stage_card_notice(..., kind, category, title, verb)`, which
+    takes the `NotificationCategory`, so handover notices can use `board_handovers`.
+  - Deactivated people and people who lost access to the board hear nothing.
+  - `Notice.send()` never raises: a Slack or socket failure after commit is logged
+    (`notice_send_failed`) and the request still answers 200 with the change saved. Leave's
+    `Notice` subclasses this one and adds its prompts, refreshes and calendar sync in `deliver()`.
+  - Names and titles are escaped with the one shared `services/slack_mrkdwn.escape_mrkdwn`
+    (leave and celebrations use it too).
   - `deep_link` is `/boards/<KEY>/cards/<N>` (the card page route); the DM ends with
     `<{FRONTEND_URL}/boards/<KEY>/cards/<N>|Open card>`, with names and titles escaped.
   - Imports never notify: their writes don't go through the card services (a test runs a Trello
@@ -1701,17 +1727,38 @@ inside `op.get_context().autocommit_block()`, following `z4_add_code_review_and_
   - Timezone: `leave/digest_settings.org_zone`, the same answer as the leave digest (its own
     timezone, else the default leave policy's, else the presence timezone the default policy would
     start from) without creating a leave policy.
-  - Due window: from the fire time for three hours (`scheduling.tick_loop.LATEST_AFTER`), like the
-    leave digest.
+  - Due window: from the fire time for `BOARDS_DUE_REMINDER_WINDOW_MINUTES` (180), on the same
+    local date. Down for less than the window, reminders go out late the same day; down longer,
+    that day is skipped. The window is clipped at local midnight, so a late fire time gets less
+    than the full window. `due_local_date` takes the window as a parameter; the leave digest
+    passes its own three hours.
+  - Each tick reads every org with open cards due within `BOARDS_DUE_REMINDER_LOOKAHEAD_HOURS`
+    (48) once, with the default leave policy's timezone joined in, works out each org's zone and
+    window from that read, and opens a session only for orgs in their window. Overdue cards
+    don't keep an org busy outside it.
   - Cards: open (not archived, `completed_at` null, `due_done` false, stage not `done` or
     `canceled`), on an active board, due before the end of the local day; "overdue" is due before
     the local day began. Grouped Overdue, then Due today, soonest first, at most
     `BOARDS_DUE_REMINDER_MAX_CARDS` (15) lines, then "…and N more". In-app: title "Cards due",
     message "You have 1 card overdue and 2 cards due today.", link `/boards`.
   - Once per person per day: `digest_claims(org_id, kind=board_due, user_id, local_date)` is
-    claimed in the same transaction as the in-app row (insert, conflict does nothing; never
-    retried, so at most once). After the DMs it records `sent`, `skipped` (no Slack, not linked
-    or muted) or `failed`.
+    claimed in the same transaction as the in-app row (insert, conflict does nothing), so the
+    in-app row is written at most once. The due query leaves out anyone already claimed for the
+    day (`NOT EXISTS`), and access is checked for all due boards in one query
+    (`BoardAccessRepository.access_pairs`). After the DMs it records `sent`, `skipped` (no Slack,
+    not linked or muted) or `failed`.
+  - Retries (migration `4bf6e7761b95` adds `digest_claims.attempts`, default 0): every tick in
+    the window re-claims, in one `UPDATE … RETURNING`, the day's claims that are `failed` or
+    still `claimed` after `BOARDS_DUE_REMINDER_STALE_MINUTES` (30), while `attempts <
+    BOARDS_DUE_REMINDER_MAX_RETRIES` (3). A retry resends only the DM, composed from the
+    person's cards as they are now; it never writes a second in-app row. With nothing left due
+    it records `skipped` (`nothing_due`). A stale claim may already have been sent before a
+    crash, so a retry can repeat a DM; the stale time must be longer than the largest org's send.
+  - Sending: orgs send at the same time, up to `BOARDS_DUE_REMINDER_ORG_CONCURRENCY` (4), so one
+    big org doesn't hold up the rest. Within an org, `scheduling.pace.Pace` keeps
+    `BOARDS_DUE_REMINDER_DM_CONCURRENCY` (2) DMs in flight and starts each
+    `BOARDS_DUE_REMINDER_DM_INTERVAL_SECONDS` (1.2) after the last, about 50
+    `conversations.open` calls a minute (Slack Tier 3). Failures go through the retries.
   - Tick: `BOARDS_DUE_REMINDER_TICK_SECONDS` (60).
 - **Scheduling.** `services/scheduling/tick_loop.py` has `run_tick_loop(name, tick_seconds,
   tick_once)` and `due_local_date` (moved from `leave/digest_schedule.py`, which is gone). The
