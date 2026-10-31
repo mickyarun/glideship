@@ -688,16 +688,28 @@ access check.
     repo checks and live events are the API's. Results: `{success, card}` / `{success,
     comment}`.
   - `write_card_doc {card_key, kind, content_md, base_version?}` with a personal token (editor+)
-    saves a **current** version through `doc_service.write_doc`; `base_version` omitted means
-    "over the current one", a stale one is 409. A scoped agent-run token still saves a
-    `pending_review` draft.
+    saves a **current** version through `doc_service.write_doc`. As on the card page,
+    `base_version` must be the current version once the document exists: leaving it out is
+    "new document", so it's 409 then, and an older one is 409 too. A scoped agent-run token
+    still saves a `pending_review` draft.
 - **Remote.** `REMOTE_BOARD_TOOLS` (`list_boards`, `get_board`, `get_card`) join
   `REMOTE_TOOLS` and `_REMOTE_TOOL_SCHEMAS`; the writes answer `-32601`. Each tool has a
   `TOOL_COSTS` weight.
 - **`get_bud_by_id`** adds `origin_card {card_key, board_key, board_name, title, archived}`
   (`services/boards/origin_summary.py`), only for a personal token whose holder can open the
   card's board (`visible_live_origins`); null otherwise.
-- Not done here: `MCP-REMOTE.md` (repo root) still lists the old remote set.
+- `MCP-REMOTE.md` (repo root) lists the three remote board reads and says the board writes
+  aren't remote.
+- **Startup contract check.** `check_mcp_contracts()` (first step of the app's lifespan)
+  reads each handler's literal `params.get("key")` reads. The board handlers read every key
+  that way and pass the value to `board_tool_access.stripped()`; `write_card_doc` reads
+  `kind` and `content_md` in its registered handler. `tests/mcp/test_contract_check_passes.py`
+  runs the check, since the integration suite never runs the lifespan (a helper that took the
+  key's name once stopped the backend from booting).
+- **Audit.** `mcp_audit_log.params` keeps `board_key`, `card_key`, `stage` and `kind` (never
+  `content_md` or a comment body). A tool that refused (`{success: false, status}`) is
+  audited with its own 4xx/5xx `status` instead of the 200 it answered with
+  (`audit.tool_result_status`), on `/mcp/tools`, `/mcp/sse` and the Ollama tool loop.
 
 ## UI
 
@@ -1230,13 +1242,23 @@ the board's linked repos.
 ### As built (backend): repo activity
 
 - **Where.** `api/v1/github_webhook.py` calls `services/boards/repo_activity.record_repo_activity`
-  after `handle_github_event`, in the delivery's session, inside a SAVEPOINT: a failure is
-  logged (`board_repo_activity_failed`) and never fails the delivery.
+  after `handle_github_event`, in the delivery's session. Reading the payload and the writes
+  (in a SAVEPOINT) are guarded together: a failure is logged (`board_repo_activity_failed`),
+  the delivery still answers 200 and commits, and what its bookkeeping queued for after the
+  commit still goes out (an integration test). Parsing is split into
+  `repo_activity_types.py` (kinds, keys, helpers), `repo_activity_pr.py` and
+  `repo_activity_parse.py` (pushes, and the entry point).
 - **Matching** (`services/boards/repo_activity_parse.py`, no database): a key is 2–10 letters,
   `-`, a number, case-insensitive, with no letter or digit on either side (`feature/ops-12-x`
-  and `feat_OPS-12` match, `OPS-12a` doesn't). `pull_request` `opened` → `pr_opened`, `closed`
-  → `pr_merged` / `pr_closed`, matched on the title and head branch. `push` → one `commit` per
-  distinct commit (first `BOARDS_REPO_ACTIVITY_MAX_COMMITS`, 20), matched on its message (first
+  and `feat_OPS-12` match, `OPS-12a` doesn't). `pull_request` `opened` → `pr_opened`,
+  `reopened` → `pr_reopened`, `closed` → `pr_merged` / `pr_closed`, and `edited` with a title
+  change → the pull request as it stands (`pr_opened`, `pr_merged` or `pr_closed`), so a card
+  a new title names is linked; matched on the title and head branch. A pull request whose head
+  repository isn't its base repository (a fork, by GitHub repository id; a deleted fork too)
+  is ignored unless `BOARDS_REPO_ACTIVITY_FORK_PRS` is on, since anyone can open one naming
+  any key. `push` → one `commit` per
+  distinct commit (first `BOARDS_REPO_ACTIVITY_MAX_COMMITS`, 20; a sha must match in full),
+  matched on its message (first
   `BOARDS_REPO_ACTIVITY_SCAN_CHARS`) and the pushed branch. At most
   `BOARDS_REPO_ACTIVITY_MAX_KEYS` (10) keys per activity.
 - **Which cards** (`repositories/board_repo_activity.py`, one statement): live key or alias, the
@@ -1942,6 +1964,30 @@ nothing changes on the card until then. The AI never moves a card and never hand
   each BUD's `auto_generate_phases` still decides.
 - **Origin.** `GET /buds/{id}/origin` now includes the card's current stage, `card.stage {id, name,
   category}`, when the caller can open the board.
+- **Why a run ended** (`board_card_agent_runs.error_code`, PG enum
+  `board_agent_run_error_code`, migration `7423710e7da2`, which creates the type before
+  `add_column`): `AI_NOT_CONFIGURED` (the provider's `binary_missing`, or the capability gate's
+  new `unsupported` code), `PROVIDER_FAILED` (any other provider failure, or a reply with no
+  draft), `TIMEOUT`, `QUEUE_FULL` (the queue, a run cap on an entry, or the run-token store),
+  `SKILL_GONE`, `STALE`, `INTERRUPTED` (a restart: the startup recovery, or a cancel while
+  shutting down), `CANCELED` (moves between boards, AI off, a person), `OVER_LIMIT` (a reply
+  over `CARD_DOC_MAX_CHARS`), `UNKNOWN` (a crash). The mapping is
+  `services/boards/agents/end_codes.py`; the subject protocol's `record_failure` gains the
+  provider's `error_code`. `error_message` stays for logs: the API sends `error_code` always
+  and `error_message` only to board admins (`configure_agents`), null for everyone else, and
+  always null on `agent_run_updated`. The `ai_run` event's detail carries `error_code`.
+- **Live runs.** `agent_run_updated {card_id, run, skill_name}`: the run's skill name (null
+  once it was deleted).
+- **Cancel.** `POST /{key}/cards/{number}/agents/runs/{run_id}/cancel` (editor, `run_agent`):
+  a pending or running run is settled `canceled` (`CANCELED`, "Someone on the board canceled
+  this run."), with an `ai_run` event naming who did it and `agent_run_updated`; after the
+  commit its job is canceled (a queued one ends `cancelled` without starting, a running one
+  goes through the executor's cancel path and saves nothing). 200 with the run; 409
+  `AGENT_RUN_FINISHED {status}` once it has ended; 404 for another card's run.
+- **Undo after accepting a draft** is the restore route (`POST …/docs/{kind}/restore/{version}`):
+  editor, `base_version` required (422 without it, 409 when stale), a new current version
+  (source `revert`) and `doc_updated` on the board; an integration test restores right after an
+  accept.
 - **Tests.** Integration tests now drain background work at teardown (`_drain_background` in
   `tests/integration/conftest.py`). That covers `background.spawn` tasks and fake-Slack sends a
   test left queued, and runs while the test's patches and engine are still up. It brings the
@@ -2333,16 +2379,27 @@ them use `board_card_events.to_category`, never stage names:
   - Cycle time: per card done on the board within `BOARDS_METRICS_WINDOW_DAYS` (90), its first
     `in_progress` entry (any board) to its latest `done` entry; `count`, `median_hours`,
     `p85_hours` (`percentile_cont`).
-  - WIP: open cards by the `to_category` of their newest category-bearing event (all four
-    categories listed).
-  - Aging: open cards whose current category is `in_progress` and unchanged for
-    `BOARDS_AGING_DAYS` (14); `aging_count`, plus the oldest `BOARDS_METRICS_AGING_LIST_LIMIT`
-    (20) as `{key, title, since}` on one board's metrics.
+  - WIP: open cards by their current stage's category (`board_cards.stage_id` →
+    `board_stages.category`, all four categories listed), so re-categorising a stage moves its
+    cards with it.
+  - Aging (decision): an open card whose stage is `in_progress` now and that **first** entered
+    `in_progress` (`board_cards.started_at`, never cleared) more than `BOARDS_AGING_DAYS` (14)
+    ago; going back to To do and in again doesn't restart it. `aging_count` is one grouped
+    `COUNT` for every board; one board's metrics also list its oldest
+    `BOARDS_METRICS_AGING_LIST_LIMIT` (20) as `{key, title, since}` with a SQL `LIMIT`
+    (`since` is `started_at`).
   - Idea to prod: card `created_at` to each of its `delivered` events in the window.
   - Every response carries `window {window_days, weeks, aging_days}`.
-- **Phase drift.** It was missing after M5: `bud_metrics_phases` now marks a phase that a
-  `via: handover` status change left as `skipped_at_handover` with `drift_pct: null`
-  (`services/bud_metrics_skips.py`); the landed phase keeps its drift. `VIA_HANDOVER` lives in
+- **Moves between boards** freeze the category the card left: `record_event(…,
+  from_category=move.from_stage.category)` (the event's stage ids stay on its own board), so a
+  done card moved to a done stage on another board isn't a completion in throughput, cycle
+  time or the Garden.
+- **Phase drift.** It was missing after M5: `bud_metrics_phases` marks a phase as
+  `skipped_at_handover` with `drift_pct: null` when every time the BUD left it, a `via:
+  handover` status change did (`services/bud_metrics_skips.py`); the landed phase keeps its
+  drift. A BUD sent back and handed over again walks from `bud` once more; a phase the team
+  worked in on the first pass was also left some other way (a move by hand, or the discard
+  that sent it back), so it keeps its drift. `VIA_HANDOVER` lives in
   `services/boards/constants.py`.
 - **Garden events.** `services/boards/garden.note_card_event`, called from `record_event`, so
   every path is covered and imports (`imported`) stay quiet. After the commit, on
@@ -2357,10 +2414,22 @@ them use `board_card_events.to_category`, never stage names:
   `sim/BoardActivity.parseBoardActivityEvent` (known kind, uuid-or-null actor, key-shaped keys;
   everything else dropped) and re-broadcasts the message `board_activity` to the room's
   clients. No room state; the client effects come with the frontend pass.
-- **Room joins.** `/internal/colyseus/verify-token` accepts an active member holding
-  `workspace:engineering` **or** `boards:view` in the token's own org (the org must still
-  equal the room's; `member_permission_set` reads that org's role). This covers every room
-  (org, race, minigame, backlash), since they share the check.
+- **Room joins** (decision): board-only members may join every Garden room in their own org,
+  race and mini-game rooms included, but never see engineering detail.
+  `/internal/colyseus/verify-token` accepts an active member holding `workspace:engineering`
+  **or** `boards:view` in the token's own org (the org must still equal the room's;
+  `member_permission_set` reads that org's role), and answers `engineering: bool`
+  (`workspace:engineering`). The join identity carries it (`JoinIdentity.engineering`; false
+  for a tokenless development join or a backend that doesn't send it).
+- **Engineering detail.** `MemberState.labelMessage` (it names files) and
+  `AgentState.actorName`, `repoName` and `message` are `@view()` fields. `OrgRoom` gives an
+  engineering client a `StateView` holding every member and agent
+  (`rooms/engineeringViews.ts`; new ones are added each sim tick); other clients have no
+  view, so those fields reach them as empty strings while names, positions, animation,
+  `labelName` and `skillName` stay shared. For them the Garden client shows generic
+  text ("Working on something") when a label has a name and no message (frontend side). A member at a repo tree is at
+  `locationContext = "tree"`, never `tree_<repo>`. Vitest decodes the room for both kinds of
+  client, on join and for later arrivals.
 
 ## Existing BUDs
 
