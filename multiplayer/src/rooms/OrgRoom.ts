@@ -52,6 +52,7 @@ import {
   type HomeCoords,
 } from "../sim/DevActivitySim"
 import { AgentActivitySim, parseAgentActivityEvent } from "../sim/AgentActivitySim"
+import { BOARD_ACTIVITY_MESSAGE, parseBoardActivityEvent } from "../sim/BoardActivity"
 import { InferredPresenceSim, buildPresenceConfig } from "../sim/InferredPresenceSim"
 import { fetchOrgSnapshot, type OrgSnapshotResponse } from "../bridge/BackendClient"
 import type { JoinCredentials, JoinIdentity } from "../auth/verifyJoin"
@@ -448,6 +449,7 @@ export class OrgRoom extends Room<{ state: OrgRoomState }> {
    * Handle an event forwarded from the backend via the bridge endpoint.
    * dev_activity → routed to DevActivitySim
    * agent_activity → routed to AgentActivitySim
+   * board_activity → checked, then re-broadcast to clients (no room state)
    * member_presence → live presence update, routed to applyPresenceChange
    */
   handleBridgeEvent(type: string, data: Record<string, unknown>): void {
@@ -473,6 +475,15 @@ export class OrgRoom extends Room<{ state: OrgRoomState }> {
         return
       }
       this.agentSim.handleEvent(this.state.agents, event)
+      return
+    }
+    if (type === "board_activity") {
+      const event = parseBoardActivityEvent(data)
+      if (!event) {
+        console.warn(`[OrgRoom] Malformed board_activity payload org=${safeLog(this.state.orgId)}`)
+        return
+      }
+      this.broadcast(BOARD_ACTIVITY_MESSAGE, event)
       return
     }
     if (type === "member_presence") {

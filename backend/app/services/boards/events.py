@@ -14,6 +14,9 @@
 
 """Write a card's history, freezing the board and stage categories as they are now.
 
+Events the Garden shows (done, handed over, delivered) are also queued on
+``board_activity:<org_id>`` (:mod:`app.services.boards.garden`).
+
 The board and both categories are copied onto the event, so metrics stay
 right after the card changes board or a stage is re-categorised. Edits by
 one person within ``BoardsConfig.edit_coalesce_seconds`` merge into the
@@ -34,6 +37,7 @@ from app.models.board_enums import BoardCardEventType
 from app.repositories.board_access import BoardAccessRepository
 from app.repositories.board_card_event import BoardCardEventRepository
 from app.schemas.boards.card_detail import EventPage, EventRead
+from app.services.boards import garden
 from app.services.boards.access import BoardAccess, CardAccess
 
 # What a moved_board entry says about each board it names, blanked for
@@ -74,6 +78,9 @@ async def record_event(
             to_category=to_stage.category if to_stage else None,
             detail=detail or {},
         )
+    )
+    await garden.note_card_event(
+        db, card, event_type, actor_id=actor_id, from_stage=from_stage, to_stage=to_stage
     )
 
 

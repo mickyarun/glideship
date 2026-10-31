@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.services.colyseus_forwarder import forward_agent_activity_to_colyseus
+from app.services.colyseus_forwarder import forward_activity_to_colyseus
 
 
 async def test_non_matching_topic_does_nothing() -> None:
@@ -29,7 +29,7 @@ async def test_non_matching_topic_does_nothing() -> None:
         "app.services.colyseus_forwarder.publish_to_colyseus",
         new_callable=AsyncMock,
     ) as m:
-        await forward_agent_activity_to_colyseus("job:xyz", {"any": "data"})
+        await forward_activity_to_colyseus("job:xyz", {"any": "data"})
         m.assert_not_called()
 
 
@@ -38,7 +38,7 @@ async def test_invalid_org_id_is_logged_and_dropped() -> None:
         "app.services.colyseus_forwarder.publish_to_colyseus",
         new_callable=AsyncMock,
     ) as m:
-        await forward_agent_activity_to_colyseus(
+        await forward_activity_to_colyseus(
             "agent_activity:not-a-uuid",
             {"any": "data"},
         )
@@ -54,13 +54,35 @@ async def test_valid_topic_forwards_to_colyseus() -> None:
         "app.services.colyseus_forwarder.publish_to_colyseus",
         new_callable=AsyncMock,
     ) as m:
-        await forward_agent_activity_to_colyseus(topic, payload)
+        await forward_activity_to_colyseus(topic, payload)
         m.assert_awaited_once_with(org_id, "agent_activity", payload)
+
+
+async def test_board_activity_forwards_under_its_own_type() -> None:
+    org_id = uuid.uuid4()
+    payload = {"kind": "card_done", "actor_id": None}
+
+    with patch(
+        "app.services.colyseus_forwarder.publish_to_colyseus",
+        new_callable=AsyncMock,
+    ) as m:
+        await forward_activity_to_colyseus(f"board_activity:{org_id}", payload)
+        m.assert_awaited_once_with(org_id, "board_activity", payload)
+
+
+async def test_board_topics_are_never_forwarded() -> None:
+    with patch(
+        "app.services.colyseus_forwarder.publish_to_colyseus",
+        new_callable=AsyncMock,
+    ) as m:
+        await forward_activity_to_colyseus(f"board:{uuid.uuid4()}", {"card_id": "x"})
+        m.assert_not_called()
 
 
 @pytest.mark.parametrize(
     "topic",
     [
+        "board_activity:",
         "agent_activity:",
         "agent_activity:   ",
         "agent_activity",  # missing colon entirely — doesn't even match prefix
@@ -71,5 +93,5 @@ async def test_edge_cases_do_not_crash(topic: str) -> None:
         "app.services.colyseus_forwarder.publish_to_colyseus",
         new_callable=AsyncMock,
     ) as m:
-        await forward_agent_activity_to_colyseus(topic, {})
+        await forward_activity_to_colyseus(topic, {})
         m.assert_not_called()

@@ -15,7 +15,7 @@
 /**
  * BridgeEndpoint — HTTP endpoint that receives events from the backend.
  *
- * The Python backend publishes dev_activity, agent_activity, and member
+ * The Python backend publishes dev_activity, agent_activity, board_activity and member
  * presence change events to this endpoint. Events are routed to the
  * appropriate OrgRoom instance via Colyseus matchMaker.
  *
@@ -94,7 +94,8 @@ export function unregisterOrgRoom(orgId: string, room: OrgRoom): void {
  * must be present so the routing is unambiguous:
  *
  *   - `{orgId, type, data}` — org-scoped: routed to the active OrgRoom
- *     for that org. Used by dev_activity, agent_activity, member_presence.
+ *     for that org. Used by dev_activity, agent_activity, board_activity,
+ *     member_presence.
  *   - `{roomId, type, data}` — room-scoped: routed through the
  *     RaceRegistry to a specific RaceRoom. Used by race_invite_declined.
  *
