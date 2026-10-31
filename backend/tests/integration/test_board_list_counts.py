@@ -27,6 +27,7 @@ from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.config import settings
+from app.core.upload_limits import MIB
 from app.models.board_card import BoardCard
 from app.services.boards.constants import BOARD_KEY_MAX_LENGTH, BOARD_KEY_MIN_LENGTH
 from tests.integration.board_api_support import (
@@ -117,3 +118,4 @@ async def test_limits_include_the_key_length_and_the_done_window(
     assert limits["board_key_min"] == BOARD_KEY_MIN_LENGTH
     assert limits["board_key_max"] == BOARD_KEY_MAX_LENGTH
     assert limits["recent_done_days"] == settings.boards.recent_done_days
+    assert limits["import_max_upload_mb"] == settings.boards.import_max_upload_bytes // MIB

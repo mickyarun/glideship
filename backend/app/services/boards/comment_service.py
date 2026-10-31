@@ -142,6 +142,7 @@ def _comment(comment: BoardCardComment, author: PersonCard | None) -> CommentRea
         author_name=author.name if author else None,
         author_avatar_url=author.avatar_url if author else None,
         body="" if comment.deleted_at is not None else comment.body,
+        import_source=comment.import_source,
         edited_at=comment.edited_at,
         deleted_at=comment.deleted_at,
         created_at=comment.created_at,

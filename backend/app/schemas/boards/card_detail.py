@@ -22,6 +22,7 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, UrlConstraints
 
 from app.models.board_card_detail import ATTACHMENT_URL_LENGTH, CHECKLIST_GROUP_LENGTH
 from app.models.board_enums import BoardAttachmentKind, BoardCardEventType, BoardStageCategory
+from app.models.external_import import ImportSourceKind
 from app.models.thread_columns import ATTACHMENT_FILENAME_LENGTH
 from app.schemas.boards.text import ChecklistOrderList, ChecklistText, CommentText
 
@@ -82,6 +83,8 @@ class CommentRead(BaseModel):
     author_name: str | None
     author_avatar_url: str | None
     body: str
+    # Where an imported comment came from (e.g. ``trello``); None when written here.
+    import_source: ImportSourceKind | None
     edited_at: datetime | None
     deleted_at: datetime | None
     created_at: datetime

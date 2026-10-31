@@ -37,7 +37,7 @@ from app.models.board_member import BoardMember
 from app.models.external_import import ExternalItemMap, ExternalItemStatus, ImportSourceKind
 from app.models.notification import Notification
 from app.services import event_bus, slack_dm
-from tests.integration.board_api_support import ok
+from tests.integration.board_api_support import BOARDS, ok
 from tests.integration.board_import_support import (
     IMPORTS,
     Jobs,
@@ -224,6 +224,11 @@ async def test_a_new_board_gets_every_card_silently(
     assert [(t, d["event"]) for t, d in heard] == [(f"board:{board.id}", "board_imported")]
     assert heard[0][1]["imported"] == 5 and heard[0][1]["status"] == "completed"
     assert done["result"]["suppressed_events"] == 5
+    # The comments API says which comments came from the import.
+    comments_url = f"{BOARDS}/{key}/cards/{spec.number}/comments"
+    ok(await client.post(comments_url, json={"body": "Mine"}, headers=pm.headers), 201)
+    listed = ok(await client.get(comments_url, headers=pm.headers))["items"]
+    assert [c["import_source"] for c in listed] == ["trello", "trello", None]
 
 
 async def test_archived_cards_can_be_skipped(

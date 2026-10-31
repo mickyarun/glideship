@@ -19,6 +19,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.upload_limits import MIB
 from app.models.board import BOARD_NAME_LENGTH, LABEL_NAME_LENGTH, STAGE_NAME_LENGTH
 from app.models.board_card import CARD_TITLE_LENGTH
 from app.models.board_card_detail import BoardCardAttachment
@@ -98,5 +99,6 @@ def board_limits() -> BoardLimits:
         filters_max_bytes=settings.boards.filters_max_bytes,
         stage_page_size=settings.boards.stage_page_size,
         recent_done_days=settings.boards.recent_done_days,
+        import_max_upload_mb=settings.boards.import_max_upload_bytes // MIB,
         attachments=limits(),
     )

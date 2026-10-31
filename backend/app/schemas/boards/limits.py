@@ -42,4 +42,6 @@ class BoardLimits(BaseModel):
     filters_max_bytes: int
     stage_page_size: int
     recent_done_days: int
+    # The largest import export file the upload route accepts, in whole MB.
+    import_max_upload_mb: int
     attachments: AttachmentLimits
