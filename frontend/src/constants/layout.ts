@@ -20,3 +20,15 @@
  * CSS as `--app-topbar-height`.
  */
 export const TOP_BAR_HEIGHT = 56
+
+/** The gap between a menu and the button that opens it. */
+export const MENU_OFFSET_PX = 4
+/** How close a menu may come to the window's edge (Vuetify's overlay viewport margin). */
+export const MENU_VIEWPORT_MARGIN_PX = 12
+/** Below this much room under its button, a menu opens above when there's more room there. */
+export const MENU_MIN_ROOM_PX = 240
+/**
+ * Clicks on a menu's items this soon after it opened are the rest of the
+ * click (or double click) that opened it, not a pick.
+ */
+export const MENU_PICK_GUARD_MS = 400
