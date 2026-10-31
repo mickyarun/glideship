@@ -20,7 +20,7 @@
 <template>
   <v-dialog v-model="open" width="640" scrollable :fullscreen="xs" aria-labelledby="new-board-title">
     <v-card color="surface" class="pa-6">
-      <h2 id="new-board-title" class="new-board__title mb-4">New board</h2>
+      <h2 id="new-board-title" class="new-board__title mb-2">New board</h2>
       <v-card-text class="new-board__body">
         <AppCallout v-if="form.loadError.value" variant="error">{{ form.loadError.value }}</AppCallout>
         <div>
@@ -100,7 +100,9 @@ async function create(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 0 !important;
+  /* Room above the first field for its floating label, which the
+     scrolling body would otherwise clip. */
+  padding: 8px 0 0 !important;
 }
 /* Top-aligned so the name field keeps its own height next to the key. */
 .new-board__row {

@@ -40,7 +40,13 @@
           :title="stage.id === card.stage_id ? `${stage.name} (current)` : stage.name"
           :disabled="stage.id === card.stage_id"
           @click="emit('move', stage.id)"
-        />
+        >
+          <!-- The stage's category dot, in the icon column, so every item's
+               text starts at the same edge as Copy link and Archive. -->
+          <template #prepend>
+            <v-icon icon="mdi-circle-medium" :color="CATEGORY_COLORS[stage.category]" aria-hidden="true" />
+          </template>
+        </v-list-item>
         <v-divider class="my-1" />
       </template>
       <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
@@ -59,6 +65,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { CATEGORY_COLORS } from '@/constants/boards'
 import type { CardSummary, StageRead } from '@/types/boards'
 import { copyText } from '@/utils/clipboard'
 
