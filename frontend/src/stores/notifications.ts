@@ -31,7 +31,18 @@ export const useNotificationStore = defineStore('notifications', () => {
     items.value.filter(n => !n.isRead && !n.isDismissed).length,
   )
 
-  async function fetchAll(): Promise<void> {
+  // A load already on its way is shared: the subscription start, a
+  // reconnect and a tab coming back can all ask at once.
+  let inFlight: Promise<void> | null = null
+
+  function fetchAll(): Promise<void> {
+    inFlight ??= load().finally(() => {
+      inFlight = null
+    })
+    return inFlight
+  }
+
+  async function load(): Promise<void> {
     loading.value = true
     error.value = ''
     try {
