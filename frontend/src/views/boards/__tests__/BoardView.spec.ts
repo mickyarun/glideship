@@ -81,7 +81,8 @@ describe('BoardView', () => {
   it('gives an editor drag, menu moves, quick-add and New card', async () => {
     const { wrapper } = await mountBoardPage()
     expect(wrapper.text()).toContain("You're an editor")
-    expect(wrapper.text()).toContain('Boards / Ops')
+    expect(wrapper.find('nav[aria-label="Breadcrumb"]').text()).toBe('Boards/Ops')
+    expect(wrapper.find('nav[aria-label="Breadcrumb"] [aria-current="page"]').text()).toBe('Ops')
     expect(wrapper.findAll('button').filter(b => b.text().includes('Add a card'))).toHaveLength(2)
     expect(wrapper.findAllComponents(BoardStageColumn).every(c => c.props('canDrag') && c.props('canMove'))).toBe(true)
     expect(wrapper.text()).toContain("Drag cards between stages, or use a card's ⋯ menu to move it from the keyboard.")

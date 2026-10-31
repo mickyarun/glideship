@@ -23,12 +23,11 @@
     <v-text-field
       v-model="query"
       class="filter-bar__search"
-      placeholder="Search cards"
+      label="Search cards"
       prepend-inner-icon="mdi-magnify"
       density="compact"
       hide-details
       clearable
-      aria-label="Search cards"
       :maxlength="searchMax ?? undefined"
     />
     <BoardFilterMenu v-model="assignee" label="Assignee" all-label="Anyone" :options="assigneeOptions(members)" />
@@ -117,5 +116,13 @@ const countText = computed(() => {
 }
 .filter-bar__archived {
   flex: 0 0 auto;
+}
+.filter-bar__archived :deep(.v-label) {
+  font-size: 14px;
+}
+@media (max-width: 600px) {
+  .filter-bar__search {
+    flex-basis: 100%;
+  }
 }
 </style>

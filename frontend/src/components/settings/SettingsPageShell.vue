@@ -19,7 +19,7 @@
     <template v-if="$slots.crumbs" #eyebrow><slot name="crumbs" /></template>
     <template #actions>
       <slot name="header-actions" />
-      <v-btn variant="text" prepend-icon="mdi-arrow-left" :to="backTo">{{ backLabel }}</v-btn>
+      <v-btn variant="text" :active="false" prepend-icon="mdi-arrow-left" :to="backTo">{{ backLabel }}</v-btn>
       <v-btn v-if="showSave" color="primary" variant="flat" :loading="saving" :disabled="!valid" @click="$emit('save')">Save changes</v-btn>
     </template>
 

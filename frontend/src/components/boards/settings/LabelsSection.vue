@@ -26,10 +26,11 @@
         label="New label"
         :maxlength="nameMax ?? undefined"
         :error-messages="problem || undefined"
+        density="compact"
         hide-details="auto"
       />
       <LabelColorSelect v-model="color" label="Colour" />
-      <v-btn type="submit" variant="outlined" prepend-icon="mdi-plus" :loading="adding">Add label</v-btn>
+      <v-btn type="submit" variant="outlined" height="40" prepend-icon="mdi-plus" :loading="adding">Add label</v-btn>
     </form>
     <ul v-if="disabled && labels.labels.value.length" class="labels__tags" aria-label="Labels">
       <li v-for="label in labels.labels.value" :key="label.id">

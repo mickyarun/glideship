@@ -54,7 +54,7 @@
         hide-details
         :maxlength="maxText ?? undefined"
       />
-      <v-btn type="submit" variant="outlined" :loading="adding" :disabled="!draft.trim()">Add</v-btn>
+      <v-btn type="submit" variant="outlined" height="40" :loading="adding" :disabled="!draft.trim()">Add</v-btn>
     </form>
   </AppPanel>
 </template>

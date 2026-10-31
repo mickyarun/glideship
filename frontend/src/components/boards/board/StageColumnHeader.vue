@@ -15,7 +15,7 @@
  -->
 
 <!-- A stage column's heading: a category-coloured dot (named for screen
-     readers), the stage name and a count pill ("4 / 3" with a WIP limit),
+     readers), the stage name and a plain count ("4 / 3" with a WIP limit),
      then, once the count passes the limit, a warning row under it. -->
 <template>
   <header class="stage-head">
@@ -80,18 +80,16 @@ const countLabel = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A plain count beside the name, as on the Delivery board. */
 .stage-head__count {
-  margin-left: auto;
-  padding: 1px 8px;
-  border-radius: 999px;
+  flex-shrink: 0;
   font-size: 12px;
-  color: rgb(var(--v-theme-ink-2));
-  background: rgb(var(--v-theme-surface-bright));
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .stage-head__count--over {
   font-weight: 600;
   color: rgb(var(--v-theme-warning));
-  background: rgba(var(--v-theme-warning), 0.16);
 }
 .stage-head__over {
   display: flex;

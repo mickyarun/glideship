@@ -38,7 +38,11 @@
     </div>
   </div>
   <div v-else class="date-field">
-    <span :class="{ 'date-field__empty': !value }">{{ value ? formatShortDate(value) : 'Not set' }}</span>
+    <span class="date-field__value">
+      <span :class="{ 'date-field__empty': !value }">{{ value ? formatShortDate(value) : 'Not set' }}</span>
+      <!-- Beside the date: the due date's Done tick. -->
+      <slot />
+    </span>
     <button v-if="editable" ref="change" type="button" class="date-field__link" :aria-label="`Change ${label.toLowerCase()} date`" @click="start">
       Change
     </button>
@@ -88,6 +92,13 @@ async function submit(day: string): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+.date-field__value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
 }
 .date-field__empty {
   color: rgb(var(--v-theme-on-surface-variant));

@@ -18,7 +18,7 @@
   <div>
     <div class="d-flex align-center ga-2 mb-2">
       <span v-if="!headless" class="text-caption text-medium-emphasis font-weight-medium">Attachments</span>
-      <span class="text-caption text-disabled">{{ count }} / {{ effectiveLimits.maxFiles }}</span>
+      <span class="text-caption text-medium-emphasis">{{ count }} / {{ effectiveLimits.maxFiles }}</span>
       <v-spacer />
       <v-btn
         v-if="!readonly"
@@ -37,7 +37,7 @@
       {{ message }}
     </AppCallout>
 
-    <div v-if="loading" class="text-caption text-disabled">Loading attachments…</div>
+    <div v-if="loading" class="text-caption text-medium-emphasis">Loading attachments…</div>
 
     <div v-else-if="count" class="d-flex flex-wrap ga-2">
       <AttachmentTile
@@ -55,11 +55,11 @@
       />
     </div>
 
-    <div v-else class="text-caption text-disabled">
+    <div v-else class="text-caption text-medium-emphasis">
       {{ readonly ? 'No attachments.' : hint }}
     </div>
 
-    <div v-if="!readonly && count" class="text-caption text-disabled mt-2">{{ hint }}</div>
+    <div v-if="!readonly && count" class="text-caption text-medium-emphasis mt-2">{{ hint }}</div>
 
     <AttachmentLinks
       v-if="wire.links && baseUrl"

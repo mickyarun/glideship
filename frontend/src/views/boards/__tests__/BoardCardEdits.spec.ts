@@ -66,12 +66,12 @@ describe('BoardCardView field edits', () => {
   it('keeps a refused title in its field, with the error, and the saved title on the card', async () => {
     cardApi.update.mockRejectedValueOnce(httpError(409, 'This card is archived; restore it first.'))
     const { wrapper } = await mountCardPage()
-    await wrapper.find('button[aria-label="Edit title"]').trigger('click')
-    await wrapper.find('[role="heading"] input').setValue('Never saved')
-    await buttonsWith(wrapper, 'Save')[0].trigger('click')
+    await wrapper.find('h1 button[title="Rename"]').trigger('click')
+    await wrapper.find('.card-title input').setValue('Never saved')
+    await wrapper.find('.card-title input').trigger('keyup', { key: 'Enter' })
     await flushPromises()
     expect(document.body.textContent).toContain('This card is archived; restore it first.')
-    expect((wrapper.find('[role="heading"] input').element as HTMLInputElement).value).toBe('Never saved')
+    expect((wrapper.find('.card-title input').element as HTMLInputElement).value).toBe('Never saved')
   })
 
   it('picks assignees and labels from their menus, one field per save', async () => {

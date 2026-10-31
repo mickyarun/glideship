@@ -16,44 +16,26 @@
 
 <!-- Board-wide states over the columns: a new board with no cards yet
      ("Ops is ready", with Add your first card), and filters that match
-     nothing (what's set, and Clear filters). -->
+     nothing (what's set, and Clear filters). The app's empty state,
+     centred in a panel. -->
 <template>
   <section class="state-panel" :aria-label="title">
-    <h2 class="state-panel__title">{{ title }}</h2>
-    <p class="state-panel__body">{{ body }}</p>
-    <div v-if="$slots.default" class="state-panel__actions"><slot /></div>
+    <AppEmptyState icon="mdi-view-column-outline" :title="title" :body="body">
+      <template v-if="$slots.default" #actions><slot /></template>
+    </AppEmptyState>
   </section>
 </template>
 
 <script setup lang="ts">
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
+
 defineProps<{ title: string; body: string }>()
 </script>
 
 <style scoped>
 .state-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 18px 20px;
   border-radius: 12px;
-  border: 1px dashed rgb(var(--v-theme-rule));
+  border: 1px solid rgb(var(--v-theme-rule));
   background: rgb(var(--v-theme-surface));
-}
-.state-panel__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-.state-panel__body {
-  margin: 0;
-  font-size: 14px;
-  color: rgb(var(--v-theme-on-surface-variant));
-}
-.state-panel__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
 }
 </style>

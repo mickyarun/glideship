@@ -94,6 +94,7 @@ defineProps<{
 .general {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  align-items: start;
   gap: 16px;
 }
 .general__description {

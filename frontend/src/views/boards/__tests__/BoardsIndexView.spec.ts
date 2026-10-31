@@ -87,10 +87,11 @@ describe('BoardsIndexView', () => {
 
   it('searches by name or key, keeping Delivery only when it matches', async () => {
     const wrapper = await mountIndex()
-    await wrapper.find('input[aria-label="Find a board"]').setValue('ops')
+    const search = () => wrapper.find('.boards-tools__search input')
+    await search().setValue('ops')
     expect(tileNames(wrapper)).toEqual(['Ops'])
     expect(wrapper.find('.delivery-tile').exists()).toBe(false)
-    await wrapper.find('input[aria-label="Find a board"]').setValue('deliv')
+    await search().setValue('deliv')
     expect(wrapper.find('.delivery-tile').exists()).toBe(true)
     expect(wrapper.text()).toContain('No boards match "deliv".')
   })

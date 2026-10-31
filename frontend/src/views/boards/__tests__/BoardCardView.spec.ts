@@ -37,7 +37,7 @@ import { buttonsWith, mountCardPage } from './cardPageHarness'
 import { CARD, boardWith, cardDefaults, mocked, revoke, send } from './cardPageMocks'
 
 const { boards, cardApi, http } = mocked
-const heading = (w: Awaited<ReturnType<typeof mountCardPage>>['wrapper']) => w.find('[role="heading"][aria-level="1"]')
+const heading = (w: Awaited<ReturnType<typeof mountCardPage>>['wrapper']) => w.find('.card-title')
 const later = (s: number) => new Date(Date.parse(CARD.updated_at) + s * 1000).toISOString()
 
 describe('BoardCardView', () => {
@@ -56,7 +56,7 @@ describe('BoardCardView', () => {
     for (const label of ['Change stage', 'Change assignees', 'Change labels', 'More card actions', 'Move to Stage s2 (upcoming)']) {
       expect(wrapper.find(`button[aria-label="${label}"]`).exists()).toBe(true)
     }
-    await wrapper.find('button[aria-label="Edit title"]').trigger('click')
+    await wrapper.find('h1 button[title="Rename"]').trigger('click')
     await heading(wrapper).find('input').setValue('Pricing calculator')
     await heading(wrapper).find('input').trigger('keyup', { key: 'Enter' })
     await flushPromises()
@@ -73,9 +73,11 @@ describe('BoardCardView', () => {
     } })
     const { wrapper } = await mountCardPage()
     expect(wrapper.text()).toContain('You can view and comment on Ops. Ask Meera Iyer (admin) for edit access.')
-    for (const label of ['Edit title', 'Change stage', 'Change assignees', 'Move to Stage s2 (upcoming)', 'Edit description']) {
+    for (const label of ['Change stage', 'Change assignees', 'Move to Stage s2 (upcoming)', 'Edit description']) {
       expect(wrapper.find(`button[aria-label="${label}"]`).exists()).toBe(false)
     }
+    expect(wrapper.find('h1 button').exists()).toBe(false)
+    expect(wrapper.find('h1').text()).toBe(CARD.title)
     expect(wrapper.text()).not.toContain('Add an item')
     await wrapper.findAll('[role="tab"]').find(t => t.text().startsWith('Comments'))!.trigger('click')
     await flushPromises()
@@ -174,16 +176,22 @@ describe('BoardCardView', () => {
     expect(document.body.textContent).toContain("Couldn't copy the link")
   })
 
-  it('offers narrow pages a Stage select that moves the card, and viewers none', async () => {
+  it('keeps the stepper on narrow pages, offers Move to the next stage, and gives viewers neither', async () => {
     boards.moveCard.mockResolvedValue({ ...CARD, stage_id: 's2', updated_at: later(1) })
     const { wrapper } = await mountCardPage('/boards/OPS/cards/3', { width: 375 })
-    // The stepper or the select shows by the page's width (a container query).
-    const select = wrapper.findComponent(CardStagePicker).findComponent({ name: 'VSelect' })
-    select.vm.$emit('update:modelValue', 's2')
+    expect(wrapper.findComponent(CardStagePicker).findComponent({ name: 'VSelect' }).exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="Move to Stage s2 (upcoming)"]').exists()).toBe(true)
+    // Phones show it as an arrow named by its label.
+    const moveTo = (b: { text(): string; attributes(k: string): string | undefined }) =>
+      b.text().startsWith('Move to') || !!b.attributes('aria-label')?.startsWith('Move to')
+    const next = wrapper.findAll('.card-header__actions button').find(moveTo)
+    expect(next!.text() || next!.attributes('aria-label')).toBe('Move to Stage s2')
+    await next!.trigger('click')
     await flushPromises()
     expect(boards.moveCard).toHaveBeenCalledWith('OPS', 3, { stage_id: 's2' })
     boardWith(VIEWER_CAPS)
     const { wrapper: viewer } = await mountCardPage('/boards/OPS/cards/3', { width: 375 })
-    expect(viewer.find('.card-stages__select').exists()).toBe(false)
+    expect(viewer.find('.stage-stepper button').exists()).toBe(false)
+    expect(viewer.findAll('.card-header__actions button').some(moveTo)).toBe(false)
   })
 })

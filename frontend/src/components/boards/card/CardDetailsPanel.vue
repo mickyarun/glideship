@@ -70,15 +70,8 @@
       </dd>
 
       <dt>Priority</dt>
-      <dd>
-        <BUDPriorityMenu
-          :priority="card.priority"
-          :editable="canEdit"
-          clearable
-          @change="emit('priority', $event)"
-          @clear="emit('priority', null)"
-        />
-        <span v-if="!card.priority && !canEdit" class="bud-facts__muted">None</span>
+      <dd class="bud-facts__split">
+        <CardPriorityField :priority="card.priority" :editable="canEdit" @change="emit('priority', $event)" />
       </dd>
 
       <dt>Start</dt>
@@ -86,17 +79,19 @@
 
       <dt>Due</dt>
       <dd>
-        <CardDateField label="Due" :value="card.due_at" :editable="canEdit" :save="iso => saveDate('due_at', iso)" />
-        <v-checkbox
-          v-if="card.due_at && canEdit"
-          :model-value="card.due_done"
-          label="Done"
-          aria-label="Mark the due date done"
-          density="compact"
-          hide-details
-          @update:model-value="emit('due-done', !!$event)"
-        />
-        <span v-else-if="card.due_at && card.due_done" class="bud-facts__muted">Done</span>
+        <CardDateField label="Due" :value="card.due_at" :editable="canEdit" :save="iso => saveDate('due_at', iso)">
+          <v-checkbox
+            v-if="card.due_at && canEdit"
+            :model-value="card.due_done"
+            label="Done"
+            aria-label="Mark the due date done"
+            density="compact"
+            hide-details
+            class="bud-facts__done"
+            @update:model-value="emit('due-done', !!$event)"
+          />
+          <span v-else-if="card.due_at && card.due_done" class="bud-facts__muted">Done</span>
+        </CardDateField>
       </dd>
 
       <dt>Created</dt>
@@ -111,7 +106,7 @@
 import { computed } from 'vue'
 import CardDateField from '@/components/boards/card/CardDateField.vue'
 import CardPickMenu, { type PickItem } from '@/components/boards/card/CardPickMenu.vue'
-import BUDPriorityMenu from '@/components/buds/detail/BUDPriorityMenu.vue'
+import CardPriorityField from '@/components/boards/card/CardPriorityField.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import { labelColor } from '@/constants/boards'
@@ -188,6 +183,9 @@ const labelItems = computed<PickItem[]>(() => props.labels.map(l => ({ id: l.id,
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+.bud-facts__done { flex: 0 0 auto; }
+.bud-facts__done :deep(.v-label) { font-size: 14px; }
+.bud-facts__done :deep(.v-selection-control) { min-height: 0; }
 .bud-facts__muted {
   color: rgb(var(--v-theme-on-surface-variant));
 }

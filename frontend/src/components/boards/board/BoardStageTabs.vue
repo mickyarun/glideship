@@ -15,11 +15,11 @@
  -->
 
 <!-- On phones the board shows one stage at a time: these pills pick it,
-     each with its card count. They scroll sideways rather than wrap, and
-     are at least 44px tall on touch screens. -->
+     each with its card count. They scroll sideways rather than wrap (the
+     pill toggle's touch size: 44px tall on touch screens). -->
 <template>
   <div class="stage-tabs">
-    <AppPillToggle v-model="model" :options="options" size="sm" aria-label="Stages" class="stage-tabs__pills" />
+    <AppPillToggle v-model="model" :options="options" size="touch" aria-label="Stages" />
   </div>
 </template>
 
@@ -37,23 +37,12 @@ const options = computed(() =>
 </script>
 
 <style scoped>
+/* A scroller in the page's flex column: it mustn't shrink below its pills. */
 .stage-tabs {
-  overflow-x: auto;
-  margin-inline: -16px;
-  padding: 2px 16px;
-  scrollbar-width: none;
-}
-.stage-tabs__pills :deep(.app-pill-toggle__option) {
-  white-space: nowrap;
   flex-shrink: 0;
-}
-@media (pointer: coarse) {
-  .stage-tabs__pills {
-    height: auto;
-  }
-  .stage-tabs__pills :deep(.app-pill-toggle__option) {
-    height: 44px;
-    min-height: 44px;
-  }
+  overflow-x: auto;
+  margin-inline: calc(-1 * var(--board-gutter));
+  padding: 2px var(--board-gutter);
+  scrollbar-width: none;
 }
 </style>

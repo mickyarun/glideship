@@ -141,11 +141,9 @@ async function remove(moveTo: StageRead | null): Promise<void> {
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
-@media (max-width: 760px) {
-  .stages {
-  container: stages / inline-size;
-}
-.stages__head {
+/* The rows stack below this width (stage-row.css), so the header goes. */
+@container stages (max-width: 720px) {
+  .stages__head {
     display: none;
   }
 }

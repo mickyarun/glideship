@@ -45,14 +45,14 @@
       @clear="filters.clear()"
     />
     <BoardStatePanel v-if="noMatch" title="No cards match these filters" :body="summary">
-      <v-btn variant="outlined" size="small" @click="filters.clear()">Clear filters</v-btn>
+      <v-btn variant="outlined" @click="filters.clear()">Clear filters</v-btn>
     </BoardStatePanel>
     <BoardStatePanel
       v-else-if="emptyBoard"
       :title="`${detail.board.name} is ready`"
       :body="detail.stages.length ? `${plural(detail.stages.length, 'stage')}, no cards yet.` : 'An admin can add stages in the board settings.'"
     >
-      <v-btn v-if="canCreate && defaultStageId" color="primary" size="small" @click="composeIn = defaultStageId">
+      <v-btn v-if="canCreate && defaultStageId" color="primary" @click="composeIn = defaultStageId">
         Add your first card
       </v-btn>
     </BoardStatePanel>
@@ -113,6 +113,7 @@ import { useBoardStats } from '@/composables/useBoardStats'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { useNow } from '@/composables/useNow'
 import { useBoardsStore } from '@/stores/boards'
+import '@/assets/styles/board-layout.css'
 import { emptyColumn } from '@/utils/boardColumns'
 import { plural } from '@/utils/format'
 
@@ -163,38 +164,31 @@ onMounted(() => void boardsStore.ensureLimits())
 .board-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--board-section-gap);
   height: 100%;
   min-width: 0;
-  padding: 24px 36px 12px;
+  padding: var(--board-page-padding);
   background: rgb(var(--v-theme-background));
 }
 /* The columns scroll sideways at the board level, bleeding through the
-   page padding like the BUD board; each column scrolls its own cards. */
+   page padding like the BUD board; each column scrolls its own cards.
+   Positioned, so screen-reader-only text inside stays inside the scroller
+   instead of widening the page. */
 .board-page__columns {
+  position: relative;
   flex: 1 1 auto;
   min-height: 320px;
   display: flex;
   align-items: stretch;
-  gap: 12px;
+  gap: var(--board-column-gap);
   overflow-x: auto;
-  margin-inline: -36px;
-  padding: 0 36px 8px;
-  scroll-padding-inline: 36px;
+  margin-inline: calc(-1 * var(--board-gutter));
+  padding: 0 var(--board-gutter) 8px;
+  scroll-padding-inline: var(--board-gutter);
 }
 .board-page__hint {
   margin: 0;
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
-}
-@media (max-width: 600px) {
-  .board-page {
-    padding: 20px 16px 16px;
-  }
-  .board-page__columns {
-    margin-inline: -16px;
-    padding-inline: 16px;
-    scroll-padding-inline: 16px;
-  }
 }
 </style>

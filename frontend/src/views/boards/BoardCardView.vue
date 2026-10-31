@@ -33,6 +33,13 @@
         <CardSkeleton v-else />
       </div>
       <div v-else class="bud-page">
+        <CardHeader
+          :card="detail" :board="board.board" :stage="stage" :stages="stages" :labels="cardLabels" :people="people"
+          :now="now" :can-edit="canEdit" :can-move="canMove" :can-archive="canArchive"
+          :title-max="limits?.card_title_max ?? null" :save-title="actions.saveTitle"
+          @priority="actions.setPriority" @move="actions.move" @history="tab = 'activity'"
+          @archive="actions.archive()" @restore="actions.restore()" @copied="actions.copied"
+        />
         <CardStateNotes
           :gone="card.gone.value"
           :archived="!!detail.archived_at"
@@ -41,12 +48,6 @@
           :viewer="!page.board.can('edit_card') && !detail.archived_at"
           :members="page.members.value"
           @restore="actions.restore()"
-        />
-        <CardHeader
-          :card="detail" :board="board.board" :stage="stage" :labels="cardLabels" :people="people" :now="now"
-          :can-edit="canEdit" :can-archive="canArchive" :save-title="actions.saveTitle"
-          @priority="actions.setPriority" @archive="actions.archive()" @restore="actions.restore()"
-          @copied="actions.copied"
         />
         <CardStagePicker :stages="stages" :stage-id="detail.stage_id" :can-move="canMove" @move="actions.move" />
         <BUDDetailTabBar v-model="tab" :tabs="tabs" label="Card sections" />

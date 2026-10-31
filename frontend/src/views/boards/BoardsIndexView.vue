@@ -53,12 +53,11 @@
         <v-text-field
           v-model="query"
           class="boards-tools__search"
-          placeholder="Find a board"
+          label="Find a board"
           prepend-inner-icon="mdi-magnify"
           density="compact"
           hide-details
           clearable
-          aria-label="Find a board"
         />
         <v-select
           v-model="sort"
@@ -154,6 +153,12 @@ onMounted(() => {
 }
 .boards-tools__sort {
   flex: 0 0 200px;
+}
+@media (max-width: 600px) {
+  .boards-tools__search,
+  .boards-tools__sort {
+    flex-basis: 100%;
+  }
 }
 .boards-grid {
   display: grid;

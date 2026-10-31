@@ -107,8 +107,8 @@ const lines = computed(() => cardStatusLines(props.bud, props.now))
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 12px 10px;
+  gap: var(--board-card-gap);
+  padding: var(--board-card-padding);
   background: rgb(var(--v-theme-surface));
   border: 1px solid rgb(var(--v-theme-rule));
   border-radius: var(--radius-card);

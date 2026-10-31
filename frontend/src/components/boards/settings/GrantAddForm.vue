@@ -28,6 +28,7 @@
       placeholder="Name, email or team"
       :custom-filter="matches"
       :disabled="disabled"
+      density="compact"
       hide-details
       class="grant-add__who"
     >
@@ -39,8 +40,8 @@
         </v-list-item>
       </template>
     </v-autocomplete>
-    <v-select v-model="role" :items="roles" label="As" :disabled="disabled" hide-details class="grant-add__role" />
-    <v-btn type="submit" color="primary" variant="flat" :disabled="disabled || !picked" :loading="busy">Add</v-btn>
+    <v-select v-model="role" :items="roles" label="As" :disabled="disabled" density="compact" hide-details class="grant-add__role" />
+    <v-btn type="submit" color="primary" height="40" :disabled="disabled || !picked" :loading="busy">Add</v-btn>
   </form>
 </template>
 

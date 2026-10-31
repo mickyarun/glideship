@@ -52,10 +52,8 @@ export function storedTiles(
   }))
 }
 
-/** "Up to 5 files, 10 MB each (png, jpg, pdf)." */
+/** "10 MB each · png, jpg, pdf" */
 export function attachmentHint(limits: AttachmentLimits): string {
-  return (
-    `Up to ${limits.maxFiles} files, ${limits.maxFileMb} MB each ` +
-    `(${limits.acceptedExtensions.join(', ')}).`
-  )
+  // The file count sits beside the heading ("2 / 5"), so the hint skips it.
+  return `${limits.maxFileMb} MB each · ${limits.acceptedExtensions.join(', ')}`
 }

@@ -14,31 +14,11 @@
  * limitations under the License.
  -->
 
-<!-- Where a card sits on its board's stages: the stage stepper (other
-     stages are buttons for those who may move it), or, when the page is
-     too narrow for every stage name, a Stage select instead. -->
+<!-- Where a card sits on its board's stages: the stage stepper at every
+     width (other stages are buttons for those who may move it). On narrow
+     pages the stepper keeps only the current stage's name. -->
 <template>
-  <div class="card-stages">
-    <BUDStageStepper
-      class="card-stages__stepper"
-      :stages="options"
-      :current-id="stageId"
-      :selectable="canMove"
-      @select="id => emit('move', id)"
-    />
-    <v-select
-      v-if="canMove"
-      class="card-stages__select"
-      :model-value="stageId"
-      :items="stages"
-      item-title="name"
-      item-value="id"
-      label="Stage"
-      variant="outlined"
-      hide-details
-      @update:model-value="(id: string) => emit('move', id)"
-    />
-  </div>
+  <BUDStageStepper :stages="options" :current-id="stageId" :selectable="canMove" @select="id => emit('move', id)" />
 </template>
 
 <script setup lang="ts">
@@ -51,18 +31,3 @@ const emit = defineEmits<{ move: [stageId: string] }>()
 
 const options = computed(() => props.stages.map(s => ({ id: s.id, label: s.name })))
 </script>
-
-<style scoped>
-.card-stages__select {
-  display: none;
-}
-/* The page (a size container) can't fit every stage's name: pick from a list. */
-@container bud-page (max-width: 960px) {
-  .card-stages__stepper {
-    display: none;
-  }
-  .card-stages__select {
-    display: block;
-  }
-}
-</style>

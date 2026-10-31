@@ -14,21 +14,38 @@
  * limitations under the License.
  -->
 
-<!-- "Boards / {board} / {page}" above a board page's title. -->
+<!-- "Boards / {board}" above a board's title, or "Boards / {board} /
+     {page}" above one of its pages (a card, its settings). Shared by team
+     boards and the Delivery board, which links to its own route. -->
 <template>
   <nav aria-label="Breadcrumb" class="board-crumbs">
     <router-link :to="{ name: 'boards' }">Boards</router-link>
     <span aria-hidden="true">/</span>
-    <router-link :to="{ name: 'board', params: { key: board.key } }">{{ board.name }}</router-link>
-    <span aria-hidden="true">/</span>
-    <span aria-current="page">{{ current }}</span>
+    <router-link v-if="current" :to="boardRoute">{{ board.name }}</router-link>
+    <span v-else aria-current="page">{{ board.name }}</span>
+    <template v-if="current">
+      <span aria-hidden="true">/</span>
+      <span aria-current="page" :class="{ 'board-crumbs__mono': mono }">{{ current }}</span>
+    </template>
   </nav>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import type { RouteLocationRaw } from 'vue-router'
 import type { BoardRead } from '@/types/boards'
 
-defineProps<{ board: Pick<BoardRead, 'key' | 'name'>; current: string }>()
+const props = defineProps<{
+  board: Pick<BoardRead, 'key' | 'name'>
+  /** The page under the board; without it the board is the current page. */
+  current?: string
+  /** Set the current crumb in the mono face (a card key). */
+  mono?: boolean
+  /** Where the board crumb goes, when it isn't a team board's own route. */
+  to?: RouteLocationRaw
+}>()
+
+const boardRoute = computed(() => props.to ?? { name: 'board', params: { key: props.board.key } })
 </script>
 
 <style scoped>
@@ -37,7 +54,6 @@ defineProps<{ board: Pick<BoardRead, 'key' | 'name'>; current: string }>()
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
   font-size: 13px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
@@ -48,5 +64,8 @@ defineProps<{ board: Pick<BoardRead, 'key' | 'name'>; current: string }>()
 }
 .board-crumbs a:hover {
   text-decoration: underline;
+}
+.board-crumbs__mono {
+  font-family: var(--font-mono);
 }
 </style>

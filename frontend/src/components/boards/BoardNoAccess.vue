@@ -18,10 +18,10 @@
      on it) doesn't exist, or it's members-only and I'm not a member. The
      API doesn't say which, so neither does this page. -->
 <template>
-  <AppPage :title="`${what === 'card' ? 'Card' : 'Board'} not found`">
+  <AppPage :title="`This ${what} doesn't exist, or you don't have access`">
     <AppEmptyState
       icon="mdi-lock-outline"
-      :title="`This ${what} doesn't exist, or you don't have access`"
+      title="Check the link, or ask for access"
       body="If someone sent you a link, ask them to add you to the board."
     >
       <template #actions>

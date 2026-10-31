@@ -1,0 +1,79 @@
+/*
+ * Copyright 2025-2026 Arun Rajkumar
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* A team board stage column (BoardStageColumn.vue). */
+.stage-col {
+  position: relative;
+  contain: paint;
+  width: var(--board-column-width);
+  flex-shrink: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--board-column-padding);
+  border-radius: 12px;
+  border: 1px solid rgb(var(--v-theme-rule));
+  background: rgba(var(--v-theme-on-surface), 0.03);
+}
+.stage-col__over {
+  margin: 0 4px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-warning));
+}
+.stage-col__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--board-card-gap);
+  /* Room for focus rings on the cards. */
+  padding: 2px;
+  margin: -2px;
+}
+.stage-col__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--board-card-gap);
+  /* The list fills the column body, so a card can be dropped anywhere in it,
+     including an empty column. */
+  flex: 1 0 auto;
+  min-height: 24px;
+}
+/* Sits over the empty list without catching the drop. */
+.stage-col__note--empty {
+  position: absolute;
+  inset: 48px 0 auto;
+  pointer-events: none;
+}
+.stage-col__skeleton { background: transparent; }
+.stage-col__note {
+  margin: 0;
+  padding: 12px 4px;
+  text-align: center;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.stage-col__sentinel { height: 1px; flex-shrink: 0; }
+.stage-col__more { align-self: center; }
+@media (max-width: 600px) {
+  .stage-col {
+    width: 100%;
+  }
+}

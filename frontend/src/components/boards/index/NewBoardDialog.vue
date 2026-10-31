@@ -19,8 +19,8 @@
      see it, with what each choice means. On success it opens the board. -->
 <template>
   <v-dialog v-model="open" width="640" scrollable :fullscreen="xs" aria-labelledby="new-board-title">
-    <v-card>
-      <v-card-title id="new-board-title" class="new-board__title">New board</v-card-title>
+    <v-card color="surface" class="pa-6">
+      <h2 id="new-board-title" class="new-board__title mb-4">New board</h2>
       <v-card-text class="new-board__body">
         <AppCallout v-if="form.loadError.value" variant="error">{{ form.loadError.value }}</AppCallout>
         <div>
@@ -90,15 +90,17 @@ async function create(): Promise<void> {
 </script>
 
 <style scoped>
+/* The same header as the New BUD dialog. */
 .new-board__title {
-  padding: 20px 24px 4px;
+  margin: 0;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 .new-board__body {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 12px 24px !important;
+  padding: 0 !important;
 }
 /* Top-aligned so the name field keeps its own height next to the key. */
 .new-board__row {
@@ -123,6 +125,6 @@ async function create(): Promise<void> {
 }
 .new-board__actions {
   justify-content: flex-end;
-  padding: 8px 24px 20px;
+  padding: 20px 0 0;
 }
 </style>

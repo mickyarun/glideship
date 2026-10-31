@@ -89,6 +89,7 @@ import BoardHeader from '@/components/buds/board/BoardHeader.vue'
 import { useBudBoard } from '@/composables/useBudBoard'
 import { useNow } from '@/composables/useNow'
 import { usePermissions } from '@/composables/usePermissions'
+import '@/assets/styles/board-layout.css'
 
 const {
   budStore, query, assignee, priority, team, sortByPriority, showDiscarded,
@@ -106,9 +107,9 @@ const now = useNow()
 .board-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--board-section-gap);
   min-height: 100%;
-  padding: 28px 36px 40px;
+  padding: var(--board-page-padding);
   background: rgb(var(--v-theme-background));
 }
 .board-page__loading {
@@ -119,15 +120,16 @@ const now = useNow()
 /* The columns scroll sideways to the page edge, so the scroller bleeds
    through the page padding and puts it back inside. */
 .board-page__scroller {
+  position: relative;
   overflow-x: auto;
-  margin-inline: -36px;
-  padding: 0 36px 8px;
-  scroll-padding-inline: 36px;
+  margin-inline: calc(-1 * var(--board-gutter));
+  padding: 0 var(--board-gutter) 8px;
+  scroll-padding-inline: var(--board-gutter);
 }
 .board-page__columns {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: var(--board-column-gap);
   width: max-content;
 }
 .board-page__empty {
@@ -152,15 +154,5 @@ const now = useNow()
   margin: 0;
   max-width: 420px;
   font-size: 14px;
-}
-@media (max-width: 600px) {
-  .board-page {
-    padding: 20px 16px 32px;
-  }
-  .board-page__scroller {
-    margin-inline: -16px;
-    padding-inline: 16px;
-    scroll-padding-inline: 16px;
-  }
 }
 </style>

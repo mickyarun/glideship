@@ -55,12 +55,12 @@ const label = computed(() => BUD_STATUS_LABELS[props.status])
 
 <style scoped>
 .board-column {
-  width: 272px;
+  width: var(--board-column-width);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px;
+  gap: var(--board-card-gap);
+  padding: var(--board-column-padding);
   border-radius: 12px;
   border: 1px solid rgb(var(--v-theme-rule));
   background: rgba(var(--v-theme-on-surface), 0.03);

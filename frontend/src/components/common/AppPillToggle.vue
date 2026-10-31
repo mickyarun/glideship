@@ -56,8 +56,11 @@ interface Props {
   // nothing — the parent always sees a non-null model value.
   mandatory?: boolean
   // ``md`` (default) matches the v-tabs density="compact" height
-  // (34px). ``sm`` is for tight chrome (e.g. card headers).
-  size?: 'sm' | 'md'
+  // (34px). ``sm`` is for tight chrome (e.g. card headers). ``touch``
+  // is for a row of many options that scrolls sideways (phone tabs): the
+  // track grows with its options instead of squeezing them, and each is
+  // 44px tall on touch screens.
+  size?: 'sm' | 'md' | 'touch'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -122,6 +125,17 @@ function select(value: T): void {
   font-size: 12px;
   padding: 0 18px;
   min-width: 84px;
+}
+.app-pill-toggle--touch {
+  width: max-content;
+  min-height: 36px;
+}
+.app-pill-toggle--touch .app-pill-toggle__option {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 0 16px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 .app-pill-toggle__option {
   /* Reset the user-agent <button> styles, then drive everything from
