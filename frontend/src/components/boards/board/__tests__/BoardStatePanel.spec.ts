@@ -41,4 +41,16 @@ describe('BoardStatePanel', () => {
     })
     expect(wrapper.find('.app-empty__actions').exists()).toBe(false)
   })
+
+  it('sits in a compact row above the columns, with the same text and action', () => {
+    const wrapper = mount(BoardStatePanel, {
+      global: { plugins: [createVuetify({ components })] },
+      props: { title: 'Ops is ready', body: '4 stages, no cards yet.', compact: true },
+      slots: { default: '<button type="button">Add your first card</button>' },
+    })
+    expect(wrapper.findComponent(AppEmptyState).exists()).toBe(false)
+    expect(wrapper.find('[role="status"]').text()).toContain('Ops is ready')
+    expect(wrapper.find('.state-panel__body').text()).toBe('4 stages, no cards yet.')
+    expect(wrapper.find('.state-panel__actions button').text()).toBe('Add your first card')
+  })
 })

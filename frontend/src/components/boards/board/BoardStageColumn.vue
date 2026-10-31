@@ -16,7 +16,9 @@
 
 <!-- One stage of a team board, as tall as the window: its header, then its
      cards in their own scroll box (the next page loads as the bottom comes
-     into view), then quick-add. Cards aren't windowed: SortableJS needs
+     into view), then quick-add. On phones the column grows with its cards
+     and the page scrolls instead, so the next page loads as the bottom
+     reaches the window. Cards aren't windowed: SortableJS needs
      them all in the DOM. A drag heading in past the WIP limit says so,
      and the drop still goes through. -->
 <template>
@@ -89,6 +91,7 @@
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
+import { useDisplay } from 'vuetify'
 import BoardCardTile from '@/components/boards/board/BoardCardTile.vue'
 import BoardQuickAdd from '@/components/boards/board/BoardQuickAdd.vue'
 import StageColumnHeader from '@/components/boards/board/StageColumnHeader.vue'
@@ -137,7 +140,10 @@ const sentinel = ref<HTMLElement | null>(null)
 const limit = computed(() => wipLimit(props.stage.wip_limit))
 const goesOver = computed(() => dragGoesOver(props.stage.id, props.count, props.stage.wip_limit))
 
-useLoadMoreSentinel(sentinel, scrollBox, () => {
+const { xs } = useDisplay()
+const sentinelRoot = computed(() => (xs.value ? null : scrollBox.value))
+
+useLoadMoreSentinel(sentinel, sentinelRoot, () => {
   if (props.column.cursor && !props.column.loading) emit('load', true)
 })
 

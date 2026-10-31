@@ -14,14 +14,14 @@
 
 // Load a column's next page as its bottom scrolls into view: an element
 // at the end of the card list is watched inside the column's own scroll
-// box. Where IntersectionObserver is missing, the column's Load more
+// box (or the window, when the root is null). Where IntersectionObserver is missing, the column's Load more
 // button still works.
 
 import { onBeforeUnmount, watch, type Ref } from 'vue'
 
 export function useLoadMoreSentinel(
   sentinel: Ref<HTMLElement | null>,
-  root: Ref<HTMLElement | null>,
+  root: Readonly<Ref<HTMLElement | null>>,
   onVisible: () => void,
 ): void {
   let observer: IntersectionObserver | null = null

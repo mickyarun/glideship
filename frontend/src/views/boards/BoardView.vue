@@ -49,6 +49,7 @@
     </BoardStatePanel>
     <BoardStatePanel
       v-else-if="emptyBoard"
+      :compact="detail.stages.length > 0"
       :title="`${detail.board.name} is ready`"
       :body="detail.stages.length ? `${plural(detail.stages.length, 'stage')}, no cards yet.` : 'An admin can add stages in the board settings.'"
     >
@@ -191,5 +192,17 @@ onMounted(() => void boardsStore.ensureLimits())
   margin: 0;
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
+}
+/* Phones: the page scrolls and the one shown column takes its own height. */
+@media (max-width: 600px) {
+  .board-page {
+    height: auto;
+    min-height: 100%;
+  }
+  .board-page__columns {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow-x: visible;
+  }
 }
 </style>

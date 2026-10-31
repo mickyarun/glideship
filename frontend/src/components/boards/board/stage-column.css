@@ -72,8 +72,18 @@
 }
 .stage-col__sentinel { height: 1px; flex-shrink: 0; }
 .stage-col__more { align-self: center; }
+/* Phones show one stage at a time: the column grows with its cards and
+   the page scrolls, rather than a short box scrolling under the header. */
 @media (max-width: 600px) {
   .stage-col {
     width: 100%;
+    height: auto;
+  }
+  .stage-col__scroll {
+    overflow-y: visible;
+  }
+  /* Room for the "No cards here" note, which sits over the empty list. */
+  .stage-col__cards {
+    min-height: 96px;
   }
 }
