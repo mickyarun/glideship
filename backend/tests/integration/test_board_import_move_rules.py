@@ -21,7 +21,14 @@ from pathlib import Path
 import pytest
 from httpx import AsyncClient
 
-from tests.integration.board_api_support import BOARDS, make_board, ok, put_role, stage_id
+from tests.integration.board_api_support import (
+    BOARDS,
+    make_board,
+    ok,
+    page,
+    put_role,
+    stage_id,
+)
 from tests.integration.board_import_support import (
     IMPORTS,
     Jobs,
@@ -56,8 +63,10 @@ async def test_imported_cards_land_in_stages_whatever_they_require(
     key = board["board"]["key"]
     await put_role(client, pm, key, priya.id, "editor")
     for stage in board["stages"]:
+        # The default stage can't require a PRD; every other field still applies.
+        fields = [f for f in FIELDS if not (stage["is_default"] and f == "prd")]
         url = f"{BOARDS}/{key}/stages/{stage['id']}"
-        ok(await client.patch(url, json={"required_fields": list(FIELDS)}, headers=pm.headers))
+        ok(await client.patch(url, json={"required_fields": fields}, headers=pm.headers))
     groups = [
         {"group_id": BACKLOG, "action": "existing", "stage_id": stage_id(board, "Backlog")},
         {"group_id": DOING, "action": "existing", "stage_id": stage_id(board, "In progress")},
@@ -74,3 +83,10 @@ async def test_imported_cards_land_in_stages_whatever_they_require(
     cards = await board_cards(pg_session_factory, board["board"]["id"])
     assert len(cards) == result["result"]["imported"]
     assert str(cards[0].stage_id) in {g.get("stage_id") for g in groups}
+    summaries = []
+    for stage in board["stages"]:
+        summaries += (await page(client, pm, key, stage["id"]))["items"]
+    # Cards land lacking what the stages require: no PRD, and some unassigned.
+    assert summaries and not any(card["has_prd"] for card in summaries)
+    assert any(card["assignee_ids"] == [] for card in summaries)
+    assert all(card["priority"] is None for card in summaries)

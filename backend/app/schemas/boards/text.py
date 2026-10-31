@@ -15,17 +15,18 @@
 """Field types shared by the board schemas.
 
 Names, titles and bodies are trimmed before their length is checked, so a
-value of only spaces is refused rather than stored empty. Lengths come
+value of only spaces is refused rather than stored empty. A card
+description of only spaces means no description and becomes ``None``. Lengths come
 from the column sizes or the product limits in ``services/boards/constants``.
 """
 
 import uuid
 from typing import Annotated
 
-from pydantic import Field, StringConstraints
+from pydantic import AfterValidator, Field, StringConstraints
 
 from app.models.board import BOARD_NAME_LENGTH, LABEL_NAME_LENGTH, STAGE_NAME_LENGTH
-from app.models.board_card import CARD_TITLE_LENGTH
+from app.models.board_card import CARD_TITLE_LENGTH, blank_as_null
 from app.services.boards.constants import (
     BOARD_DESCRIPTION_MAX_CHARS,
     CARD_DESCRIPTION_MAX_CHARS,
@@ -50,6 +51,7 @@ CommentText = Annotated[str, _trimmed(COMMENT_MAX_CHARS)]
 ChecklistText = Annotated[str, _trimmed(CHECKLIST_TEXT_MAX_CHARS)]
 BoardDescription = Annotated[str, Field(max_length=BOARD_DESCRIPTION_MAX_CHARS)]
 Description = Annotated[str, Field(max_length=CARD_DESCRIPTION_MAX_CHARS)]
+CardDescription = Annotated[Description | None, AfterValidator(blank_as_null)]
 DocText = Annotated[str, Field(max_length=CARD_DOC_MAX_CHARS)]
 IdList = Annotated[list[uuid.UUID], Field(max_length=ID_LIST_MAX_ITEMS)]
 OrderList = Annotated[list[uuid.UUID], Field(min_length=1, max_length=ID_LIST_MAX_ITEMS)]

@@ -31,10 +31,15 @@ from app.repositories.board_card_position import BoardCardPositionRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.stage import StageCreate, StageOrder, StageRead, StageUpdate
 from app.services.boards.access import BoardAccess
+from app.services.boards.card_facts import ordered_fields
 from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError, BoardRuleError
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.move_rules import ordered_fields
-from app.services.boards.stage_rules import check_stage_count, check_stages
+from app.services.boards.move_rules import EntryCause, enter_stage
+from app.services.boards.stage_rules import (
+    check_default_stage_entry,
+    check_stage_count,
+    check_stages,
+)
 
 STAGE_NOT_FOUND = "Stage not found."
 STAGE_NAME_TAKEN = "Another stage on this board already has that name."
@@ -45,6 +50,7 @@ def _check(access: BoardAccess, stages: list[BoardStage]) -> None:
     check_stages(
         stages, handover_stage_id=board.handover_stage_id, return_stage_id=board.return_stage_id
     )
+    check_default_stage_entry(stages)
 
 
 def _find(stages: list[BoardStage], stage_id: uuid.UUID) -> BoardStage:
@@ -173,6 +179,7 @@ async def delete_stage(
 async def _move_cards(
     db: AsyncSession, access: BoardAccess, source: BoardStage, target: BoardStage
 ) -> None:
+    await enter_stage(target, cause=EntryCause.STAGE_DELETE, from_stage=source)
     await BoardCardEventRepository(db, org_id=access.org_id).record_stage_moves(
         source.id,
         target.id,

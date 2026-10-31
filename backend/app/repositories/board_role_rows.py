@@ -71,7 +71,7 @@ def role_rows(org_id: uuid.UUID, grants: CTE, name: str) -> Subquery:
             grants.c.user_id,
             Board.id.label("board_id"),
             role_literal(BoardMemberRole.ADMIN).label("role"),
-            _via(BoardAccessVia.ORG),
+            _via(BoardAccessVia.PERMISSION),
         )
         .select_from(grants)
         .join(Board, org_boards)

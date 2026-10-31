@@ -121,15 +121,23 @@ async def test_a_card_names_only_a_repository_its_board_links(
     assert again["repo_id"] == str(repo)
 
 
-async def test_unlinking_clears_the_cards_and_announces_them(
+async def test_unlinking_clears_the_cards_and_announces_it_once(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     org, admin, editor, viewer, key = await _setup(client, pg_session_factory)
     repo, kept = [await tracked_repo(pg_session_factory, org) for _ in range(2)]
-    for linked in (repo, kept):
-        await link_repo(client, admin, key, linked)
+    other = (await make_board(client, admin))["board"]["key"]
+    for board_key, linked in ((key, repo), (key, kept), (other, repo)):
+        await link_repo(client, admin, board_key, linked)
     on_repo = [await make_card(client, editor, key, f"R{i}", repo_id=str(repo)) for i in range(2)]
+    archived = await make_card(client, editor, key, "A", repo_id=str(repo))
+    ok(
+        await client.post(
+            f"{BOARDS}/{key}/cards/{archived['number']}/archive", headers=editor.headers
+        )
+    )
     on_kept = await make_card(client, editor, key, "K", repo_id=str(kept))
+    elsewhere = await make_card(client, admin, other, "E", repo_id=str(repo))
     plain = await make_card(client, editor, key, "P")
     stage = on_kept["stage_id"]
 
@@ -137,21 +145,18 @@ async def test_unlinking_clears_the_cards_and_announces_them(
     assert {c["id"] for c in filtered} == {c["id"] for c in on_repo}
     assert plain["id"] not in {c["id"] for c in await _filter(client, viewer, key, stage, kept)}
 
-    board_id = ok(await client.get(f"{BOARDS}/{key}", headers=admin.headers))["board"]["id"]
-    queue = event_bus.subscribe(f"board:{board_id}")
-    try:
-        ok(await client.delete(f"{BOARDS}/{key}/repos/{repo}", headers=admin.headers))
-        await asyncio.sleep(0)
-        events = [queue.get_nowait()["data"] for _ in range(queue.qsize())]
-    finally:
-        event_bus.unsubscribe(f"board:{board_id}", queue)
-    assert events[0]["event"] == "repos_changed"
-    assert (events[0]["repo_id"], events[0]["linked"]) == (str(repo), False)
-    updated = {e["card"]["id"]: e["card"]["repo_id"] for e in events[1:]}
-    assert all(e["event"] == "card_updated" for e in events[1:])
-    assert updated == {c["id"]: None for c in on_repo}
+    events = await _events(client, admin, key, "DELETE", repo)
+    assert events == [
+        {
+            **events[0],
+            "event": "repos_changed",
+            "repo_id": str(repo),
+            "linked": False,
+            "cleared": 3,
+        }
+    ]
 
-    for card in on_repo:
+    for card in [*on_repo, archived]:
         got = ok(
             await client.get(f"{BOARDS}/{key}/cards/{card['number']}", headers=viewer.headers)
         )
@@ -160,7 +165,39 @@ async def test_unlinking_clears_the_cards_and_announces_them(
         await client.get(f"{BOARDS}/{key}/cards/{on_kept['number']}", headers=viewer.headers)
     )
     assert still["repo_id"] == str(kept)
+    there = ok(
+        await client.get(f"{BOARDS}/{other}/cards/{elsewhere['number']}", headers=admin.headers)
+    )
+    assert there["repo_id"] == str(repo)
     assert await _filter(client, viewer, key, stage, repo) == []
+
+
+async def test_linking_announces_the_repository(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org, admin, _, _, key = await _setup(client, pg_session_factory)
+    repo = await tracked_repo(pg_session_factory, org, full_name="acme/api")
+    events = await _events(client, admin, key, "PUT", repo)
+    assert [(e["event"], e["repo_id"], e["linked"]) for e in events] == [
+        ("repos_changed", str(repo), True)
+    ]
+    assert events[0]["repo"]["id"] == str(repo)
+    assert events[0]["repo"]["url"] == "https://github.com/acme/api"
+    assert await _events(client, admin, key, "PUT", repo) == []
+
+
+async def _events(
+    client: AsyncClient, admin: Person, key: str, method: str, repo: uuid.UUID
+) -> list[dict[str, Any]]:
+    board_id = ok(await client.get(f"{BOARDS}/{key}", headers=admin.headers))["board"]["id"]
+    queue = event_bus.subscribe(f"board:{board_id}")
+    try:
+        url = f"{BOARDS}/{key}/repos/{repo}"
+        ok(await client.request(method, url, headers=admin.headers))
+        await asyncio.sleep(0)
+        return [queue.get_nowait()["data"] for _ in range(queue.qsize())]
+    finally:
+        event_bus.unsubscribe(f"board:{board_id}", queue)
 
 
 async def _filter(

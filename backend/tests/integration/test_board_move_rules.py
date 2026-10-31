@@ -76,12 +76,12 @@ async def test_a_refusal_lists_every_missing_field_and_blank_text_is_missing(
     admin, editor, board = await rules_board(client, pg_session_factory)
     ok(await require(client, admin, board, "In progress", list(reversed(FIELDS))))
     card = await make_card(client, editor, board["board"]["key"], description_md="  \n ")
+    assert card["description_md"] is None
     url = card_url(board, card)
-    ok(
-        await client.put(
-            f"{url}/docs/prd", json={"body_md": " ", "base_version": None}, headers=editor.headers
-        )
+    blank = await client.put(
+        f"{url}/docs/prd", json={"body_md": " ", "base_version": None}, headers=editor.headers
     )
+    assert blank.status_code == 422 and "empty" in blank.json()["detail"]
     refused = await move(client, editor, board, card, "In progress")
     assert refused.status_code == 422
     assert refused.json()["missing"] == list(FIELDS)

@@ -16,6 +16,7 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,13 +35,14 @@ from app.services.boards.card_checks import (
     check_labels,
     check_repo,
 )
+from app.services.boards.card_facts import NewCardFacts
 from app.services.boards.card_place import place_card
 from app.services.boards.card_timing import enter_category
 from app.services.boards.cursor import encode_cursor
 from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.move_rules import check_entry, facts_of_new_card
+from app.services.boards.move_rules import EntryCause, enter_stage
 from app.services.boards.reads import card_detail, card_summary, summary_json
 from app.services.boards.stage_service import STAGE_NOT_FOUND
 
@@ -82,7 +84,12 @@ async def create_card(db: AsyncSession, access: BoardAccess, body: CardCreate) -
     )
     if stage is None:
         raise BoardItemNotFoundError(STAGE_NOT_FOUND)
-    check_entry(stage, facts_of_new_card(body), confirm_open_checklist=body.confirm_open_checklist)
+    await enter_stage(
+        stage,
+        cause=EntryCause.CREATE,
+        facts=partial(_new_card_facts, body),
+        confirm_open_checklist=body.confirm_open_checklist,
+    )
     check_dates(body.start_at, body.due_at)
     await check_assignees(db, access, body.assignee_ids)
     await check_labels(db, access, body.label_ids)
@@ -126,3 +133,7 @@ async def create_card(db: AsyncSession, access: BoardAccess, body: CardCreate) -
     changes.emit(BoardSocketEvent.CARD_CREATED, card=summary_json(detail))
     await changes.commit(db)
     return detail
+
+
+async def _new_card_facts(body: CardCreate) -> NewCardFacts:
+    return NewCardFacts.of(body)

@@ -14,22 +14,27 @@
 
 """Data access for the repositories a board links, scoped to an organization.
 
+Only an active repository counts as linked: listing, and a card naming
+one, skip a link whose repository was ignored or removed.
+
 A card write that names a repository holds the link row ``FOR KEY SHARE``
-until it commits; unlinking takes it ``FOR UPDATE`` before clearing the
-cards. Both take the link before any card row, so the two queue up
-instead of deadlocking, and a card can't pick up a repository that is
-being unlinked.
+until it commits (the same lock the card's foreign key takes), so card
+writes never wait on each other. Unlinking takes it ``FOR UPDATE`` before
+clearing the cards. Both take the link before any card row, so the two
+queue up instead of deadlocking, and a card can't pick up a repository
+that is being unlinked.
 """
 
 import uuid
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board_card import BoardCard
 from app.models.board_repo import BoardRepo
 from app.models.tracked_repository import RepoStatus, TrackedRepository
+from app.repositories.base import rowcount
 
 
 class BoardRepoRepository:
@@ -40,11 +45,15 @@ class BoardRepoRepository:
         self._org_id = org_id
 
     async def list_linked(self, board_id: uuid.UUID) -> list[TrackedRepository]:
-        """The repositories the board links, by name."""
+        """The active repositories the board links, by name."""
         stmt = (
             select(TrackedRepository)
             .join(BoardRepo, BoardRepo.repo_id == TrackedRepository.id)
-            .where(BoardRepo.org_id == self._org_id, BoardRepo.board_id == board_id)
+            .where(
+                BoardRepo.org_id == self._org_id,
+                BoardRepo.board_id == board_id,
+                TrackedRepository.status == RepoStatus.ACTIVE,
+            )
             .order_by(func.lower(TrackedRepository.name), TrackedRepository.id)
         )
         return list((await self._db.execute(stmt)).scalars().all())
@@ -85,20 +94,33 @@ class BoardRepoRepository:
         )
         return (await self._db.execute(stmt)).first() is not None
 
-    async def hold_link(
-        self, board_id: uuid.UUID, repo_id: uuid.UUID, *, exclusive: bool = False
-    ) -> bool:
-        """Lock the link row (shared, or ``exclusive`` to remove it); False when absent."""
-        stmt = select(BoardRepo.id).where(
-            BoardRepo.org_id == self._org_id,
-            BoardRepo.board_id == board_id,
-            BoardRepo.repo_id == repo_id,
+    async def hold_link(self, board_id: uuid.UUID, repo_id: uuid.UUID) -> bool:
+        """Hold the link to an active repository ``FOR KEY SHARE``; False when there's none."""
+        stmt = (
+            self._link(board_id, repo_id)
+            .join(TrackedRepository, TrackedRepository.id == BoardRepo.repo_id)
+            .where(TrackedRepository.status == RepoStatus.ACTIVE)
+            .with_for_update(read=True, key_share=True, of=BoardRepo)
         )
-        stmt = stmt.with_for_update() if exclusive else stmt.with_for_update(key_share=True)
         return (await self._db.execute(stmt)).first() is not None
 
-    async def detach_cards(self, board_id: uuid.UUID, repo_id: uuid.UUID) -> list[uuid.UUID]:
-        """Clear ``repo_id`` on the board's cards that name it; their ids."""
+    async def take_link(self, board_id: uuid.UUID, repo_id: uuid.UUID) -> bool:
+        """Lock the link ``FOR UPDATE`` to remove it, whatever the repository's status."""
+        stmt = self._link(board_id, repo_id).with_for_update()
+        return (await self._db.execute(stmt)).first() is not None
+
+    async def take_links_to(self, repo_id: uuid.UUID) -> list[uuid.UUID]:
+        """Lock every link to the repository ``FOR UPDATE``; the boards, in id order."""
+        stmt = (
+            select(BoardRepo.board_id)
+            .where(BoardRepo.org_id == self._org_id, BoardRepo.repo_id == repo_id)
+            .order_by(BoardRepo.board_id)
+            .with_for_update()
+        )
+        return list((await self._db.execute(stmt)).scalars().all())
+
+    async def detach_cards(self, board_id: uuid.UUID, repo_id: uuid.UUID) -> int:
+        """Clear ``repo_id`` on the board's cards that name it, archived ones too; how many."""
         stmt = (
             update(BoardCard)
             .where(
@@ -107,10 +129,9 @@ class BoardRepoRepository:
                 BoardCard.repo_id == repo_id,
             )
             .values(repo_id=None, updated_at=func.now())
-            .returning(BoardCard.id)
             .execution_options(synchronize_session=False)
         )
-        return list((await self._db.execute(stmt)).scalars().all())
+        return rowcount(await self._db.execute(stmt))
 
     async def unlink(self, board_id: uuid.UUID, repo_id: uuid.UUID) -> None:
         """Remove the link; the caller has detached the cards first."""
@@ -120,4 +141,11 @@ class BoardRepoRepository:
                 BoardRepo.board_id == board_id,
                 BoardRepo.repo_id == repo_id,
             )
+        )
+
+    def _link(self, board_id: uuid.UUID, repo_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
+        return select(BoardRepo.id).where(
+            BoardRepo.org_id == self._org_id,
+            BoardRepo.board_id == board_id,
+            BoardRepo.repo_id == repo_id,
         )

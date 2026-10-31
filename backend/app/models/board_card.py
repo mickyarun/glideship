@@ -37,7 +37,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.models.base import BaseModel
 from app.models.board_enums import pg_enum
@@ -48,6 +48,11 @@ CARD_TITLE_LENGTH = 500
 CARD_KEY_LENGTH = 32
 # Card numbers and document versions are int4 columns.
 INT4_MAX = 2**31 - 1
+
+
+def blank_as_null(value: str | None) -> str | None:
+    """``value``, or None when it's only whitespace: a blank description is no description."""
+    return value if value is not None and value.strip() else None
 
 
 class BoardCard(BaseModel):
@@ -73,6 +78,14 @@ class BoardCard(BaseModel):
             ["board_id", "repo_id"],
             ["board_repos.board_id", "board_repos.repo_id"],
             name="fk_board_cards_board_repo",
+        ),
+        # Serves that key, the ``?repo=`` filter and clearing a repository's
+        # cards on unlink or delete.
+        Index(
+            "ix_board_cards_board_repo",
+            "board_id",
+            "repo_id",
+            postgresql_where=text("repo_id IS NOT NULL"),
         ),
         # Keyset paging of one stage's open cards on ``(position, id)``.
         Index(
@@ -128,6 +141,11 @@ class BoardCard(BaseModel):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+
+    @validates("description_md")
+    def _blank_description_as_null(self, _key: str, value: str | None) -> str | None:
+        # Every write path (API, import) stores a blank description as NULL.
+        return blank_as_null(value)
 
     def __repr__(self) -> str:
         return f"<BoardCard(board_id={self.board_id}, number={self.number})>"

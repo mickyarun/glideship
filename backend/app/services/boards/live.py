@@ -53,7 +53,8 @@ class BoardSocketEvent(StrEnum):
     STAGE_REORDERED = "stage_reordered"
     LABEL_CHANGED = "label_changed"
     MEMBER_CHANGED = "member_changed"
-    # A repository was linked or unlinked; ``repo_id`` and ``linked`` say which.
+    # A repository was linked (``linked: true`` with the ``repo``) or unlinked
+    # (``linked: false`` with how many cards it ``cleared``).
     REPOS_CHANGED = "repos_changed"
     # One summary when an import finishes; the board reloads rather than
     # hearing about each imported card.
@@ -103,6 +104,11 @@ class BoardChanges:
 
         A commit that fails publishes nothing.
         """
+        self.queue(db)
+        await db.commit()
+
+    def queue(self, db: AsyncSession) -> None:
+        """Queue everything for when ``db`` commits, for a caller that commits itself."""
         topic = board_topic(self.board_id)
         actor = None if self.actor_id is None else str(self.actor_id)
         gate: dict[str, Any] = {}
@@ -121,4 +127,3 @@ class BoardChanges:
             publish_after_commit(db, topic, message)
         if gate:
             recheck_topic(db, topic, self._recheck)
-        await db.commit()

@@ -17,7 +17,8 @@
 A board has at least one ``todo`` and one ``done`` stage, exactly one
 default stage, no more than ``BoardsConfig.max_stages_per_board`` stages,
 and its handover and return stages keep the categories handover needs.
-The template validator checks the same shape for new boards.
+The template validator checks the same shape for new boards. The default
+stage also can't require a PRD: a card created there has none yet.
 """
 
 import uuid
@@ -25,7 +26,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from app.config import settings
-from app.models.board_enums import BoardStageCategory
+from app.models.board_enums import BoardStageCategory, StageRequiredField
 from app.services.boards.errors import BoardRuleError
 
 
@@ -46,6 +47,30 @@ class StageShape(Protocol):
     def is_default(self) -> bool:
         """Whether new cards land here."""
         ...
+
+
+class RequiringStage(StageShape, Protocol):
+    """A stage with its name and the fields a card needs to enter it."""
+
+    @property
+    def name(self) -> str:
+        """The stage's name."""
+        ...
+
+    @property
+    def required_fields(self) -> Sequence[StageRequiredField]:
+        """What a card needs before it enters."""
+        ...
+
+
+def check_default_stage_entry(stages: Sequence[RequiringStage]) -> None:
+    """Refuse a default stage that requires a PRD, which a new card never has."""
+    for stage in stages:
+        if stage.is_default and StageRequiredField.PRD in stage.required_fields:
+            raise BoardRuleError(
+                f"{stage.name} is where new cards land, and a new card has no PRD yet. "
+                "Make another stage the default, or don't require a PRD here."
+            )
 
 
 def check_stage_count(count: int) -> None:

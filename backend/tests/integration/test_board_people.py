@@ -21,8 +21,9 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
+from sqlalchemy import delete, update
 
+from app.models.team import Team, TeamMember, TeamStatus
 from app.models.user import User
 from tests.integration.board_api_support import (
     BOARDS,
@@ -80,7 +81,7 @@ async def test_a_members_only_board_lists_members_and_expanded_teams_with_the_hi
         str(own.id): ("viewer", "member"),
         str(teammate.id): ("editor", "team"),
         str(both.id): ("editor", "team"),
-        str(manager.id): ("admin", "org"),
+        str(manager.id): ("admin", "permission"),
     }
     assert str(outsider.id) not in people and str(gone.id) not in people
     assert set(people[str(own.id)]) == {"id", "name", "avatar_url", "role", "via"}
@@ -137,3 +138,29 @@ async def test_the_people_of_a_board_stay_inside_its_org(
     resp = await client.get(f"{BOARDS}/{key}/people", headers=foreigner.headers)
     assert resp.status_code == 404
     assert str(foreigner.id) not in await _people(client, admin, key)
+
+
+async def test_archived_teams_and_removed_teammates_drop_out_and_own_rows_win_ties(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    factory = pg_session_factory
+    org = await new_org(factory)
+    admin = await person(factory, org, "pm")
+    tie, archived, removed, kept = [await person(factory, org) for _ in range(4)]
+    key = (await make_board(client, admin, visibility="members"))["board"]["key"]
+    await put_role(client, admin, key, tie.id, "editor")
+    live = await new_team(factory, org, tie.id, removed.id, kept.id)
+    gone = await new_team(factory, org, archived.id)
+    for team in (live, gone):
+        await _put_team(client, admin, key, team, "editor")
+    async with factory() as db:
+        await db.execute(update(Team).where(Team.id == gone).values(status=TeamStatus.ARCHIVED))
+        await db.execute(
+            delete(TeamMember).where(TeamMember.team_id == live, TeamMember.user_id == removed.id)
+        )
+        await db.commit()
+
+    people = await _people(client, admin, key)
+    assert people[str(tie.id)]["via"] == "member"
+    assert people[str(kept.id)]["via"] == "team"
+    assert str(archived.id) not in people and str(removed.id) not in people

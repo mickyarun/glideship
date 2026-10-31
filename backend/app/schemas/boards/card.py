@@ -20,7 +20,7 @@ from datetime import datetime
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.models.bud import BUDPriority
-from app.schemas.boards.text import CardTitle, Description, IdList
+from app.schemas.boards.text import CardDescription, CardTitle, IdList
 
 
 class CardCreate(BaseModel):
@@ -29,7 +29,7 @@ class CardCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: CardTitle
-    description_md: Description | None = None
+    description_md: CardDescription = None
     stage_id: uuid.UUID | None = None
     priority: BUDPriority | None = None
     start_at: AwareDatetime | None = None
@@ -48,7 +48,7 @@ class CardUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: CardTitle | None = None
-    description_md: Description | None = None
+    description_md: CardDescription = None
     priority: BUDPriority | None = None
     start_at: AwareDatetime | None = None
     due_at: AwareDatetime | None = None

@@ -51,9 +51,6 @@ LINKS_MAX_PER_CARD: Final = 50
 ID_LIST_MAX_ITEMS: Final = 50
 WIP_LIMIT_MAX: Final = 999
 
-# The BUD board, listed beside team boards for members of the engineering workspace.
-GITHUB_WEB_URL: Final = "https://github.com"
-
 # How a refused move names each missing field: "needs an assignee and a PRD".
 STAGE_REQUIRED_FIELD_LABELS: Final = MappingProxyType(
     {
@@ -66,6 +63,12 @@ STAGE_REQUIRED_FIELD_LABELS: Final = MappingProxyType(
     }
 )
 
+# Linked repositories: a repository's page is ``GITHUB_WEB_URL/<owner>/<name>``,
+# built only from a full name of that shape.
+GITHUB_WEB_URL: Final = "https://github.com"
+GITHUB_FULL_NAME_PATTERN: Final = re.compile(r"[\w.-]+/[\w.-]+", re.ASCII)
+
+# The BUD board, listed beside team boards for members of the engineering workspace.
 DELIVERY_BOARD_NAME: Final = "Delivery"
 DELIVERY_BOARD_PATH: Final = "/buds"
 

@@ -45,6 +45,7 @@ from app.services.boards.card_timing import enter_category
 from app.services.boards.constants import LINKS_MAX_PER_CARD
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardSocketEvent
+from app.services.boards.move_rules import EntryCause, enter_stage
 from app.services.imports.board_plan import BoardPlan
 from app.services.imports.context import ImportContext
 from app.services.imports.draft import AttachmentDraft, CardDraft
@@ -60,6 +61,7 @@ async def write_card(
     """The draft as a card in its mapped stage, at the bottom; returns the card id."""
     now = datetime.now(UTC)
     stage = plan.stages[draft.group_id]
+    await enter_stage(stage, cause=EntryCause.IMPORT)
     card = BoardCard(
         org_id=ctx.org_id,
         board_id=ctx.board.id,

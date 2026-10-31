@@ -19,18 +19,19 @@ moves into one stage take turns. A move to another stage must meet that
 stage's entry rules (:mod:`app.services.boards.move_rules`) and records a
 ``moved`` event with both categories frozen; reordering inside a stage
 checks and records nothing. Restoring an archived card puts it back in its
-own stage without the entry rules.
+own stage, which the entry rules skip.
 """
 
 import uuid
 from datetime import UTC, datetime
+from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board import BoardStage
 from app.models.board_enums import BoardCardEventType
 from app.repositories.board_card import BoardCardRepository
-from app.repositories.board_card_summary import BoardCardSummaryRepository
+from app.repositories.board_card_summary import BoardCardSummaryRepository, CardSummaryRow
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.card import CardDetail, CardMove
 from app.services.boards.access import CardAccess
@@ -40,7 +41,7 @@ from app.services.boards.card_timing import enter_category
 from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.move_rules import check_entry, facts_of_summary
+from app.services.boards.move_rules import EntryCause, enter_stage
 from app.services.boards.reads import card_detail, summary_json
 from app.services.boards.stage_service import STAGE_NOT_FOUND
 
@@ -71,8 +72,13 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
     if from_stage is None:
         # Moved by someone else between loading and locking.
         raise BoardConflictError(STALE_NEIGHBOURS)
-    if to_stage.id != from_stage.id:
-        await _check_entry(db, target, to_stage, body)
+    known = await enter_stage(
+        to_stage,
+        cause=EntryCause.MOVE,
+        from_stage=from_stage,
+        facts=partial(_summary, db, target),
+        confirm_open_checklist=body.confirm_open_checklist,
+    )
     placement = await place_card(
         db,
         access.org_id,
@@ -96,7 +102,7 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
             from_stage=from_stage,
             to_stage=to_stage,
         )
-    detail = await card_detail(db, access.board, card)
+    detail = await card_detail(db, access.board, card, known=known)
     changes = BoardChanges.of(access)
     if placement.rebalanced:
         changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(to_stage.id))
@@ -108,14 +114,10 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
     return detail
 
 
-async def _check_entry(
-    db: AsyncSession, target: CardAccess, to_stage: BoardStage, body: CardMove
-) -> None:
+async def _summary(db: AsyncSession, target: CardAccess) -> CardSummaryRow:
     summaries = BoardCardSummaryRepository(db, org_id=target.access.org_id)
     (row,) = await summaries.summaries_by_ids(target.access.board.id, [target.card.id])
-    check_entry(
-        to_stage, facts_of_summary(row), confirm_open_checklist=body.confirm_open_checklist
-    )
+    return row
 
 
 async def set_card_archived(db: AsyncSession, target: CardAccess, *, archived: bool) -> CardDetail:
@@ -136,6 +138,7 @@ async def set_card_archived(db: AsyncSession, target: CardAccess, *, archived: b
         if placement.rebalanced:
             await cards.lock(card)
             changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(stage.id))
+        await enter_stage(stage, cause=EntryCause.RESTORE)
         card.archived_at, card.position = None, placement.position
         event, socket = BoardCardEventType.RESTORED, BoardSocketEvent.CARD_RESTORED
     await record_event(db, card, event, actor_id=access.user_id)

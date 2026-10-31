@@ -16,7 +16,9 @@
 
 Assignee and label ids are ``array_agg``'d, the checklist counted and the
 PRD looked up in correlated subqueries, so a page of cards is one round
-trip with no lazy loads, however many cards it holds.
+trip with no lazy loads, however many cards it holds. Blank descriptions
+are stored as NULL and blank documents refused, so "has a description" and
+"has a PRD" are plain presence checks.
 """
 
 import uuid
@@ -24,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Double, Select, false, func, literal, select, tuple_
+from sqlalchemy import ColumnElement, Double, Select, func, literal, select, tuple_
 from sqlalchemy.dialects.postgresql import UUID, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,10 +62,6 @@ class CardSummaryRow:
     checklist_total: int = 0
 
 
-# Anything but whitespace, the same test ``move_rules.has_text`` makes.
-_HAS_TEXT = r"\S"
-
-
 def _per_card(column: Any, *conditions: ColumnElement[bool]) -> Any:
     return select(column).where(*conditions).correlate(BoardCard).scalar_subquery()
 
@@ -75,7 +73,6 @@ def _has_prd() -> ColumnElement[bool]:
             BoardCardDoc.card_id == BoardCard.id,
             BoardCardDoc.kind == BoardCardDocKind.PRD,
             BoardCardDoc.state == BoardCardDocState.CURRENT,
-            BoardCardDoc.body_md.regexp_match(_HAS_TEXT),
         )
         .correlate(BoardCard)
         .exists()
@@ -144,9 +141,7 @@ class BoardCardSummaryRepository:
             BoardCard.archived_at,
             BoardCard.updated_at,
             BoardCard.repo_id,
-            func.coalesce(BoardCard.description_md.regexp_match(_HAS_TEXT), false()).label(
-                "has_description"
-            ),
+            BoardCard.description_md.is_not(None).label("has_description"),
             _has_prd().label("has_prd"),
             assignees.label("assignee_ids"),
             labels.label("label_ids"),

@@ -18,7 +18,7 @@ The same rule and the same people as
 :meth:`app.repositories.board_access.BoardAccessRepository.users_with_access`
 (active members of the org, teams expanded), with each person's highest
 role and the grant it comes from: their own row first on a tie, then a
-team's, then the org's.
+team's, then the ``boards:manage`` permission, then the org's.
 """
 
 import uuid
@@ -57,7 +57,8 @@ class BoardPeopleRepository:
         via_rank = case(
             (rows.c.via == BoardAccessVia.MEMBER.value, 0),
             (rows.c.via == BoardAccessVia.TEAM.value, 1),
-            else_=2,
+            (rows.c.via == BoardAccessVia.PERMISSION.value, 2),
+            else_=3,
         )
         best = (
             select(rows.c.user_id, rows.c.role, rows.c.via)

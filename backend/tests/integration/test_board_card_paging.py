@@ -170,8 +170,8 @@ async def test_a_page_is_one_query_however_many_cards_it_holds(
             await client.post(f"{card_url}/checklist", json={"text": "step"}, headers=pm.headers),
             201,
         )
-        if i % 3 == 0:
-            body = {"body_md": "The PRD" if i % 2 else "   ", "base_version": None}
+        if i % 3 == 0 and i % 2:
+            body = {"body_md": "The PRD", "base_version": None}
             ok(await client.put(f"{card_url}/docs/prd", json=body, headers=pm.headers))
 
     async with pg_session_factory() as db:

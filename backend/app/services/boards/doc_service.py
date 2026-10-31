@@ -16,7 +16,8 @@
 
 Writes lock the card row first, so two saves can't claim the same version
 number. Restoring copies an old version's text into a new current version;
-history is never rewritten.
+history is never rewritten. A version of only whitespace is refused, so a
+card "has" a document exactly when it has a current version.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,12 +31,13 @@ from app.repositories.board_card_doc import BoardCardDocRepository
 from app.schemas.boards.doc import DocList, DocRead, DocVersionPage, DocVersionRead
 from app.services.boards.access import CardAccess
 from app.services.boards.card_checks import check_open
-from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError
+from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError, BoardRuleError
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 
 VERSION_NOT_FOUND = "That version doesn't exist."
 DOC_CHANGED = "This document changed since you opened it; reload it and try again."
+DOC_BLANK = "A document can't be empty; write something before saving it."
 
 
 async def list_docs(db: AsyncSession, target: CardAccess) -> DocList:
@@ -116,6 +118,8 @@ async def _new_current(
     access, card = target.access, target.card
     await BoardCardRepository(db, org_id=access.org_id).lock(card)
     check_open(card)
+    if not body_md.strip():
+        raise BoardRuleError(DOC_BLANK)
     repo = BoardCardDocRepository(db, org_id=access.org_id)
     current = await repo.current(card.id, kind)
     if (current.version if current else None) != base_version:

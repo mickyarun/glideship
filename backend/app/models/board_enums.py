@@ -146,10 +146,11 @@ class StageRequiredField(StrEnum):
 class BoardAccessVia(StrEnum):
     """How someone holds their role on a board (computed, never stored).
 
-    ``member`` is their own row, ``team`` a team's row, and ``org`` the
-    board's org-wide visibility or the ``boards:manage`` permission.
+    ``member`` is their own row, ``team`` a team's row, ``permission`` the
+    ``boards:manage`` permission, and ``org`` the board's org-wide visibility.
     """
 
     MEMBER = "member"
     TEAM = "team"
+    PERMISSION = "permission"
     ORG = "org"

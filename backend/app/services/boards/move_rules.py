@@ -14,20 +14,22 @@
 
 """What a card must have to enter a stage: its required fields, then a closed checklist.
 
-Checked when someone moves a card into another stage or creates one in a
-stage. Not checked when a deleted stage's cards move on, when an import
-writes cards, or when an archived card is restored to the stage it was in:
-those place cards without anyone choosing the stage.
+Every path that puts a card in a stage calls :func:`enter_stage` with why
+(:class:`EntryCause`), and ``ENTRY_RULES`` says which rules that cause
+applies. Someone moving a card or creating one in a stage meets both
+rules; restoring an archived card, moving a deleted stage's cards on and
+importing place cards without anyone choosing the stage, so they skip them.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from enum import StrEnum
+from types import MappingProxyType
+from typing import Any, Final
 
 from app.models.board import BoardStage
-from app.models.board_enums import BoardStageCategory, StageRequiredField
-from app.repositories.board_card_summary import CardSummaryRow
-from app.schemas.boards.card import CardCreate
+from app.models.board_enums import COMPLETED_CATEGORIES, BoardStageCategory, StageRequiredField
+from app.services.boards.card_facts import CardFacts, missing_fields
 from app.services.boards.constants import STAGE_REQUIRED_FIELD_LABELS
 from app.services.boards.errors import BoardConflictError, BoardRuleError
 
@@ -55,7 +57,8 @@ class ChecklistOpenError(BoardConflictError):
     """The card still has open checklist items (409 ``CHECKLIST_OPEN``)."""
 
     def __init__(self, open_items: int, total: int) -> None:
-        super().__init__(f"{open_items} of {total} checklist items are still open.")
+        verb = "is" if open_items == 1 else "are"
+        super().__init__(f"{open_items} of {total} checklist items {verb} still open.")
         self.open_items = open_items
         self.total = total
 
@@ -64,70 +67,77 @@ class ChecklistOpenError(BoardConflictError):
         return {"code": "CHECKLIST_OPEN", "open": self.open_items, "total": self.total}
 
 
+class EntryCause(StrEnum):
+    """Why a card is entering a stage."""
+
+    MOVE = "move"
+    CREATE = "create"
+    RESTORE = "restore"
+    STAGE_DELETE = "stage_delete"
+    IMPORT = "import"
+
+
 @dataclass(frozen=True)
-class CardFacts:
-    """What the entry rules look at on one card."""
+class EntryRules:
+    """Which entry rules one cause applies."""
 
-    present: frozenset[StageRequiredField]
-    checklist_done: int = 0
-    checklist_total: int = 0
-
-
-def facts_of_summary(row: CardSummaryRow) -> CardFacts:
-    """The facts of a saved card, from its summary row."""
-    return CardFacts(
-        present=_present(
-            assignee=bool(row.assignee_ids),
-            due_date=row.due_at is not None,
-            priority=row.priority is not None,
-            label=bool(row.label_ids),
-            description=row.has_description,
-            prd=row.has_prd,
-        ),
-        checklist_done=row.checklist_done,
-        checklist_total=row.checklist_total,
-    )
+    required_fields: bool
+    open_checklist: bool
 
 
-def facts_of_new_card(body: CardCreate) -> CardFacts:
-    """The facts of a card about to be created; it has no PRD or checklist yet."""
-    return CardFacts(
-        present=_present(
-            assignee=bool(body.assignee_ids),
-            due_date=body.due_at is not None,
-            priority=body.priority is not None,
-            label=bool(body.label_ids),
-            description=has_text(body.description_md),
-            prd=False,
-        )
-    )
+_CHOSEN = EntryRules(required_fields=True, open_checklist=True)
+_PLACED = EntryRules(required_fields=False, open_checklist=False)
+
+ENTRY_RULES: Final[Mapping[EntryCause, EntryRules]] = MappingProxyType(
+    {
+        EntryCause.MOVE: _CHOSEN,
+        EntryCause.CREATE: _CHOSEN,
+        EntryCause.RESTORE: _PLACED,
+        EntryCause.STAGE_DELETE: _PLACED,
+        EntryCause.IMPORT: _PLACED,
+    }
+)
 
 
-def check_entry(stage: BoardStage, facts: CardFacts, *, confirm_open_checklist: bool) -> None:
-    """Refuse the card's entry into ``stage`` when it breaks the stage's rules.
+async def enter_stage[Facts: CardFacts](
+    stage: BoardStage,
+    *,
+    cause: EntryCause,
+    from_stage: BoardStage | None = None,
+    facts: Callable[[], Awaitable[Facts]] | None = None,
+    confirm_open_checklist: bool = False,
+) -> Facts | None:
+    """Refuse the card's entry into ``stage`` when ``cause`` applies a rule it breaks.
+
+    ``from_stage`` is where the card is now (None when it's new); staying
+    in the same stage isn't an entry. ``facts`` loads the card's facts, and
+    is only called when a rule applies; the loaded facts are returned.
 
     Raises:
         StageRequirementsMissingError: A field the stage requires is missing.
-        ChecklistOpenError: The stage is a ``done`` stage, the checklist has
-            open items, and the caller hasn't confirmed moving anyway.
+        ChecklistOpenError: The card is completing in a ``done`` stage with
+            open checklist items, and the caller hasn't confirmed moving anyway.
     """
-    missing = [f for f in ordered_fields(stage.required_fields) if f not in facts.present]
-    if missing:
-        raise StageRequirementsMissingError(stage, missing)
-    open_items = facts.checklist_total - facts.checklist_done
-    if stage.category is BoardStageCategory.DONE and open_items and not confirm_open_checklist:
-        raise ChecklistOpenError(open_items, facts.checklist_total)
+    rules = ENTRY_RULES[cause]
+    entering = from_stage is None or from_stage.id != stage.id
+    if not entering or not (rules.required_fields or rules.open_checklist):
+        return None
+    if facts is None:
+        raise TypeError(f"A {cause.value} checks the card, so it needs the card's facts.")
+    card = await facts()
+    if rules.required_fields:
+        missing = missing_fields(card, stage.required_fields)
+        if missing:
+            raise StageRequirementsMissingError(stage, missing)
+    open_items = card.checklist_total - card.checklist_done
+    completing = rules.open_checklist and _completes(stage, from_stage)
+    if completing and open_items and not confirm_open_checklist:
+        raise ChecklistOpenError(open_items, card.checklist_total)
+    return card
 
 
-def has_text(value: str | None) -> bool:
-    """Whether ``value`` holds anything but whitespace."""
-    return bool(value and value.strip())
-
-
-def ordered_fields(fields: Sequence[StageRequiredField]) -> list[StageRequiredField]:
-    """``fields`` in declaration order, as a stage stores them."""
-    return [f for f in StageRequiredField if f in fields]
-
-
-def _present(**flags: bool) -> frozenset[StageRequiredField]:
-    return frozenset(StageRequiredField(name) for name, held in flags.items() if held)
+def _completes(stage: BoardStage, from_stage: BoardStage | None) -> bool:
+    """A card completes on entering ``done`` from a stage that isn't done or canceled."""
+    if stage.category is not BoardStageCategory.DONE:
+        return False
+    return from_stage is None or from_stage.category not in COMPLETED_CATEGORIES
