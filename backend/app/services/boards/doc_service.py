@@ -17,7 +17,8 @@
 Writes lock the card row first, so two saves can't claim the same version
 number. Restoring copies an old version's text into a new current version;
 history is never rewritten. A version of only whitespace is refused, so a
-card "has" a document exactly when it has a current version.
+card "has" a document exactly when it has a current version. Every save
+announces ``doc_updated`` and the card's fresh summary (``card_updated``).
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -149,5 +150,7 @@ async def _new_current(
     changes.emit(
         BoardSocketEvent.DOC_UPDATED, card_id=str(card.id), kind=kind.value, version=version
     )
+    # The summary's has_prd follows the current PRD.
+    await changes.card_summary(db, access.board, card)
     await changes.commit(db)
     return read

@@ -84,7 +84,8 @@ async def test_a_members_only_board_lists_members_and_expanded_teams_with_the_hi
         str(manager.id): ("admin", "permission"),
     }
     assert str(outsider.id) not in people and str(gone.id) not in people
-    assert set(people[str(own.id)]) == {"id", "name", "avatar_url", "role", "via"}
+    assert set(people[str(own.id)]) == {"id", "name", "avatar_url", "role", "via", "team_name"}
+    assert people[str(own.id)]["team_name"] is None
 
 
 async def test_an_org_board_lists_every_active_member_who_holds_boards_view(
@@ -164,3 +165,34 @@ async def test_archived_teams_and_removed_teammates_drop_out_and_own_rows_win_ti
     assert people[str(tie.id)]["via"] == "member"
     assert people[str(kept.id)]["via"] == "team"
     assert str(archived.id) not in people and str(removed.id) not in people
+
+
+async def test_a_role_through_a_team_names_the_first_team_by_name_that_grants_it(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    factory = pg_session_factory
+    org = await new_org(factory)
+    admin = await person(factory, org, "pm")
+    dev, lead = [await person(factory, org) for _ in range(2)]
+    key = (await make_board(client, admin, visibility="members"))["board"]["key"]
+    names = {"zeta": "editor", "Beta": "editor", "alpha": "viewer", "Gamma": "admin"}
+    teams: dict[str, uuid.UUID] = {}
+    for name, role in names.items():
+        members = (dev.id, lead.id) if name == "Gamma" else (dev.id,)
+        teams[name] = await new_team(factory, org, *members)
+        async with factory() as db:
+            await db.execute(update(Team).where(Team.id == teams[name]).values(name=name))
+            await db.commit()
+        await _put_team(client, admin, key, teams[name], role)
+    async with factory() as db:
+        await db.execute(
+            delete(TeamMember).where(
+                TeamMember.team_id == teams["Gamma"], TeamMember.user_id == dev.id
+            )
+        )
+        await db.commit()
+
+    people = await _people(client, admin, key)
+    assert (people[str(dev.id)]["role"], people[str(dev.id)]["team_name"]) == ("editor", "Beta")
+    assert (people[str(lead.id)]["role"], people[str(lead.id)]["team_name"]) == ("admin", "Gamma")
+    assert people[str(admin.id)]["team_name"] is None

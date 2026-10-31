@@ -36,8 +36,7 @@ from app.services.boards.access import CardAccess
 from app.services.boards.card_checks import check_open
 from app.services.boards.constants import CHECKLIST_MAX_ITEMS
 from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError, BoardRuleError
-from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.reads import card_detail, summary_json
+from app.services.boards.live import BoardChanges
 
 
 async def list_items(db: AsyncSession, target: CardAccess) -> list[ChecklistItemRead]:
@@ -117,7 +116,6 @@ async def _get(db: AsyncSession, target: CardAccess, item_id: uuid.UUID) -> Boar
 
 async def _announce(db: AsyncSession, target: CardAccess) -> None:
     """Commit and announce the card's new checklist counts."""
-    detail = await card_detail(db, target.access.board, target.card)
     changes = BoardChanges.of(target.access)
-    changes.emit(BoardSocketEvent.CARD_UPDATED, card=summary_json(detail))
+    await changes.card_summary(db, target.access.board, target.card)
     await changes.commit(db)

@@ -17,7 +17,9 @@
 A board keeps at least one admin row (a person's or an active team's), so
 it can always be managed without ``boards:manage``. Removing someone or
 lowering their role asks their open sockets to re-check the board topic,
-so a person who lost access stops getting its live updates.
+so a person who lost access stops getting its live updates. Every change
+announces ``member_changed`` (the roles list) and ``people_changed`` (who
+can open the board).
 """
 
 import uuid
@@ -141,5 +143,6 @@ async def remove_team(db: AsyncSession, access: BoardAccess, team_id: uuid.UUID)
 
 async def _done(db: AsyncSession, access: BoardAccess, changes: BoardChanges) -> MembersRead:
     changes.emit(BoardSocketEvent.MEMBER_CHANGED)
+    changes.emit(BoardSocketEvent.PEOPLE_CHANGED)
     await changes.commit(db)
     return await list_members(db, access)

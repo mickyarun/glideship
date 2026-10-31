@@ -1063,7 +1063,9 @@ These were decided on 2026-10-31 after a first hands-on test.
   active members only, active teams expanded, `boards:manage` as admin. Each row has `id`,
   `name`, `avatar_url`, the highest `role` and `via` (`member`, `team`, `permission` for
   `boards:manage`, or `org` for an org-wide board). On a tie the order is own row, team,
-  permission, org. Card assignees are checked against exactly this set.
+  permission, org. A `via: team` row carries `team_name`, the team that grants the role (the
+  first by name when several grant it); it is null otherwise. Card assignees are checked against
+  exactly this set.
 - **Entry rules** live in `services/boards/move_rules.py`. Every path that puts a card in a stage
   calls `enter_stage(stage, cause=EntryCause…, from_stage, facts, confirm_open_checklist)`, and
   `ENTRY_RULES` maps each cause to the rules it applies:
@@ -1108,6 +1110,19 @@ These were decided on 2026-10-31 after a first hands-on test.
   once), `StageRead` returns it.
 - **Card summaries** carry `has_description`, `has_prd` and `repo_id`, computed in the same
   `list_summaries` statement.
+- **Live events the board's client checks against.** The client checks entry rules on the
+  summaries it holds, so both inputs stay live on `board:<id>`:
+  - `card_updated {card}` goes out after every write that changes a field the summary derives:
+    card PATCH, every checklist change (add, edit, tick, reorder, delete) and every document save
+    or restore (after its `doc_updated`, which is unchanged). They all go through one helper,
+    `BoardChanges.card_summary(db, board, card)`, which reads the summary and queues the event;
+    a new derived field only needs its write path to call it.
+  - `people_changed {}` (no payload) tells open boards to reload `GET …/people`. It goes out
+    beside `member_changed` on every member or team role change on the board (add, role change,
+    remove), and on every board that grants a team a role when that team gains or loses a
+    member, is archived or is made active again (`people_service.team_people_changed`, boards
+    from `BoardMemberRepository.boards_granting_team`). People who lose access through the
+    change don't hear it; their sockets re-check as before.
 
 ## Linked repositories
 

@@ -22,13 +22,18 @@ from app.models.board_enums import BoardAccessVia, BoardMemberRole
 
 
 class BoardPersonRead(BaseModel):
-    """A person with access, their highest role and where it comes from."""
+    """A person with access, their highest role and where it comes from.
+
+    ``team_name`` names the team that grants the role when ``via`` is
+    ``team`` (the first by name when several do), and is null otherwise.
+    """
 
     id: uuid.UUID
     name: str
     avatar_url: str | None
     role: BoardMemberRole
     via: BoardAccessVia
+    team_name: str | None
 
 
 class BoardPeopleRead(BaseModel):

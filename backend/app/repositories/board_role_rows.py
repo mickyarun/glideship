@@ -21,7 +21,19 @@ person and board. :mod:`app.repositories.board_access` documents the rule.
 
 import uuid
 
-from sqlalchemy import CTE, ColumnElement, Subquery, and_, cast, func, literal, select, union_all
+from sqlalchemy import (
+    CTE,
+    ColumnElement,
+    String,
+    Subquery,
+    and_,
+    cast,
+    func,
+    literal,
+    null,
+    select,
+    union_all,
+)
 
 from app.core.permissions_boards import BOARDS_MANAGE, BOARDS_VIEW
 from app.models.board import Board
@@ -43,6 +55,10 @@ def _via(via: BoardAccessVia) -> ColumnElement[str]:
     return literal(via.value).label("via")
 
 
+def _no_team() -> ColumnElement[str]:
+    return cast(null(), String).label("team_name")
+
+
 def member_grants(org_id: uuid.UUID, user_ids: set[uuid.UUID] | None, name: str) -> CTE:
     """One grants row per active member of the org (only ``user_ids`` when given)."""
     stmt = (
@@ -60,7 +76,9 @@ def member_grants(org_id: uuid.UUID, user_ids: set[uuid.UUID] | None, name: str)
 
 
 def role_rows(org_id: uuid.UUID, grants: CTE, name: str) -> Subquery:
-    """``(user_id, board_id, role, via)``: every grant, before taking the highest.
+    """``(user_id, board_id, role, via, team_name)``: every grant, before taking the highest.
+
+    ``team_name`` names the granting team on a team row and is null otherwise.
 
     ``grants`` has one row per person: ``user_id``, ``can_view`` (holds
     ``boards:view``) and ``can_manage`` (holds ``boards:manage``).
@@ -72,6 +90,7 @@ def role_rows(org_id: uuid.UUID, grants: CTE, name: str) -> Subquery:
             Board.id.label("board_id"),
             role_literal(BoardMemberRole.ADMIN).label("role"),
             _via(BoardAccessVia.PERMISSION),
+            _no_team(),
         )
         .select_from(grants)
         .join(Board, org_boards)
@@ -84,12 +103,19 @@ def role_rows(org_id: uuid.UUID, grants: CTE, name: str) -> Subquery:
             BoardMember.board_id,
             BoardMember.role,
             _via(BoardAccessVia.MEMBER),
+            _no_team(),
         )
         .join(grants, grants.c.user_id == BoardMember.user_id)
         .where(BoardMember.org_id == org_id, grants.c.can_view)
     )
     teams = (
-        select(TeamMember.user_id, BoardTeam.board_id, BoardTeam.role, _via(BoardAccessVia.TEAM))
+        select(
+            TeamMember.user_id,
+            BoardTeam.board_id,
+            BoardTeam.role,
+            _via(BoardAccessVia.TEAM),
+            Team.name.label("team_name"),
+        )
         .select_from(BoardTeam)
         .join(TeamMember, TeamMember.team_id == BoardTeam.team_id)
         .join(Team, Team.id == BoardTeam.team_id)
@@ -102,6 +128,7 @@ def role_rows(org_id: uuid.UUID, grants: CTE, name: str) -> Subquery:
             Board.id,
             role_literal(BoardMemberRole.VIEWER),
             _via(BoardAccessVia.ORG),
+            _no_team(),
         )
         .select_from(grants)
         .join(Board, and_(org_boards, Board.visibility == BoardVisibility.ORG))

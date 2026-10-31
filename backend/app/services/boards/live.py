@@ -32,9 +32,13 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.board import Board
+from app.models.board_card import BoardCard
+from app.schemas.boards.card import CardDetail
 from app.services.access_recheck import recheck_topic
 from app.services.after_commit import publish_after_commit
 from app.services.boards.access import BoardAccess
+from app.services.boards.reads import card_detail, summary_json
 from app.services.ws_topic_policy import ACCESS_CHANGED_KEY
 
 
@@ -53,6 +57,9 @@ class BoardSocketEvent(StrEnum):
     STAGE_REORDERED = "stage_reordered"
     LABEL_CHANGED = "label_changed"
     MEMBER_CHANGED = "member_changed"
+    # Who can open the board changed (a member, a team's role or a team's
+    # people); open boards reload their people list. No payload.
+    PEOPLE_CHANGED = "people_changed"
     # A repository was linked (``linked: true`` with the ``repo``) or unlinked
     # (``linked: false`` with how many cards it ``cleared``).
     REPOS_CHANGED = "repos_changed"
@@ -91,6 +98,18 @@ class BoardChanges:
     def emit(self, event: BoardSocketEvent, **payload: Any) -> None:
         """Queue one event for after the commit."""
         self._events.append((event, payload))
+
+    async def card_summary(self, db: AsyncSession, board: Board, card: BoardCard) -> CardDetail:
+        """Queue ``card_updated`` with the card's summary as this request leaves it.
+
+        Call it from every write that changes something the summary derives
+        (assignees, labels, checklist counts, ``has_description``,
+        ``has_prd``, ...), so open boards check stage entry rules against
+        what's true now. Returns the card's detail for the response.
+        """
+        detail = await card_detail(db, board, card)
+        self.emit(BoardSocketEvent.CARD_UPDATED, card=summary_json(detail))
+        return detail
 
     def recheck_access(self, user_ids: set[uuid.UUID] | None) -> None:
         """Queue a re-check of these people's subscriptions (``None``: everyone's)."""

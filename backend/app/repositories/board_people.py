@@ -18,7 +18,8 @@ The same rule and the same people as
 :meth:`app.repositories.board_access.BoardAccessRepository.users_with_access`
 (active members of the org, teams expanded), with each person's highest
 role and the grant it comes from: their own row first on a tie, then a
-team's, then the ``boards:manage`` permission, then the org's.
+team's, then the ``boards:manage`` permission, then the org's. A role
+through a team names the team; when several teams grant it, the first by name.
 """
 
 import uuid
@@ -41,6 +42,7 @@ class PersonRow:
     avatar_url: str | None
     role: BoardMemberRole
     via: BoardAccessVia
+    team_name: str | None
 
 
 class BoardPeopleRepository:
@@ -61,14 +63,20 @@ class BoardPeopleRepository:
             else_=3,
         )
         best = (
-            select(rows.c.user_id, rows.c.role, rows.c.via)
+            select(rows.c.user_id, rows.c.role, rows.c.via, rows.c.team_name)
             .where(rows.c.board_id == board_id)
             .distinct(rows.c.user_id)
-            .order_by(rows.c.user_id, rows.c.role.desc(), via_rank)
+            .order_by(
+                rows.c.user_id,
+                rows.c.role.desc(),
+                via_rank,
+                func.lower(rows.c.team_name),
+                rows.c.team_name,
+            )
             .subquery("people_best")
         )
         stmt = (
-            select(User.id, User.name, User.avatar_url, best.c.role, best.c.via)
+            select(User.id, User.name, User.avatar_url, best.c.role, best.c.via, best.c.team_name)
             .join(best, best.c.user_id == User.id)
             .order_by(func.lower(User.name), User.id)
         )
@@ -79,6 +87,7 @@ class BoardPeopleRepository:
                 avatar_url=row.avatar_url,
                 role=BoardMemberRole(row.role),
                 via=BoardAccessVia(row.via),
+                team_name=row.team_name,
             )
             for row in (await self._db.execute(stmt)).all()
         ]

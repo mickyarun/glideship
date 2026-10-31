@@ -158,3 +158,12 @@ class BoardMemberRepository:
             TeamMember.org_id == self._org_id, TeamMember.team_id == team_id
         )
         return set((await self._db.execute(stmt)).scalars().all())
+
+    async def boards_granting_team(self, team_id: uuid.UUID) -> list[uuid.UUID]:
+        """Every board that gives the team a role, whatever the team's status."""
+        stmt = (
+            select(BoardTeam.board_id)
+            .where(BoardTeam.org_id == self._org_id, BoardTeam.team_id == team_id)
+            .order_by(BoardTeam.board_id)
+        )
+        return list((await self._db.execute(stmt)).scalars().all())
