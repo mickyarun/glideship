@@ -19,6 +19,7 @@
 import type { CardEvent } from '@/types/boards'
 import { isOlder, locate, removeCard, upsertCard, type Columns } from '@/utils/boardColumns'
 import type { CardFilters } from '@/utils/boardFilters'
+import { keepBudAccess } from '@/utils/handoverChips'
 
 export interface CardState {
   columns: Columns
@@ -32,10 +33,11 @@ export function bumpCount(counts: Record<string, number>, stageId: string, by: n
 }
 
 export function applyCardEvent(state: CardState, message: CardEvent): void {
-  const { card } = message
-  const held = locate(state.columns, card.id)
+  const held = locate(state.columns, message.card.id)
   // A late copy of a change we've already seen a newer version of.
-  if (held && isOlder(card, held.card)) return
+  if (held && isOlder(message.card, held.card)) return
+  // Socket copies never say I may open a BUD; keep what the last fetch said.
+  const card = keepBudAccess(message.card, held?.card)
   switch (message.event) {
     case 'card_archived':
       bumpCount(state.counts, held?.stageId ?? card.stage_id, -1)

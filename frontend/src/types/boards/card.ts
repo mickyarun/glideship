@@ -15,14 +15,24 @@
 // Cards: a column's summaries and one card's detail. Mirrors
 // backend/app/schemas/boards/card.py.
 
-import type { BUDPriority } from '@/types'
+import type { BUDPriority, BUDStatus } from '@/types'
 import type { StageRequiredField } from '@/types/boards/board'
 
-/** A BUD a card was handed over to, with that BUD's status (the server sends it as text). */
+/**
+ * A BUD the card was handed over to: its key and statuses, never its
+ * title. Socket copies always say ``can_open_bud: false``; merging one
+ * keeps the value last fetched (utils/handoverChips.ts).
+ */
 export interface HandoverChip {
   bud_id: string
-  status: string
+  bud_key: string
+  status: BUDStatus
+  handover_status: 'active' | 'returned'
+  can_open_bud: boolean
 }
+
+/** How far the card's live handovers are: none, some still in dev, all in prod. */
+export type CardDelivery = 'none' | 'in_progress' | 'delivered'
 
 export interface CardSummary {
   id: string
@@ -48,6 +58,7 @@ export interface CardSummary {
   /** One of the board's linked repositories. */
   repo_id: string | null
   handovers: HandoverChip[]
+  delivery: CardDelivery
 }
 
 /** One keyset page; pass ``next_cursor`` back as ``cursor``. Null on the last page. */

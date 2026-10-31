@@ -42,6 +42,9 @@
       </template>
     </AppCallout>
 
+    <!-- A BUD from a board card can go back to it before development starts. -->
+    <BUDSendBack :bud="bud" @sent="emit('reload-timeline')" />
+
     <!-- Reassignment dialog -->
     <v-dialog v-model="showReassignDialog" max-width="440">
       <v-card color="surface" class="pa-6">
@@ -78,6 +81,7 @@ import { subscribe, unsubscribe } from '@/services/socket'
 import { friendlyAgentError } from '@/types/agentErrors'
 import { ROLE_LABELS } from '@/types'
 import AppCallout from '@/components/common/AppCallout.vue'
+import BUDSendBack from '@/components/buds/origin/BUDSendBack.vue'
 import type { BUDDocument, UserRoleName } from '@/types'
 
 const props = defineProps<{

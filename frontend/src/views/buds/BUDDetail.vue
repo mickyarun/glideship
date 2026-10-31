@@ -85,16 +85,15 @@
           </div>
           <aside class="bud-page__aside" aria-label="BUD details">
             <BUDDetailsPanel :bud="bud" @change-assignee="changeAssignee" />
+            <BUDOriginPanel :bud-id="bud.id" :status="bud.status" />
             <BUDActivitySection :events="timelineEvents" :loading="timelineLoading" />
           </aside>
         </div>
       </div>
 
       <BUDDetailDialogs
-        ref="dialogs"
-        v-model:skill-settings-open="skillSettingsOpen" v-model:history-open="sectionDiffOpen"
-        v-model:delete-open="confirmDelete"
-        :bud="bud" :controller="statusController" :history-section="sectionDiffSection"
+        ref="dialogs" v-model:skill-settings-open="skillSettingsOpen" v-model:history-open="sectionDiffOpen"
+        v-model:delete-open="confirmDelete" :bud="bud" :controller="statusController" :history-section="sectionDiffSection"
         @restored="loadTimeline" @settings-saved="refreshAfterSettingsSave"
         @reverted="refreshBudAndTimeline" @confirm-delete="deleteBud"
       />
@@ -127,6 +126,7 @@ import BUDDetailTabBar from '@/components/buds/detail/BUDDetailTabBar.vue'
 import BUDDetailTabPanels from '@/components/buds/detail/BUDDetailTabPanels.vue'
 import BUDExternalLlmCallout from '@/components/buds/detail/BUDExternalLlmCallout.vue'
 import BUDStageStepper from '@/components/buds/detail/BUDStageStepper.vue'
+import BUDOriginPanel from '@/components/buds/origin/BUDOriginPanel.vue'
 import { useBudAgentTracking } from '@/composables/useBudAgentTracking'
 import { useBudDetailActions } from '@/composables/useBudDetailActions'
 import { useBudDetailChat } from '@/composables/useBudDetailChat'

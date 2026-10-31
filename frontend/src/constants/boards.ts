@@ -94,6 +94,34 @@ export const HANDOVER_TARGETS: { value: HandoverTarget; label: string }[] = [
   { value: 'tech_arch', label: 'Tech arch' },
 ]
 
+/** What each landing means for the new BUD, under the dialog's stage choice. */
+export const HANDOVER_TARGET_NOTES: Record<HandoverTarget, string> = {
+  bud: 'The PRD writer starts from what the card has.',
+  design: 'Requirements are marked done, credited to you. Only the Design agent runs.',
+  tech_arch: 'Requirements and design are marked done, credited to you. Only the Tech plan agent runs.',
+}
+/**
+ * A similar BUD this close (cosine distance) reads as a "close match"; the
+ * rest of the preview's list, up to its cut-off, as "possible". Mirrors
+ * THRESHOLD_AUTO_SKIP in backend/app/services/jira_dedup.py.
+ */
+export const HANDOVER_CLOSE_MATCH_DISTANCE = 0.25
+/** A card tile names this many of its BUDs; more show as the "1 of 3 in prod" roll-up. */
+export const BUD_CHIPS_SHOWN = 2
+/** How many BUDs the link picker lists at once; typing narrows them. */
+export const HANDOVER_LINK_RESULTS_MAX = 8
+/** ``?handover=1`` on a card's page opens its handover dialog (the board's card menu sends it). */
+export const HANDOVER_QUERY_KEY = 'handover'
+/** Starting words for a send-back's reason, one tap each. */
+export const SEND_BACK_REASONS = ['Unclear scope', 'Duplicate', 'Not now'] as const
+/**
+ * A send-back's reason, as the card comment holds it. Mirrors
+ * HANDOVER_RETURN_REASON_MAX_CHARS in backend/app/services/boards/constants.py.
+ */
+export const SEND_BACK_REASON_MAX = 9_900
+/** How many of the origin card's comments a BUD's Origin panel shows per page. */
+export const ORIGIN_COMMENTS_PAGE = 5
+
 /** On touch screens a card must be held this long before it drags, so the column still scrolls. */
 export const DRAG_TOUCH_DELAY_MS = 150
 /** How long a drag's slide animation runs (none when the OS asks for reduced motion). */

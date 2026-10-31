@@ -16,7 +16,8 @@
 
 <!-- A card's ⋯ menu: move it to another stage (the keyboard path for
      anything drag does; it lands at the bottom) or to another board, copy
-     its link, and archive or restore it. Items the board's capabilities don't allow are
+     its link, hand it over to Delivery (on its page, where the dialog
+     opens), and archive or restore it. Items the board's capabilities don't allow are
      left out, so a viewer sees only Copy link. A stage the card can't enter
      yet wears a lock and says what it needs; picking it explains and
      offers Open card. -->
@@ -61,6 +62,7 @@
         title="Move to another board…"
         @click="emit('move-board')"
       />
+      <v-list-item v-if="canHandOver" prepend-icon="mdi-truck-delivery-outline" title="Hand over to Delivery…" @click="handOver" />
       <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
       <template v-if="canArchive">
         <v-list-item
@@ -77,7 +79,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { CATEGORY_COLORS } from '@/constants/boards'
+import { CATEGORY_COLORS, HANDOVER_QUERY_KEY } from '@/constants/boards'
 import type { CardSummary, StageRead } from '@/types/boards'
 import { copyText } from '@/utils/clipboard'
 import { blockReason } from '@/utils/stageRules'
@@ -88,11 +90,21 @@ const props = defineProps<{
   boardKey: string
   canMove: boolean
   canArchive: boolean
+  /** Hand it over to Delivery: its page opens with the handover dialog. */
+  canHandOver?: boolean
 }>()
 
 const emit = defineEmits<{ move: [stageId: string]; 'move-board': []; archive: []; restore: []; copied: [] }>()
 
 const router = useRouter()
+
+function handOver(): void {
+  void router.push({
+    name: 'board-card',
+    params: { key: props.boardKey, number: props.card.number },
+    query: { [HANDOVER_QUERY_KEY]: '1' },
+  })
+}
 
 async function copy(): Promise<void> {
   const { href } = router.resolve({

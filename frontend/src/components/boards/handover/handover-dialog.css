@@ -1,0 +1,71 @@
+/*
+ * Copyright 2025-2026 Arun Rajkumar
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* The handover dialog: a heading, a scrolling body and a footer that stays
+   in view. On phones the body pads less and the footer wraps. */
+.handover-dialog {
+  display: flex;
+  flex-direction: column;
+}
+.handover-dialog__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 24px 24px 12px;
+}
+.handover-dialog__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.handover-dialog__desc {
+  margin: 0;
+  font-size: 13px;
+  color: rgb(var(--v-theme-ink-2));
+}
+.handover-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 24px 16px;
+  overflow-y: auto;
+}
+.handover-dialog__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px 20px;
+  border-top: 1px solid rgb(var(--v-theme-rule));
+}
+.handover-dialog__hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+@media (max-width: 600px) {
+  .handover-dialog__head,
+  .handover-dialog__body,
+  .handover-dialog__foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .handover-dialog__hint {
+    flex-basis: 100%;
+  }
+}

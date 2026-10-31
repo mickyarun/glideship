@@ -42,6 +42,7 @@ export function makeCard(id: string, over: Partial<CardSummary> = {}): CardSumma
     has_prd: false,
     repo_id: null,
     handovers: [],
+    delivery: 'none',
     ...over,
   }
 }

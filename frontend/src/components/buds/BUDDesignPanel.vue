@@ -538,11 +538,14 @@ onMounted(() => {
 // ``immediate: true`` covers the late-mount path — if the flag was
 // already flipped before the panel mounted, the watcher fires once
 // on subscription and runs the trigger.
+// A BUD that landed at design from a handover elsewhere waits, by id, in
+// ``designPendingFor`` until its own panel mounts, while it's still in design.
 watch(
-  () => budStore.designAvailable,
+  () => budStore.designAvailable || (budStore.designPendingFor === props.budId && props.editable),
   async (val) => {
     if (!val) return
     budStore.designAvailable = false
+    budStore.designPendingFor = null
     await triggerDesignGeneration()
   },
   { immediate: true },

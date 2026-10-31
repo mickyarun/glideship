@@ -18,8 +18,8 @@
      the ⋯ menu, the due date and the assignees sit above it and stay
      separately clickable without nesting interactive elements (editors
      change the last two right here). The card's repository, when it names
-     one the board links, shows as a small chip. Same rhythm as the BUD
-     board card. -->
+     one the board links, shows as a small chip, and the BUDs it was handed
+     over to as quiet chips. Same rhythm as the BUD board card. -->
 <template>
   <article class="card-tile" :class="{ 'card-tile--archived': card.archived_at }" :data-card-id="card.id">
     <div class="card-tile__top">
@@ -32,6 +32,7 @@
           :board-key="boardKey"
           :can-move="canMove"
           :can-archive="canArchive"
+          :can-hand-over="canHandOver"
           @move="(stageId) => emit('move', card, stageId)"
           @move-board="emit('move-board', card)"
           @archive="emit('archive', card)"
@@ -45,11 +46,12 @@
       <router-link :to="cardRoute" class="card-tile__link" draggable="false">{{ card.title }}</router-link>
     </h3>
 
-    <div v-if="labels.length || repo" class="card-tile__labels">
+    <div v-if="labels.length || repo || handedOver" class="card-tile__labels">
       <AppTag v-for="label in labels" :key="label.id" :color="labelColor(label.color)" sr-prefix="Label">
         {{ label.name }}
       </AppTag>
       <CardRepoChip v-if="repo" :name="repo.name" />
+      <CardBudChips :card="card" />
     </div>
 
     <div v-if="quickEdits || date || card.checklist_total || card.assignee_ids.length" class="card-tile__foot">
@@ -73,12 +75,14 @@
 import { computed } from 'vue'
 import BoardCardMenu from '@/components/boards/board/BoardCardMenu.vue'
 import CardAssigneePicker from '@/components/boards/board/CardAssigneePicker.vue'
+import CardBudChips from '@/components/boards/board/CardBudChips.vue'
 import CardDuePicker from '@/components/boards/board/CardDuePicker.vue'
 import CardRepoChip from '@/components/boards/board/CardRepoChip.vue'
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
 import { useCardQuickEdit } from '@/composables/useCardQuickEdit'
+import { usePermissions } from '@/composables/usePermissions'
 import { labelColor } from '@/constants/boards'
 import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
 import { dateChip } from '@/utils/cardChips'
@@ -103,7 +107,8 @@ const emit = defineEmits<{
 }>()
 
 const { canEdit } = useCardQuickEdit()
-const { repos } = useBoardContext()
+const { repos, board } = useBoardContext()
+const { hasPermission, canAccessEngineering } = usePermissions()
 // Unknown until the board's repositories load (or after an unlink): no chip.
 const repo = computed(() => repos.find(props.card.repo_id))
 
@@ -115,6 +120,12 @@ const labels = computed(() =>
   props.card.label_ids.map(id => props.labelsById.get(id)).filter((l): l is LabelRead => !!l),
 )
 const date = computed(() => dateChip(props.card, props.now))
+const handedOver = computed(() => props.card.handovers?.some(c => c.handover_status === 'active') ?? false)
+// The server re-checks; this only decides whether the menu offers it.
+const canHandOver = computed(
+  () => !!board.detail.value?.board.handover_enabled && board.can('hand_over') && !props.card.archived_at
+    && hasPermission('buds:create') && canAccessEngineering.value,
+)
 // Editors pick assignees and the due date right here; archived cards stay as they are.
 const quickEdits = computed(() => canEdit.value && !props.card.archived_at)
 </script>

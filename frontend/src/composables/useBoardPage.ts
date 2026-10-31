@@ -24,6 +24,7 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useBoard } from '@/composables/useBoard'
 import { useBoardFilters } from '@/composables/useBoardFilters'
+import { useBoardHandoverLive } from '@/composables/useBoardHandoverLive'
 import { useBoardPeople } from '@/composables/useBoardPeople'
 import { useBoardRepos } from '@/composables/useBoardRepos'
 import { useTopicChannel } from '@/composables/useTopicChannel'
@@ -131,9 +132,12 @@ export function useBoardPage(key: Ref<string>) {
     if (forOpenBoard()) void refreshBoard()
   }
 
+  // BUD chips: handovers and BUD status changes name only the card.
+  const handovers = useBoardHandoverLive(cards, forOpenBoard)
   useTopicChannel<BoardSocketMessage>(
     topic,
     {
+      ...handovers.handlers,
       card_created: onCard,
       card_updated: onCard,
       card_moved: onCard,

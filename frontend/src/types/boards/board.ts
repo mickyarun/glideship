@@ -32,7 +32,7 @@ export type LabelColor =
 
 /** What the caller may do on a board; the UI shows controls from this list. */
 export type BoardAction =
-  | 'view' | 'comment' | 'create_card' | 'edit_card' | 'move_card' | 'archive_card'
+  | 'view' | 'comment' | 'create_card' | 'edit_card' | 'move_card' | 'archive_card' | 'hand_over'
   | 'review_draft' | 'run_agent' | 'edit_settings' | 'manage_stages' | 'manage_members'
   | 'manage_labels' | 'configure_agents' | 'manage_repos' | 'import' | 'archive_board'
   | 'remove_any_attachment'

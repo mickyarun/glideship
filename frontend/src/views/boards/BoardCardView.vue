@@ -82,6 +82,9 @@
               :wanted="focus.wanted.value" @show-me="focus.showWanted" @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels" @repo="actions.setRepo"
               @priority="actions.setPriority" @due-done="actions.setDueDone"
             />
+            <CardHandoverPanel
+              v-if="board.board.handover_enabled" :card="card" :board="board" :feedback="feedback" :doc-max="limits?.doc_max ?? null"
+            />
           </aside>
         </div>
       </div>
@@ -92,13 +95,9 @@
         fix-label="Show me" @moved="move.moved" @fix="field => void focus.show(field)"
       />
       <AppConfirmDialog
-        :model-value="drafts.guard.asking.value"
-        title="Leave without saving?"
+        :model-value="drafts.guard.asking.value" title="Leave without saving?" action="Discard changes" color="error"
         :body="`Your changes to ${drafts.what.value ?? 'this card'} haven't been saved.`"
-        action="Discard changes"
-        color="error"
-        @update:model-value="open => !open && drafts.guard.answer(false)"
-        @confirm="drafts.guard.answer(true)"
+        @update:model-value="open => !open && drafts.guard.answer(false)" @confirm="drafts.guard.answer(true)"
       />
     </div>
   </div>
@@ -120,6 +119,7 @@ import CardOverview from '@/components/boards/card/CardOverview.vue'
 import CardSkeleton from '@/components/boards/card/CardSkeleton.vue'
 import CardStagePicker from '@/components/boards/card/CardStagePicker.vue'
 import CardStateNotes from '@/components/boards/card/CardStateNotes.vue'
+import CardHandoverPanel from '@/components/boards/handover/CardHandoverPanel.vue'
 import BUDDetailTabBar from '@/components/buds/detail/BUDDetailTabBar.vue'
 import BugComments from '@/components/bugs/BugComments.vue'
 import AppCallout from '@/components/common/AppCallout.vue'

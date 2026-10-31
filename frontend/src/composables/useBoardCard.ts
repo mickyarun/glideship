@@ -30,6 +30,7 @@ import { useTopicChannel } from '@/composables/useTopicChannel'
 import { boardCardApi } from '@/services/boardCardApi'
 import { boardTopic, type BoardSocketMessage, type CardDetail, type CardDocKind, type CardEvent } from '@/types/boards'
 import { isOlder } from '@/utils/boardColumns'
+import { keepBudAccess } from '@/utils/handoverChips'
 import { extractApiError } from '@/utils/errors'
 
 export interface CardLiveHooks {
@@ -112,12 +113,18 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
   function onCard(message: CardEvent): void {
     const held = detail.value
     if (!held || !isMine(message.card.id) || isOlder(message.card, held)) return
-    detail.value = { ...held, ...message.card }
+    detail.value = { ...held, ...keepBudAccess(message.card, held) }
     hooks.onHistory()
     // The description of an edit isn't in the summary.
     if (message.event !== 'card_updated') return
     void load({ quiet: true })
     hooks.onUpdated()
+  }
+
+  function reloadIfMine(message: { card_id: string }): void {
+    if (!isMine(message.card_id)) return
+    void load({ quiet: true })
+    hooks.onHistory()
   }
 
   const topic = computed(() => (page.board.detail.value ? boardTopic(page.board.detail.value.board.id) : null))
@@ -134,6 +141,10 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
       card_activity: message => {
         if (isMine(message.card_id)) hooks.onActivity()
       },
+      // Handed over, sent back, or a BUD it holds moved: its chips (and stage) change.
+      card_handed_over: reloadIfMine,
+      card_handover_returned: reloadIfMine,
+      card_handovers_changed: reloadIfMine,
       // An unlink clears the card's repository without a card_updated.
       repos_changed: message => {
         const held = detail.value
