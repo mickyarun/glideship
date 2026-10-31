@@ -51,7 +51,7 @@ from app.models.board_enums import (
     BoardVisibility,
     StageRequiredField,
 )
-from app.models.board_handover import BoardCardHandover
+from app.models.board_handover import BoardCardHandover, BoardCardHandoverKey
 from app.models.board_member import BoardMember, BoardTeam, BoardUserPrefs
 from app.models.board_repo import BoardRepo
 from app.models.bud import (
@@ -195,6 +195,7 @@ __all__ = [
     "BoardCardEvent",
     "BoardCardEventType",
     "BoardCardHandover",
+    "BoardCardHandoverKey",
     "BoardCardKeyAlias",
     "BoardCardLabel",
     "BoardHandoverStatus",

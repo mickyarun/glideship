@@ -15,6 +15,7 @@
 """Single entry point for recording BUD timeline events."""
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,8 +32,14 @@ async def record_event(
     actor_id: uuid.UUID | None = None,
     actor_name: str | None = None,
     detail: dict[str, Any] | None = None,
+    occurred_at: datetime | None = None,
 ) -> BUDTimelineEvent:
-    """Append a timeline event to a BUD."""
+    """Append a timeline event to a BUD.
+
+    ``created_at`` defaults to the transaction's start, so events written in
+    one transaction tie. A caller writing steps that must read in order
+    passes ``occurred_at`` from :func:`clock_now`.
+    """
     repo = BUDTimelineRepository(db, org_id=org_id)
     event = BUDTimelineEvent(
         org_id=org_id,
@@ -42,6 +49,13 @@ async def record_event(
         actor_name=actor_name,
         detail=detail,
     )
+    if occurred_at is not None:
+        event.created_at = occurred_at
     await repo.add(event)
     await repo.flush()
     return event
+
+
+async def clock_now(db: AsyncSession, org_id: uuid.UUID) -> datetime:
+    """The database's clock now; later on every call, even inside one transaction."""
+    return await BUDTimelineRepository(db, org_id=org_id).clock_now()

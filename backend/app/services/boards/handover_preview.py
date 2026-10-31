@@ -20,8 +20,9 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board_enums import BoardHandoverStatus
+from app.models.board_handover import BoardCardHandover
 from app.models.bud import BUDDocument
-from app.repositories.board_handover import BoardHandoverRepository
+from app.repositories.board_handover import BoardHandoverRepository, HandoverRow
 from app.schemas.boards.handover import (
     HandoverMode,
     HandoverPreview,
@@ -29,6 +30,7 @@ from app.schemas.boards.handover import (
     HandoverWarning,
     HandoverWarningCode,
     ImpactedRepo,
+    ReopenedBUD,
 )
 from app.services.boards.access import CardAccess
 from app.services.boards.handover_content import HandoverDraft, draft_for
@@ -38,7 +40,7 @@ from app.services.boards.handover_rules import (
     linkable_bud,
     target_of,
 )
-from app.services.boards.handover_similar import draft_embedding, similar_buds
+from app.services.boards.handover_similar import bud_key, draft_embedding, similar_buds
 
 _MESSAGES = {
     HandoverWarningCode.SIMILAR_BUDS: (
@@ -81,12 +83,15 @@ async def preview(db: AsyncSession, target: CardAccess, body: HandoverRequest) -
     """
     access, card = target.access, target.card
     check_allowed(access, card, body.mode)
-    handovers = await BoardHandoverRepository(db, org_id=access.org_id).list_for_card(card.id)
+    repo = BoardHandoverRepository(db, org_id=access.org_id)
+    handovers = await repo.list_for_card(card.id)
     warnings: list[HandoverWarning] = []
     if any(h.status is BoardHandoverStatus.ACTIVE for h, _ in handovers):
         warnings.append(_warning(HandoverWarningCode.ALREADY_HANDED_OVER))
     draft = await draft_for(db, access, card)
-    moves = not handovers and access.board.handover_stage_id not in (None, card.stage_id)
+    # As the confirm decides: the card moves when it holds no live handover.
+    first = await repo.count_live_for_card(card.id) == 0
+    moves = first and access.board.handover_stage_id not in (None, card.stage_id)
     if moves and draft.checklist_open:
         warnings.append(_warning(HandoverWarningCode.CHECKLIST_OPEN))
     if body.mode is HandoverMode.LINK:
@@ -106,8 +111,17 @@ async def preview(db: AsyncSession, target: CardAccess, body: HandoverRequest) -
         target_status=status,
         similar=similar,
         warnings=warnings,
+        reopens=_reopens(await repo.returned_discarded(card.id), handovers),
         **_draft_fields(draft),
     )
+
+
+def _reopens(reused: BoardCardHandover | None, handovers: list[HandoverRow]) -> ReopenedBUD | None:
+    """The sent-back BUD a create would restore, by key and status (never its title)."""
+    if reused is None:
+        return None
+    bud = next((b for h, b in handovers if h.id == reused.id), None)
+    return None if bud is None else ReopenedBUD(bud_key=bud_key(bud.number), status=bud.status)
 
 
 def _draft_fields(draft: HandoverDraft) -> dict[str, Any]:

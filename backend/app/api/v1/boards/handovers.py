@@ -14,10 +14,12 @@
 
 """Handing a card over to dev: preview, confirm, and the card's handovers.
 
-Preview and confirm need an editor on the board who also holds
-``workspace:engineering`` and ``buds:create`` (``buds:edit`` too, to link),
-re-checked in the service for every request.
+Preview, confirm and retry-start need an editor on the board who also holds
+``workspace:engineering``, ``buds:view`` and ``buds:create`` (``buds:edit``
+too, to link), re-checked in the service for every request.
 """
+
+import uuid
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,3 +67,13 @@ async def confirm_handover(
 ) -> HandoverResult:
     """Hand the card over; a repeated ``idempotency_key`` returns the first result."""
     return await handover_confirm.confirm(db, target, body)
+
+
+@router.post(f"{HANDOVERS}/{{handover_id}}/retry-start", response_model=HandoverResult)
+async def retry_handover_start(
+    handover_id: uuid.UUID,
+    target: CardAccess = Depends(hand_over_card),
+    db: AsyncSession = Depends(get_db),
+) -> HandoverResult:
+    """Start the handed-over BUD's stage again after it failed to start; 409 when it didn't."""
+    return await handover_confirm.retry_start(db, target, handover_id)

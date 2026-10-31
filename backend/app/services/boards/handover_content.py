@@ -20,6 +20,7 @@ design brief and a link back to the card. Copied once; later card edits
 don't reach the BUD.
 """
 
+import re
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,9 +105,35 @@ def _figma_url(attachments: list[BoardCardAttachment]) -> str | None:
     return None
 
 
-def _md_text(text: str) -> str:
-    """Text safe inside a markdown link label."""
-    return text.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+# Characters that start markdown syntax anywhere in a line, and at its start.
+_INLINE_SPECIAL = "\\`*_[]()<>!|"
+_LEADING_SPECIAL = "#->+*=~"
+_URL_UNSAFE = {"<": "%3C", ">": "%3E"}
+_ORDERED_LIST = re.compile(r"^(\d+)([.)])")
+
+
+def md_text(text: str) -> str:
+    """Card text on one line, escaped so it starts no heading, list, link or code."""
+    flat = " ".join(text.split())
+    escaped = "".join(f"\\{ch}" if ch in _INLINE_SPECIAL else ch for ch in flat)
+    if escaped and escaped[0] in _LEADING_SPECIAL:
+        return f"\\{escaped}"
+    # "1. " or "1) " would start an ordered list.
+    return _ORDERED_LIST.sub(r"\1\\\2", escaped)
+
+
+def md_url(url: str) -> str:
+    """A link destination in angle brackets, so a ``)`` in it can't end it early."""
+    flat = "".join(url.split())
+    return "<" + "".join(_URL_UNSAFE.get(ch, ch) for ch in flat) + ">"
+
+
+def without_board_section(requirements_md: str) -> str:
+    """The requirements before the generated "From the board" section."""
+    if requirements_md.lstrip().startswith(FROM_THE_BOARD):
+        return ""
+    head, _, _ = requirements_md.partition(f"\n{FROM_THE_BOARD}")
+    return head.strip()
 
 
 def _checklist_md(items: list[BoardCardChecklistItem]) -> str:
@@ -116,9 +143,9 @@ def _checklist_md(items: list[BoardCardChecklistItem]) -> str:
     for item in items:
         if item.group_name and item.group_name != group:
             group = item.group_name
-            lines.append(f"- {group}")
+            lines.append(f"- {md_text(group)}")
         indent = "  " if group else ""
-        lines.append(f"{indent}- [{'x' if item.done else ' '}] {item.text}")
+        lines.append(f"{indent}- [{'x' if item.done else ' '}] {md_text(item.text)}")
     return "\n".join(lines)
 
 
@@ -126,11 +153,11 @@ def _attachments_md(attachments: list[BoardCardAttachment], key: str, url: str) 
     """Links as links; files are named and point at the card that holds them."""
     lines = ["**Attachments**", ""]
     for item in attachments:
-        name = _md_text(item.filename or item.url or "")
+        name = md_text(item.filename or item.url or "")
         if item.kind is BoardAttachmentKind.LINK and item.url:
-            lines.append(f"- [{name}]({item.url})")
+            lines.append(f"- [{name}]({md_url(item.url)})")
         else:
-            lines.append(f"- {name} (a file on [{key}]({url}))")
+            lines.append(f"- {name} (a file on [{key}]({md_url(url)}))")
     return "\n".join(lines)
 
 
@@ -150,5 +177,5 @@ def _from_the_board(
         parts.append(_attachments_md(attachments, key, url))
     if brief_md and brief_md.strip():
         parts.append(f"**Design brief**\n\n{brief_md.strip()}")
-    parts.append(f"Handed over from [{key}]({url}).")
+    parts.append(f"Handed over from [{key}]({md_url(url)}).")
     return "\n\n".join(parts)

@@ -130,10 +130,7 @@ async def status_changes(factory: Factory, bud_id: uuid.UUID) -> list[tuple[Any,
             )
             .order_by(BUDTimelineEvent.created_at)
         )
-        return [
-            (r.detail["from"], r.detail["to"], r.detail.get("via"), r.actor_id)
-            for r in sorted(rows, key=lambda r: ["bud", "design"].index(r.detail["from"]))
-        ]
+        return [(r.detail["from"], r.detail["to"], r.detail.get("via"), r.actor_id) for r in rows]
 
 
 async def first_editor(factory: Factory, bud_id: uuid.UUID) -> uuid.UUID | None:

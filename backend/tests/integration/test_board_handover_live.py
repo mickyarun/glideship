@@ -64,7 +64,14 @@ async def test_the_board_hears_the_move_and_the_handover(
     moved, handed = events
     assert moved["card"]["stage_id"] == d.stage("Ready for dev")
     assert handed["card_id"] == made["card"]["id"]
-    assert handed["handover"] == made["handover"]
+    handover = made["handover"]
+    assert handed["handover"] == {
+        "id": handover["id"],
+        "bud_id": handover["bud_id"],
+        "bud_key": handover["bud_key"],
+        "bud_status": handover["bud_status"],
+        "status": "active",
+    }
     assert handed["actor_id"] == str(d.pm.id)
 
 

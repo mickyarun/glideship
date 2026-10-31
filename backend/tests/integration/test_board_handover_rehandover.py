@@ -111,7 +111,7 @@ async def test_a_retry_of_the_second_handover_replays_it(
 async def test_a_dev_side_discard_keeps_the_handover_live(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
-    """Discarded from the BUD: the row stays active and the chip shows the BUD discarded."""
+    """Discarded from the BUD: the row stays active, the chip shows it, delivery ignores it."""
     d = await desk(client, pg_session_factory)
     url = await card(client, d, description_md="x")
     made = await handed(client, d.pm, url)
@@ -131,7 +131,8 @@ async def test_a_dev_side_discard_keeps_the_handover_live(
     detail = ok(await client.get(url, headers=d.pm.headers))
     [chip] = detail["handovers"]
     assert (chip["status"], chip["handover_status"]) == ("discarded", "active")
-    assert detail["delivery"] == "in_progress"
+    # A BUD discarded on the dev side no longer counts toward the card's delivery.
+    assert detail["delivery"] == "none"
     # A fresh create on this card doesn't reuse it: only returned BUDs come back.
     second = await handed(client, d.pm, url)
     assert bud_of(second) != bud_of(made)

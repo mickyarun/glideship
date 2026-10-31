@@ -37,6 +37,7 @@ from app.services.boards.access import BoardCaller
 from app.services.boards.comment_service import read_comments
 from app.services.boards.cursor import decode_time_cursor, encode_cursor
 from app.services.boards.errors import BoardItemNotFoundError
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.handover_reads import handover_read
 from app.services.boards.reads import card_key
 
@@ -77,7 +78,10 @@ async def bud_origin(
             board=OriginBoard(key=board.key, name=board.name),
         ),
         comments=await _comments(db, org_id, card.id, cursor=cursor, limit=limit),
-        handovers=[handover_read(r) for r in await handovers.list_for_card(card.id)],
+        handovers=[
+            handover_read(r, can_open_bud=opens_buds(caller.perms))
+            for r in await handovers.list_for_card(card.id)
+        ],
     )
 
 

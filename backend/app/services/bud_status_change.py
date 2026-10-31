@@ -17,7 +17,8 @@
 The status PATCH and :func:`app.services.bud_discard.discard_bud` both call
 :func:`apply_status_change`. It doesn't set ``bud.status`` (except on entry
 to development, which the hook below needs), transition the linked feature
-or start agents: the callers do, in the order they always have.
+or start agents: the callers do, in the order they always have. A discard
+re-checks the origin card's delivery (:func:`recheck_after_discard`).
 """
 
 import uuid
@@ -26,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bud import BUDDocument, BUDStatus, BUDTimelineEventType
 from app.services.boards.handover_live import queue_origin_card_refresh
+from app.services.boards.notify import recheck_after_discard
 from app.services.bud_assignment import auto_assign_for_phase
 from app.services.bud_development import on_bud_development_started
 from app.services.bud_timeline import record_event
@@ -67,5 +69,8 @@ async def apply_status_change(
     # tech spec and assigned to the lead, PERT estimation scheduled.
     if entering_development:
         await on_bud_development_started(db, org_id, bud, actor_id=actor_id, actor_name=actor_name)
+    # A discarded BUD no longer holds its card's delivery back.
+    if new_status == BUDStatus.DISCARDED:
+        await recheck_after_discard(db, org_id, bud, actor_id=actor_id)
     # Boards holding the BUD refresh its chip once this commits; logged, never raised.
     await queue_origin_card_refresh(db, org_id, bud.id)

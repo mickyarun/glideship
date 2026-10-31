@@ -24,6 +24,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.board_card import BoardCard
 from app.models.board_card_detail import BoardCardComment
 from app.models.board_enums import BoardCardEventType
 from app.repositories.board_card_thread import BoardCardCommentRepository
@@ -65,22 +66,28 @@ async def add_comment(db: AsyncSession, target: CardAccess, body: str) -> Commen
     """Post a comment as the caller."""
     access, card = target.access, target.card
     check_open(card)
-    comment = await BoardCardCommentRepository(db, org_id=access.org_id).create(
-        BoardCardComment(
-            org_id=access.org_id, card_id=card.id, author_id=access.user_id, body=body
-        )
+    comment = await post_comment(db, card, author_id=access.user_id, body=body)
+    notice = await card_notify.stage_commented(db, access, card)
+    read = await _announce(db, target, comment)
+    card_notify.send(notice)
+    return read
+
+
+async def post_comment(
+    db: AsyncSession, card: BoardCard, *, author_id: uuid.UUID, body: str
+) -> BoardCardComment:
+    """Write a comment and its ``commented`` event; the caller announces and notifies."""
+    comment = await BoardCardCommentRepository(db, org_id=card.org_id).create(
+        BoardCardComment(org_id=card.org_id, card_id=card.id, author_id=author_id, body=body)
     )
     await record_event(
         db,
         card,
         BoardCardEventType.COMMENTED,
-        actor_id=access.user_id,
+        actor_id=author_id,
         detail={"comment_id": str(comment.id)},
     )
-    notice = await card_notify.stage_commented(db, access, card)
-    read = await _announce(db, target, comment)
-    card_notify.send(notice)
-    return read
+    return comment
 
 
 async def edit_comment(

@@ -121,8 +121,19 @@ class HandoverWarning(BaseModel):
     message: str
 
 
+class ReopenedBUD(BaseModel):
+    """The sent-back BUD a create-mode confirm would restore instead of making a new one."""
+
+    bud_key: str
+    status: BUDStatus
+
+
 class HandoverPreview(BaseModel):
-    """The BUD a confirm would create (or the one it would link), nothing written yet."""
+    """The BUD a confirm would create (or the one it would link), nothing written yet.
+
+    ``reopens`` names the BUD a create would bring back (the card's
+    most recently sent-back one, still discarded); null when it makes a new one.
+    """
 
     mode: HandoverMode
     target_status: BUDStatus
@@ -133,10 +144,17 @@ class HandoverPreview(BaseModel):
     impacted_repos: list[ImpactedRepo]
     similar: list[SimilarBUD]
     warnings: list[HandoverWarning]
+    reopens: ReopenedBUD | None = None
 
 
 class HandoverRead(BaseModel):
-    """One handover on a card, with the BUD as it is now (null fields once it's deleted)."""
+    """One handover on a card, with the BUD as it is now (null fields once it's deleted).
+
+    ``bud_title`` is sent only to callers who may open the BUD
+    (``can_open_bud``); everyone who sees the card sees the key and statuses.
+    ``stage_start_failed``: the target stage's agent didn't start after the
+    confirm; ``POST .../handovers/{id}/retry-start`` (or the same key again) retries.
+    """
 
     id: uuid.UUID
     card_id: uuid.UUID
@@ -151,13 +169,21 @@ class HandoverRead(BaseModel):
     handed_over_at: datetime
     returned_at: datetime | None
     return_reason: str | None
+    can_open_bud: bool
+    stage_start_failed: bool
 
 
 class HandoverResult(BaseModel):
-    """A confirmed (or replayed) handover, and the card as it now is."""
+    """A confirmed (or replayed) handover, and the card as it now is.
+
+    ``design_available``: the BUD just entered design with generation on
+    and no ready designs, so the client starts generating them as the BUD
+    page does on ``X-Design-Available``.
+    """
 
     handover: HandoverRead
     card: CardDetail
+    design_available: bool = False
 
 
 class HandoverList(BaseModel):

@@ -16,13 +16,15 @@
 
 A create-mode confirm on a card whose most recently returned handover still
 points at a discarded BUD reuses that BUD, so its number isn't spent twice.
-Inside the confirm's transaction (the card is already locked, then the BUD):
+Inside the confirm's transaction (the BUD is already locked, then the card):
 
 - the BUD is restored at ``bud`` through :func:`app.services.bud_restore.restore_bud`
   (``status_change`` tagged ``via: handover``, feature revived);
 - the refreshed draft replaces its title, requirements, priority, Figma
-  link, repositories, phase switches and embedding, and a new
-  ``bud_versions`` row records it with the handing-over person as editor;
+  link, repositories, phase switches, stage skill picks (replaced, or
+  cleared when none are given, as a new BUD starts with none) and
+  embedding, and a new ``bud_versions`` row records it with the
+  handing-over person as editor;
 - ``handed_over_from_board`` (``again: true``), then
   :func:`handover_landing.land` walks it to the target as a new BUD's would.
 
@@ -44,15 +46,15 @@ from app.repositories import bud_version as bud_version_repo
 from app.repositories.bud import BUDRepository
 from app.schemas.boards.handover import HandoverConfirm
 from app.services.boards.access import BoardAccess
-from app.services.boards.card_place import STALE_NEIGHBOURS
-from app.services.boards.errors import BoardConflictError
-from app.services.boards.handover_bud import HandedOverBUD, origin_detail, prepare
+from app.services.boards.handover_bud import HandedOverBUD, origin_detail
+from app.services.boards.handover_errors import BUDNotReturnedError
 from app.services.boards.handover_landing import VIA_HANDOVER, land
+from app.services.boards.handover_prepare import prepare
 from app.services.boards.handover_similar import draft_embedding
 from app.services.boards.reads import card_key
 from app.services.bud_restore import restore_bud
 from app.services.bud_stage_overrides import persist_stage_skill_overrides
-from app.services.bud_timeline import record_event
+from app.services.bud_timeline import clock_now, record_event
 
 
 async def hand_over_again(
@@ -67,15 +69,14 @@ async def hand_over_again(
     """Restore the returned BUD with the card's current draft and land it at the target.
 
     Raises:
-        BoardConflictError: The BUD was restored or deleted meanwhile; retry.
+        BUDNotReturnedError: The BUD was restored or deleted meanwhile.
         HandoverNeedsRequirementsError / BoardRuleError: As :func:`prepare`.
         StageSkillOverrideError: A stage skill pick doesn't fit its stage.
     """
-    buds = BUDRepository(db, org_id=access.org_id)
     bud_id = row.bud_id
-    bud = await buds.get_by_id(bud_id) if bud_id and await buds.lock_for_edit(bud_id) else None
+    bud = await BUDRepository(db, org_id=access.org_id).get_by_id(bud_id) if bud_id else None
     if bud is None or bud.status is not BUDStatus.DISCARDED:
-        raise BoardConflictError(STALE_NEIGHBOURS)
+        raise BUDNotReturnedError()
     prepared = await prepare(db, access, card, body)
     create = prepared.create
     await restore_bud(
@@ -94,10 +95,9 @@ async def hand_over_again(
     bud.impacted_repos = prepared.impacted_repos_json
     bud.auto_generate_phases = create.auto_generate_phases
     bud.embedding = await draft_embedding(access.org_id, create.title, create.requirements_md)
-    if create.stage_skill_overrides:
-        await persist_stage_skill_overrides(
-            db, access.org_id, bud.id, create.stage_skill_overrides
-        )
+    await persist_stage_skill_overrides(
+        db, access.org_id, bud.id, create.stage_skill_overrides or {}
+    )
     source = card_key(access.board.key, card.number)
     await bud_version_repo.insert_snapshot(
         db,
@@ -115,6 +115,7 @@ async def hand_over_again(
         actor_id=access.user_id,
         actor_name=actor_name,
         detail=origin_detail(access, card, target_status=prepared.target.value, again=True),
+        occurred_at=await clock_now(db, access.org_id),
     )
     previous = await land(
         db, access.org_id, bud, prepared.target, actor_id=access.user_id, actor_name=actor_name
@@ -127,8 +128,9 @@ def reactivate(
 ) -> BoardCardHandover:
     """Set the returned handover back to ``active`` for this confirm.
 
-    The new ``idempotency_key`` makes a retry of this confirm replay it; the
-    return's facts are cleared from the row and stay in the card's events.
+    The new ``idempotency_key`` is the row's current one (every key is also
+    kept in ``board_card_handover_keys``); the return's facts are cleared
+    from the row and stay in the card's events.
     """
     row.status = BoardHandoverStatus.ACTIVE
     row.target_status = landed
@@ -137,5 +139,6 @@ def reactivate(
     row.returned_by = None
     row.returned_at = None
     row.return_reason = None
+    row.stage_start_failed_at = None
     row.idempotency_key = key
     return row

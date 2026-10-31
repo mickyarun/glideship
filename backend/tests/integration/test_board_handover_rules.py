@@ -76,7 +76,13 @@ async def test_linking_needs_buds_edit(client: AsyncClient, pg_session_factory: 
     d = await desk(client, pg_session_factory)
     maker = await person(pg_session_factory, d.org, "pm")
     await give_custom_role(
-        pg_session_factory, d.org, maker.id, "boards:view", "workspace:engineering", "buds:create"
+        pg_session_factory,
+        d.org,
+        maker.id,
+        "boards:view",
+        "workspace:engineering",
+        "buds:view",
+        "buds:create",
     )
     await put_role(client, d.pm, d.key, maker.id, "editor")
     bud_id = await new_bud(pg_session_factory, d.org, 1, status=BUDStatus.DESIGN)

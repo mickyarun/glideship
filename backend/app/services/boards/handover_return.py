@@ -21,13 +21,14 @@ then the card (:mod:`handover_return_card`):
   (feature inactive, ``status_change``, a version) and gets a
   ``returned_to_board`` timeline event;
 - the handover row becomes ``returned`` with the reason;
-- the card gets the reason as a comment by the person sending it back, and
-  a ``returned`` event; with no other live handover left it moves to the
-  board's return stage;
+- the card gets the reason as a comment by the person sending it back
+  (with its ``commented`` event), and a ``returned`` event; with no other
+  live handover left it moves to the board's return stage;
 - the card's assignees get an in-app row and a DM (``board_handovers``).
 
-The board hears ``card_moved`` (when it moved) and ``card_handover_returned``
-after the commit. Neither, nor the card event, carries the BUD's title.
+The board hears ``card_moved`` (when it moved), ``card_activity`` (the
+comment) and ``card_handover_returned`` after the commit. None of them,
+nor the card events, carries the BUD's title.
 """
 
 import uuid
@@ -57,6 +58,7 @@ from app.services.boards.handover_return_card import (
 from app.services.boards.handover_return_rules import (
     BUDPastReturnError,
     HandoverNotActiveError,
+    discarded_on_dev_side,
 )
 from app.services.boards.handover_similar import bud_key
 from app.services.boards.live import BoardChanges, BoardSocketEvent
@@ -91,10 +93,12 @@ async def return_to_board(
     row = await BoardHandoverRepository(db, org_id=org_id).active_for_bud(bud.id)
     if row is None:
         raise HandoverNotActiveError()
+    key = bud_key(bud.bud_number)
+    if bud.status is BUDStatus.DISCARDED:
+        raise discarded_on_dev_side(key)
     if bud.status not in HANDOVER_LANDING_STATUSES:
         raise BUDPastReturnError(bud.status)
     locked = await lock_card(db, org_id, row.card_id)
-    key = bud_key(bud.bud_number)
     await discard_bud(db, org_id, bud, actor_id=actor_id, actor_name=actor_name)
     await record_bud_event(
         db,
@@ -115,7 +119,10 @@ async def return_to_board(
     notice = await handover_notices.stage_returned(
         db, locked.board, locked.card, bud_key=key, actor_id=actor_id, reason=reason
     )
-    read = handover_read((row, HandoverBUD(bud.bud_number, bud.title, bud.status)))
+    # A BUD route: the caller is working on the BUD, so the title is theirs to see.
+    read = handover_read(
+        (row, HandoverBUD(bud.bud_number, bud.title, bud.status)), can_open_bud=True
+    )
     await _announce(db, locked, moved, row, bud, actor_id)
     send(notice)
     return read
@@ -139,7 +146,7 @@ async def _card_side(
     """The comment, the move when no live handover is left, and the ``returned`` event."""
     await db.flush()
     handovers = BoardHandoverRepository(db, org_id=row.org_id)
-    alone = await handovers.count_active_for_card(locked.card.id) == 0
+    alone = await handovers.count_live_for_card(locked.card.id) == 0
     moved = await move_to_return_stage(db, locked) if alone else ReturnMove(to_stage=None)
     comment = await post_reason(
         db, locked.card, author_id=actor_id, lead=f"Sent back from {key}: ", reason=reason
@@ -175,6 +182,8 @@ async def _announce(
             card=summary_json(detail),
             from_stage_id=str(locked.from_stage.id),
         )
+    # The reason went up as a comment; open panels reload the thread.
+    changes.emit(BoardSocketEvent.CARD_ACTIVITY, card_id=str(locked.card.id))
     changes.emit(
         BoardSocketEvent.CARD_HANDOVER_RETURNED,
         card_id=str(locked.card.id),

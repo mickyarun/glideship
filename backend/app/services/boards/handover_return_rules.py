@@ -24,12 +24,19 @@ from app.services.boards.errors import BoardConflictError, BoardErrorCode
 class HandoverNotActiveError(BoardConflictError):
     """The BUD has no live origin card (409 ``HANDOVER_NOT_ACTIVE``)."""
 
-    def __init__(self) -> None:
-        super().__init__("This BUD wasn't handed over from a card, or was already sent back.")
+    def __init__(
+        self, message: str = "This BUD wasn't handed over from a card, or was already sent back."
+    ) -> None:
+        super().__init__(message)
 
     def body(self) -> Mapping[str, Any]:
         """The code clients branch on."""
         return {"code": BoardErrorCode.HANDOVER_NOT_ACTIVE}
+
+
+def discarded_on_dev_side(key: str) -> HandoverNotActiveError:
+    """A BUD discarded on the dev side keeps its card, but only a restore brings it back."""
+    return HandoverNotActiveError(f"{key} was discarded; restore it first.")
 
 
 class BUDPastReturnError(BoardConflictError):

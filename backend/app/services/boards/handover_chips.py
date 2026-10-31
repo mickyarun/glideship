@@ -60,8 +60,17 @@ def all_delivered(statuses: Sequence[BUDStatus]) -> bool:
 
 
 def delivery(rows: Sequence[HandoverChipRow]) -> CardDelivery:
-    """``none`` without a live handover, ``delivered`` when all reached prod, else in progress."""
-    live = [row.status for row in rows if row.handover_status is BoardHandoverStatus.ACTIVE]
+    """``none`` without a live handover, ``delivered`` when all reached prod, else in progress.
+
+    Live as :func:`app.repositories.board_handover.live_handover` says: a
+    discarded BUD's chip shows, but it doesn't hold the card's delivery back.
+    """
+    live = [
+        row.status
+        for row in rows
+        if row.handover_status is BoardHandoverStatus.ACTIVE
+        and row.status is not BUDStatus.DISCARDED
+    ]
     if not live:
         return CardDelivery.NONE
     return CardDelivery.DELIVERED if all_delivered(live) else CardDelivery.IN_PROGRESS

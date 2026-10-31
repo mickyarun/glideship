@@ -12,19 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A card's handovers as the API returns them."""
+"""A card's handovers as the API and the board's live events show them.
+
+Anyone who sees the card sees each handover's BUD key and statuses; the
+BUD's title only goes to callers who may open it (``buds:view`` and
+``workspace:engineering``). Board topics carry ids, keys and statuses only.
+"""
+
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.board_handover import BoardHandoverRepository, HandoverRow
 from app.schemas.boards.handover import HandoverList, HandoverRead
 from app.services.boards.access import CardAccess
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.handover_rules import can_hand_over
 from app.services.boards.handover_similar import bud_key
 
 
-def handover_read(row: HandoverRow) -> HandoverRead:
-    """One handover, with its BUD's key, title and status (null once the BUD is gone)."""
+def handover_read(row: HandoverRow, *, can_open_bud: bool) -> HandoverRead:
+    """One handover, with its BUD's key and status (null once the BUD is gone)."""
     handover, bud = row
     return HandoverRead(
         id=handover.id,
@@ -34,20 +42,34 @@ def handover_read(row: HandoverRow) -> HandoverRead:
         target_status=handover.target_status,
         bud_id=handover.bud_id,
         bud_key=bud_key(bud.number) if bud else None,
-        bud_title=bud.title if bud else None,
+        bud_title=bud.title if bud and can_open_bud else None,
         bud_status=bud.status if bud else None,
         handed_over_by=handover.handed_over_by,
         handed_over_at=handover.handed_over_at,
         returned_at=handover.returned_at,
         return_reason=handover.return_reason,
+        can_open_bud=can_open_bud,
+        stage_start_failed=handover.stage_start_failed_at is not None,
     )
+
+
+def live_handover(read: HandoverRead) -> dict[str, Any]:
+    """A handover as a board topic carries it: ids, the key and statuses."""
+    return {
+        "id": str(read.id),
+        "bud_id": str(read.bud_id) if read.bud_id else None,
+        "bud_key": read.bud_key,
+        "bud_status": read.bud_status.value if read.bud_status else None,
+        "status": read.status.value,
+    }
 
 
 async def list_handovers(db: AsyncSession, target: CardAccess) -> HandoverList:
     """The card's handovers, oldest first, and whether the caller may add one now."""
     repo = BoardHandoverRepository(db, org_id=target.access.org_id)
+    opens = opens_buds(target.access.perms)
     rows = await repo.list_for_card(target.card.id)
     return HandoverList(
-        items=[handover_read(row) for row in rows],
+        items=[handover_read(row, can_open_bud=opens) for row in rows],
         can_hand_over=can_hand_over(target.access, target.card),
     )

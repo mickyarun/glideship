@@ -17,9 +17,10 @@
 Create goes through :func:`app.services.bud_create.create_bud` at ``bud``,
 without starting that stage. Its first ``bud_versions`` row is written with
 the handing-over person as editor, so BUD authorship (the earliest
-version's editor) names them. A ``handed_over_from_board`` event follows,
-then :func:`handover_landing.land` walks it to the target. A link leaves
-the BUD as it is apart from that event.
+version's editor) names them. A ``handed_over_from_board`` event follows
+(stamped from the database clock, so it reads after ``created``), then
+:func:`handover_landing.land` walks it to the target. A link leaves the BUD
+as it is apart from that event; the confirm has already locked that BUD.
 """
 
 import uuid
@@ -32,28 +33,18 @@ from app.models.board_card import BoardCard
 from app.models.bud import BUDDocument, BUDStatus, BUDTimelineEventType
 from app.models.bud_version import BUDEditSource
 from app.repositories import bud_version as bud_version_repo
-from app.repositories.board_repo import BoardRepoRepository
-from app.repositories.bud import BUDRepository
-from app.schemas.boards.handover import HandoverConfirm, HandoverOverrides, ImpactedRepo
-from app.schemas.bud import BUDCreate
+from app.schemas.boards.handover import HandoverConfirm
 from app.services.boards.access import BoardAccess
-from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
-from app.services.boards.handover_content import draft_for, impacted
 from app.services.boards.handover_landing import land
-from app.services.boards.handover_rules import (
-    BUD_NOT_FOUND,
-    check_requirements,
-    linkable_bud,
-    target_of,
-)
+from app.services.boards.handover_prepare import prepare
+from app.services.boards.handover_rules import linkable_bud
 from app.services.boards.handover_similar import draft_embedding
 from app.services.boards.reads import card_key
 from app.services.bud_create import create_bud
-from app.services.bud_timeline import record_event
+from app.services.bud_timeline import clock_now, record_event
 
 # The ``created`` event's source for a BUD made by handing a card over.
 SOURCE_BOARD = "board"
-UNKNOWN_REPOS = "Pick repositories from the organisation's active ones."
 
 
 @dataclass(frozen=True)
@@ -72,59 +63,6 @@ def origin_detail(access: BoardAccess, card: BoardCard, **extra: Any) -> dict[st
         "card_key": card_key(access.board.key, card.number),
         **extra,
     }
-
-
-async def _repos(
-    db: AsyncSession, access: BoardAccess, drafted: list[ImpactedRepo], o: HandoverOverrides
-) -> list[ImpactedRepo]:
-    if o.impacted_repo_ids is None:
-        return drafted
-    wanted = list(dict.fromkeys(o.impacted_repo_ids))
-    found = await BoardRepoRepository(db, org_id=access.org_id).active_among(wanted)
-    if len(found) != len(wanted):
-        raise BoardRuleError(UNKNOWN_REPOS)
-    return impacted(found)
-
-
-@dataclass(frozen=True)
-class PreparedBUD:
-    """What a confirm writes into the BUD: the create body, its repositories and target."""
-
-    create: BUDCreate
-    repos: list[ImpactedRepo]
-    target: BUDStatus
-
-    @property
-    def impacted_repos_json(self) -> list[dict[str, Any]] | None:
-        """The repositories as ``bud_documents.impacted_repos`` stores them."""
-        return [repo.model_dump(mode="json") for repo in self.repos] or None
-
-
-async def prepare(
-    db: AsyncSession, access: BoardAccess, card: BoardCard, body: HandoverConfirm
-) -> PreparedBUD:
-    """The card's draft with the dialog's edits, checked for the landing it asks for.
-
-    Raises:
-        HandoverNeedsRequirementsError: A tech-plan landing with nothing to plan from.
-        BoardRuleError: An overridden repository isn't one of the org's active ones.
-    """
-    draft = await draft_for(db, access, card)
-    o = body.overrides or HandoverOverrides()
-    title = o.title or draft.title
-    requirements = draft.requirements_md if o.requirements_md is None else o.requirements_md
-    target = target_of(access, body)
-    check_requirements(target, draft.source_md if o.requirements_md is None else requirements)
-    repos = await _repos(db, access, draft.impacted_repos, o)
-    create = BUDCreate(
-        title=title,
-        requirements_md=requirements or None,
-        priority=draft.priority,
-        figma_url=draft.figma_url,
-        auto_generate_phases={s.value: on for s, on in body.auto_generate_phases.items()},
-        stage_skill_overrides=body.stage_skill_overrides,
-    )
-    return PreparedBUD(create=create, repos=repos, target=target)
 
 
 async def create_and_land(
@@ -170,6 +108,7 @@ async def create_and_land(
         actor_id=access.user_id,
         actor_name=actor_name,
         detail=origin_detail(access, card, target_status=target.value),
+        occurred_at=await clock_now(db, access.org_id),
     )
     previous = await land(
         db, access.org_id, bud, target, actor_id=access.user_id, actor_name=actor_name
@@ -187,12 +126,12 @@ async def link(
 ) -> HandedOverBUD:
     """Make the card the BUD's origin; the BUD gets one timeline event and nothing else.
 
+    The caller holds the BUD's lock, so the checks are final here.
+
     Raises:
         BoardItemNotFoundError / BUDNotOpenError / BUDAlreadyLinkedError /
             BUDHasOtherOriginError: As :func:`handover_rules.linkable_bud`.
     """
-    if not await BUDRepository(db, org_id=access.org_id).lock_for_edit(bud_id):
-        raise BoardItemNotFoundError(BUD_NOT_FOUND)
     bud = await linkable_bud(db, access, card, bud_id)
     await record_event(
         db,
@@ -202,5 +141,6 @@ async def link(
         actor_id=access.user_id,
         actor_name=actor_name,
         detail=origin_detail(access, card, linked=True),
+        occurred_at=await clock_now(db, access.org_id),
     )
     return HandedOverBUD(bud=bud, previous=None)

@@ -48,10 +48,10 @@ async def queue_origin_card_refresh(
     db: AsyncSession, org_id: uuid.UUID, bud_id: uuid.UUID
 ) -> None:
     """Queue ``card_handovers_changed`` for each card holding a handover of the BUD."""
-    # One read, without autoflush, so the caller's writes flush when they
-    # always have; no SAVEPOINT for the same reason (it would flush first).
+    # In a SAVEPOINT, so a failed read rolls back only itself and never
+    # aborts the caller's transaction (it flushes the caller's writes first).
     try:
-        with db.no_autoflush:
+        async with db.begin_nested():
             cards = await BoardHandoverRepository(db, org_id=org_id).cards_for_bud(bud_id)
     except Exception:
         logger.exception("origin_card_refresh_failed", bud_id=str(bud_id))

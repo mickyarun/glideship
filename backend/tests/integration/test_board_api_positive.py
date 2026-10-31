@@ -112,8 +112,12 @@ READS: dict[str, dict[str, str]] = {
 }
 
 # Editor routes that also need engineering permissions this editor lacks;
-# test_board_handover_rules covers who may use them.
-HANDOVER_EDITS = {("POST", f"{CARD}/handovers"), ("POST", f"{CARD}/handovers/preview")}
+# test_board_handover_rules and test_board_handover_stage_start cover them.
+HANDOVER_EDITS = {
+    ("POST", f"{CARD}/handovers"),
+    ("POST", f"{CARD}/handovers/preview"),
+    ("POST", f"{CARD}/handovers/{{handover_id}}/retry-start"),
+}
 
 # In order: later rows rely on earlier ones (restore after archive, delete last).
 EDITS: list[tuple[str, str, dict[str, Any]]] = [

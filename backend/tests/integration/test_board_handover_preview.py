@@ -77,7 +77,7 @@ async def test_preview_builds_the_draft_and_writes_nothing(
     assert (shown["mode"], shown["target_status"]) == ("create", "bud")
     body = shown["requirements_md"]
     assert body.startswith("The PRD\n\n## From the board")
-    assert "- [ ] Copy" in body and "[Spec](https://example.com/spec)" in body
+    assert "- [ ] Copy" in body and "[Spec](<https://example.com/spec>)" in body
     assert "Calm, two columns" in body and f"/boards/{d.key}/cards/" in body
     assert "Old description" not in body
     assert "CHECKLIST_OPEN" in [w["code"] for w in shown["warnings"]]

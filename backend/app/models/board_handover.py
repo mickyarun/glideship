@@ -15,8 +15,10 @@
 """A card handed over to dev: the one record of where a BUD came from.
 
 A card can hold several handovers, one per BUD. A BUD has at most one
-active origin card. ``idempotency_key`` comes from the client, so a retry
-or a double click returns the first handover instead of making a second BUD.
+active origin card. Every confirm's ``idempotency_key`` (from the client)
+is kept in ``board_card_handover_keys``, so a retry or a double click of
+any confirm, even one before a send-back and a second handover, returns
+that handover instead of making another BUD.
 """
 
 import uuid
@@ -60,6 +62,7 @@ class BoardCardHandover(BaseModel):
             postgresql_where=text(f"status = '{BoardHandoverStatus.ACTIVE.value}'"),
         ),
         Index("ix_board_card_handovers_card_at", "card_id", "handed_over_at"),
+        Index("ix_board_card_handovers_bud", "bud_id"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -92,7 +95,36 @@ class BoardCardHandover(BaseModel):
     )
     returned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     return_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The key of the confirm that made the row live now; every key is in
+    # ``board_card_handover_keys``, which replays read.
     idempotency_key: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Set when the target stage's agent failed to start after the commit;
+    # cleared once a retry starts it.
+    stage_start_failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     def __repr__(self) -> str:
         return f"<BoardCardHandover(card_id={self.card_id}, bud_id={self.bud_id})>"
+
+
+class BoardCardHandoverKey(BaseModel):
+    """One confirm's idempotency key on a card, and the handover it made or reused."""
+
+    __tablename__ = "board_card_handover_keys"
+    __table_args__ = (
+        card_fk("board_card_handover_keys"),
+        UniqueConstraint(
+            "card_id", "idempotency_key", name="uq_board_card_handover_keys_card_key"
+        ),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    card_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    handover_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("board_card_handovers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )

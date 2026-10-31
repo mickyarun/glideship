@@ -12,48 +12,53 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Hand a card over to dev: one transaction, then the target stage and the owner's notice.
+"""Hand a card over to dev: one transaction, then the target stage's agent.
 
-The transaction locks the card (:mod:`handover_card_stage`), returns the
-first result for a repeated ``idempotency_key``, moves the card to the
-handover stage on its first handover, creates and lands the BUD or links
-one (:mod:`handover_bud`), inserts the ``board_card_handovers`` row and a
-``handed_over`` card event, and queues the board's live events.
+The transaction takes the locks (:mod:`handover_locks`: BUD, then the card)
+or returns the first result for a repeated ``idempotency_key``, moves the
+card to the handover stage when it holds no live handover, creates and lands
+the BUD (assigning the target stage's owner) or links one
+(:mod:`handover_bud`), records the handover row, its key and a
+``handed_over`` card event, stages the owner's notice and queues the
+board's live events.
 
-After it commits: assignment and the agent for the target stage
-(:func:`handover_landing.start_target_stage`), then the owner's in-app row
-and Slack DM. Those are logged, not raised, if they fail: the handover is
-already saved, and a retry would only replay it.
+After it commits: the owner's DM, then the agent for the target stage
+(:mod:`handover_stage_start`). A failed start is logged and marked on the
+handover, never raised: the handover is saved, and a replay of the same key
+(or the retry route) starts it again.
 """
 
-from datetime import UTC, datetime
+import uuid
 
-import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.board_enums import BoardCardEventType, BoardHandoverStatus
 from app.models.board_handover import BoardCardHandover
-from app.repositories.board_handover import BoardHandoverRepository, HandoverBUD
+from app.repositories.board_handover import BoardHandoverRepository, HandoverBUD, HandoverRow
 from app.repositories.user import UserRepository
-from app.schemas.boards.handover import HandoverConfirm, HandoverMode, HandoverRead, HandoverResult
+from app.schemas.boards.card import CardDetail
+from app.schemas.boards.handover import HandoverConfirm, HandoverMode, HandoverResult
 from app.services.boards.access import BoardAccess, CardAccess
 from app.services.boards.card_notify import send
-from app.services.boards.errors import BoardRuleError
-from app.services.boards.events import record_event
+from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.handover_bud import HandedOverBUD, create_and_land, link
-from app.services.boards.handover_card_stage import CardStage, lock_card, move_on_first_handover
+from app.services.boards.handover_card_stage import move_on_first_handover
 from app.services.boards.handover_chips import opens_buds
-from app.services.boards.handover_landing import start_target_stage
+from app.services.boards.handover_locks import lock_for_confirm
 from app.services.boards.handover_notify import stage_owner_notice
 from app.services.boards.handover_reads import handover_read
-from app.services.boards.handover_rehandover import hand_over_again, reactivate
+from app.services.boards.handover_record import announce, record
+from app.services.boards.handover_rehandover import hand_over_again
 from app.services.boards.handover_rules import check_allowed
-from app.services.boards.handover_similar import bud_key
-from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.reads import card_detail, summary_json
+from app.services.boards.handover_stage_start import (
+    StageStart,
+    restart_failed,
+    retry,
+    start_stage,
+)
+from app.services.boards.reads import card_detail
 from app.services.bud_stage_overrides import StageSkillOverrideError
 
-logger = structlog.get_logger(__name__)
+HANDOVER_NOT_FOUND = "Handover not found."
 
 
 async def confirm(db: AsyncSession, target: CardAccess, body: HandoverConfirm) -> HandoverResult:
@@ -65,50 +70,99 @@ async def confirm(db: AsyncSession, target: CardAccess, body: HandoverConfirm) -
         StageRequirementsMissingError / ChecklistOpenError: The first
             handover can't move the card into the handover stage.
         HandoverNeedsRequirementsError, BUDNotOpenError, BUDAlreadyLinkedError,
-            BUDHasOtherOriginError, BoardItemNotFoundError: From the BUD side.
+            BUDHasOtherOriginError, BUDNotReturnedError, BoardItemNotFoundError:
+            From the BUD side.
     """
     access, card = target.access, target.card
     check_allowed(access, card, body.mode)
-    locked = await lock_card(db, target)
+    locks = await lock_for_confirm(db, target, body)
+    if locks.replay is not None:
+        return await replayed(db, target, locks.replay)
+    assert locks.card is not None  # set whenever there's no replay
     handovers = BoardHandoverRepository(db, org_id=access.org_id)
-    replay = await handovers.by_idempotency_key(card.id, body.idempotency_key)
-    opens = opens_buds(access.perms)
-    if replay is not None:
-        detail = await card_detail(db, access.board, card, opens_buds=opens)
-        return HandoverResult(handover=handover_read(replay), card=detail)
     # Moves into the handover stage when the card holds no live handover:
-    # its first, or the first since every earlier one was sent back.
-    first = await handovers.count_active_for_card(card.id) == 0
+    # its first, or the first since every earlier one was sent back or discarded.
+    first = await handovers.count_live_for_card(card.id) == 0
     stage = await move_on_first_handover(
-        db, target, locked, first=first, confirm_open_checklist=body.confirm_open_checklist
+        db, target, locks.card, first=first, confirm_open_checklist=body.confirm_open_checklist
     )
     actor_name = await _actor_name(db, access)
-    reused = None
     if body.mode is HandoverMode.LINK:
         assert body.bud_id is not None  # the schema requires it for a link
         result = await link(db, access, card, body.bud_id, actor_name=actor_name)
     else:
-        reused = await handovers.returned_discarded(card.id)
-        result = await _create(db, target, body, reused, actor_name)
-    read = await _record(db, target, body, result, stage, reused)
-    detail = await card_detail(db, access.board, card, opens_buds=opens)
-    changes = BoardChanges.of(access)
-    if stage.rebalanced and stage.to_stage is not None:
-        changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(stage.to_stage.id))
-    if stage.moved:
-        changes.emit(
-            BoardSocketEvent.CARD_MOVED,
-            card=summary_json(detail),
-            from_stage_id=str(stage.from_stage.id),
+        result = await _create(db, target, body, locks.reused, actor_name)
+    row = await record(db, target, body, result, stage, locks.reused)
+    notice = await stage_owner_notice(db, access, card, result.bud)
+    bud = result.bud
+    read_row: HandoverRow = (row, HandoverBUD(bud.bud_number, bud.title, bud.status))
+    detail = await card_detail(db, access.board, card, opens_buds=opens_buds(access.perms))
+    await announce(db, target, stage, read_row, detail)
+    send(notice)
+    started = StageStart()
+    handover_id = row.id
+    if result.previous is not None:
+        started = await start_stage(
+            db, access.org_id, handover_id, bud, result.previous, actor_id=access.user_id
         )
-    changes.emit(
-        BoardSocketEvent.CARD_HANDED_OVER,
-        card_id=str(card.id),
-        handover=read.model_dump(mode="json"),
+    return await _result(db, target, handover_id, started, detail)
+
+
+async def replayed(db: AsyncSession, target: CardAccess, row: HandoverRow) -> HandoverResult:
+    """The first result for a repeated key, starting its stage again if that had failed."""
+    access = target.access
+    handover_id = row[0].id
+    started = await restart_failed(db, access.org_id, row, actor_id=access.user_id)
+    return await _result(db, target, handover_id, started or StageStart())
+
+
+async def retry_start(
+    db: AsyncSession, target: CardAccess, handover_id: uuid.UUID
+) -> HandoverResult:
+    """Start a handover's target stage again after it failed to start.
+
+    Raises:
+        HandoverPermissionError / HandoverDisabledError: As ``check_allowed`` (create).
+        BoardItemNotFoundError: No such handover on the card.
+        HandoverStageStartedError: Nothing to retry.
+    """
+    access = target.access
+    check_allowed(access, target.card, HandoverMode.CREATE)
+    row = await BoardHandoverRepository(db, org_id=access.org_id).on_card(
+        target.card.id, handover_id
     )
-    await changes.commit(db)
-    await _after_commit(db, target, result, actor_name)
-    return HandoverResult(handover=read, card=detail)
+    if row is None:
+        raise BoardItemNotFoundError(HANDOVER_NOT_FOUND)
+    started = await retry(db, access.org_id, row, actor_id=access.user_id)
+    return await _result(db, target, handover_id, started)
+
+
+async def _result(
+    db: AsyncSession,
+    target: CardAccess,
+    handover_id: uuid.UUID,
+    started: StageStart,
+    detail: CardDetail | None = None,
+) -> HandoverResult:
+    """The handover as it now is (its stage start may have failed) and the card."""
+    access = target.access
+    if started.failed:
+        # The failed start rolled back, expiring the board and the card.
+        for held in (access.board, target.card):
+            await db.refresh(held)
+    opens = opens_buds(access.perms)
+    if detail is None:
+        detail = await card_detail(db, access.board, target.card, opens_buds=opens)
+    row = await BoardHandoverRepository(db, org_id=access.org_id).on_card(
+        target.card.id, handover_id
+    )
+    if row is None:
+        raise BoardItemNotFoundError(HANDOVER_NOT_FOUND)
+    return HandoverResult(
+        handover=handover_read(row, can_open_bud=opens),
+        card=detail,
+        design_available=started.design_available,
+    )
 
 
 async def _create(
@@ -126,83 +180,6 @@ async def _create(
         return await create_and_land(db, access, card, body, actor_name=actor_name)
     except StageSkillOverrideError as exc:
         raise BoardRuleError(str(exc)) from exc
-
-
-async def _record(
-    db: AsyncSession,
-    target: CardAccess,
-    body: HandoverConfirm,
-    result: HandedOverBUD,
-    stage: CardStage,
-    reused: BoardCardHandover | None = None,
-) -> HandoverRead:
-    """Insert the handover row (or reactivate the reused one) and a ``handed_over`` event."""
-    access, card, bud = target.access, target.card, result.bud
-    linked = body.mode is HandoverMode.LINK
-    if reused is not None:
-        row = reactivate(reused, access.user_id, bud.status, body.idempotency_key)
-        await db.flush()
-    else:
-        row = await BoardHandoverRepository(db, org_id=access.org_id).add(
-            BoardCardHandover(
-                org_id=access.org_id,
-                card_id=card.id,
-                bud_id=bud.id,
-                status=BoardHandoverStatus.ACTIVE,
-                linked_existing=linked,
-                target_status=None if linked else bud.status,
-                handed_over_by=access.user_id,
-                handed_over_at=datetime.now(UTC),
-                idempotency_key=body.idempotency_key,
-            )
-        )
-    await record_event(
-        db,
-        card,
-        BoardCardEventType.HANDED_OVER,
-        actor_id=access.user_id,
-        from_stage=stage.from_stage if stage.moved else None,
-        to_stage=stage.to_stage,
-        detail={
-            "bud_id": str(bud.id),
-            "bud_key": bud_key(bud.bud_number),
-            "mode": body.mode.value,
-            "bud_status": bud.status.value,
-            **({"again": True} if reused is not None else {}),
-        },
-    )
-    return handover_read((row, HandoverBUD(bud.bud_number, bud.title, bud.status)))
-
-
-async def _after_commit(
-    db: AsyncSession, target: CardAccess, result: HandedOverBUD, actor_name: str | None
-) -> None:
-    """Start the target stage of a created BUD, then tell the BUD's owner."""
-    access, bud = target.access, result.bud
-    if result.previous is not None:
-        try:
-            await start_target_stage(
-                db,
-                access.org_id,
-                bud,
-                result.previous,
-                actor_id=access.user_id,
-                actor_name=actor_name,
-            )
-            await db.commit()
-        except Exception:
-            logger.exception("handover_stage_start_failed", bud_id=str(bud.id))
-            await db.rollback()
-    try:
-        # A rollback above expires everything the session holds.
-        for row in (bud, access.board, target.card):
-            await db.refresh(row)
-        notice = await stage_owner_notice(db, access, target.card, bud)
-        await db.commit()
-        send(notice)
-    except Exception:
-        logger.exception("handover_owner_notice_failed", bud_id=str(bud.id))
-        await db.rollback()
 
 
 async def _actor_name(db: AsyncSession, access: BoardAccess) -> str | None:

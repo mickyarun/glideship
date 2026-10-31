@@ -145,7 +145,14 @@ async def start_intake(
     await auto_assign_for_phase(
         db, org_id, bud, BUDStatus.BUD, actor_id=actor_id, actor_name=actor_name
     )
+    await start_intake_agent(db, org_id, bud, triggered_by=actor_id)
+
+
+async def start_intake_agent(
+    db: AsyncSession, org_id: uuid.UUID, bud: BUDDocument, *, triggered_by: uuid.UUID
+) -> None:
+    """Ask for the PM agent when the BUD's ``bud`` phase is on; that call commits."""
     if should_auto_generate_phase(bud.auto_generate_phases, BUDStatus.BUD.value):
         await create_agent_task_for_stage(
-            bud, BUDStatus.BUD.value, org_id, db, triggered_by=actor_id, force=True
+            bud, BUDStatus.BUD.value, org_id, db, triggered_by=triggered_by, force=True
         )

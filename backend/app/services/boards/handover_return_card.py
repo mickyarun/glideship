@@ -35,10 +35,10 @@ from app.models.board_card_detail import BoardCardComment
 from app.models.board_enums import BoardStatus
 from app.repositories.board import BoardRepository
 from app.repositories.board_card import BoardCardRepository
-from app.repositories.board_card_thread import BoardCardCommentRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.services.boards.card_place import STALE_NEIGHBOURS, place_card
 from app.services.boards.card_timing import enter_category
+from app.services.boards.comment_service import post_comment
 from app.services.boards.errors import BoardConflictError
 from app.services.boards.move_rules import EntryCause, enter_stage
 
@@ -107,9 +107,9 @@ async def move_to_return_stage(db: AsyncSession, locked: ReturnCard) -> ReturnMo
 async def post_reason(
     db: AsyncSession, card: BoardCard, *, author_id: uuid.UUID, lead: str, reason: str
 ) -> BoardCardComment:
-    """The reason as a comment on the card, written by whoever sent the BUD back."""
-    return await BoardCardCommentRepository(db, org_id=card.org_id).create(
-        BoardCardComment(
-            org_id=card.org_id, card_id=card.id, author_id=author_id, body=f"{lead}{reason}"
-        )
-    )
+    """The reason as a comment on the card, written by whoever sent the BUD back.
+
+    Posted as any comment is (with its ``commented`` event); the returned
+    notice is the only one sent, so no comment notice goes out.
+    """
+    return await post_comment(db, card, author_id=author_id, body=f"{lead}{reason}")
