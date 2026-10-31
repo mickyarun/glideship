@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** The boards index: loading, a load error with retry, empty for creators and others, search and sort. */
+/** The boards index: loading, a load error with retry, empty for creators and others, search, sort and the summary. */
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/boardsApi', () => ({
-  boardsApi: { list: vi.fn(), limits: vi.fn(), templates: vi.fn(), star: vi.fn(), switcher: vi.fn() },
+  boardsApi: { list: vi.fn(), limits: vi.fn(), templates: vi.fn(), star: vi.fn(), switcher: vi.fn(), metricsSummary: vi.fn() },
 }))
 
 import { httpError, makeBoardItem } from '@/components/boards/__tests__/fixtures'
@@ -109,4 +109,42 @@ describe('BoardsIndexView', () => {
     await flushPromises()
     expect(tileNames(wrapper)).toEqual(['Ops', 'Content SEO'])
   })
+
+  it('lists the flow numbers for the boards I can see, sortable, each linking to its metrics', async () => {
+    api.metricsSummary.mockResolvedValue({
+      window: { window_days: 90, weeks: 12, aging_days: 14 },
+      boards: [
+        { ...SUMMARY_ROW, key: 'SEO', name: 'Content SEO', aging_count: 0, throughput: [{ week_start: '2026-10-05', count: 1 }] },
+        { ...SUMMARY_ROW, key: 'OPS', name: 'Ops', aging_count: 3, throughput: [{ week_start: '2026-10-05', count: 6 }] },
+      ],
+    })
+    const wrapper = await mountIndex()
+    const names = () => wrapper.findAll('.summary__board').map(a => a.text())
+    expect(wrapper.text()).toContain('Flow across boards')
+    expect(names()).toEqual(['Content SEO', 'Ops'])
+    expect(wrapper.find('.summary__board').attributes('href')).toBe('/boards/SEO/metrics')
+    const header = (label: string) => wrapper.findAll('th').find(th => th.text().startsWith(label))!
+    await header('Throughput').find('button').trigger('click')
+    expect(names()).toEqual(['Ops', 'Content SEO'])
+    expect(header('Throughput').attributes('aria-sort')).toBe('descending')
+    await header('Throughput').find('button').trigger('click')
+    expect(names()).toEqual(['Content SEO', 'Ops'])
+    expect(header('Board').attributes('aria-sort')).toBe('none')
+  })
+
+  it('says when the summary fails, and leaves it out when there is nothing to show', async () => {
+    api.metricsSummary.mockRejectedValueOnce(httpError(500, 'Down'))
+    const failed = await mountIndex()
+    expect(failed.text()).toContain("The numbers across boards didn't load")
+    expect(failed.find('.summary').exists()).toBe(false)
+    api.metricsSummary.mockResolvedValue({ window: { window_days: 90, weeks: 12, aging_days: 14 }, boards: [] })
+    const empty = await mountIndex()
+    expect(empty.text()).not.toContain('Flow across boards')
+  })
 })
+
+const SUMMARY_ROW = {
+  cycle_time: { count: 0, median_hours: null, p85_hours: null },
+  lead_time: { count: 0, median_hours: null, p85_hours: null },
+  wip: { todo: 1, in_progress: 2, done: 0, canceled: 0 },
+}

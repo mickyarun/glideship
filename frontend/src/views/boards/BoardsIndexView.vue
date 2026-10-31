@@ -17,7 +17,8 @@
 <!-- Every board I can open, with Delivery pinned full width for engineering
      members, a search and a sort, and "New board" and "Import from Trello"
      for people who may create one (?new=1 opens New board, from the switcher). Lists nothing it can't open:
-     members-only boards I'm not on never reach this page. -->
+     members-only boards I'm not on never reach this page. Under the grid,
+     the flow numbers for the same boards, sortable. -->
 <template>
   <AppPage title="Boards" :subtitle="subtitle">
     <template v-if="canCreateBoards" #actions>
@@ -75,6 +76,17 @@
         <BoardTile v-for="board in shown" :key="board.id" :board="board" :done-label="done" @star="star" />
       </div>
       <p v-if="query && !shown.length" class="boards-none" role="status">No boards match "{{ query }}".</p>
+      <AppCallout v-if="summary.error.value" variant="error" title="The numbers across boards didn't load" role="alert">
+        {{ summary.error.value }}
+        <template #actions>
+          <v-btn variant="outlined" size="small" @click="summary.load()">Try again</v-btn>
+        </template>
+      </AppCallout>
+      <BoardsMetricsSummary
+        v-else-if="summary.data.value?.boards.length"
+        :rows="summary.data.value.boards"
+        :window="summary.data.value.window"
+      />
     </template>
 
     <NewBoardDialog v-model="creating" />
@@ -86,11 +98,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BoardTile from '@/components/boards/index/BoardTile.vue'
+import BoardsMetricsSummary from '@/components/boards/index/BoardsMetricsSummary.vue'
 import DeliveryTile from '@/components/boards/index/DeliveryTile.vue'
 import NewBoardDialog from '@/components/boards/index/NewBoardDialog.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPage from '@/components/common/AppPage.vue'
+import { useBoardMetricsSummary } from '@/composables/useBoardMetrics'
 import { usePermissions } from '@/composables/usePermissions'
 import { useBoardsStore } from '@/stores/boards'
 import type { CustomBoardItem } from '@/types/boards'
@@ -112,6 +126,7 @@ const sort = ref<BoardSort>('recent')
 const creating = ref(false)
 const toast = ref('')
 const toastOpen = ref(false)
+const summary = useBoardMetricsSummary()
 
 const shown = computed(() => sortBoards(searchBoards(store.customBoards, query.value ?? ''), sort.value))
 const done = computed(() => doneLabel(store.limits?.recent_done_days))
@@ -139,6 +154,7 @@ async function star(board: CustomBoardItem): Promise<void> {
 onMounted(() => {
   void store.fetchIndex()
   void store.ensureLimits()
+  void summary.load()
 })
 </script>
 

@@ -16,8 +16,8 @@
 
 <!-- A board's title area: the breadcrumb, then the name and key as the
      switcher's button (B opens it too), my star, who can see the board and
-     my role; on the right Settings (admins) and New card (editors), which
-     shrinks to a + button on phones. -->
+     my role; on the right Metrics (everyone), Settings (admins) and New
+     card (editors), which shrink to icon buttons on phones. -->
 <template>
   <header class="board-head">
     <BoardHeadIntro :board="detail.board">
@@ -39,6 +39,22 @@
       </template>
     </BoardHeadIntro>
     <div class="board-head__actions bo-header-actions">
+      <v-btn
+        v-if="xs"
+        variant="outlined"
+        icon="mdi-chart-bar"
+        size="small"
+        aria-label="Metrics"
+        :to="{ name: 'board-metrics', params: { key: detail.board.key } }"
+      />
+      <v-btn
+        v-else
+        variant="outlined"
+        prepend-icon="mdi-chart-bar"
+        :to="{ name: 'board-metrics', params: { key: detail.board.key } }"
+      >
+        Metrics
+      </v-btn>
       <v-btn
         v-if="canSettings"
         variant="outlined"

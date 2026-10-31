@@ -47,6 +47,7 @@ export async function mountCardPage(
         children: [
           { path: '', name: 'board', component: blank },
           { path: 'settings', name: 'board-settings', component: blank },
+          { path: 'metrics', name: 'board-metrics', component: blank },
           { path: 'settings/import', name: 'board-import', component: blank },
           { path: 'cards/:number', name: 'board-card', component: BoardCardView },
         ],

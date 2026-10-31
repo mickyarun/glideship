@@ -54,6 +54,12 @@ export const boardRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/boards/BoardSettingsView.vue'),
       },
       {
+        // Anyone who can open the board reads its metrics.
+        path: 'metrics',
+        name: 'board-metrics',
+        component: () => import('@/views/boards/BoardMetricsView.vue'),
+      },
+      {
         // Board admins only; the page says so to anyone else.
         path: 'settings/import',
         name: 'board-import',

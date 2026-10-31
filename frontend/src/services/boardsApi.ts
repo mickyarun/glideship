@@ -23,6 +23,8 @@ import type {
   BoardDetail,
   BoardLimits,
   BoardList,
+  BoardMetrics,
+  BoardMetricsSummary,
   BoardReposRead,
   BoardTemplate,
   CardCreate,
@@ -80,6 +82,10 @@ export const boardsApi = {
   people: async (key: string) => (await api.get<BoardPeopleRead>(`${boardUrl(key)}/people`)).data,
   /** The repositories the board links, by name. */
   repos: async (key: string) => (await api.get<BoardReposRead>(`${boardUrl(key)}/repos`)).data,
+  /** Throughput, cycle and lead times, WIP and aging for one board. */
+  metrics: async (key: string) => (await api.get<BoardMetrics>(`${boardUrl(key)}/metrics`)).data,
+  /** The same numbers for every board I can open (``METRICS`` is a reserved key). */
+  metricsSummary: async () => (await api.get<BoardMetricsSummary>(`${BASE}/metrics/summary`)).data,
   prefs: async (key: string) => (await api.get<PrefsRead>(`${boardUrl(key)}/prefs`)).data,
   savePrefs: async (key: string, filters: SavedFilters) =>
     (await api.put<PrefsRead>(`${boardUrl(key)}/prefs`, filters)).data,
