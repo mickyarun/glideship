@@ -27,6 +27,10 @@
  * `production`. Such a development join gets a namespaced identity,
  * `dev:<claimed userId>`, so it can never act as a real member, and it must
  * name the room's org exactly, so its claims cannot reach another org's room.
+ *
+ * `engineering` is true only when the backend says the user holds
+ * `workspace:engineering`; a tokenless join never has it. Rooms show
+ * repository and file detail to engineering members only.
  */
 import { ErrorCode, ServerError } from "colyseus"
 import { verifyUserToken, type TokenVerification } from "../bridge/BackendClient"
@@ -56,6 +60,8 @@ export interface JoinIdentity {
   userId: string
   name: string
   orgId: string
+  /** Sees engineering detail (repositories, files, agent work). */
+  engineering: boolean
 }
 
 /**
@@ -77,7 +83,12 @@ export async function verifyJoin(
   const orgId = nonEmpty(result.org_id)
   if (!userId || !orgId) throw refuseJoin("token verification named no user or org", roomOrgId)
   if (orgId !== roomOrgId) throw refuseJoin("token org mismatch", roomOrgId)
-  return { userId, name: nonEmpty(result.name) || userId, orgId }
+  return {
+    userId,
+    name: nonEmpty(result.name) || userId,
+    orgId,
+    engineering: result.engineering === true,
+  }
 }
 
 /** The identity `onAuth` returned, for `onJoin`. Refuses a join that skipped it. */
@@ -105,7 +116,12 @@ function tokenlessIdentity(
   console.warn(
     `[verifyJoin] tokenless development join user=${safeLog(userId)} org=${safeLog(roomOrgId)}`,
   )
-  return { userId, name: nonEmpty(options?.name) || userId, orgId: roomOrgId }
+  return {
+    userId,
+    name: nonEmpty(options?.name) || userId,
+    orgId: roomOrgId,
+    engineering: false,
+  }
 }
 
 /**

@@ -78,6 +78,7 @@ async def test_answers_with_the_stored_display_name(monkeypatch: pytest.MonkeyPa
         "user_id": str(USER_ID),
         "org_id": str(ORG_ID),
         "name": "Alice Stored",
+        "engineering": True,
     }
 
 
@@ -125,7 +126,8 @@ async def test_lets_a_board_user_without_engineering_in(
         boards=True,
     )
 
-    assert (await _verify())["valid"] is True
+    verified = await _verify()
+    assert (verified["valid"], verified["engineering"]) == (True, False)
     lookup.assert_awaited_once()
     assert lookup.await_args is not None
     assert lookup.await_args.args[1:] == (USER_ID, ORG_ID)

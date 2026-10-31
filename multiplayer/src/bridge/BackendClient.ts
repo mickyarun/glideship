@@ -89,6 +89,8 @@ export interface TokenVerification {
   user_id?: string
   org_id?: string
   name?: string
+  /** Whether the user holds `workspace:engineering` in the org (engineering detail). */
+  engineering?: boolean
   /** Reason for failure — set when valid=false to aid diagnostics. */
   reason?: "token_invalid" | "backend_http_error" | "backend_unreachable"
 }

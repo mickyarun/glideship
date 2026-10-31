@@ -24,7 +24,7 @@ const ORG = "7e2a8b0c-4d5f-4a7b-8c8d-9e0f1a2b3c4d"
 const OTHER_ORG = "8f3b9c1d-5e6a-4b8c-9d9e-0f1a2b3c4d5e"
 const fetchMock = vi.fn()
 /** The verified identity the static onAuth hands to onJoin. */
-const ANA = { userId: "u1", orgId: ORG, name: "Ana" }
+const ANA = { userId: "u1", orgId: ORG, name: "Ana", engineering: false }
 let room: MinigameRoom
 let broadcast: ReturnType<typeof vi.spyOn>
 
@@ -99,7 +99,7 @@ describe("MinigameRoom.onAuth (static, before matchmaking)", () => {
       token: "jwt",
       game: "fishing",
     })
-    expect(auth).toEqual({ userId: "u1", orgId: ORG, name: "Ana" })
+    expect(auth).toEqual({ userId: "u1", orgId: ORG, name: "Ana", engineering: false })
   })
 
   it("rejects an invalid token", async () => {

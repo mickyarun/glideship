@@ -41,7 +41,7 @@ function verifiedAs(userId: string, orgId = ORG): void {
 
 /** The verified identity the static onAuth hands onJoin. */
 function viewerAuth(userId = "viewer", name = "Sam") {
-  return { userId, name, orgId: ORG }
+  return { userId, name, orgId: ORG, engineering: false }
 }
 
 describe("BacklashRoom turn timeout", () => {

@@ -117,7 +117,7 @@ describe("a verified member of the org", () => {
       const room = matchMaker.getLocalRoomById(seat.roomId)
       const reserved = (room as unknown as { _reservedSeats: Record<string, unknown[]> })
         ._reservedSeats[seat.sessionId]
-      expect(reserved?.[1]).toEqual({ userId: "ana", name: "ana", orgId: ORG_A })
+      expect(reserved?.[1]).toEqual({ userId: "ana", name: "ana", orgId: ORG_A, engineering: false })
       expect(backendPaths(fetchMock).filter((p) => p.endsWith("/verify-token"))).toHaveLength(1)
     },
   )

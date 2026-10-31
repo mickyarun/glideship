@@ -37,6 +37,8 @@ const TREE_OFFSET_X = -1.5       // opposite side from agent robots
 const TREE_OFFSET_Z = 1.0
 const ORCHARD_FALLBACK_X = -3.0
 const ORCHARD_FALLBACK_Z = 3.0
+/** A member's locationContext while at a repo tree. */
+export const TREE_LOCATION = "tree"
 const PHRASE_INTERVAL = 5        // seconds between phrase cycles
 
 const WORKING_PHRASES = [
@@ -299,7 +301,8 @@ export class DevActivitySim {
         state.targetZ = treePos.z + TREE_OFFSET_Z
         state.moveState = "walking_to_tree"
         member.animState = "walk"
-        member.locationContext = `tree_${event.repo_name}`
+        // Every viewer receives locationContext, so it never names the repo.
+        member.locationContext = TREE_LOCATION
       } else {
         this.walkToOrchardFallback(state, member)
       }

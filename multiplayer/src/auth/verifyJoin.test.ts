@@ -48,9 +48,16 @@ describe("verifyJoin with a token", () => {
       "org-a",
     )
 
-    expect(identity).toEqual({ userId: "alice", name: "Alice", orgId: "org-a" })
+    expect(identity).toEqual({ userId: "alice", name: "Alice", orgId: "org-a", engineering: false })
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(String(init.body))).toEqual({ token: "jwt", org_id: "org-a" })
+  })
+
+  it("passes on the backend's engineering flag, and only a true one", async () => {
+    backendAnswers({ valid: true, user_id: "alice", org_id: "org-a", name: "A", engineering: true })
+    expect((await verifyJoin({ token: "jwt" }, "org-a")).engineering).toBe(true)
+    backendAnswers({ valid: true, user_id: "alice", org_id: "org-a", name: "A", engineering: "yes" })
+    expect((await verifyJoin({ token: "jwt" }, "org-a")).engineering).toBe(false)
   })
 
   it("refuses a room that has no org", async () => {
@@ -142,7 +149,7 @@ describe("verifyJoin without a token", () => {
 
     const identity = await verifyJoin({ userId: "bob", name: "Bob", orgId: "org-a" }, "org-a")
 
-    expect(identity).toEqual({ userId: "dev:bob", name: "Bob", orgId: "org-a" })
+    expect(identity).toEqual({ userId: "dev:bob", name: "Bob", orgId: "org-a", engineering: false })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

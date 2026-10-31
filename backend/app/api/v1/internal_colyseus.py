@@ -37,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.deps import get_db
-from app.core.permission_deps import member_permission_set
+from app.core.permission_deps import PermissionSet, member_permission_set
 from app.core.permissions import WORKSPACE_ENGINEERING
 from app.core.permissions_boards import BOARDS_VIEW
 from app.core.security import verify_token
@@ -230,8 +230,10 @@ async def verify_user_token(
         payload: `{"token": "<jwt>", "org_id": "<uuid>"}`
 
     Returns:
-        `{"valid": true, "user_id": "...", "org_id": "...", "name": "..."}`
-        or `{"valid": false}`.
+        `{"valid": true, "user_id": "...", "org_id": "...", "name": "...",
+        "engineering": bool}` or `{"valid": false}`. ``engineering`` says
+        whether the user holds ``workspace:engineering`` in that org: rooms
+        show repository and file detail only to those who do.
     """
     token = payload.get("token")
     claimed_org_id = payload.get("org_id")
@@ -267,8 +269,8 @@ async def verify_user_token(
     # The garden is for the engineering workspace and for board users:
     # people-only roles (and deactivated users with a still-valid JWT) don't
     # join the room.
-    member = await _org_room_member(db, jwt_payload.get("sub"), token_org_id)
-    if member is None:
+    found = await _org_room_member(db, jwt_payload.get("sub"), token_org_id)
+    if found is None:
         logger.warning(
             "colyseus_verify_token_no_engineering_access",
             user_id=jwt_payload.get("sub", ""),
@@ -276,11 +278,13 @@ async def verify_user_token(
         )
         return {"valid": False}
 
+    member, perms = found
     return {
         "valid": True,
         "user_id": str(member.id),
         "org_id": str(token_org_id),
         "name": member.name,
+        "engineering": perms.has(WORKSPACE_ENGINEERING),
     }
 
 
@@ -288,9 +292,12 @@ async def verify_user_token(
 GARDEN_PERMISSIONS = (WORKSPACE_ENGINEERING, BOARDS_VIEW)
 
 
-async def _org_room_member(db: AsyncSession, sub: Any, org_id: Any) -> User | None:
-    """The JWT subject if it is an active member of ``org_id`` who may open the Garden
-    (``workspace:engineering`` or ``boards:view``, in that org's role).
+async def _org_room_member(
+    db: AsyncSession, sub: Any, org_id: Any
+) -> tuple[User, PermissionSet] | None:
+    """The JWT subject and their permissions, if they are an active member of
+    ``org_id`` who may open the Garden (``workspace:engineering`` or
+    ``boards:view``, in that org's role).
 
     A user who must change their password is refused, as every other
     authenticated route refuses them (``get_current_user``) until they do.
@@ -306,7 +313,7 @@ async def _org_room_member(db: AsyncSession, sub: Any, org_id: Any) -> User | No
     perms = await member_permission_set(db, user_id, org_uuid)
     if perms is None or not perms.has_any(GARDEN_PERMISSIONS):
         return None
-    return user
+    return user, perms
 
 
 class RaceInviteRequest(BaseModel):

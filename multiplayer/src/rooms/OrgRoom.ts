@@ -63,6 +63,7 @@ import { isUuid } from "../bridge/uuid"
 import { installRaceCreateHandler } from "./OrgRaceHandler"
 import { installBacklashCreateHandler } from "./OrgBacklashHandler"
 import { claimOrgRoomSlot } from "./orgRoomSlot"
+import { EngineeringViews } from "./engineeringViews"
 
 // Server simulation tick rate — 20Hz matches Colyseus default state sync cadence
 const SIM_TICK_MS = 50
@@ -153,6 +154,9 @@ export class OrgRoom extends Room<{ state: OrgRoomState }> {
 
   // Server-side agent/robot simulation (spawn, walk between repo trees, despawn)
   private agentSim = new AgentActivitySim(this.repoPositions)
+
+  // Which clients receive engineering detail (see rooms/engineeringViews).
+  readonly engineeringViews = new EngineeringViews()
 
   // Inferred presence simulation — drives pseudo-presence for non-Slack users
   // from their dev-activity history + time of day. Skips Slack-driven members
@@ -251,6 +255,7 @@ export class OrgRoom extends Room<{ state: OrgRoomState }> {
       const dt = dtMs / 1000
       this.devSim.tick(this.state.members, dt)
       this.agentSim.tick(this.state.agents, dt)
+      this.engineeringViews.sync(this.state)
     }, SIM_TICK_MS)
 
     // Separate slow-tick loop for InferredPresenceSim (once per minute).
@@ -369,6 +374,8 @@ export class OrgRoom extends Room<{ state: OrgRoomState }> {
       name: identity.name,
       characterModel: typeof options.characterModel === "string" ? options.characterModel : "",
     }
+    // Repository, file and agent detail only for engineering members.
+    this.engineeringViews.attach(client, identity.engineering, this.state)
     // Users not present in this.state.members at join time indicate a snapshot
     // mismatch — the backend's `/internal/colyseus/org-snapshot` endpoint is
     // responsible for returning every active org member. If you see this
@@ -382,6 +389,7 @@ export class OrgRoom extends Room<{ state: OrgRoomState }> {
   }
 
   onLeave(client: Client) {
+    this.engineeringViews.detach(client)
     const name = (client.userData as { name?: string } | undefined)?.name ?? client.sessionId
     console.log(`[OrgRoom] ${safeLog(name)} left org=${safeLog(this.state.orgId)}`)
 
