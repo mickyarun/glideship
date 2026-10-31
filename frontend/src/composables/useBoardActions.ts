@@ -20,14 +20,15 @@
 // opens the card's page on the first missing field (``?focus=``) and names
 // the stage (``?enter=``) so the page can say everything it needs. A drag
 // over a stage the card can't enter never drops there; letting go over it
-// says why the same way.
+// says why the same way. A card moved to another board leaves its column
+// and says where it went, with Open.
 
 import { useRouter } from 'vue-router'
 import type { BoardPage } from '@/composables/useBoardPage'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
 import type { CardDrop } from '@/composables/useCardDrag'
 import { useStageEntry } from '@/composables/useStageEntry'
-import type { CardSummary, StageRead, StageRequiredField } from '@/types/boards'
+import type { CardDetail, CardSummary, StageRead, StageRequiredField } from '@/types/boards'
 import { locate } from '@/utils/boardColumns'
 import type { Neighbours } from '@/utils/boardPositions'
 import { ENTER_QUERY_KEY, FOCUS_QUERY_KEY } from '@/utils/cardFocus'
@@ -111,5 +112,17 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
     feedback.show({ text: `Archived ${card.key}`, action: { label: 'Undo', run: () => void restore(archived) } })
   }
 
-  return { drop, blockedDrop, menuMove, archive, restore, confirm: entry.confirm }
+  /** The move dialog sent ``card`` to another board, where it's ``moved`` now. */
+  function movedBoard(card: CardSummary, moved: CardDetail, boardName: string): void {
+    cards.dropCard(card.id)
+    const text = `${card.key} moved to ${boardName} as ${moved.key}`
+    const open = () => void router.push({ name: 'board-card', params: { key: moved.board_key, number: moved.number } })
+    feedback.show({ text, action: { label: 'Open', run: open } })
+    feedback.announce(text)
+  }
+
+  /** The target stage needs a field the card lacks: open the card on it. */
+  const fixForMove = (card: CardSummary, field: StageRequiredField) => openCard(card, { [FOCUS_QUERY_KEY]: field })
+
+  return { drop, blockedDrop, menuMove, archive, restore, movedBoard, fixForMove, confirm: entry.confirm }
 }

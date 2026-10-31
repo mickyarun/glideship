@@ -81,6 +81,18 @@ describe('useBoardPage', () => {
     scope.stop()
   })
 
+  it('drops a card that moved to another board, and reloads the counts for one not loaded', async () => {
+    const { page, scope } = await openBoard()
+    send({ event: 'card_left_board', card_id: '1', new_key: 'PDT-9', to_board_key: 'PDT' })
+    expect(page.cards.columns.s1.items).toEqual([])
+    expect(page.cards.counts.s1).toBe(0)
+    expect(api.get).toHaveBeenCalledOnce()
+    send({ event: 'card_left_board', card_id: 'not-loaded' })
+    await flush()
+    expect(api.get).toHaveBeenCalledTimes(2)
+    scope.stop()
+  })
+
   it('applies a move from another tab of mine, counting from the stage it left', async () => {
     const { page, scope } = await openBoard()
     send({ event: 'card_moved', from_stage_id: 's1', card: { ...A, stage_id: 's2', updated_at: later(A.updated_at) } })

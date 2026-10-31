@@ -17,7 +17,7 @@
 // and ``send``/``revoke`` play the board's live channel.
 
 import { vi } from 'vitest'
-import { makeCardDetail, makeDetail } from '@/components/boards/__tests__/fixtures'
+import { httpError, makeCardDetail, makeDetail } from '@/components/boards/__tests__/fixtures'
 import api from '@/services/api'
 import { boardCardApi } from '@/services/boardCardApi'
 import { boardsApi } from '@/services/boardsApi'
@@ -52,6 +52,9 @@ export function cardDefaults(capabilities: BoardAction[], card: CardDetail = CAR
   boards.switcher.mockResolvedValue({ starred: [], recent: [], other: [], delivery: null })
   boards.limits.mockRejectedValue(new Error('offline'))
   boards.cards.mockResolvedValue({ items: [], next_cursor: null })
+  // No card had this key before a move.
+  boards.cardByKey.mockRejectedValue(httpError(404))
+  boards.list.mockResolvedValue({ items: [] })
   cardApi.checklist.mockResolvedValue([])
   cardApi.events.mockResolvedValue({ items: [], next_before: null })
   cardApi.docs.mockResolvedValue({ items: [] })

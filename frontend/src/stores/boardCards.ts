@@ -26,7 +26,7 @@ import { boardsApi } from '@/services/boardsApi'
 import { cardActions } from '@/stores/boardCardActions'
 import type { CardEvent, CardSummary, StageRead } from '@/types/boards'
 import { emptyColumn, locate, mergePage, type Columns } from '@/utils/boardColumns'
-import { applyCardEvent as applyEvent, bumpCount } from '@/utils/boardEvents'
+import { applyCardEvent as applyEvent, bumpCount, cardLeft } from '@/utils/boardEvents'
 import { NO_FILTERS, toListParams, type CardFilters } from '@/utils/boardFilters'
 import { extractApiError } from '@/utils/errors'
 
@@ -130,6 +130,11 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
     applyEvent({ columns: columns.value, counts: counts.value, filters: filters.value }, message)
   }
 
+  /** A card moved to another board: it leaves its column (false: it wasn't loaded). */
+  function dropCard(cardId: string): boolean {
+    return cardLeft({ columns: columns.value, counts: counts.value }, cardId)
+  }
+
   const actions = cardActions({
     boardKey,
     columns,
@@ -141,7 +146,7 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
 
   return {
     boardKey, boardId, columns, counts, filters,
-    reset, clear, syncStages, loadStage, loadAll, setFilters, applyCardEvent, clearRepo, patchCard,
+    reset, clear, syncStages, loadStage, loadAll, setFilters, applyCardEvent, clearRepo, patchCard, dropCard,
     ...actions,
   }
 })

@@ -77,6 +77,7 @@
           @drop="act.drop"
           @blocked="act.blockedDrop"
           @move="act.menuMove"
+          @move-board="moveToBoard"
           @archive="act.archive"
           @restore="act.restore"
           @copied="feedback.announce('Link copied')"
@@ -91,6 +92,13 @@
 
     <BoardFeedback :feedback="feedback" />
     <ChecklistConfirmDialog :confirm="act.confirm" />
+    <CardMoveBoardDialog
+      v-if="movingCard"
+      v-model="moveOpen"
+      :card="movingCard" :board="detail" :people="page.people.people.value" fix-label="Open card"
+      @moved="(moved, name) => movingCard && act.movedBoard(movingCard, moved, name)"
+      @fix="field => movingCard && act.fixForMove(movingCard, field)"
+    />
   </div>
 </template>
 
@@ -105,6 +113,7 @@ import BoardStageTabs from '@/components/boards/board/BoardStageTabs.vue'
 import BoardViewHeader from '@/components/boards/board/BoardViewHeader.vue'
 import BoardViewStates from '@/components/boards/board/BoardViewStates.vue'
 import ChecklistConfirmDialog from '@/components/boards/board/ChecklistConfirmDialog.vue'
+import CardMoveBoardDialog from '@/components/boards/card/CardMoveBoardDialog.vue'
 import { useBoardActions } from '@/composables/useBoardActions'
 import { useBoardContext } from '@/composables/useBoardContext'
 import { useBoardFeedback } from '@/composables/useBoardFeedback'
@@ -114,6 +123,7 @@ import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { useNow } from '@/composables/useNow'
 import { useBoardsStore } from '@/stores/boards'
 import '@/assets/styles/board-layout.css'
+import type { CardSummary } from '@/types/boards'
 import { emptyColumn, locate } from '@/utils/boardColumns'
 
 const page = useBoardContext()
@@ -158,6 +168,13 @@ const shownStages = computed(() => {
 // The stage whose composer is open; "New card" opens the default stage's,
 // and on phones switches to that stage.
 const composeIn = ref<string | null>(null)
+// The card the "Move to another board" dialog is for (kept while it closes).
+const movingCard = ref<CardSummary | null>(null)
+const moveOpen = ref(false)
+function moveToBoard(card: CardSummary): void {
+  movingCard.value = card
+  moveOpen.value = true
+}
 watch(composeIn, id => {
   if (id && xs.value) phoneStage.value = id
 })

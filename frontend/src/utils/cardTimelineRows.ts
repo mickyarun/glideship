@@ -22,6 +22,7 @@ import type { CardDocKind, CardEventRead, CardEventType, StageCategory } from '@
 import {
   actor, plainRow, section, text, type ActivityPart, type ActivityRenderer, type ActivityRenderers, type ActivityRow,
 } from '@/utils/activity'
+import { movedBoardRow } from '@/utils/cardMovedBoardRow'
 import { wordList } from '@/utils/format'
 
 export interface CardTimelineNames {
@@ -78,7 +79,7 @@ export function cardTimelineRenderers(names: CardTimelineNames): ActivityRendere
         ],
       }),
     },
-    moved_board: { icon: 'mdi-swap-horizontal', color: 'primary', row: said('moved this card from another board') },
+    moved_board: { icon: 'mdi-swap-horizontal', color: 'primary', row: e => movedBoardRow(e, who(e), names.stage) },
     edited: {
       icon: 'mdi-pencil',
       color: 'primary',

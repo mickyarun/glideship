@@ -58,3 +58,13 @@ export function applyCardEvent(state: CardState, message: CardEvent): void {
   }
   upsertCard(state.columns, card, state.filters)
 }
+
+/**
+ * A card left the board (moved to another): it goes, and its stage counts
+ * one fewer. False when it wasn't loaded, so the counts need a reload.
+ */
+export function cardLeft(state: Pick<CardState, 'columns' | 'counts'>, cardId: string): boolean {
+  const held = removeCard(state.columns, cardId)
+  if (held && !held.card.archived_at) bumpCount(state.counts, held.stageId, -1)
+  return !!held
+}

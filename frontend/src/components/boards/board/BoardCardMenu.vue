@@ -15,8 +15,8 @@
  -->
 
 <!-- A card's ⋯ menu: move it to another stage (the keyboard path for
-     anything drag does; it lands at the bottom), copy its link, and
-     archive or restore it. Items the board's capabilities don't allow are
+     anything drag does; it lands at the bottom) or to another board, copy
+     its link, and archive or restore it. Items the board's capabilities don't allow are
      left out, so a viewer sees only Copy link. A stage the card can't enter
      yet wears a lock and says what it needs; picking it explains and
      offers Open card. -->
@@ -55,6 +55,12 @@
         </v-list-item>
         <v-divider class="my-1" />
       </template>
+      <v-list-item
+        v-if="canMove && !card.archived_at"
+        prepend-icon="mdi-arrow-right-bold-box-outline"
+        title="Move to another board…"
+        @click="emit('move-board')"
+      />
       <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
       <template v-if="canArchive">
         <v-list-item
@@ -84,7 +90,7 @@ const props = defineProps<{
   canArchive: boolean
 }>()
 
-const emit = defineEmits<{ move: [stageId: string]; archive: []; restore: []; copied: [] }>()
+const emit = defineEmits<{ move: [stageId: string]; 'move-board': []; archive: []; restore: []; copied: [] }>()
 
 const router = useRouter()
 

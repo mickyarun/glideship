@@ -14,14 +14,21 @@
  * limitations under the License.
  -->
 
-<!-- The card page's overflow menu: copy the card's link (saying whether it
-     worked), and archive or restore it for those who may. -->
+<!-- The card page's overflow menu: move the card to another board, copy
+     its link (saying whether it worked), and archive or restore it, each
+     for those who may. -->
 <template>
   <v-menu location="bottom end">
     <template #activator="{ props: menuProps }">
       <v-btn v-bind="menuProps" variant="outlined" icon="mdi-dots-horizontal" aria-label="More card actions" />
     </template>
     <v-list density="compact" min-width="200" aria-label="Card actions">
+      <v-list-item
+        v-if="canMove && !archived"
+        prepend-icon="mdi-arrow-right-bold-box-outline"
+        title="Move to another board…"
+        @click="emit('move-board')"
+      />
       <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
       <template v-if="canArchive">
         <v-divider class="my-1" />
@@ -36,8 +43,8 @@
 import { useRouter } from 'vue-router'
 import { copyText } from '@/utils/clipboard'
 
-const props = defineProps<{ boardKey: string; number: number; archived: boolean; canArchive: boolean }>()
-const emit = defineEmits<{ archive: []; restore: []; copied: [ok: boolean] }>()
+const props = defineProps<{ boardKey: string; number: number; archived: boolean; canArchive: boolean; canMove: boolean }>()
+const emit = defineEmits<{ 'move-board': []; archive: []; restore: []; copied: [ok: boolean] }>()
 
 const router = useRouter()
 

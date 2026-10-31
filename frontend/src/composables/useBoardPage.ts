@@ -139,6 +139,10 @@ export function useBoardPage(key: Ref<string>) {
       card_moved: onCard,
       card_archived: onCard,
       card_restored: onCard,
+      // Moved to another board: it leaves (a card not loaded here leaves the counts only).
+      card_left_board: message => {
+        if (forOpenBoard() && !cards.dropCard(message.card_id)) void refreshBoard()
+      },
       stage_reordered: message => {
         if (forOpenBoard()) void cards.loadStage(message.stage_id, { keep: true })
       },

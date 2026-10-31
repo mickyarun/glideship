@@ -57,6 +57,8 @@
             :number="card.number"
             :archived="!!card.archived_at"
             :can-archive="canArchive"
+            :can-move="canMove"
+            @move-board="emit('move-board')"
             @archive="emit('archive')"
             @restore="emit('restore')"
             @copied="ok => emit('copied', ok)"
@@ -117,6 +119,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   priority: [priority: BUDPriority | null]
   move: [stageId: string]
+  'move-board': []
   history: []
   archive: []
   restore: []

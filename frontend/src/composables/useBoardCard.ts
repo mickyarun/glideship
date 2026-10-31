@@ -16,13 +16,16 @@
 // loaded the board), and keep it fresh from the board's live channel.
 // Another tab's or person's change to this card lands at once; comments,
 // files and documents changing elsewhere call the page's hooks. This
-// tab's own echoes are dropped by origin. A 404 on the first load is the
-// no-access state; one later means the card went away (moved to another
-// board, or deleted), which the page reports.
+// tab's own echoes are dropped by origin. A 404 on the first load asks
+// whether the number is a key the card had before it moved (useMovedCard)
+// and follows it; otherwise it's the no-access state. One later means the
+// card went away (deleted); a card that moved to another board is
+// followed there, or reported as moved somewhere I can't see.
 
 import { isAxiosError } from 'axios'
 import { computed, ref, watch, type Ref } from 'vue'
 import { useBoardContext } from '@/composables/useBoardContext'
+import { useMovedCard } from '@/composables/useMovedCard'
 import { useTopicChannel } from '@/composables/useTopicChannel'
 import { boardCardApi } from '@/services/boardCardApi'
 import { boardTopic, type BoardSocketMessage, type CardDetail, type CardDocKind, type CardEvent } from '@/types/boards'
@@ -47,6 +50,9 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
   const error = ref('')
   const notFound = ref(false)
   const gone = ref(false)
+  /** It moved to a board I can't see. */
+  const hidden = ref(false)
+  const moved = useMovedCard()
   const boardKey = computed(() => page.board.detail.value?.board.key ?? '')
   let seq = 0
 
@@ -76,11 +82,29 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
       if (mine !== seq) return
       const missing = isAxiosError(err) && err.response?.status === 404
       if (missing && detail.value) gone.value = true
-      else if (missing) notFound.value = true
+      else if (missing) await followOldKey(`${key}-${n}`, mine)
       else if (!quiet) error.value = extractApiError(err, "Couldn't load this card. Try again.")
     } finally {
       if (mine === seq) loading.value = false
     }
+  }
+
+  /** The URL's key may be one the card had before a move: follow it, or there's no such card. */
+  async function followOldKey(oldKey: string, mine: number): Promise<void> {
+    const outcome = await moved.follow(oldKey)
+    if (mine !== seq || outcome === 'moved') return
+    if (outcome === 'failed') error.value = "Couldn't load this card. Try again."
+    else notFound.value = true
+  }
+
+  /** The open card moved to another board: follow it, or say it went where I can't see. */
+  async function leftBoard(): Promise<void> {
+    const held = detail.value
+    if (!held) return
+    const outcome = await moved.follow(held.key)
+    if (outcome === 'moved' || detail.value?.id !== held.id) return
+    gone.value = true
+    hidden.value = outcome === 'missing'
   }
 
   const isMine = (cardId: string) => !!detail.value && detail.value.id === cardId
@@ -104,6 +128,9 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
       card_moved: onCard,
       card_archived: onCard,
       card_restored: onCard,
+      card_left_board: message => {
+        if (isMine(message.card_id)) void leftBoard()
+      },
       card_activity: message => {
         if (isMine(message.card_id)) hooks.onActivity()
       },
@@ -130,10 +157,11 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
     detail.value = null
     notFound.value = false
     gone.value = false
+    hidden.value = false
     void load()
   }, { immediate: true })
 
-  return { page, boardKey, detail, loading, error, notFound, gone, load }
+  return { page, boardKey, detail, loading, error, notFound, gone, hidden, load, goTo: moved.goTo }
 }
 
 export type BoardCard = ReturnType<typeof useBoardCard>

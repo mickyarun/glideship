@@ -15,7 +15,8 @@
 // Everything a card's page runs: the card (useBoardCard) with its edits,
 // checklist, history, comment thread and documents, and what the page
 // says back after each action: a live-region announcement on success,
-// the snackbar on failure, and "Archived OPS-3" with Undo.
+// the snackbar on failure, and "Archived OPS-3" with Undo. A card reached
+// by a key it had before a move says so once ("SEO-14 is now OPS-3").
 
 import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { useBoardCard } from '@/composables/useBoardCard'
@@ -25,10 +26,12 @@ import { useCardChecklist } from '@/composables/useCardChecklist'
 import { useCardEdits } from '@/composables/useCardEdits'
 import { useCardPageActions, type FieldGuide } from '@/composables/useCardPageActions'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
+import { takeMoveNote } from '@/composables/useMovedCard'
 import { cardUrl } from '@/services/boardsApi'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
 import { useBoardsStore } from '@/stores/boards'
 import { createCommentThread } from '@/stores/commentThread'
+import type { CardDetail } from '@/types/boards'
 import { CARD_COMMENT_WIRE } from '@/utils/boardCardWire'
 
 export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) {
@@ -95,6 +98,15 @@ export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) 
 
   const actions = useCardPageActions({ card, edits, checklist, activity, feedback, stages, guide })
 
+  const movedNote = ref<string | null>(null)
+  watch(() => detail.value?.key, key => (movedNote.value = key ? takeMoveNote(key) : null), { immediate: true })
+  /** Moved to another board from here: its page there, with the note. */
+  async function movedBoard(moved: CardDetail, boardName: string): Promise<void> {
+    const from = detail.value?.key ?? moved.key
+    feedback.announce(`${from} moved to ${boardName} as ${moved.key}`)
+    await card.goTo(moved, from)
+  }
+
   onMounted(() => {
     void directory.ensureLoaded()
     void boardsStore.ensureLimits()
@@ -104,6 +116,6 @@ export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) 
 
   return {
     card, page, detail, boardKey, feedback, checklist, activity, thread, attachments, docs,
-    canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions,
+    canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions, movedNote, movedBoard,
   }
 }

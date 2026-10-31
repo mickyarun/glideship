@@ -28,6 +28,7 @@ import type {
   CardCreate,
   CardDetail,
   CardMove,
+  CardMoveBoard,
   CardPage,
   MembersRead,
   PrefsRead,
@@ -90,6 +91,9 @@ export const boardsApi = {
     (await api.post<CardDetail>(`${boardUrl(key)}/cards`, body)).data,
   moveCard: async (key: string, number: number, body: CardMove) =>
     (await api.post<CardDetail>(`${cardUrl(key, number)}/move`, body)).data,
+  /** Move a card to another board; it answers the card as it is there (new key). */
+  moveCardToBoard: async (key: string, number: number, body: CardMoveBoard) =>
+    (await api.post<CardDetail>(`${cardUrl(key, number)}/move-board`, body)).data,
   archiveCard: async (key: string, number: number) =>
     (await api.post<CardDetail>(`${cardUrl(key, number)}/archive`)).data,
   restoreCard: async (key: string, number: number) =>

@@ -41,7 +41,7 @@
             <div v-if="row.view.meta?.length" class="tl-meta">
               <ActivityParts :parts="row.view.meta" />
             </div>
-            <div v-if="row.view.lines?.length" class="tl-meta">
+            <div v-if="row.view.lines?.length" class="tl-meta tl-meta--lines">
               <div v-for="(line, i) in row.view.lines" :key="i" class="text-caption">{{ line }}</div>
             </div>
           </div>
@@ -121,6 +121,12 @@ function fullTime(dateStr: string): string {
   align-items: center;
   gap: 4px;
   margin-top: 2px;
+}
+/* Extra lines stack, one under another. */
+.tl-meta--lines {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
 }
 /* Timestamp: right-aligned, muted */
 .tl-time {

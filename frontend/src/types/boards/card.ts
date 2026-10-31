@@ -90,6 +90,13 @@ export interface CardMove {
   confirm_open_checklist?: boolean
 }
 
+/** Moving a card to another board (``CardMoveBoard``); no stage: the server picks one. */
+export interface CardMoveBoard {
+  target_board_key: string
+  stage_id?: string | null
+  confirm_open_checklist?: boolean
+}
+
 /** 422 on a move or create: the stage needs fields the card lacks (declaration order). */
 export interface StageRequirementsMissingBody {
   detail: string

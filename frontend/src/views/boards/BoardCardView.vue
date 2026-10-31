@@ -37,17 +37,13 @@
           :card="detail" :board="board.board" :stage="stage" :stages="stages" :labels="cardLabels" :people="people"
           :now="now" :can-edit="canEdit" :can-move="canMove" :can-archive="canArchive"
           :title-max="limits?.card_title_max ?? null" :save-title="actions.saveTitle"
-          @priority="actions.setPriority" @move="actions.move" @history="tab = 'activity'"
+          @priority="actions.setPriority" @move="actions.move" @history="tab = 'activity'" @move-board="moveOpen = true"
           @archive="actions.archive()" @restore="actions.restore()" @copied="actions.copied"
         />
         <CardStateNotes
-          :gone="card.gone.value"
-          :archived="!!detail.archived_at"
-          :can-restore="canArchive"
-          :board="board"
-          :viewer="!page.board.can('edit_card') && !detail.archived_at"
-          :members="page.members.value"
-          @restore="actions.restore()"
+          :moved-note="movedNote" :gone="card.gone.value" :hidden="card.hidden.value" :archived="!!detail.archived_at"
+          :can-restore="canArchive" :board="board" :viewer="!page.board.can('edit_card') && !detail.archived_at"
+          :members="page.members.value" @restore="actions.restore()" @dismiss-note="movedNote = null"
         />
         <CardStagePicker :stages="stages" :stage-id="detail.stage_id" :can-move="canMove" @move="actions.move" />
         <BUDDetailTabBar v-model="tab" :tabs="tabs" label="Card sections" />
@@ -89,6 +85,10 @@
       </div>
       <BoardFeedback :feedback="feedback" />
       <ChecklistConfirmDialog :confirm="actions.confirm" />
+      <CardMoveBoardDialog
+        v-if="detail && board" v-model="moveOpen" :card="detail" :board="board" :people="page.people.people.value"
+        fix-label="Show me" @moved="movedBoard" @fix="field => void focus.show(field)"
+      />
       <AppConfirmDialog
         :model-value="drafts.guard.asking.value"
         title="Leave without saving?"
@@ -113,6 +113,7 @@ import CardActivity from '@/components/boards/card/CardActivity.vue'
 import CardDetailsPanel from '@/components/boards/card/CardDetailsPanel.vue'
 import CardDocs from '@/components/boards/card/CardDocs.vue'
 import CardHeader from '@/components/boards/card/CardHeader.vue'
+import CardMoveBoardDialog from '@/components/boards/card/CardMoveBoardDialog.vue'
 import CardOverview from '@/components/boards/card/CardOverview.vue'
 import CardSkeleton from '@/components/boards/card/CardSkeleton.vue'
 import CardStagePicker from '@/components/boards/card/CardStagePicker.vue'
@@ -139,7 +140,7 @@ const route = useRoute()
 const number = computed(() => parseCardNumber(route.params.number))
 const {
   card, page, detail, boardKey, feedback, checklist, activity, thread, attachments, docs,
-  canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions,
+  canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions, movedNote, movedBoard,
 } = useBoardCardPage(number, {
   show: (field, stageId) => void focus.show(field, stageId),
   want: stageId => focus.want(stageId),
@@ -160,6 +161,7 @@ function setOverview(el: unknown): void {
   attachments.value = (el as InstanceType<typeof CardOverview> | null) ?? null
 }
 
+const moveOpen = ref(false)
 const openTab = ref('overview')
 const docKind = ref<CardDocKind>(DOC_KINDS[0])
 /** Switching tab (or document) closes its editors, so an unsaved draft asks first. */

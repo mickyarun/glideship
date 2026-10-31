@@ -60,6 +60,7 @@
           :can-move="canMove"
           :can-archive="canArchive"
           @move="(c, stageId) => emit('move', c, stageId)"
+          @move-board="emit('move-board', $event)"
           @archive="emit('archive', $event)"
           @restore="emit('restore', $event)"
           @copied="emit('copied', $event)"
@@ -141,6 +142,7 @@ const emit = defineEmits<{
   drop: [drop: CardDrop]
   blocked: [cardId: string, stageId: string]
   move: [card: CardSummary, stageId: string]
+  'move-board': [card: CardSummary]
   archive: [card: CardSummary]
   restore: [card: CardSummary]
   copied: [card: CardSummary]

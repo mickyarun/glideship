@@ -25,7 +25,8 @@
      closing gives focus back to whatever had it when it opened; when that
      is gone (a deleted row), to ``returnFocus`` (the next row, an add
      field). ``color`` is the action's: ``error`` for destructive ones.
-     ``secondary`` adds a quieter third choice beside Cancel. -->
+     ``secondary`` adds a quieter third choice beside Cancel; ``disabled``
+     holds the action back until there's something to confirm. -->
 <template>
   <v-dialog
     :model-value="modelValue"
@@ -41,7 +42,7 @@
       <div class="app-confirm__actions">
         <v-btn v-if="secondary" variant="text" :disabled="busy" @click="emit('secondary')">{{ secondary }}</v-btn>
         <v-btn ref="cancel" variant="text" :disabled="busy" @click="emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn :color="color" variant="flat" :loading="busy" @click="emit('confirm')">{{ action }}</v-btn>
+        <v-btn :color="color" variant="flat" :loading="busy" :disabled="disabled" @click="emit('confirm')">{{ action }}</v-btn>
       </div>
     </v-card>
   </v-dialog>
@@ -62,8 +63,10 @@ const props = withDefaults(
     returnFocus?: HTMLElement | null
     /** A third choice's label ("Open card"); emits ``secondary``. */
     secondary?: string
+    /** The action can't be taken yet (nothing picked). */
+    disabled?: boolean
   }>(),
-  { body: '', busy: false, color: 'primary', returnFocus: null, secondary: '' },
+  { body: '', busy: false, color: 'primary', returnFocus: null, secondary: '', disabled: false },
 )
 const emit = defineEmits<{ 'update:modelValue': [open: boolean]; confirm: []; secondary: [] }>()
 const cancel = ref<{ $el: HTMLElement } | null>(null)

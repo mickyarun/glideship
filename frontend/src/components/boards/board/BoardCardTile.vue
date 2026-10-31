@@ -33,6 +33,7 @@
           :can-move="canMove"
           :can-archive="canArchive"
           @move="(stageId) => emit('move', card, stageId)"
+          @move-board="emit('move-board', card)"
           @archive="emit('archive', card)"
           @restore="emit('restore', card)"
           @copied="emit('copied', card)"
@@ -94,6 +95,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   move: [card: CardSummary, stageId: string]
+  'move-board': [card: CardSummary]
   archive: [card: CardSummary]
   restore: [card: CardSummary]
   copied: [card: CardSummary]

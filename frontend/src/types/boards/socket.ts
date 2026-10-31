@@ -43,6 +43,9 @@ export type CardEvent =
 export type BoardSocketMessage =
   | CardEvent
   | (Base<'card_activity'> & { card_id: string })
+  // A card moved to another board. Only its id: where it went is asked by
+  // its old key (GET /boards/cards/by-key), which hides boards I can't see.
+  | (Base<'card_left_board'> & { card_id: string })
   | (Base<'doc_updated'> & { card_id: string; kind: CardDocKind; version: number })
   | (Base<'board_updated'> & { board: BoardRead })
   | Base<'stage_changed'>
