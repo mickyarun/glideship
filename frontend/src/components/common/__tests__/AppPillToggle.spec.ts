@@ -50,4 +50,19 @@ describe('AppPillToggle', () => {
     await wrapper.trigger('keydown', { key: 'ArrowLeft' })
     expect(wrapper.emitted('update:modelValue')?.[1]).toEqual(['c'])
   })
+
+  it('renders touch pills as separate radios: one picked, one tab stop', () => {
+    const wrapper = mountToggle({ size: 'touch', modelValue: 'b' })
+    const pills = wrapper.findAll('[role="radio"]')
+    expect(pills.map(p => p.attributes('aria-checked'))).toEqual(['false', 'true', 'false'])
+    expect(pills.map(p => p.classes().includes('app-pill-toggle__option--active'))).toEqual([false, true, false])
+    expect(pills.map(p => p.attributes('tabindex'))).toEqual(['-1', '0', '-1'])
+  })
+
+  it('jumps to the first and last touch pill with Home and End', async () => {
+    const wrapper = mountToggle({ size: 'touch', modelValue: 'b' })
+    await wrapper.trigger('keydown', { key: 'End' })
+    await wrapper.trigger('keydown', { key: 'Home' })
+    expect(wrapper.emitted('update:modelValue')).toEqual([['c'], ['a']])
+  })
 })

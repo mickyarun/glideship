@@ -57,9 +57,8 @@ interface Props {
   mandatory?: boolean
   // ``md`` (default) matches the v-tabs density="compact" height
   // (34px). ``sm`` is for tight chrome (e.g. card headers). ``touch``
-  // is for a row of many options that scrolls sideways (phone tabs): the
-  // track grows with its options instead of squeezing them, and each is
-  // 44px tall on touch screens.
+  // is for a row of many options that scrolls sideways (phone tabs):
+  // separate 44px pills, the picked one filled, rather than one track.
   size?: 'sm' | 'md' | 'touch'
 }
 
@@ -98,91 +97,4 @@ function select(value: T): void {
 }
 </script>
 
-<style scoped>
-.app-pill-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  background: rgb(var(--v-theme-primary));
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-.app-pill-toggle--sm {
-  height: 28px;
-}
-.app-pill-toggle--sm .app-pill-toggle__option {
-  height: 22px;
-  font-size: 11px;
-  padding: 0 12px;
-  min-width: 64px;
-}
-.app-pill-toggle--md {
-  height: 34px;
-}
-.app-pill-toggle--md .app-pill-toggle__option {
-  height: 28px;
-  font-size: 12px;
-  padding: 0 18px;
-  min-width: 84px;
-}
-.app-pill-toggle--touch {
-  width: max-content;
-  min-height: 36px;
-}
-.app-pill-toggle--touch .app-pill-toggle__option {
-  flex-shrink: 0;
-  min-height: 30px;
-  padding: 0 16px;
-  font-size: 13px;
-  white-space: nowrap;
-}
-.app-pill-toggle__option {
-  /* Reset the user-agent <button> styles, then drive everything from
-     here. Labels use the theme's on-primary ink (white on the light
-     theme's blue, near-black on the dark theme's lighter blue) so both
-     clear 4.5:1 on the track. */
-  appearance: none;
-  -webkit-appearance: none;
-  border: none;
-  background: transparent;
-  color: rgb(var(--v-theme-on-primary));
-  font-family: inherit;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition:
-    background-color var(--dur-short, 150ms) ease,
-    color var(--dur-short, 150ms) ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-/* Hover shades the track towards the surface ink, which keeps the label
-   at about 6.0:1 on the light theme and 8.1:1 on the dark one. */
-.app-pill-toggle__option:hover:not(.app-pill-toggle__option--active) {
-  background: rgba(var(--v-theme-on-surface), 0.12);
-}
-/* The active pill is a surface-coloured cut-out showing the primary ink:
-   5.2:1 on the light theme, 7.0:1 on the dark theme. */
-.app-pill-toggle__option--active {
-  background: rgb(var(--v-theme-surface));
-  color: rgb(var(--v-theme-primary));
-  cursor: default;
-}
-@media (pointer: coarse) {
-  .app-pill-toggle {
-    height: auto;
-  }
-  .app-pill-toggle .app-pill-toggle__option {
-    min-height: 44px;
-  }
-}
-.app-pill-toggle__option:focus-visible {
-  /* No offset, so the whole ring sits on the track rather than past it. */
-  outline: 2px solid rgb(var(--v-theme-on-primary));
-  outline-offset: 0;
-}
-</style>
+<style scoped src="./app-pill-toggle.css"></style>

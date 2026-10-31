@@ -16,7 +16,7 @@
 
 <!-- On phones the board shows one stage at a time: these pills pick it,
      each with its card count. They scroll sideways rather than wrap (the
-     pill toggle's touch size: 44px tall on touch screens). -->
+     pill toggle's touch size: separate 44px pills). -->
 <template>
   <div class="stage-tabs">
     <AppPillToggle v-model="model" :options="options" size="touch" aria-label="Stages" />
@@ -42,7 +42,8 @@ const options = computed(() =>
   flex-shrink: 0;
   overflow-x: auto;
   margin-inline: calc(-1 * var(--board-gutter));
-  padding: 2px var(--board-gutter);
+  /* Room for the focus ring, which sits just outside a pill. */
+  padding: 4px var(--board-gutter);
   scrollbar-width: none;
 }
 </style>
