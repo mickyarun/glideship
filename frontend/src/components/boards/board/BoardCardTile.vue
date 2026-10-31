@@ -176,9 +176,6 @@ const quickEdits = computed(() => canEdit.value && !props.card.archived_at)
 .card-tile--archived {
   border-style: dashed;
 }
-.card-tile--ghost {
-  opacity: 0.4;
-}
 .card-tile__people {
   margin-left: auto;
 }

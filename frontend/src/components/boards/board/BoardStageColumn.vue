@@ -22,7 +22,12 @@
      them all in the DOM. A drag heading in past the WIP limit says so,
      and the drop still goes through. -->
 <template>
-  <section class="stage-col" :aria-labelledby="headingId" :data-stage-col="stage.id">
+  <section
+    class="stage-col"
+    :class="{ 'stage-col--drop-target': dropTarget }"
+    :aria-labelledby="headingId"
+    :data-stage-col="stage.id"
+  >
     <StageColumnHeader :id="headingId" :stage="stage" :count="count" />
     <p v-if="goesOver" class="stage-col__over" role="status">
       {{ stage.name }} goes over its limit of {{ limit }}. You can still drop here.
@@ -96,7 +101,7 @@ import BoardCardTile from '@/components/boards/board/BoardCardTile.vue'
 import BoardQuickAdd from '@/components/boards/board/BoardQuickAdd.vue'
 import StageColumnHeader from '@/components/boards/board/StageColumnHeader.vue'
 import {
-  dragEnded, dragGoesOver, dragMoved, dragOptions, dragStarted, dropFromDragEnd, type CardDrop,
+  dragEnded, dragGoesOver, dragMoved, dragOptions, dragStarted, dropFromDragEnd, isDropTarget, type CardDrop,
 } from '@/composables/useCardDrag'
 import { useLoadMoreSentinel } from '@/composables/useLoadMoreSentinel'
 import type { ActionResult } from '@/stores/boardCardActions'
@@ -139,6 +144,7 @@ const sentinel = ref<HTMLElement | null>(null)
 
 const limit = computed(() => wipLimit(props.stage.wip_limit))
 const goesOver = computed(() => dragGoesOver(props.stage.id, props.count, props.stage.wip_limit))
+const dropTarget = computed(() => isDropTarget(props.stage.id))
 
 const { xs } = useDisplay()
 const sentinelRoot = computed(() => (xs.value ? null : scrollBox.value))

@@ -85,6 +85,8 @@ export const glideshipDark: ThemeDefinition = {
     'border-opacity': 0.09,
     'high-emphasis-opacity': 0.95,
     'medium-emphasis-opacity': 0.68,
+    // The one drop shadow: a card lifted off the board while it's dragged.
+    'lift-shadow': '0 12px 28px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3)',
   },
 }
 
@@ -141,6 +143,7 @@ export const glideshipLight: ThemeDefinition = {
     'border-opacity': 0.12,
     'high-emphasis-opacity': 0.95,
     'medium-emphasis-opacity': 0.66,
+    'lift-shadow': '0 12px 28px rgb(15 23 42 / 0.14), 0 2px 6px rgb(15 23 42 / 0.08)',
   },
 }
 

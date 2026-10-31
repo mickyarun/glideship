@@ -96,8 +96,10 @@ export const HANDOVER_TARGETS: { value: HandoverTarget; label: string }[] = [
 
 /** On touch screens a card must be held this long before it drags, so the column still scrolls. */
 export const DRAG_TOUCH_DELAY_MS = 150
-/** How long a drag's slide animation runs. */
+/** How long a drag's slide animation runs (none when the OS asks for reduced motion). */
 export const DRAG_ANIMATION_MS = 150
+/** How far a press must travel before it drags, so a slightly shaky click still opens the card. */
+export const DRAG_START_TOLERANCE_PX = 4
 
 /** A card's documents, in the order its Documents tab lists them. */
 export const DOC_LABELS: Record<CardDocKind, string> = {

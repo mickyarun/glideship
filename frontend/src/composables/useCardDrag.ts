@@ -17,10 +17,11 @@
 // store moves the card (optimistically), and Vue re-renders from that.
 // Columns carry ``data-stage-id`` and cards ``data-card-id``. While a
 // drag is on, ``dragging`` says which card and which column it's over,
-// so a column can warn before a drop takes it past its WIP limit.
+// so a column can warn before a drop takes it past its WIP limit and
+// light up as the drop target.
 
 import { ref } from 'vue'
-import { DRAG_ANIMATION_MS, DRAG_TOUCH_DELAY_MS } from '@/constants/boards'
+import { DRAG_ANIMATION_MS, DRAG_START_TOLERANCE_PX, DRAG_TOUCH_DELAY_MS } from '@/constants/boards'
 import { overWip } from '@/utils/wip'
 
 export interface CardDrop {
@@ -76,6 +77,18 @@ export function dragGoesOver(stageId: string, count: number, limit: number | nul
   return overWip(count + 1, limit)
 }
 
+/** Whether the drag in progress would land in this stage, having come from another. */
+export function isDropTarget(stageId: string): boolean {
+  const drag = dragging.value
+  return !!drag && drag.overStageId === stageId && drag.fromStageId !== stageId
+}
+
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia?.(REDUCED_MOTION).matches
+}
+
 export function dragEnded(): void {
   dragging.value = null
 }
@@ -85,13 +98,23 @@ export function dragOptions(boardId: string, enabled: boolean) {
   return {
     group: `board-${boardId}`,
     disabled: !enabled,
-    animation: DRAG_ANIMATION_MS,
+    animation: prefersReducedMotion() ? 0 : DRAG_ANIMATION_MS,
     delay: DRAG_TOUCH_DELAY_MS,
     delayOnTouchOnly: true,
     draggable: '[data-card-id]',
     // The ⋯ menu and the quick-edit buttons (due date, assignees) click; they never drag.
     filter: '.card-tile__menu, .card-tile__quick',
     preventOnFilter: false,
+    // The slot the card will land in, the card picked up, and the copy
+    // that follows the pointer (styled in stage-column.css).
     ghostClass: 'card-tile--ghost',
+    chosenClass: 'card-tile--chosen',
+    dragClass: 'card-tile--drag',
+    // Draw that copy ourselves, for mouse and touch alike, rather than the
+    // browser's faded snapshot. It sits on <body>, outside the column's
+    // paint containment, which would otherwise clip it.
+    forceFallback: true,
+    fallbackOnBody: true,
+    fallbackTolerance: DRAG_START_TOLERANCE_PX,
   }
 }
