@@ -40,7 +40,7 @@
 
       <template #append>
         <v-divider class="mb-2" />
-        <v-list density="compact" nav class="px-2 pb-2">
+        <v-list density="compact" nav class="px-2 pb-2" role="none">
           <v-list-item
             v-if="canAccessEngineering && canManageMembers"
             prepend-icon="mdi-account-group-outline"

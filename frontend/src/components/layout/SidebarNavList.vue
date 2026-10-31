@@ -20,7 +20,9 @@
      Board users outside engineering get the Garden under their boards
      (engineers open it from the dashboard). -->
 <template>
-  <v-list density="compact" nav class="px-2">
+  <!-- role="none": the drawer is already a <nav> of links, and a list
+       role would need list items around each one. -->
+  <v-list density="compact" nav class="px-2" role="none">
     <EngineeringNav v-if="canAccessEngineering" group="work" :rail="rail" />
     <BoardsNav
       v-if="canViewBoards || canAccessEngineering"

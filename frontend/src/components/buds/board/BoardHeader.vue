@@ -157,10 +157,9 @@ const countLabel = computed(() => {
 }
 .bud-board-head__hint a {
   color: var(--color-accent-text);
-  text-decoration: none;
-}
-.bud-board-head__hint a:hover {
+  /* Underlined, not colour alone: it sits inside a sentence. */
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 @media (max-width: 600px) {
   .bud-board-head__search {
