@@ -35,8 +35,8 @@
         <span class="origin__key">{{ card.key }}</span>
         <span class="origin__title">{{ card.title }}</span>
       </div>
-      <ul v-if="origin?.handovers.length" class="origin__list" aria-label="Handovers from this card">
-        <HandoverBudRow v-for="h in origin.handovers" :key="h.id" :handover="h" :can-retry="false" :retrying="false" />
+      <ul v-if="others.length" class="origin__list" aria-label="Other BUDs from this card">
+        <HandoverBudRow v-for="h in others" :key="h.id" :handover="h" :can-retry="false" :retrying="false" />
       </ul>
       <OriginComments
         :comments="store.comments" :has-more="!!store.nextCursor" :loading="store.loadingMore" @more="store.more()"
@@ -62,6 +62,8 @@ const props = defineProps<{ budId: string; status: BUDStatus }>()
 const store = useBudOriginStore()
 const origin = computed(() => (store.budId === props.budId ? store.origin : null))
 const card = computed(() => origin.value?.card ?? null)
+// The card's other BUDs; this one is the page itself.
+const others = computed(() => (origin.value?.handovers ?? []).filter(h => h.bud_id !== props.budId))
 const cardLink = computed(() =>
   card.value ? { name: 'board-card', params: { key: card.value.board.key, number: card.value.number } } : '',
 )

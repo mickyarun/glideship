@@ -38,6 +38,7 @@
       <v-chip v-for="r in SEND_BACK_REASONS" :key="r" tag="button" type="button" size="small" variant="outlined" @click="start(r)">{{ r }}</v-chip>
     </div>
     <v-textarea
+      ref="field"
       v-model="reason"
       label="Reason (required)"
       rows="3"
@@ -63,6 +64,7 @@ const store = useBudOriginStore()
 const reason = ref('')
 const busy = ref(false)
 const failure = ref('')
+const field = ref<{ focus: () => void } | null>(null)
 
 watch(() => props.modelValue, open => {
   if (!open) return
@@ -70,10 +72,11 @@ watch(() => props.modelValue, open => {
   failure.value = ''
 })
 
-/** A common reason starts the text; whatever I'd written stays after it. */
+/** A common reason starts the text (whatever I'd written stays after it), and I carry on typing. */
 function start(r: string): void {
   const rest = reason.value.trim()
   reason.value = rest ? `${r}: ${rest}` : `${r}: `
+  field.value?.focus()
 }
 
 async function submit(): Promise<void> {
