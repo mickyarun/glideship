@@ -1046,6 +1046,11 @@ These were decided on 2026-10-31 after a first hands-on test.
 - **Due date from the board.** The card's date chip, or a calendar "+" when the card has no due
   date, opens a date picker for anyone who can edit. It can set, change or clear the due date and
   saves through the card PATCH, optimistically with rollback.
+- **Delivery is a board type.** The BUD board is listed under Boards as the "Delivery" board
+  (type Delivery, key BUD), first in the sidebar's Boards section for engineering users and no
+  longer in Work. It uses the same board chrome as custom boards: breadcrumb, title switcher, key
+  chip and meta line. `/boards/BUD` redirects to `/buds`. Data and the BUD lifecycle are
+  unchanged, and BUDs don't gain a board id.
 - **Assign from the board.** A card's avatars, or a "+" when no one is assigned, open a people
   picker for anyone who can edit. It lists people with access to the board and saves through
   the card PATCH, optimistically with rollback.
