@@ -1022,6 +1022,14 @@ export type NotificationType =
   | 'leave_requested'
   | 'leave_decided'
   | 'employee_record_changed'
+  | 'board_card_assigned'
+  | 'board_card_comment'
+  | 'board_ai_draft'
+  | 'board_ai_failed'
+  | 'board_handover'
+  | 'board_handover_returned'
+  | 'board_handover_delivered'
+  | 'board_due'
 
 /**
  * Structured payload attached to a race-invite notification.
