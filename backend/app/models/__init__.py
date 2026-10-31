@@ -88,6 +88,14 @@ from app.models.employee_profile import EmployeeProfile
 from app.models.employee_reporting_manager import EmployeeReportingManager
 from app.models.employee_sensitive import EmployeeSensitiveDetails
 from app.models.enterprise_rule import EnterpriseRule
+from app.models.external_import import (
+    ExternalImportSession,
+    ExternalImportStatus,
+    ExternalItemMap,
+    ExternalItemStatus,
+    ImportMode,
+    ImportSourceKind,
+)
 from app.models.feature import Feature
 from app.models.feature_learning import FeatureLearning
 from app.models.feature_match_log import FeatureMatchLog
@@ -246,6 +254,8 @@ __all__ = [
     "RepoRunStatus",
     "ScanKind",
     "StepStatus",
+    "ImportMode",
+    "ImportSourceKind",
     "ImportStatus",
     "JiraImportSession",
     "JiraIssueBudMap",
@@ -296,6 +306,10 @@ __all__ = [
     "TeamMember",
     "TeamRepo",
     "TeamStatus",
+    "ExternalImportSession",
+    "ExternalImportStatus",
+    "ExternalItemMap",
+    "ExternalItemStatus",
     "Feature",
     "FeatureQASession",
     "FeatureQAStatus",

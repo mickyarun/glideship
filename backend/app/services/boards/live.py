@@ -53,6 +53,9 @@ class BoardSocketEvent(StrEnum):
     STAGE_REORDERED = "stage_reordered"
     LABEL_CHANGED = "label_changed"
     MEMBER_CHANGED = "member_changed"
+    # One summary when an import finishes; the board reloads rather than
+    # hearing about each imported card.
+    BOARD_IMPORTED = "board_imported"
 
 
 def board_topic(board_id: uuid.UUID) -> str:

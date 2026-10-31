@@ -48,7 +48,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions_boards import BOARDS_MANAGE, BOARDS_VIEW
 from app.models.board import Board
-from app.models.board_enums import BoardMemberRole, BoardVisibility
+from app.models.board_enums import BoardMemberRole, BoardStatus, BoardVisibility
 from app.models.board_member import BoardMember, BoardTeam
 from app.models.team import Team, TeamMember, TeamStatus
 from app.models.user import OrgToUser, User
@@ -111,6 +111,19 @@ class BoardAccessRepository:
         )
         row = (await self._db.execute(stmt)).one_or_none()
         return None if row is None else (row[0], row[1])
+
+    async def administers_any(self, user_id: uuid.UUID, perms: PermissionChecker) -> bool:
+        """Whether the caller is admin on at least one active board in the org."""
+        roles = self.role_subquery(user_id, perms)
+        stmt = (
+            select(roles.c.board_id)
+            .join(Board, Board.id == roles.c.board_id)
+            .where(
+                roles.c.role == _role(BoardMemberRole.ADMIN), Board.status == BoardStatus.ACTIVE
+            )
+            .limit(1)
+        )
+        return (await self._db.execute(stmt)).first() is not None
 
     async def users_with_access(
         self, board_id: uuid.UUID, user_ids: set[uuid.UUID]

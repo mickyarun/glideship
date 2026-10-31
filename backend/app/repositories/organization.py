@@ -132,6 +132,14 @@ class OrganizationRepository(BaseRepository[Organization]):
         org.config = {**(org.config or {}), key: value}
         await self._db.flush()
 
+    async def remove_config_section(self, org_id: uuid.UUID, key: str) -> None:
+        """Drop one top-level section of the org's ``config`` JSONB, if present."""
+        org = await self._db.get(Organization, org_id)
+        if org is None or key not in (org.config or {}):
+            return
+        org.config = {k: v for k, v in (org.config or {}).items() if k != key}
+        await self._db.flush()
+
     async def get_by_github_app_id(self, app_id: int) -> Organization | None:
         """Fetch an organization by its configured GitHub App ID.
 

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.board import Board, BoardStage
-from app.models.board_enums import BoardMemberRole
+from app.models.board_enums import BoardMemberRole, BoardVisibility
 from app.repositories.board import BoardRepository, VisibleBoard
 from app.repositories.board_member import BoardMemberRepository
 from app.repositories.board_prefs import BoardPrefsRepository
@@ -112,29 +112,55 @@ def normalise_key(raw: str) -> str:
     return key
 
 
-async def create_board(db: AsyncSession, caller: BoardCaller, body: BoardCreate) -> BoardDetail:
-    """A new board from a template, with the caller as its admin."""
-    key, name = normalise_key(body.key), body.name
-    template = load_templates().get(body.template)
-    if template is None:
-        raise BoardRuleError(f"There is no board template called {body.template!r}.")
+async def check_new_board(db: AsyncSession, caller: BoardCaller, *, key: str, name: str) -> str:
+    """The normalised key, once the key is valid and neither it nor ``name`` is taken."""
+    normal = normalise_key(key)
     repo = BoardRepository(db, org_id=caller.org_id)
-    if await repo.key_or_name_taken(key=key, name=name):
+    if await repo.key_or_name_taken(key=normal, name=name):
         raise BoardConflictError(BOARD_TAKEN)
+    return normal
+
+
+async def insert_board(
+    db: AsyncSession,
+    caller: BoardCaller,
+    *,
+    key: str,
+    name: str,
+    description: str | None,
+    visibility: BoardVisibility,
+) -> Board:
+    """A new board with no stages yet and the caller as its admin; not committed."""
     board = Board(
         org_id=caller.org_id,
         name=name,
-        key=key,
-        description=body.description,
-        visibility=body.visibility,
+        key=await check_new_board(db, caller, key=key, name=name),
+        description=description,
+        visibility=visibility,
         created_by=caller.user_id,
     )
-    if not await repo.insert(board):
+    if not await BoardRepository(db, org_id=caller.org_id).insert(board):
         raise BoardConflictError(BOARD_TAKEN)
-    await _add_template_stages(db, board, template)
     await BoardMemberRepository(db, org_id=caller.org_id).put_member(
         board.id, caller.user_id, BoardMemberRole.ADMIN
     )
+    return board
+
+
+async def create_board(db: AsyncSession, caller: BoardCaller, body: BoardCreate) -> BoardDetail:
+    """A new board from a template, with the caller as its admin."""
+    template = load_templates().get(body.template)
+    if template is None:
+        raise BoardRuleError(f"There is no board template called {body.template!r}.")
+    board = await insert_board(
+        db,
+        caller,
+        key=body.key,
+        name=body.name,
+        description=body.description,
+        visibility=body.visibility,
+    )
+    await _add_template_stages(db, board, template)
     await db.commit()
     await db.refresh(board)
     access = BoardAccess(

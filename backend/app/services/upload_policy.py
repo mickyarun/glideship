@@ -263,3 +263,13 @@ def card_attachment_policy(*, max_file_mb: int, max_files: int) -> UploadPolicy:
         extensions=CARD_ATTACHMENT_EXTENSIONS,
         max_files=max_files,
     )
+
+
+IMPORT_FILE_EXTENSIONS: Mapping[str, str] = {".json": "application/json"}
+
+
+def import_file_policy(*, max_bytes: int) -> UploadPolicy:
+    """An exported board (JSON) uploaded to start an import, up to ``max_bytes``."""
+    return UploadPolicy.for_extensions(
+        label="Import file", max_bytes=max_bytes, extensions=IMPORT_FILE_EXTENSIONS
+    )

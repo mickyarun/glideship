@@ -35,6 +35,7 @@ from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.event_loop import configure_event_loop_policy
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
+from app.repositories.external_import import recover_stuck_external_imports
 from app.services.celebrations.scheduler import run_forever as run_celebrations
 from app.services.leave.carry_scheduler import run_forever as run_leave_carry_forward
 from app.services.leave.digest_scheduler import run_forever as run_leave_digest
@@ -228,6 +229,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("recovered_stuck_import_sessions", count=recovered)
     except Exception:
         logger.warning("import_session_recovery_failed", exc_info=True)
+
+    # 6c. Board imports interrupted by the restart become failed; starting
+    # one again resumes after its last committed batch.
+    try:
+        async with AsyncSessionLocal() as session:
+            recovered = await recover_stuck_external_imports(session)
+            await session.commit()
+        if recovered:
+            logger.info("recovered_stuck_board_imports", count=recovered)
+    except Exception:
+        logger.warning("board_import_recovery_failed", exc_info=True)
 
     # 7. Periodic Slack presence polling
     from app.services.presence_cache import refresh_all_presence

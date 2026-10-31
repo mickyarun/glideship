@@ -26,6 +26,7 @@ update_job(state=FAILED) instead.
 import os
 
 from app.services.bud_agent_handler import handle_bud_agent_job
+from app.services.imports.pipeline import handle_import_discover_job, handle_import_run_job
 from app.services.jira_enrich import handle_enrich_job
 from app.services.jira_import_pipeline import handle_discovery_job, handle_import_job
 from app.services.job_agents import handle_triage_job
@@ -38,6 +39,8 @@ from app.services.job_queue import (
     JOB_DESIGN_AGENT,
     JOB_DESIGN_EXTRACT,
     JOB_FEATURE_QA,
+    JOB_IMPORT_DISCOVER,
+    JOB_IMPORT_RUN,
     JOB_JIRA_DISCOVERY,
     JOB_JIRA_ENRICH,
     JOB_JIRA_IMPORT,
@@ -105,6 +108,10 @@ def setup_job_handlers() -> None:
     register_job_type(JOB_JIRA_DISCOVERY, handle_discovery_job, worker_count=1)
     register_job_type(JOB_JIRA_IMPORT, handle_import_job, worker_count=1)
     register_job_type(JOB_JIRA_ENRICH, handle_enrich_job, worker_count=1)
+
+    # Board imports (Trello first): one parse and one import at a time.
+    register_job_type(JOB_IMPORT_DISCOVER, handle_import_discover_job, worker_count=1)
+    register_job_type(JOB_IMPORT_RUN, handle_import_run_job, worker_count=1)
 
     # PR-merge feature reconcile is no longer a job-queue type — it
     # runs via the per-(org, repo) Redis-stream worker pool
