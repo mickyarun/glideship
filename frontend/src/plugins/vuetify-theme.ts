@@ -157,6 +157,8 @@ export const vuetifyDefaults = {
     elevation: 0,
   },
   VBtn: {
+    // Flat by default: filled buttons sit on the surface, no drop shadow.
+    variant: 'flat',
     rounded: 'lg',
     // Roman, not uppercase; weight carries emphasis (Hallmark typography).
     class: 'text-none font-weight-medium',
@@ -167,6 +169,11 @@ export const vuetifyDefaults = {
     color: 'primary',
   },
   VSelect: {
+    variant: 'outlined',
+    density: 'comfortable',
+    color: 'primary',
+  },
+  VAutocomplete: {
     variant: 'outlined',
     density: 'comfortable',
     color: 'primary',
