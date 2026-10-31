@@ -116,7 +116,7 @@ def stub_externals(embedding: list[float] | None = None) -> Iterator[Externals]:
             stack.enter_context(patch(target, new=AsyncMock(side_effect=RuntimeError(_NO_MODEL))))
         bg_estimate = stack.enter_context(patch("app.api.v1.bud._bg_estimate", new=AsyncMock()))
         dev_estimate = stack.enter_context(
-            patch("app.services.bud_development._schedule_estimation_after_commit")
+            patch("app.services.bud_estimate_after_commit.schedule")
         )
         yield Externals(embed=embed, bg_estimate=bg_estimate, dev_estimate=dev_estimate)
 

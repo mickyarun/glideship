@@ -41,6 +41,10 @@ def publish_after_commit(db: AsyncSession, topic: str, data: dict[str, Any]) -> 
 
 @event.listens_for(Session, "after_commit")
 def _send(session: Session) -> None:
+    # ``after_commit`` also fires when a SAVEPOINT is released; only the
+    # outermost commit makes the change visible.
+    if session.in_nested_transaction():
+        return
     for topic, data in session.info.pop(_PENDING, []):
         event_bus.publish(topic, data)
 
@@ -72,6 +76,8 @@ def call_after_commit(db: AsyncSession, callback: Callable[[], None]) -> None:
 
 @event.listens_for(Session, "after_commit")
 def _call(session: Session) -> None:
+    if session.in_nested_transaction():
+        return
     for callback in session.info.pop(_CALLBACKS, []):
         callback()
 
