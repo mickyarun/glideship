@@ -1025,6 +1025,28 @@ Paths are relative to `frontend/src` and `backend/app`.
 - Moving cards between boards, with key aliases.
 - A per-user due digest.
 
+## Moving cards: validation and quick edits
+
+These were decided on 2026-10-31 after a first hands-on test.
+
+- **Checklist before Done.** A card can't enter a stage of category `done` while its checklist
+  has open items, unless the person confirms. The server refuses the move with 409
+  `CHECKLIST_OPEN` and the open count. The client asks "N checklist items are still open. Move
+  to <stage> anyway?" and resends with `confirm_open_checklist: true`.
+- **Required fields per stage.** Each stage can list fields a card must have before it enters:
+  `board_stages.required_fields`, an array of the PG enum `stage_required_field` (`assignee`,
+  `due_date`, `priority`, `label`, `description`, `prd`).
+  - **Where it's checked.** Moves and creates into that stage. The server refuses with 422
+    `STAGE_REQUIREMENTS_MISSING` and the missing list.
+  - **On the board.** `CardSummary` carries `has_description` and `has_prd`, so the board can
+    check before a drop. A refused drop animates back, and a message names what's missing, with
+    "Open card".
+  - **Exceptions.** Moving cards out of a deleted stage (`move_to`) and imports
+    (`ImportContext`) don't check requirements. Admins set requirements in Stages settings.
+- **Assign from the board.** A card's avatars, or a "+" when no one is assigned, open a people
+  picker for anyone who can edit. It lists people with access to the board and saves through
+  the card PATCH, optimistically with rollback.
+
 ## Moving cards between boards
 
 A card can move between two custom boards, for example SEO to DevOps. It's the same row moving,
