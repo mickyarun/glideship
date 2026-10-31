@@ -37,7 +37,17 @@
     <v-btn v-if="hasFilters(model)" variant="text" size="small" prepend-icon="mdi-close" @click="emit('clear')">
       Clear filters
     </v-btn>
-    <v-checkbox v-model="archived" label="Show archived" density="compact" hide-details class="filter-bar__archived" />
+    <!-- A text toggle, the same as Delivery's "Discarded". -->
+    <v-btn
+      variant="text"
+      prepend-icon="mdi-archive-outline"
+      :aria-pressed="archived"
+      :color="archived ? 'primary' : undefined"
+      class="filter-bar__archived"
+      @click="archived = !archived"
+    >
+      Archived
+    </v-btn>
   </div>
 </template>
 
@@ -116,9 +126,6 @@ const countText = computed(() => {
 }
 .filter-bar__archived {
   flex: 0 0 auto;
-}
-.filter-bar__archived :deep(.v-label) {
-  font-size: 14px;
 }
 @media (max-width: 600px) {
   .filter-bar__search {
