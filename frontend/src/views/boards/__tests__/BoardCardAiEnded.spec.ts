@@ -14,10 +14,11 @@
 
 /**
  * How the card's AI panel says a run ended: in product words for the run's
- * error code, never the raw reason (that goes to the console). A server
- * that sends no code yet reads as "not connected" when its message says
- * so, else the default words. Whoever can connect the AI service gets a
- * link to its settings. Try again stands in for that agent's Run button.
+ * error code. The raw reason goes to the console, and board admins (the
+ * only ones the server sends it to) can open it under Details. A run from
+ * before codes existed reads as canceled when it was, else the default
+ * words. Whoever can connect the AI service gets a link to its settings.
+ * Try again stands in for that agent's Run button.
  */
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -60,7 +61,10 @@ describe('BoardCardView AI panel: how a run ended', () => {
     ['was interrupted', { status: 'failed', error_code: 'INTERRUPTED' }, "PRD writer didn't finish", 'The run stopped before it finished. Try again.'],
     ['was canceled', { status: 'canceled', error_code: 'CANCELED', error_message: 'Cancelled by user' }, 'PRD writer was canceled', 'Canceled.'],
     ['was canceled, from an older server', { status: 'canceled' }, 'PRD writer was canceled', 'Canceled.'],
-    ['had no provider, from an older server', { status: 'failed', error_message: RAW }, "PRD writer didn't finish", RUN_ENDED_COPY.AI_NOT_CONFIGURED],
+    ['had no provider', { status: 'failed', error_code: 'AI_NOT_CONFIGURED' }, "PRD writer didn't finish", RUN_ENDED_COPY.AI_NOT_CONFIGURED],
+    ['wrote a draft too long to keep', { status: 'failed', error_code: 'OVER_LIMIT' }, "PRD writer didn't finish", "The draft came back longer than a document can hold. Try again, or shorten the card's text."],
+    ['crashed', { status: 'failed', error_code: 'UNKNOWN' }, "PRD writer didn't finish", RUN_ENDED_DEFAULT],
+    ['had a provider message but no code, from before codes', { status: 'failed', error_message: RAW }, "PRD writer didn't finish", RUN_ENDED_DEFAULT],
     ['failed for a reason it has no words for', { status: 'failed', error_message: 'Boom: stack trace' }, "PRD writer didn't finish", RUN_ENDED_DEFAULT],
     ['failed with a code from a newer server', { status: 'failed', error_code: 'NEW_THING' as AgentRunRead['error_code'] }, "PRD writer didn't finish", RUN_ENDED_DEFAULT],
   ])('says so when a run %s, with Try again in place of Run', async (_name, over, title, words) => {
@@ -72,12 +76,34 @@ describe('BoardCardView AI panel: how a run ended', () => {
     expect(buttonsWith(wrapper, 'Run PRD writer')).toHaveLength(0)
   })
 
-  it('keeps the raw reason off the screen and in the console', async () => {
+  it('keeps the raw reason off the screen for non-admins and in the console', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     cardApi.agents.mockResolvedValue(cardAgents({ runs: [makeRun('r1', { status: 'failed', error_message: RAW })] }))
     await mountCardPage()
     expect(panel()).not.toContain('curl')
+    expect(document.querySelector('.ai-ended__details')).toBeNull()
     expect(logged).toHaveBeenCalledWith('[boards] agent run r1 failed:', RAW)
+  })
+
+  it('lets a board admin open the raw reason under Details, below the product words', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    cardDefaults([...RUN_CAPS, 'configure_agents'])
+    const failed = makeRun('r1', { status: 'failed', error_code: 'PROVIDER_FAILED', error_message: RAW })
+    cardApi.agents.mockResolvedValue(cardAgents({ runs: [failed] }))
+    await mountCardPage()
+    const details = document.querySelector<HTMLDetailsElement>('.ai-ended__details')
+    expect(details?.open).toBe(false)
+    expect(details?.querySelector('summary')?.textContent).toBe('Details')
+    expect(details?.querySelector('pre')?.textContent).toBe(RAW)
+    expect(panel().indexOf(RUN_ENDED_COPY.PROVIDER_FAILED)).toBeLessThan(panel().indexOf('Details'))
+  })
+
+  it('shows no Details to an admin when the run has no raw reason', async () => {
+    cardDefaults([...RUN_CAPS, 'configure_agents'])
+    cardApi.agents.mockResolvedValue(cardAgents({ runs: [makeRun('r1', { status: 'canceled', error_code: 'CANCELED' })] }))
+    await mountCardPage()
+    expect(panel()).toContain('Canceled.')
+    expect(document.querySelector('.ai-ended__details')).toBeNull()
   })
 
   it('links whoever can connect the AI service to its settings', async () => {

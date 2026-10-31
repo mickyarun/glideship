@@ -21,6 +21,7 @@ import api from '@/services/api'
 import { cardUrl } from '@/services/boardsApi'
 import type {
   AgentRunAccepted,
+  AgentRunRead,
   CardAgents,
   CardDetail,
   CardDocKind,
@@ -71,6 +72,9 @@ export const boardCardApi = {
   /** Start (or retry) one of the stage's agents; 202 with the run to follow. */
   runAgent: async (key: string, n: number, agentId: string) =>
     (await api.post<AgentRunAccepted>(`${agents(key, n)}/${agentId}/run`)).data,
+  /** Cancel a queued or drafting run (editors); 409 ``AGENT_RUN_FINISHED`` once it has ended. */
+  cancelRun: async (key: string, n: number, runId: string) =>
+    (await api.post<AgentRunRead>(`${agents(key, n)}/runs/${runId}/cancel`)).data,
   /** Make an AI draft (or ``body_md``, my edit of it) the current version, on top of ``base_version``. */
   acceptDraft: async (key: string, n: number, kind: CardDocKind, id: string, base_version: number | null, body_md?: string) =>
     (await api.post<DocRead>(`${draft(key, n, kind, id)}/accept`, body_md === undefined ? { base_version } : { base_version, body_md })).data,

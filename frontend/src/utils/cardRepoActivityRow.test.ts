@@ -32,13 +32,20 @@ const words = (parts: ActivityPart[]) => parts.map(p => ('text' in p ? p.text : 
 const link = (parts: ActivityPart[]) => parts.find(p => p.kind === 'link') as Extract<ActivityPart, { kind: 'link' }> | undefined
 
 describe('repoActivityRow', () => {
-  it('says who opened, merged or closed a pull request, with its own icon', () => {
-    for (const [kind, words_] of [['pr_opened', 'opened'], ['pr_merged', 'merged'], ['pr_closed', 'closed']] as const) {
+  it('says who opened, reopened, merged or closed a pull request, with its own icon', () => {
+    const kinds = [['pr_opened', 'opened'], ['pr_reopened', 'reopened'], ['pr_merged', 'merged'], ['pr_closed', 'closed']] as const
+    for (const [kind, words_] of kinds) {
       const row = repoActivityRow(ev({ kind }), named)
       expect(words(row.primary)).toBe(`octo ${words_} pull request #5 Fix login`)
       expect(row.icon).toBe(REPO_ACTIVITY_LOOKS[kind].icon)
       expect(row.color).toBe(REPO_ACTIVITY_LOOKS[kind].color)
     }
+  })
+
+  it('gives a reopened pull request an icon of its own', () => {
+    const icons = Object.values(REPO_ACTIVITY_LOOKS).map(look => look.icon)
+    expect(REPO_ACTIVITY_LOOKS.pr_reopened.icon).toBe('mdi-source-branch-refresh')
+    expect(new Set(icons).size).toBe(icons.length)
   })
 
   it('reads a commit by its short sha, on the repository the board links', () => {

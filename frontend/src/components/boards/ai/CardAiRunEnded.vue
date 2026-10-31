@@ -15,10 +15,11 @@
  -->
 
 <!-- The card's last run, when it failed or was canceled: what happened
-     in product words for its error code (the raw reason goes to the
-     console, never on screen), a link to the AI settings for whoever can
-     connect the AI service when it isn't, and Retry (the same call as Run)
-     for editors while the agent is still on the stage. -->
+     in product words for its error code, a link to the AI settings for
+     whoever can connect the AI service when it isn't, and Retry (the same
+     call as Run) for editors while the agent is still on the stage. The
+     raw reason goes to the console; board admins (the only ones the server
+     sends it to) can also open it under the words, in Details. -->
 <template>
   <AppCallout
     :variant="run.status === 'failed' ? 'error' : 'info'"
@@ -27,6 +28,10 @@
   >
     {{ words }}
     <router-link v-if="settingsLink" :to="settingsLink" class="ai-ended__link">Open AI settings</router-link>
+    <details v-if="details" class="ai-ended__details">
+      <summary class="ai-ended__summary">Details</summary>
+      <pre class="ai-ended__raw">{{ details }}</pre>
+    </details>
     <template v-if="canRetry" #actions>
       <v-btn variant="outlined" size="small" :disabled="busy" @click="emit('retry')">Try again</v-btn>
     </template>
@@ -45,12 +50,20 @@ import { logFailure } from '@/utils/logFailure'
 const AI_SETTINGS = { name: 'settings' }
 const AI_SETTINGS_PERMISSION = 'integrations:configure'
 
-const props = defineProps<{ run: AgentRunRead; skillName: string; canRetry: boolean; busy: boolean }>()
+const props = defineProps<{
+  run: AgentRunRead
+  skillName: string
+  canRetry: boolean
+  busy: boolean
+  /** Board admins may read the run's raw reason. */
+  canSeeDetails: boolean
+}>()
 const emit = defineEmits<{ retry: [] }>()
 
 const { hasPermission } = usePermissions()
 const title = computed(() => RUN_ENDED_TITLES[props.run.status]?.(props.skillName) ?? props.skillName)
 const words = computed(() => runEndedWords(props.run))
+const details = computed(() => (props.canSeeDetails ? props.run.error_message?.trim() || null : null))
 const settingsLink = computed(() =>
   runEndedCode(props.run) === 'AI_NOT_CONFIGURED' && hasPermission(AI_SETTINGS_PERMISSION) ? AI_SETTINGS : null,
 )
@@ -65,5 +78,20 @@ watch(() => props.run.id, () => {
 .ai-ended__link {
   margin-left: 4px;
   color: var(--color-accent-text);
+}
+.ai-ended__details {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.ai-ended__summary {
+  cursor: pointer;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.ai-ended__raw {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 </style>

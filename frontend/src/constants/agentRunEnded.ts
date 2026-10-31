@@ -14,13 +14,15 @@
 
 // How a run that ended without a draft reads on the card's AI panel. The
 // words come from the run's ``error_code``, never from its raw
-// ``error_message`` (that goes to the console only). A server that sends
-// no code yet gets the default words, except a run whose message says no
-// AI provider is set up, which reads as AI_NOT_CONFIGURED.
+// ``error_message`` (board admins can open that under the words). A run
+// that ended before codes existed reads as canceled when it was, else gets
+// the default words.
 
 import type { AgentRunErrorCode, AgentRunRead, AgentRunStatus } from '@/types/boards'
 
 const NOTHING_CHANGED = 'Nothing on the card changed.'
+/** The words for a run that crashed, or ended for a reason with no words of its own. */
+export const RUN_ENDED_DEFAULT = `Something went wrong while drafting. ${NOTHING_CHANGED}`
 
 /** The headline above the words. */
 export const RUN_ENDED_TITLES: Partial<Record<AgentRunStatus, (skill: string) => string>> = {
@@ -37,23 +39,18 @@ export const RUN_ENDED_COPY: Record<AgentRunErrorCode, string> = {
   STALE: 'The run stopped before it finished. Try again.',
   INTERRUPTED: 'The run stopped before it finished. Try again.',
   CANCELED: 'Canceled.',
+  OVER_LIMIT: "The draft came back longer than a document can hold. Try again, or shorten the card's text.",
+  UNKNOWN: RUN_ENDED_DEFAULT,
 }
-
-export const RUN_ENDED_DEFAULT = `Something went wrong while drafting. ${NOTHING_CHANGED}`
-
-/** Words in a code-less run's message that mean no AI provider is set up (lower case). */
-const NOT_CONFIGURED_HINTS = ['cli not found', 'not configured']
 
 const isCode = (code: unknown): code is AgentRunErrorCode => typeof code === 'string' && code in RUN_ENDED_COPY
 
-type Ended = Pick<AgentRunRead, 'status' | 'error_message' | 'error_code'>
+type Ended = Pick<AgentRunRead, 'status' | 'error_code'>
 
-/** Why the run ended, as a code: the server's, else what its status or message implies. */
+/** Why the run ended, as a code: the server's, else what its status implies. */
 export function runEndedCode(run: Ended): AgentRunErrorCode | null {
   if (isCode(run.error_code)) return run.error_code
-  if (run.status === 'canceled') return 'CANCELED'
-  const raw = run.error_message?.toLowerCase() ?? ''
-  return NOT_CONFIGURED_HINTS.some(hint => raw.includes(hint)) ? 'AI_NOT_CONFIGURED' : null
+  return run.status === 'canceled' ? 'CANCELED' : null
 }
 
 /** What the panel says about a run that ended. */

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A card's ``repo_activity`` history row: a pull request opened, merged
-// or closed, or a commit pushed, on a repository the board links, that
+// A card's ``repo_activity`` history row: a pull request opened, reopened,
+// merged or closed, or a commit pushed, on a repository the board links, that
 // named the card's key. The detail comes from a GitHub delivery, so every
 // field is checked: the login and title show as text, the ref links to
 // GitHub only through safeHref (the server builds the address from the
@@ -24,7 +24,7 @@ import type { CardEventRead } from '@/types/boards'
 import { actor, section, text, type ActivityPart, type ActivityRow } from '@/utils/activity'
 import { safeHref } from '@/utils/safeHref'
 
-export type RepoActivityKind = 'pr_opened' | 'pr_merged' | 'pr_closed' | 'commit'
+export type RepoActivityKind = 'pr_opened' | 'pr_reopened' | 'pr_merged' | 'pr_closed' | 'commit'
 
 interface KindLook {
   icon: string
@@ -34,6 +34,7 @@ interface KindLook {
 
 export const REPO_ACTIVITY_LOOKS: Record<RepoActivityKind, KindLook> = {
   pr_opened: { icon: 'mdi-source-pull', color: 'info', words: 'opened pull request' },
+  pr_reopened: { icon: 'mdi-source-branch-refresh', color: 'info', words: 'reopened pull request' },
   pr_merged: { icon: 'mdi-source-merge', color: 'success', words: 'merged pull request' },
   pr_closed: { icon: 'mdi-source-branch-remove', color: 'muted', words: 'closed pull request' },
   commit: { icon: 'mdi-source-commit', color: 'primary', words: 'pushed commit' },

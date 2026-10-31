@@ -411,7 +411,7 @@ export class InteriorManager {
   ): { x: number; z: number; yaw: number } | null {
     // The server sets locationContext to `house_{ownerId}` when the member
     // is placed at their own desk/bed. Any other context (garden, break_*,
-    // tree_*) means they're not currently inside the house.
+    // tree) means they're not currently inside the house.
     if (snapshot.locationContext !== `house_${ownerId}`) return null
     // Presence dictates the pose: at_home → bed, active → desk.
     // Seat position is tier-specific (3×3 hut vs 4×4 cottage vs 5×5 mansion).

@@ -18,7 +18,8 @@
      it has taken and the job's own progress line when it sends one. The
      run's status itself comes from the board's live channel; following the
      job here adds its words and covers a missed update (its end reloads
-     the panel). Nothing it writes overwrites the card: it waits for review. -->
+     the panel). Nothing it writes overwrites the card: it waits for review.
+     Editors can cancel it. -->
 <template>
   <div class="ai-running">
     <span class="ai-running__dot" aria-hidden="true" />
@@ -29,11 +30,13 @@
       </span>
       <span class="ai-running__note">{{ jobLine || NOTE }}</span>
     </div>
+    <CardAiRunCancel v-if="canCancel" :run="run" :skill-name="skillName" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onUnmounted, watch } from 'vue'
+import CardAiRunCancel from '@/components/boards/ai/CardAiRunCancel.vue'
 import { useJobSocket } from '@/composables/useJobSocket'
 import { useNow } from '@/composables/useNow'
 import { RUN_ELAPSED_TICK_MS } from '@/constants/boardAgents'
@@ -43,7 +46,7 @@ import { logFailure } from '@/utils/logFailure'
 const NOTE = "You can keep working on the card. The draft won't overwrite anything; it waits for review."
 const SECONDS_PER_MINUTE = 60
 
-const props = defineProps<{ run: AgentRunRead; skillName: string }>()
+const props = defineProps<{ run: AgentRunRead; skillName: string; canCancel: boolean }>()
 const emit = defineEmits<{ ended: [] }>()
 
 const now = useNow(RUN_ELAPSED_TICK_MS)

@@ -30,7 +30,8 @@ export function makeRun(id: string, over: Partial<AgentRunRead> = {}): AgentRunR
   return {
     id, card_id: '3', stage_id: 's1', stage_agent_id: 'a1', skill_id: 'sk-a1', trigger: 'manual',
     status: 'running', job_id: `job-${id}`, attempt: 1, result_summary: null, error_message: null,
-    triggered_by: 'me', started_at: '2026-10-31T10:00:00Z', finished_at: null, created_at: '2026-10-31T10:00:00Z',
+    error_code: null, triggered_by: 'me', started_at: '2026-10-31T10:00:00Z', finished_at: null,
+    created_at: '2026-10-31T10:00:00Z',
     ...over,
   }
 }

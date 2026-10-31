@@ -48,7 +48,7 @@ export function boardCardApiModule() {
     boardCardApi: {
       get: vi.fn(), update: vi.fn(), checklist: vi.fn(), addItem: vi.fn(), updateItem: vi.fn(), removeItem: vi.fn(),
       orderItems: vi.fn(), events: vi.fn(), docs: vi.fn(), versions: vi.fn(), version: vi.fn(), writeDoc: vi.fn(),
-      restoreDoc: vi.fn(), agents: vi.fn(), runAgent: vi.fn(), acceptDraft: vi.fn(), rejectDraft: vi.fn(),
+      restoreDoc: vi.fn(), agents: vi.fn(), runAgent: vi.fn(), cancelRun: vi.fn(), acceptDraft: vi.fn(), rejectDraft: vi.fn(),
     },
   }
 }

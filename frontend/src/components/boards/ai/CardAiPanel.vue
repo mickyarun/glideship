@@ -17,7 +17,8 @@
 <!-- The card's AI, beside its sections: the agents switched on for its
      stage (what each writes and when it runs), the run going now or the
      last one that failed or was canceled (with Retry, which stands in for
-     that agent's Run button), and a Run button for each by-hand agent. In
+     that agent's Run button), and a Run button for each by-hand agent.
+     Editors can cancel the run going now. In
      a narrow column the callout's buttons sit under its words. Only editors run agents; everyone sees what's
      set up. With the board's AI off it says so and offers nothing to run.
      A server without stage agents shows no panel at all. -->
@@ -38,6 +39,7 @@
         v-else-if="agents.active"
         :run="agents.active"
         :skill-name="agents.skillName(agents.active)"
+        :can-cancel="canRun"
         @ended="agents.load()"
       />
       <CardAiRunEnded
@@ -46,6 +48,7 @@
         :skill-name="agents.skillName(ended)"
         :can-retry="!!retryAgent"
         :busy="!!agents.starting || agents.waiting"
+        :can-see-details="canConfigure"
         @retry="retry"
       />
       <AppCallout v-if="agents.refusalText" variant="warning" role="alert" class="card-ai__refusal">

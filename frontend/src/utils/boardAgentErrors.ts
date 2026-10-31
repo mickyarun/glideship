@@ -43,7 +43,9 @@ const MESSAGES: Partial<Record<AgentErrorCode, string>> = {
   SKILL_NOT_IN_LIBRARY: "That skill isn't in your organization's library any more. Pick another one.",
 }
 
-const CODES: ReadonlySet<string> = new Set<AgentErrorCode>(['AI_DISABLED', 'AGENT_RUN_ACTIVE', 'SKILL_NOT_IN_LIBRARY', 'AGENT_RUN_LIMIT'])
+const CODES: ReadonlySet<string> = new Set<AgentErrorCode>([
+  'AI_DISABLED', 'AGENT_RUN_ACTIVE', 'SKILL_NOT_IN_LIBRARY', 'AGENT_RUN_LIMIT', 'AGENT_RUN_FINISHED',
+])
 const isCode = (code: unknown): code is AgentErrorCode => typeof code === 'string' && CODES.has(code)
 
 /** A refusal that waits, with the seconds left on its countdown. */
