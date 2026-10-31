@@ -85,6 +85,13 @@
     min-height: 44px;
   }
 }
+.app-pill-toggle__option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.app-pill-toggle__option:hover:disabled {
+  background: transparent;
+}
 .app-pill-toggle__option:focus-visible {
   /* No offset, so the whole ring sits on the track rather than past it. */
   outline: 2px solid rgb(var(--v-theme-on-primary));

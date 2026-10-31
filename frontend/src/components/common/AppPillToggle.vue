@@ -22,7 +22,8 @@
      v-model is the value of the selected option. ``mandatory`` (the
      default) prevents clicks on the active option from deselecting
      it — useful when the parent assumes a non-null mode at all
-     times. -->
+     times. An option with ``disabled: true`` stays in view but can't be
+     picked (click or arrow keys); say why beside the toggle. -->
 <template>
   <div ref="root" class="app-pill-toggle" :class="`app-pill-toggle--${size}`" role="radiogroup" @keydown="onKey">
     <button
@@ -33,6 +34,8 @@
       class="app-pill-toggle__option"
       :class="{ 'app-pill-toggle__option--active': opt.value === modelValue }"
       :aria-checked="opt.value === modelValue"
+      :aria-disabled="opt.disabled || undefined"
+      :disabled="opt.disabled"
       :tabindex="opt.value === focusValue ? 0 : -1"
       @click="select(opt.value)"
     >
@@ -47,6 +50,8 @@ import { computed, nextTick, ref } from 'vue'
 interface PillOption<V extends string | number> {
   label: string
   value: V
+  /** Shown but not pickable. */
+  disabled?: boolean
 }
 
 interface Props {
@@ -78,20 +83,34 @@ const focusValue = computed(() =>
 
 const STEPS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
 
+const enabled = (index: number) => !props.options[index]?.disabled
+
+/** The next pickable option from ``from`` in ``step`` direction, or -1 when there's none. */
+function nextEnabled(from: number, step: number): number {
+  const count = props.options.length
+  for (let i = 1; i <= count; i++) {
+    const at = (from + step * i + count * count) % count
+    if (enabled(at)) return at
+  }
+  return -1
+}
+
 function onKey(event: KeyboardEvent): void {
   const count = props.options.length
   const at = props.options.findIndex(o => o.value === focusValue.value)
   let next: number
-  if (event.key in STEPS) next = (at + STEPS[event.key] + count) % count
-  else if (event.key === 'Home') next = 0
-  else if (event.key === 'End') next = count - 1
+  if (event.key in STEPS) next = nextEnabled(at, STEPS[event.key])
+  else if (event.key === 'Home') next = nextEnabled(count - 1, 1)
+  else if (event.key === 'End') next = nextEnabled(0, -1)
   else return
   event.preventDefault()
+  if (next < 0) return
   select(props.options[next].value)
   void nextTick(() => root.value?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus())
 }
 
 function select(value: T): void {
+  if (props.options.find(o => o.value === value)?.disabled) return
   if (props.mandatory && value === props.modelValue) return
   emit('update:modelValue', value)
 }

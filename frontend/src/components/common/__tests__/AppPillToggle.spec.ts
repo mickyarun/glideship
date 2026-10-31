@@ -65,4 +65,17 @@ describe('AppPillToggle', () => {
     await wrapper.trigger('keydown', { key: 'Home' })
     expect(wrapper.emitted('update:modelValue')).toEqual([['c'], ['a']])
   })
+
+  it('shows a disabled option that neither a click nor the arrow keys pick', async () => {
+    const options = [OPTIONS[0], { ...OPTIONS[1], disabled: true }, OPTIONS[2]]
+    const wrapper = mountToggle({ options })
+    const pills = wrapper.findAll('[role="radio"]')
+    expect(pills[1].attributes('disabled')).toBeDefined()
+    expect(pills[1].attributes('aria-disabled')).toBe('true')
+    expect(pills[0].attributes('aria-disabled')).toBeUndefined()
+    await pills[1].trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    await wrapper.trigger('keydown', { key: 'ArrowRight' })
+    expect(wrapper.emitted('update:modelValue')).toEqual([['c']])
+  })
 })
