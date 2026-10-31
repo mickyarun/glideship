@@ -30,6 +30,7 @@ import {
 } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
 import { plural } from '@/utils/format'
+import { logFailure } from '@/utils/logFailure'
 
 export type GrantKind = 'person' | 'team'
 
@@ -89,7 +90,7 @@ export function useMemberSettings(page: BoardPage, status: BoardSettingsStatus) 
       teamOptions.value = (await boardSettingsApi.teamOptions(key)).items
     } catch (err) {
       // Without the list people can still be added; teams can't.
-      console.error('[boards] team options fetch failed:', err)
+      logFailure('boards', 'team options fetch', err)
     }
   }
 

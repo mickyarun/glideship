@@ -16,7 +16,8 @@
 import { describe, expect, it } from 'vitest'
 import { apiError, makeSession } from '@/components/boards/imports/__tests__/importFixtures'
 import { MAX_RETRY_AFTER_SECONDS } from '@/constants/imports'
-import { asksForReview, failureLog, importFailure, parseRetryAfter, tooManyOfMine } from '@/utils/importErrors'
+import { asksForReview, importFailure, parseRetryAfter, tooManyOfMine } from '@/utils/importErrors'
+import { failureLog } from '@/utils/logFailure'
 import { importSourceLabel, skippedLine, unmatchedLine } from '@/utils/importSummary'
 
 describe('import failures', () => {

@@ -21,6 +21,7 @@
 import { computed, ref } from 'vue'
 import { boardsApi } from '@/services/boardsApi'
 import type { BoardRepoRead } from '@/types/boards'
+import { logFailure } from '@/utils/logFailure'
 
 const byName = (a: BoardRepoRead, b: BoardRepoRead) => a.name.localeCompare(b.name)
 
@@ -36,7 +37,7 @@ export function useBoardRepos() {
       const reply = await boardsApi.repos(key)
       if (mine === seq && current()) set(reply.items)
     } catch (err) {
-      console.error('[boards] repos fetch failed:', err)
+      logFailure('boards', 'repos fetch', err)
     }
   }
 

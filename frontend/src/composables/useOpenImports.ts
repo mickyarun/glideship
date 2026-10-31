@@ -21,7 +21,8 @@
 import { ref, type Ref } from 'vue'
 import { boardImportsApi } from '@/services/boardImportsApi'
 import type { ImportSessionSummary } from '@/types/boards'
-import { failureLog, importFailure } from '@/utils/importErrors'
+import { importFailure } from '@/utils/importErrors'
+import { failureLog } from '@/utils/logFailure'
 
 /**
  * Whether an open session belongs to this entry point: a board's own

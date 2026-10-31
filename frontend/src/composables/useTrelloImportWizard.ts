@@ -30,7 +30,8 @@ import { boardImportsApi } from '@/services/boardImportsApi'
 import { boardsApi } from '@/services/boardsApi'
 import { useBoardsStore } from '@/stores/boards'
 import type { BoardDetail } from '@/types/boards'
-import { failureLog, tooManyOfMine } from '@/utils/importErrors'
+import { tooManyOfMine } from '@/utils/importErrors'
+import { logFailure } from '@/utils/logFailure'
 
 export const SESSION_QUERY_KEY = 'session'
 
@@ -69,7 +70,7 @@ export function useTrelloImportWizard(board: Ref<BoardDetail | null>, hooks: { o
     try {
       boardPeople.value = (await boardsApi.people(key)).items.map(p => ({ id: p.id, name: p.name }))
     } catch (err) {
-      console.error('[imports] board people fetch failed:', failureLog(err))
+      logFailure('imports', 'board people fetch', err)
       peopleError.value = PEOPLE_FAILED
     }
   }

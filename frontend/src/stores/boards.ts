@@ -32,6 +32,7 @@ import type {
   SwitcherRead,
 } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
+import { logFailure } from '@/utils/logFailure'
 
 /** A refused new board; ``field`` is the form field it's about (BOARD_KEY_TAKEN names "key"). */
 export class BoardCreateError extends Error {
@@ -80,7 +81,7 @@ export const useBoardsStore = defineStore('boards', () => {
     try {
       nav.value = await boardsApi.switcher()
     } catch (err) {
-      console.error('[boards] switcher fetch failed:', err)
+      logFailure('boards', 'switcher fetch', err)
     }
   }
 
@@ -89,7 +90,7 @@ export const useBoardsStore = defineStore('boards', () => {
       try {
         limits.value = await boardsApi.limits()
       } catch (err) {
-        console.error('[boards] limits fetch failed:', err)
+        logFailure('boards', 'limits fetch', err)
       }
     }
     return limits.value

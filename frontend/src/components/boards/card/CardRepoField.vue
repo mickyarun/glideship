@@ -15,13 +15,12 @@
  -->
 
 <!-- A card's repository in its details: the name (a link to its page when
-     it has one), or None, and for editors a Change menu of the board's
+     it has a safe one), or None, and for editors a Change menu of the board's
      linked repositories with "No repository" to clear it. A repository the
      board no longer links reads as None. -->
 <template>
   <span class="repo-field">
-    <a v-if="repo?.url" :href="repo.url" target="_blank" rel="noopener noreferrer" class="repo-field__name">{{ repo.name }}</a>
-    <span v-else-if="repo" class="repo-field__name">{{ repo.name }}</span>
+    <RepoLink v-if="repo" :name="repo.name" :url="repo.url" class="repo-field__name" />
     <span v-else class="repo-field__muted">None</span>
   </span>
   <v-menu v-if="editable" location="bottom end">
@@ -48,6 +47,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import RepoLink from '@/components/boards/RepoLink.vue'
 import type { BoardRepoRead } from '@/types/boards'
 
 const props = defineProps<{ repoId: string | null; repos: BoardRepoRead[]; editable: boolean }>()
@@ -62,16 +62,7 @@ const repo = computed(() => props.repos.find(r => r.id === props.repoId) ?? null
   overflow-wrap: anywhere;
 }
 .repo-field__name {
-  font-family: var(--font-mono);
   font-size: 13px;
-  color: inherit;
-}
-a.repo-field__name {
-  color: var(--color-accent-text);
-  text-decoration: none;
-}
-a.repo-field__name:hover {
-  text-decoration: underline;
 }
 .repo-field__muted {
   color: rgb(var(--v-theme-on-surface-variant));

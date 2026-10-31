@@ -23,6 +23,7 @@ import { SEARCH_DELAY_MS } from '@/composables/useDebounced'
 import { boardsApi } from '@/services/boardsApi'
 import type { SavedFilters } from '@/types/boards'
 import { fromSaved, NO_FILTERS, toSaved, type CardFilters } from '@/utils/boardFilters'
+import { logFailure } from '@/utils/logFailure'
 
 export function useBoardFilters(apply: (filters: CardFilters) => void) {
   const filters = ref<CardFilters>({ ...NO_FILTERS })
@@ -56,7 +57,7 @@ export function useBoardFilters(apply: (filters: CardFilters) => void) {
     clearTimeout(saveTimer)
     pending = () => {
       boardsApi.savePrefs(key, toSaved(value)).catch(err => {
-        console.error('[boards] prefs save failed:', err)
+        logFailure('boards', 'prefs save', err)
       })
     }
     saveTimer = setTimeout(flush, PREFS_SAVE_DELAY_MS)

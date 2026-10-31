@@ -29,6 +29,7 @@
  */
 import { ref } from 'vue'
 import api from '@/services/api'
+import { logFailure } from '@/utils/logFailure'
 
 export interface DirectoryEntry {
   id: string
@@ -61,7 +62,7 @@ async function ensureLoaded(force = false): Promise<void> {
       entries.value = data
       reindex()
     } catch (err) {
-      console.error('[useMemberDirectory] directory fetch failed:', err)
+      logFailure('useMemberDirectory', 'directory fetch', err)
     } finally {
       loading.value = false
       inflight = null

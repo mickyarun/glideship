@@ -130,10 +130,3 @@ export function asksForReview(failure: ImportFailure | null): boolean {
 export function tooManyOfMine(failure: ImportFailure | null): boolean {
   return failure?.code === IMPORT_CODES.tooManyOpen && failure.facts.scope !== 'org'
 }
-
-/** What to log about a failed call: its message and status, never the request or response. */
-export function failureLog(err: unknown): string {
-  const e = err as HttpLike | null
-  const message = typeof e?.message === 'string' ? e.message : String(err)
-  return e?.response?.status ? `${message} (HTTP ${e.response.status})` : message
-}
