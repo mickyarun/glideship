@@ -30,14 +30,15 @@ def test_the_fixture_parses_with_every_part() -> None:
     assert (len(export.lists), len(export.labels), len(export.members)) == (4, 3, 2)
     # The card without an id is left out rather than failing the file.
     assert len(export.cards) == 6
-    assert len(export.comments()) == 3 and len(export.actions) == 4
-    assert not export.action_cap_hit
+    # Compact: only comments are kept, with the count of every action.
+    assert len(export.comments()) == 3 and len(export.actions) == 3
+    assert export.action_count == 4 and not export.action_cap_hit
     cards = {c.id: c for c in export.cards}
     spec = cards[SPEC]
     assert spec.due == datetime(2026, 11, 5, 17, tzinfo=UTC)
     assert spec.start == datetime(2026, 11, 1, 9, tzinfo=UTC)
     assert len(spec.attachments) == 3 and spec.attachments[1].is_upload
-    assert len(spec.custom_field_items) == 1
+    assert spec.custom_field_items == 1
     # Bad or null values read as empty.
     assert cards[IN_FLIGHT].start is None and cards[IN_FLIGHT].due_complete
     assert cards[ARCHIVED].closed and cards[ARCHIVED].id_labels == []
@@ -52,7 +53,8 @@ def test_missing_keys_and_nulls_read_as_empty() -> None:
             "members": [{"id": "m1"}, "not a member"],
         }
     )
-    assert export.lists[0].name == "" and export.lists[0].pos == 0.0
+    # A position that isn't a number sorts last.
+    assert export.lists[0].name == "" and export.lists[0].pos == float("inf")
     card = export.cards[0]
     assert card.id_labels == [] and card.due is None and card.closed is False
     assert export.actions == [] and [m.id for m in export.members] == ["m1"]

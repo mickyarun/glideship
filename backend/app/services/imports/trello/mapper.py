@@ -20,6 +20,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 
 from app.models.board import LABEL_NAME_LENGTH, STAGE_NAME_LENGTH
+from app.models.board_card_detail import EXTERNAL_LABEL_LENGTH
 from app.models.board_enums import BoardLabelColor, BoardStageCategory
 from app.services.imports.trello.constants import (
     AUTHOR_LABEL_FORMAT,
@@ -28,7 +29,7 @@ from app.services.imports.trello.constants import (
     TRELLO_DEFAULT_LABEL_COLOR,
     UNKNOWN_AUTHOR,
 )
-from app.services.imports.trello.parse import TrelloLabel
+from app.services.imports.trello.models import TrelloLabel
 
 _WORDS = re.compile(r"[a-z']+")
 _SPACES = re.compile(r"\s+")
@@ -67,14 +68,20 @@ def nearest_label_color(color: str | None) -> BoardLabelColor:
 
 
 def label_name(label: TrelloLabel) -> str:
-    """The label's name, or its colour's when it has none (Trello allows unnamed labels)."""
+    """The label's name, or its colour's when it has none (Trello allows unnamed labels).
+
+    Board labels are matched ignoring case, so two Trello labels whose names
+    differ only in case become one board label, with the first one's colour.
+    """
     name = label.name.strip()[:LABEL_NAME_LENGTH].strip()
     return name or nearest_label_color(label.color).value.capitalize()
 
 
 def author_label(full_name: str) -> str:
-    """How an imported comment by an unmapped member names its author."""
-    return AUTHOR_LABEL_FORMAT.format(name=full_name.strip() or UNKNOWN_AUTHOR)
+    """How an imported comment by an unmapped member names its author, within the column."""
+    room = EXTERNAL_LABEL_LENGTH - len(AUTHOR_LABEL_FORMAT.format(name=""))
+    name = full_name.strip()[:room].strip() or UNKNOWN_AUTHOR
+    return AUTHOR_LABEL_FORMAT.format(name=name)
 
 
 def _key(name: str) -> str:

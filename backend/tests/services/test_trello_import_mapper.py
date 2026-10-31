@@ -23,7 +23,8 @@ from app.models.board_enums import BoardLabelColor, BoardStageCategory
 from app.models.external_import import ImportMode
 from app.schemas.boards.trello_discovery import TrelloWarning
 from app.services.boards.constants import CHECKLIST_MAX_ITEMS
-from app.services.imports.trello.cards import ChecklistLine, card_drafts
+from app.services.imports.draft import ChecklistLine
+from app.services.imports.trello.cards import card_drafts
 from app.services.imports.trello.constants import (
     TRELLO_DEFAULT_LABEL_COLOR,
     TRELLO_EXPORT_ACTION_CAP,
@@ -36,7 +37,8 @@ from app.services.imports.trello.mapper import (
     suggest_category,
     suggest_users,
 )
-from app.services.imports.trello.parse import TrelloLabel, parse_board, parse_export
+from app.services.imports.trello.models import TrelloLabel
+from app.services.imports.trello.parse import parse_board, parse_export
 from tests.services.trello_fixture import (
     ANCIENT,
     ARCHIVED,
@@ -159,7 +161,8 @@ def test_discovery_suggests_stages_people_and_warns_at_the_action_cap() -> None:
     assert {lb.name: lb.mapped_color for lb in found.labels}[
         "Design"
     ] is TRELLO_DEFAULT_LABEL_COLOR
-    assert found.counts.cards == 6 and found.counts.archived_cards == 1
+    # The closed card, and the card in the archived list.
+    assert found.counts.cards == 6 and found.counts.archived_cards == 2
     assert found.counts.comments == 3 and found.counts.checklist_items == 3
     assert (found.dropped.custom_fields, found.dropped.power_up_data, found.dropped.covers) == (
         1,

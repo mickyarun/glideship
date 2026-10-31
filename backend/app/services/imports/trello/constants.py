@@ -30,8 +30,9 @@ TRELLO_API_BASE: Final = f"https://{TRELLO_API_HOST}"
 # Trello's rate limits are counted over 10-second windows.
 TRELLO_WINDOW_SECONDS: Final = 10.0
 
-# Object ids are 24 hex characters.
+# Object ids are 24 hex characters; card short links are a few letters and digits.
 TRELLO_ID_PATTERN: Final = re.compile(r"^[0-9a-fA-F]{24}$")
+TRELLO_SHORT_LINK_PATTERN: Final = re.compile(r"^[0-9A-Za-z]{1,24}$")
 
 # A board export holds only the newest 1,000 actions, and comments are
 # actions, so an export at the cap has lost older comments.
@@ -58,7 +59,8 @@ TRELLO_BOARD_PARAMS: Final = MappingProxyType(
 )
 TRELLO_BOARDS_PARAMS: Final = MappingProxyType({"filter": "open", "fields": "name,url"})
 
-# Imported comments by someone with no mapped user keep a name like this.
+# Imported comments by someone with no mapped user keep a name like this;
+# the name is cut so the whole label fits its column.
 AUTHOR_LABEL_FORMAT: Final = "{name} (Trello)"
 UNKNOWN_AUTHOR: Final = "Someone"
 UNTITLED_CARD: Final = "Untitled card"

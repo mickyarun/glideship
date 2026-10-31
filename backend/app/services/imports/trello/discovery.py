@@ -28,14 +28,15 @@ from app.schemas.boards.trello_discovery import (
     TrelloDiscovery,
     TrelloWarning,
 )
-from app.services.imports.trello.cards import CardDraft
+from app.services.imports.draft import CardDraft
+from app.services.imports.text import http_url
 from app.services.imports.trello.mapper import (
     nearest_label_color,
     stage_name,
     suggest_category,
     suggest_users,
 )
-from app.services.imports.trello.parse import TrelloExport
+from app.services.imports.trello.models import TrelloExport
 
 
 def build_discovery(
@@ -48,7 +49,7 @@ def build_discovery(
 
     The action cap only applies to uploaded exports: API mode pages every comment.
     """
-    per_list = Counter(d.list_id for d in drafts)
+    per_list = Counter(d.group_id for d in drafts)
     lists = sorted(export.lists, key=lambda x: (x.pos, x.id))
     open_ids = [lst.id for lst in lists if not lst.closed]
     last_open = open_ids[-1] if open_ids else None
@@ -62,7 +63,7 @@ def build_discovery(
     return TrelloDiscovery(
         board_id=export.id,
         board_name=export.name,
-        board_url=export.url,
+        board_url=http_url(export.url),
         lists=[
             DiscoveredList(
                 id=lst.id,
@@ -99,7 +100,7 @@ def build_discovery(
             comments=sum(len(d.comments) for d in drafts),
             checklist_items=sum(len(d.checklist) for d in drafts),
             attachments=sum(len(d.attachments) for d in drafts),
-            actions=len(export.actions),
+            actions=export.action_count,
         ),
         dropped=DroppedCounts(
             custom_fields=dropped["custom_fields"],

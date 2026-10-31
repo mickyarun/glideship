@@ -12,180 +12,97 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A Trello board's JSON (export or API read) as typed models.
 
-Trello publishes no schema, so every field is optional except ids, and a
-null, a missing key or a malformed date reads as empty rather than
-failing the whole file. Keys we don't use are ignored.
+"""Reading a Trello board's JSON (export or API read), once.
+
+The raw JSON is read exactly once, when the import is created (or the API
+snapshot is fetched): array sizes are counted against the
+``BoardsConfig.import_max_*`` caps before any model is built, then the
+board is validated and stored in its compact form, comments only and
+nothing the import drops. Discovery and the run read that compact form.
 """
 
 import json
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
+from app.config import settings
 from app.services.imports.errors import ImportSourceDataError
-from app.services.imports.trello.constants import TRELLO_COMMENT_ACTION, TRELLO_EXPORT_ACTION_CAP
-from app.services.imports.trello.fields import Flag, Ids, Pos, Raw, Records, Text, When
+from app.services.imports.trello.models import TrelloExport
 
 NOT_A_BOARD = (
     "This isn't a Trello board export. Export the board as JSON from Trello and try again."
 )
-
-
-class _Model(BaseModel):
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
-
-
-class TrelloLabel(_Model):
-    """A label on the board."""
-
-    id: str
-    name: Text = ""
-    color: str | None = None
-
-
-class TrelloList(_Model):
-    """A list (column)."""
-
-    id: str
-    name: Text = ""
-    closed: Flag = False
-    pos: Pos = 0.0
-
-
-class TrelloMember(_Model):
-    """A board member. Exports carry no email, only names."""
-
-    id: str
-    full_name: Text = Field(default="", alias="fullName")
-    username: Text = ""
-
-
-class TrelloCheckItem(_Model):
-    """One checklist line."""
-
-    id: str
-    name: Text = ""
-    state: Text = ""
-    pos: Pos = 0.0
-
-
-class TrelloChecklist(_Model):
-    """A named checklist on a card."""
-
-    id: str
-    id_card: Text = Field(default="", alias="idCard")
-    name: Text = ""
-    pos: Pos = 0.0
-    check_items: Records[TrelloCheckItem] = Field(default_factory=list, alias="checkItems")
-
-
-class TrelloAttachment(_Model):
-    """A file uploaded to Trello, or a link."""
-
-    id: str
-    name: Text = ""
-    url: Text = ""
-    is_upload: Flag = Field(default=False, alias="isUpload")
-
-
-class TrelloCard(_Model):
-    """A card."""
-
-    id: str
-    name: Text = ""
-    desc: Text = ""
-    closed: Flag = False
-    id_list: Text = Field(default="", alias="idList")
-    id_labels: Ids = Field(default_factory=list, alias="idLabels")
-    id_members: Ids = Field(default_factory=list, alias="idMembers")
-    pos: Pos = 0.0
-    due: When = None
-    due_complete: Flag = Field(default=False, alias="dueComplete")
-    start: When = None
-    short_link: Text = Field(default="", alias="shortLink")
-    url: Text = ""
-    attachments: Records[TrelloAttachment] = Field(default_factory=list)
-    custom_field_items: Raw = Field(default_factory=list, alias="customFieldItems")
-    plugin_data: Raw = Field(default_factory=list, alias="pluginData")
-    cover: dict[str, Any] | None = None
-
-
-class TrelloActionData(_Model):
-    """The part of an action a comment needs."""
-
-    text: Text = ""
-    card: dict[str, Any] | None = None
-
-
-class TrelloActionMember(_Model):
-    """Who made an action."""
-
-    id: Text = ""
-    full_name: Text = Field(default="", alias="fullName")
-
-
-class TrelloAction(_Model):
-    """An entry in the board's action history; only comments are imported."""
-
-    id: str
-    type: Text = ""
-    date: When = None
-    id_member_creator: Text = Field(default="", alias="idMemberCreator")
-    data: TrelloActionData = Field(default_factory=TrelloActionData)
-    member_creator: TrelloActionMember | None = Field(default=None, alias="memberCreator")
-
-    @property
-    def card_id(self) -> str | None:
-        """The card a comment is on."""
-        card_id = (self.data.card or {}).get("id")
-        return card_id if isinstance(card_id, str) else None
-
-
-class TrelloExport(_Model):
-    """The whole board."""
-
-    id: Text = ""
-    name: Text = ""
-    url: Text = ""
-    lists: Records[TrelloList] = Field(default_factory=list)
-    cards: Records[TrelloCard] = Field(default_factory=list)
-    labels: Records[TrelloLabel] = Field(default_factory=list)
-    members: Records[TrelloMember] = Field(default_factory=list)
-    checklists: Records[TrelloChecklist] = Field(default_factory=list)
-    actions: Records[TrelloAction] = Field(default_factory=list)
-    custom_fields: Raw = Field(default_factory=list, alias="customFields")
-    plugin_data: Raw = Field(default_factory=list, alias="pluginData")
-
-    def comments(self) -> list[TrelloAction]:
-        """Comment actions on a card."""
-        return [a for a in self.actions if a.type == TRELLO_COMMENT_ACTION and a.card_id]
-
-    @property
-    def action_cap_hit(self) -> bool:
-        """Whether the export is at the 1,000-action cap, so older comments are missing."""
-        return len(self.actions) >= TRELLO_EXPORT_ACTION_CAP
+TOO_BIG = "This board is too big to import here: it has more than {cap:,} {what}."
+# Errors a decoder or validator raises on hostile input (too deep, huge numbers).
+_UNREADABLE = (ValueError, RecursionError)
 
 
 def parse_export(data: bytes) -> TrelloExport:
-    """Parse a board's JSON, refusing anything that isn't shaped like a Trello board.
+    """Read an uploaded export, refusing anything that isn't shaped like a Trello board.
 
     Raises:
-        ImportSourceDataError: Not JSON, not an object, or no lists and cards.
+        ImportSourceDataError: Not JSON, not a board, or over a count cap.
     """
     try:
         raw = json.loads(data)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except _UNREADABLE as exc:
         raise ImportSourceDataError(NOT_A_BOARD) from exc
     return parse_board(raw)
 
 
 def parse_board(raw: Any) -> TrelloExport:
-    """Read already-decoded board JSON; see :func:`parse_export`."""
+    """Already-decoded board JSON as its compact model; see :func:`parse_export`."""
     if not isinstance(raw, dict) or "lists" not in raw or "cards" not in raw:
         raise ImportSourceDataError(NOT_A_BOARD)
+    check_counts(raw)
     try:
-        return TrelloExport.model_validate(raw)
-    except ValidationError as exc:
+        export = TrelloExport.model_validate(raw)
+    except (ValidationError, *_UNREADABLE) as exc:
         raise ImportSourceDataError(NOT_A_BOARD) from exc
+    return export.model_copy(
+        update={"actions": export.comments(), "action_total": export.action_count}
+    )
+
+
+def check_counts(raw: dict[str, Any]) -> None:
+    """Refuse a board whose arrays pass the import caps, before anything is built."""
+    cfg = settings.boards
+    caps = (
+        ("cards", cfg.import_max_cards),
+        ("actions", cfg.import_max_actions),
+        ("lists", cfg.import_max_lists),
+        ("members", cfg.import_max_members),
+        ("labels", cfg.import_max_labels),
+        ("checklists", cfg.import_max_checklists),
+    )
+    for key, cap in caps:
+        if _length(raw.get(key)) > cap:
+            raise ImportSourceDataError(TOO_BIG.format(cap=cap, what=key))
+    checklists = raw.get("checklists")
+    lines = sum(_length(c.get("checkItems")) for c in _list(checklists) if isinstance(c, dict))
+    if lines > cfg.import_max_check_items:
+        cap = cfg.import_max_check_items
+        raise ImportSourceDataError(TOO_BIG.format(cap=cap, what="checklist items"))
+
+
+def compact_json(export: TrelloExport) -> bytes:
+    """The compact form stored for the session (non-numeric positions become null)."""
+    return export.model_dump_json(by_alias=True).encode()
+
+
+def load_compact(data: bytes) -> TrelloExport:
+    """The stored compact form; it was validated when it was written."""
+    try:
+        return TrelloExport.model_validate_json(data)
+    except (ValidationError, *_UNREADABLE) as exc:
+        raise ImportSourceDataError(NOT_A_BOARD) from exc
+
+
+def _list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _length(value: Any) -> int:
+    return len(value) if isinstance(value, list) else 0

@@ -16,6 +16,7 @@
 
 import uuid
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -81,11 +82,12 @@ class DroppedCounts(BaseModel):
 
 
 class TrelloDiscovery(BaseModel):
-    """The parse result stored on the session."""
+    """The parse result stored on the session; ``board_url`` is a checked http(s) link."""
 
+    source_kind: Literal["trello"] = "trello"
     board_id: str
     board_name: str
-    board_url: str
+    board_url: str | None
     lists: list[DiscoveredList]
     labels: list[DiscoveredLabel]
     members: list[DiscoveredMember]

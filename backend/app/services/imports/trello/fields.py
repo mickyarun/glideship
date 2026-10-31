@@ -12,31 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """Lenient field types for Trello JSON: a wrong or missing value reads as empty.
 
-Trello publishes no schema, so nothing but an id is relied on. Dates
-without a zone are read as UTC.
+Trello publishes no schema, so nothing but an id is relied on. Text is
+cleaned of control and bidi-override characters as it's read. Dates
+without a zone are read as UTC. A position that isn't a number sorts
+last. ``Count`` and ``Covered`` keep only what the import reports about
+data it drops, so the stored compact form doesn't carry that data.
 """
 
+import math
 from datetime import UTC, datetime
 from typing import Annotated, Any, TypeVar
 
 from pydantic import BeforeValidator
 
+from app.models.external_import import EXTERNAL_ID_LENGTH
+from app.services.imports.text import clean_text
+
 T = TypeVar("T")
+
+# Card covers: any of these set means the card had one.
+_COVER_KEYS = ("idAttachment", "color", "idUploadedBackground")
 
 
 def _text(value: Any) -> str:
-    return value if isinstance(value, str) else ""
+    return clean_text(value) if isinstance(value, str) else ""
 
 
 def _flag(value: Any) -> bool:
     return value is True
 
 
-def _number(value: Any) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return 0.0
+def _position(value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or math.isnan(value):
+        return math.inf
     return float(value)
 
 
@@ -54,20 +65,51 @@ def _items(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def is_plain_id(value: Any) -> bool:
+    """Whether ``value`` can be stored as a source id: short, clean text."""
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= EXTERNAL_ID_LENGTH
+        and clean_text(value) == value
+    )
+
+
 def _records(value: Any) -> list[Any]:
-    # Entries without an id can't be mapped; they're left out, not fatal.
-    return [v for v in _items(value) if isinstance(v, dict) and isinstance(v.get("id"), str)]
+    # Entries without a usable id can't be mapped; they're left out, not fatal.
+    return [v for v in _items(value) if isinstance(v, dict) and is_plain_id(v.get("id"))]
 
 
 def _strings(value: Any) -> list[str]:
-    return [v for v in _items(value) if isinstance(v, str)]
+    return [v for v in _items(value) if is_plain_id(v)]
+
+
+def _count(value: Any) -> int:
+    # A raw list counts its entries; the compact form stores the count.
+    if isinstance(value, list):
+        return len(value)
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _covered(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(value.get(key) for key in _COVER_KEYS)
+    return value is True
+
+
+def _ref(value: Any) -> dict[str, Any] | None:
+    # Only the id of a referenced object is kept.
+    if isinstance(value, dict) and is_plain_id(value.get("id")):
+        return {"id": value["id"]}
+    return None
 
 
 Text = Annotated[str, BeforeValidator(_text)]
 Flag = Annotated[bool, BeforeValidator(_flag)]
-Pos = Annotated[float, BeforeValidator(_number)]
+Pos = Annotated[float, BeforeValidator(_position)]
 When = Annotated[datetime | None, BeforeValidator(_when)]
 Ids = Annotated[list[str], BeforeValidator(_strings)]
-Raw = Annotated[list[Any], BeforeValidator(_items)]
+Count = Annotated[int, BeforeValidator(_count)]
+Covered = Annotated[bool, BeforeValidator(_covered)]
+Ref = Annotated[dict[str, str] | None, BeforeValidator(_ref)]
 # A list of objects; entries that aren't objects with a string id are dropped.
 Records = Annotated[list[T], BeforeValidator(_records)]
