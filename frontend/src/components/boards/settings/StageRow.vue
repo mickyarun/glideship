@@ -17,7 +17,8 @@
 <!-- One stage in the settings list: drag handle and one-step moves, name,
      category, WIP limit, the default radio, delete, and under them what a
      card needs to enter it, its handover role and open cards (a Done stage
-     also says it asks before completing a card with open checklist items). Name and WIP limit save when the field
+     also says it asks before completing a card with open checklist items).
+     Name and WIP limit save when the field
      is left or Enter is pressed; a change the board's rules refuse is
      explained here and not sent, and the note clears once a change goes
      through. Stacked (a narrow list), each field shows its label. -->
@@ -74,13 +75,19 @@
     </label>
     <v-btn icon="mdi-delete-outline" variant="text" size="small" class="stage-row__delete" :aria-label="`Delete ${stage.name}`" @click="askDelete" />
     <div class="stage-row__required">
-      <StageRequiredSelect :model-value="stage.required_fields" :stage-name="stage.name" @update:model-value="pickRequired" />
+      <StageRequiredSelect
+        :model-value="stage.required_fields"
+        :stage-name="stage.name"
+        :is-default="stage.is_default"
+        @update:model-value="pickRequired"
+      />
     </div>
     <div class="stage-row__tags">
       <AppTag v-if="stage.id === board.handover_stage_id" color="category-done">Handover stage</AppTag>
       <AppTag v-if="stage.id === board.return_stage_id" color="category-todo">Return stage</AppTag>
-      <span class="stage-row__cards">{{ plural(stage.open_cards, 'open card') }}</span>
-      <span v-if="stage.category === 'done'" class="stage-row__cards">{{ CHECKLIST_RULE }}</span>
+      <span class="stage-row__cards">
+        {{ plural(stage.open_cards, 'open card') }}<template v-if="stage.category === 'done'"> · {{ CHECKLIST_RULE }}</template>
+      </span>
     </div>
     <p v-if="problem || refusal" class="stage-row__problem" role="alert">{{ problem || refusal }}</p>
   </div>

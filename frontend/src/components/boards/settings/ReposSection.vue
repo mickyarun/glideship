@@ -15,12 +15,14 @@
  -->
 
 <!-- Repositories: the tracked repositories this board's work lands in, so
-     a card can name one and the board can be filtered by it. Admins link
-     one from the org's active repositories (already linked ones show but
-     can't be picked again) and unlink, which asks first since the cards
-     naming it lose it. Everyone else reads the list. -->
+     a card can name one, the board can be filtered by it and AI on the
+     board reads only these. Admins link one from the org's active
+     repositories (already linked ones show but can't be picked again; an
+     org with none is pointed to its repository settings) and unlink,
+     which asks first and says how many open cards lose it when that's
+     known. Everyone else reads the list. -->
 <template>
-  <AppPanel title="Repositories" :note="plural(repos.linked.value.length, 'linked repository', 'linked repositories')">
+  <AppPanel title="Repositories" :note="INTRO">
     <form v-if="!disabled" class="repos__add" aria-label="Link a repository" @submit.prevent>
       <v-autocomplete
         v-model:search="search"
@@ -33,19 +35,24 @@
         prepend-inner-icon="mdi-source-repository"
         :loading="repos.loadingOptions.value"
         :error-messages="repos.optionsError.value || undefined"
-        :no-data-text="repos.loadingOptions.value ? 'Loading…' : 'No tracked repositories in this org'"
+        :no-data-text="noData"
         density="compact"
         hide-details="auto"
         return-object
         @update:model-value="link"
       />
     </form>
-    <ul v-if="repos.linked.value.length" class="repos__list" aria-label="Linked repositories">
+    <AppCallout v-if="orgHasNone" variant="info" class="repos__none">
+      This org tracks no repositories yet. Add them in the org's repository settings, then link them here.
+      <template #actions>
+        <v-btn variant="outlined" size="small" :to="{ name: 'settings-code' }">Repository settings</v-btn>
+      </template>
+    </AppCallout>
+    <ul v-if="repos.linked.value.length" class="repos__list" :aria-label="plural(repos.linked.value.length, 'linked repository', 'linked repositories')">
       <li v-for="repo in repos.linked.value" :key="repo.id" class="repos__row">
         <v-icon icon="mdi-source-repository" size="18" aria-hidden="true" />
-        <a v-if="repo.url" :href="repo.url" target="_blank" rel="noopener noreferrer" class="repos__name">{{ repo.name }}</a>
-        <span v-else class="repos__name">{{ repo.name }}</span>
-        <v-btn v-if="!disabled" variant="text" size="small" class="repos__unlink" @click="unlinking = repo">Unlink</v-btn>
+        <RepoLink :name="repo.name" :url="repo.url" class="repos__name" />
+        <v-btn v-if="!disabled" variant="text" :aria-label="`Unlink ${repo.name}`" @click="unlinking = repo">Unlink</v-btn>
       </li>
     </ul>
     <AppEmptyState
@@ -57,7 +64,7 @@
     <AppConfirmDialog
       v-model="unlinkOpen"
       :title="`Unlink ${unlinking?.name ?? ''}?`"
-      body="Cards on this board that name it will have their repository cleared. You can link it again later."
+      :body="unlinkBody"
       action="Unlink"
       color="error"
       :busy="status.saving.value"
@@ -68,6 +75,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import RepoLink from '@/components/boards/RepoLink.vue'
+import AppCallout from '@/components/common/AppCallout.vue'
 import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
@@ -79,7 +88,10 @@ import { plural } from '@/utils/format'
 
 const props = defineProps<{ status: BoardSettingsStatus; disabled: boolean }>()
 
-const repos = useRepoSettings(useBoardContext(), props.status)
+const INTRO = 'Cards can name one of these; AI on this board reads only these repositories.'
+
+const page = useBoardContext()
+const repos = useRepoSettings(page, props.status)
 const search = ref('')
 const unlinking = ref<BoardRepoRead | null>(null)
 const unlinkOpen = computed({
@@ -88,10 +100,31 @@ const unlinkOpen = computed({
     if (!open) unlinking.value = null
   },
 })
+const loaded = computed(() => !repos.loadingOptions.value && !repos.optionsError.value)
+const orgHasNone = computed(() => !props.disabled && loaded.value && repos.optionsLoaded.value && !repos.options.value.length)
+const allLinked = computed(() => repos.options.value.length > 0 && repos.options.value.every(o => o.linked))
 // Linked ones stay in the list, greyed, so it's clear they're already here.
 const choices = computed(() =>
-  repos.options.value.map(o => ({ ...o, props: { disabled: o.linked, subtitle: o.linked ? 'Linked' : undefined } })),
+  allLinked.value
+    ? []
+    : repos.options.value.map(o => ({ ...o, props: { disabled: o.linked, subtitle: o.linked ? 'Linked' : undefined } })),
 )
+const noData = computed(() => {
+  if (repos.loadingOptions.value) return 'Loading…'
+  return allLinked.value ? "All of the org's repositories are linked" : 'No tracked repositories in this org'
+})
+// How many open cards lose it, when the board's loaded cards are all of them.
+const unlinkBody = computed(() => {
+  const count = unlinking.value ? repos.cardsNaming(unlinking.value.id) : null
+  const what = count === null
+    ? 'Cards on this board that name it will have their repository cleared.'
+    : count === 0
+      ? 'No open card on this board names it.'
+      : count === 1
+        ? '1 open card on this board names it and will have its repository cleared.'
+        : `${count} open cards on this board name it and will have their repository cleared.`
+  return `${what} You can link it again later.`
+})
 
 async function link(option: RepoOption | null): Promise<void> {
   if (!option || option.linked) return
@@ -110,7 +143,9 @@ onMounted(() => {
 
 <style scoped>
 .repos__add {
-  max-width: 420px;
+  margin-bottom: 16px;
+}
+.repos__none {
   margin-bottom: 16px;
 }
 .repos__list {
@@ -122,7 +157,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: 52px;
   border-top: 1px solid rgb(var(--v-theme-rule));
   color: rgb(var(--v-theme-on-surface-variant));
 }
@@ -132,15 +167,8 @@ onMounted(() => {
 .repos__name {
   flex: 1 1 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
-  font: 500 14px var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
   color: rgb(var(--v-theme-on-surface));
-}
-a.repos__name {
-  color: var(--color-accent-text);
-  text-decoration: none;
-}
-a.repos__name:hover {
-  text-decoration: underline;
 }
 </style>

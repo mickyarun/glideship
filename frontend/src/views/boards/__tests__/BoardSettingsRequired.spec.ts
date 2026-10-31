@@ -46,10 +46,16 @@ const api = vi.mocked(boardsApi)
 const settings = vi.mocked(boardSettingsApi)
 type Wrapper = Awaited<ReturnType<typeof mountSettings>>['wrapper']
 
-/** Pick fields in a stage row's "Required to enter", as the select does. */
+/** Pick fields in a stage row's "Required to enter" and close the list, as a person does. */
 async function pick(wrapper: Wrapper, stage: string, fields: StageRequiredField[]): Promise<void> {
-  const select = wrapper.findAllComponents(StageRequiredSelect).find(s => s.props('stageName') === stage)!
-  select.findComponent(VSelect).vm.$emit('update:modelValue', fields)
+  const row = () => wrapper.findAllComponents(StageRequiredSelect).find(s => s.props('stageName') === stage)!
+  const add = row().find('button.required__add')
+  if (add.exists()) await add.trigger('click')
+  await flushPromises()
+  const select = row().findComponent(VSelect)
+  select.vm.$emit('update:menu', true)
+  select.vm.$emit('update:modelValue', fields)
+  select.vm.$emit('update:menu', false)
   await flushPromises()
 }
 const rowText = (id: string) => document.querySelector(`[data-stage-row="${id}"]`)?.textContent ?? ''
@@ -101,6 +107,31 @@ describe('BoardSettingsView: Required to enter', () => {
     await flushPromises()
     expect(settings.updateStage).not.toHaveBeenCalled()
     expect(rowText('s2')).toContain('Doing is where new cards land')
+  })
+
+  it('starts as a "+ Required to enter" button, and offers no PRD on the default stage', async () => {
+    const { wrapper } = await mountSettings('/boards/OPS/settings?section=stages')
+    const row = wrapper.findAllComponents(StageRequiredSelect).find(s => s.props('stageName') === 'To do')!
+    expect(row.find('button.required__add').text()).toContain('Required to enter')
+    await row.find('button.required__add').trigger('click')
+    await flushPromises()
+    const items = row.findComponent(VSelect).props('items') as { value: string; props: { disabled: boolean; subtitle?: string } }[]
+    expect(items.find(i => i.value === 'prd')?.props).toEqual({ disabled: true, subtitle: "The default stage can't need a PRD" })
+    expect(items.find(i => i.value === 'assignee')?.props.disabled).toBe(false)
+  })
+
+  it('sends quick picks as one change, the latest', async () => {
+    const { wrapper } = await mountSettings('/boards/OPS/settings?section=stages')
+    const row = wrapper.findAllComponents(StageRequiredSelect).find(s => s.props('stageName') === 'Doing')!
+    await row.find('button.required__add').trigger('click')
+    await flushPromises()
+    const select = row.findComponent(VSelect)
+    select.vm.$emit('update:modelValue', ['assignee'])
+    select.vm.$emit('update:modelValue', ['assignee', 'label'])
+    select.vm.$emit('update:menu', false)
+    await flushPromises()
+    expect(settings.updateStage).toHaveBeenCalledOnce()
+    expect(settings.updateStage).toHaveBeenCalledWith('OPS', 's2', { required_fields: ['assignee', 'label'] })
   })
 
   it('explains the checklist rule on Done stages only', async () => {

@@ -17,18 +17,24 @@
 // Each reply is the board's new list, which goes straight into the board
 // context (this tab skips its own repos_changed echo); an unlink also
 // clears the repository from the loaded cards and from the filter.
+// ``cardsNaming`` counts the open cards naming a repository when the
+// board's loaded cards are all of them (no filter, every page in), else
+// null, so an unlink can say what it clears without a request.
 
 import { computed, ref } from 'vue'
 import type { BoardPage } from '@/composables/useBoardPage'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
 import { boardSettingsApi } from '@/services/boardSettingsApi'
 import type { BoardRepoRead, RepoOption } from '@/types/boards'
+import { hasFilters } from '@/utils/boardFilters'
 import { extractApiError } from '@/utils/errors'
 
 export function useRepoSettings(page: BoardPage, status: BoardSettingsStatus) {
   const options = ref<RepoOption[]>([])
   const optionsError = ref('')
   const loadingOptions = ref(false)
+  /** The org's list came back at least once. */
+  const optionsLoaded = ref(false)
   const linked = computed(() => page.repos.repos.value)
 
   async function loadOptions(): Promise<void> {
@@ -38,6 +44,7 @@ export function useRepoSettings(page: BoardPage, status: BoardSettingsStatus) {
     optionsError.value = ''
     try {
       options.value = (await boardSettingsApi.repoOptions(key)).items
+      optionsLoaded.value = true
     } catch (err) {
       optionsError.value = extractApiError(err, "Couldn't load the org's repositories.")
     } finally {
@@ -72,5 +79,14 @@ export function useRepoSettings(page: BoardPage, status: BoardSettingsStatus) {
     )
   }
 
-  return { options, optionsError, loadingOptions, linked, loadOptions, link, unlink }
+  function cardsNaming(repoId: string): number | null {
+    const { cards } = page
+    const columns = Object.values(cards.columns)
+    const complete = !hasFilters(cards.filters) && !cards.filters.archived
+      && columns.every(c => c.loaded && !c.cursor)
+    if (!complete || !columns.length) return null
+    return columns.reduce((n, c) => n + c.items.filter(card => card.repo_id === repoId).length, 0)
+  }
+
+  return { options, optionsError, loadingOptions, optionsLoaded, linked, loadOptions, link, unlink, cardsNaming }
 }

@@ -26,6 +26,7 @@ import { CATEGORY_LABELS } from '@/constants/boards'
 import { boardSettingsApi } from '@/services/boardSettingsApi'
 import type { BoardLimits, StageCategory, StageRead, StageRequiredField } from '@/types/boards'
 import { addBlock, moveItem, movedId, requiredBlock } from '@/utils/boardStageRules'
+import { latestWins } from '@/utils/coalesce'
 import { needsList } from '@/utils/stageRules'
 
 export interface NewStage {
@@ -102,12 +103,17 @@ export function useStageSettings(page: BoardPage, status: BoardSettingsStatus, l
     return patchInline(stage, { is_default: true }, `New cards now land in ${stage.name}`)
   }
 
-  function setRequired(stage: StageRead, fields: StageRequiredField[]): Promise<boolean> {
-    if (fields.join() === stage.required_fields.join()) return Promise.resolve(true)
+  // One save per stage at a time; picks made meanwhile send only the latest.
+  const saveRequired = latestWins((_id: string, { stage, fields }: { stage: StageRead; fields: StageRequiredField[] }) => {
     const done = fields.length
       ? `${stage.name} now needs ${needsList(fields)}`
       : `${stage.name} no longer needs anything to enter`
     return patchInline(stage, { required_fields: fields }, done)
+  })
+
+  function setRequired(stage: StageRead, fields: StageRequiredField[]): Promise<boolean> {
+    if (fields.join() === stage.required_fields.join()) return Promise.resolve(true)
+    return saveRequired(stage.id, { stage, fields })
   }
 
   /**

@@ -72,6 +72,7 @@ export async function mountSettings(
     routes: [
       { path: '/', component: blank },
       { path: '/boards', name: 'boards', component: blank },
+      { path: '/settings/code', name: 'settings-code', component: blank },
       {
         path: '/boards/:key',
         component: BoardShell,

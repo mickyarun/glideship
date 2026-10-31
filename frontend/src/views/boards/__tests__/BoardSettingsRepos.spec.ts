@@ -75,15 +75,16 @@ describe('BoardSettingsView: Repositories', () => {
     picker.vm.$emit('update:modelValue', { ...API, linked: false })
     await flushPromises()
     expect(settings.linkRepo).toHaveBeenCalledWith('OPS', 'r2')
-    expect(document.querySelector('[aria-label="Linked repositories"]')?.textContent).toContain('northwind-api')
+    expect(document.querySelector('.repos__list')?.textContent).toContain('northwind-api')
     expect(document.body.textContent).not.toContain('No repositories linked')
   })
 
   it('links each name to its page in a new tab, safely', async () => {
     api.repos.mockResolvedValue({ items: [WEB, API] })
     await mountSettings(PATH)
-    const link = document.querySelector<HTMLAnchorElement>('[aria-label="Linked repositories"] a')!
-    expect(link.textContent).toBe('northwind-web')
+    const link = document.querySelector<HTMLAnchorElement>('.repos__list a')!
+    expect(link.textContent).toContain('northwind-web')
+    expect(link.textContent).toContain('opens in a new tab')
     expect(link.getAttribute('href')).toBe(WEB.url)
     expect(link.target).toBe('_blank')
     expect(link.rel).toContain('noopener')
@@ -96,13 +97,35 @@ describe('BoardSettingsView: Repositories', () => {
     settings.unlinkRepo.mockResolvedValue({ items: [] })
     button('Unlink').click()
     await flushPromises()
-    expect(document.body.textContent).toContain('Cards on this board that name it will have their repository cleared.')
+    expect(document.body.textContent).toContain('1 open card on this board names it and will have its repository cleared.')
     expect(settings.unlinkRepo).not.toHaveBeenCalled()
     ;[...document.querySelectorAll<HTMLButtonElement>('.v-overlay--active button')].find(b => b.textContent?.trim() === 'Unlink')!.click()
     await flushPromises()
     expect(settings.unlinkRepo).toHaveBeenCalledWith('OPS', 'r1')
     expect(useBoardCardsStore().columns.s1.items[0].repo_id).toBeNull()
     expect(document.body.textContent).toContain('No repositories linked')
+  })
+
+  it('shows a stored address that is not https as plain text', async () => {
+    api.repos.mockResolvedValue({ items: [{ ...WEB, url: 'javascript:alert(1)' }] })
+    await mountSettings(PATH)
+    expect(document.querySelector('.repos__list a')).toBeNull()
+    expect(document.querySelector('.repos__list')?.textContent).toContain('northwind-web')
+  })
+
+  it("says so when every org repository is linked, and points an org with none to its settings", async () => {
+    settings.repoOptions.mockResolvedValue({ items: [{ ...WEB, linked: true }] })
+    const { wrapper } = await mountSettings(PATH)
+    const picker = wrapper.findComponent(VAutocomplete)
+    expect(picker.props('items')).toEqual([])
+    expect(picker.props('noDataText')).toBe("All of the org's repositories are linked")
+    wrapper.unmount()
+    document.body.innerHTML = ''
+    settings.repoOptions.mockResolvedValue({ items: [] })
+    await mountSettings(PATH)
+    expect(document.body.textContent).toContain('This org tracks no repositories yet.')
+    const link = [...document.querySelectorAll('a')].find(a => a.textContent?.includes('Repository settings'))
+    expect(link?.getAttribute('href')).toBe('/settings/code')
   })
 
   it("shows anyone else the list without the controls", async () => {

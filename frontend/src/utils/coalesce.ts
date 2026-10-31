@@ -38,3 +38,33 @@ export function coalesced(task: () => Promise<void>): () => Promise<void> {
     return running
   }
 }
+
+/**
+ * One save at a time per key, latest wins: a call while that key's save
+ * runs replaces any value already waiting, and the waiting one is sent
+ * after, so saves never overlap or land out of order. Every caller for a
+ * run resolves with the last save's outcome.
+ */
+export function latestWins<K, V>(save: (key: K, value: V) => Promise<boolean>): (key: K, value: V) => Promise<boolean> {
+  const running = new Map<K, Promise<boolean>>()
+  const waiting = new Map<K, V>()
+  return (key, value) => {
+    const held = running.get(key)
+    if (held) {
+      waiting.set(key, value)
+      return held
+    }
+    const run = (async () => {
+      let ok = await save(key, value)
+      while (waiting.has(key)) {
+        const next = waiting.get(key) as V
+        waiting.delete(key)
+        ok = await save(key, next)
+      }
+      running.delete(key)
+      return ok
+    })()
+    running.set(key, run)
+    return run
+  }
+}
