@@ -1056,6 +1056,31 @@ These were decided on 2026-10-31 after a first hands-on test.
   picker for anyone who can edit. It lists people with access to the board and saves through
   the card PATCH, optimistically with rollback.
 
+### As built (backend)
+
+- **People with access.** `GET /boards/{key}/people` (viewer+) lists everyone with a role on the
+  board in one query, built from the same SQL as `users_with_access` (`repositories/board_role_rows.py`):
+  active members only, teams expanded, `boards:manage` as admin. Each row has `id`, `name`,
+  `avatar_url`, the highest `role` and `via` (`member`, `team` or `org`; own row wins a tie).
+  Card assignees are checked against exactly this set.
+- **Entry rules** live in `services/boards/move_rules.py` and run on a move to another stage
+  (`POST …/move`) and on a create (into the named or default stage). Required fields come first:
+  422 `{"detail", "code": "STAGE_REQUIREMENTS_MISSING", "stage_id", "missing": [...]}`, fields in
+  declaration order. Then, for a `done` stage: 409 `{"detail", "code": "CHECKLIST_OPEN", "open",
+  "total"}` unless the body has `confirm_open_checklist: true` (on `CardMove` and `CardCreate`; a
+  new card has no checklist, so the create flag is for symmetry). `description` and `prd` mean
+  "has non-whitespace text"; `prd` is the card's current PRD doc. Reordering inside a stage,
+  restoring an archived card, stage-delete `move_to`, imports and card PATCH edits don't check.
+  New requirements apply to cards entering from then on.
+- **Error shape.** Board errors stay `{"detail": message}`; an error a client acts on adds a
+  `code` and its facts beside `detail` (`BoardError.body()`, wired through
+  `register_domain_errors(extra=...)`).
+- **Stages.** `board_stages.required_fields` is an array of the `stage_required_field` enum
+  (default `{}`), stored in declaration order; `StageCreate` / `StageUpdate` take it (each field
+  once), `StageRead` returns it.
+- **Card summaries** carry `has_description`, `has_prd` and `repo_id`, computed in the same
+  `list_summaries` statement.
+
 ## Linked repositories
 
 Decided on 2026-10-31. Any board can link tracked repositories.
@@ -1080,6 +1105,24 @@ the board's linked repos.
   - The match uses the board's own key and its key aliases, so `OPS-12` can only reach a card on
     a board that links that repo.
   - Delivery's existing BUD matching (`bud_id` on PRs) is unchanged.
+
+### As built (backend)
+
+- `board_repos(board_id, repo_id, org_id)`: composite FKs to `boards(id, org_id)` and
+  `tracked_repositories(id, org_id)`, unique `(board_id, repo_id)`.
+- `board_cards.repo_id` has two keys: `(board_id, repo_id)` → `board_repos`, so a card can only
+  name a linked repository, and `repo_id` → `tracked_repositories` `ON DELETE SET NULL`, so
+  deleting a repository clears its cards before the first key is checked.
+- API: `GET /boards/{key}/repos` and `GET …/repos/{repo_id}` (viewer+), `GET …/repos/options`
+  (the org's active repositories with `linked`), `PUT` and `DELETE …/repos/{repo_id}` (admin,
+  `manage_repos`). Linking is idempotent; only the org's active repositories can be linked (404
+  otherwise). `url` is the GitHub page when the repository has a full name.
+- Card create and PATCH take `repo_id` (null clears it); a repository the board doesn't link is
+  422. The cards list filters on `?repo=`.
+- Unlinking clears `repo_id` on the board's cards in the same transaction and sends
+  `repos_changed` (`repo_id`, `linked`) plus `card_updated` for each card it cleared; linking
+  sends `repos_changed`. A card write holds the link row `FOR KEY SHARE` (taken before the card
+  lock) and unlinking takes it `FOR UPDATE`, so the two queue instead of failing.
 
 ## AI on every board
 
