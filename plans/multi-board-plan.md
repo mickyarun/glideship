@@ -659,6 +659,46 @@ access check.
 - Handover stays out of MCP at first. It's a deliberate human action with a dedupe review.
 - `get_bud_by_id` includes the origin card summary.
 
+### As built (backend)
+
+- **Tools.** `list_boards`, `get_board`, `get_card`, `create_card`, `update_card`, `move_card`,
+  `comment_card`, `write_card_doc`. Schemas in `mcp/board_tool_schemas.py`; handlers in
+  `mcp/handlers_boards.py` (boards), `mcp/handlers_board_cards.py` (cards) and
+  `mcp/handlers_board_docs.py` (`write_card_doc` and the agent-only `get_card_context`), all in
+  `AUTH_TOOL_HANDLERS`.
+- **Access, per call.** `mcp/board_tool_access.board_tool` wraps each tool: a personal token
+  only (org, internal and scoped tokens get `status: 403`, "Board tools need a personal MCP
+  token"), the caller's `PermissionSet` read again (`member_permission_set`), then
+  `resolve_board_access` / `resolve_card_by_key` with the action's minimum role. No role is
+  `status: 404` "Board not found." / "Card not found.", exactly as the API.
+- **Errors.** A `BoardError` rolls the session back and returns `{success: false, error, status,
+  code?, …}` with the API's status and `body()` (so `STAGE_REQUIREMENTS_MISSING` 422 with
+  `stage_id` and `missing`, `CHECKLIST_OPEN` 409 with `open` and `total`). Bad input (Pydantic)
+  is `status: 422`.
+- **Shapes.**
+  - `get_board {board_key}`: board fields, role, capabilities, labels, and each stage with up
+    to `BOARDS_MCP_CARDS_PER_STAGE` (50) open cards (`key, title, priority, due_at,
+    assignee_ids, label_ids, checklist "d/t", delivery`) and `more_cards`.
+  - `get_card {card_key}` (live or old key): the agent context read (`card`, `board`, `docs`,
+    `comments`, `checklist`, `attachments`, `linked_repos`) with `card.stage_id`, `start_at`,
+    `archived`, `delivery` and `handovers [{bud_key, bud_status, handover_status}]`.
+  - `create_card {board_key, title, stage?, …}` and `move_card {card_key, stage}`: `stage` is a
+    name (ignoring case) or an id; 404 "Stage not found." otherwise. Writes go through
+    `card_service`, `card_edit`, `card_move` and `comment_service`, so entry rules, label and
+    repo checks and live events are the API's. Results: `{success, card}` / `{success,
+    comment}`.
+  - `write_card_doc {card_key, kind, content_md, base_version?}` with a personal token (editor+)
+    saves a **current** version through `doc_service.write_doc`; `base_version` omitted means
+    "over the current one", a stale one is 409. A scoped agent-run token still saves a
+    `pending_review` draft.
+- **Remote.** `REMOTE_BOARD_TOOLS` (`list_boards`, `get_board`, `get_card`) join
+  `REMOTE_TOOLS` and `_REMOTE_TOOL_SCHEMAS`; the writes answer `-32601`. Each tool has a
+  `TOOL_COSTS` weight.
+- **`get_bud_by_id`** adds `origin_card {card_key, board_key, board_name, title, archived}`
+  (`services/boards/origin_summary.py`), only for a personal token whose holder can open the
+  card's board (`visible_live_origins`); null otherwise.
+- Not done here: `MCP-REMOTE.md` (repo root) still lists the old remote set.
+
 ## UI
 
 All of this uses `AppPage`, `AppPanel`, `AppSideSheet`, `AppCallout`, `AppPillToggle` and
@@ -1187,6 +1227,33 @@ the board's linked repos.
   the composite key, `?repo=` and clearing a repository's cards. `url` is built only when the
   full name matches `owner/name` (`[\w.-]+/[\w.-]+`, ASCII).
 
+### As built (backend): repo activity
+
+- **Where.** `api/v1/github_webhook.py` calls `services/boards/repo_activity.record_repo_activity`
+  after `handle_github_event`, in the delivery's session, inside a SAVEPOINT: a failure is
+  logged (`board_repo_activity_failed`) and never fails the delivery.
+- **Matching** (`services/boards/repo_activity_parse.py`, no database): a key is 2–10 letters,
+  `-`, a number, case-insensitive, with no letter or digit on either side (`feature/ops-12-x`
+  and `feat_OPS-12` match, `OPS-12a` doesn't). `pull_request` `opened` → `pr_opened`, `closed`
+  → `pr_merged` / `pr_closed`, matched on the title and head branch. `push` → one `commit` per
+  distinct commit (first `BOARDS_REPO_ACTIVITY_MAX_COMMITS`, 20), matched on its message (first
+  `BOARDS_REPO_ACTIVITY_SCAN_CHARS`) and the pushed branch. At most
+  `BOARDS_REPO_ACTIVITY_MAX_KEYS` (10) keys per activity.
+- **Which cards** (`repositories/board_repo_activity.py`, one statement): live key or alias, the
+  card's *current* board active and linking the (active) repository, all in the repository's
+  org. A key on a board that doesn't link the repo, or another org's board with the same key,
+  gets nothing.
+- **Event.** `board_card_events` type `repo_activity` (new enum value), `actor_id` null,
+  `actor_label` the GitHub login, `detail {repo_id, kind, ref ("#5" or short sha), url, title
+  (≤ 200), author_login}`. `url` is built from the repository's own full name
+  (`https://github.com/<owner>/<name>/pull/<n>` or `/commit/<sha>`), never from the payload.
+- **Once per card.** New column `board_card_events.external_ref` (`<repo id>:<kind>:<PR number
+  or sha>`) with a partial unique index `(card_id, external_ref) WHERE external_ref IS NOT NULL`;
+  the insert is `ON CONFLICT DO NOTHING`. Redeliveries and re-pushes add nothing. Migration
+  `30025124b1d9` (with the `ALTER TYPE … ADD VALUE 'repo_activity'`).
+- **Live.** `card_activity {card_id}` on that card's `board:<id>` only (actor null), after the
+  commit; nothing on any org-wide topic. No XP or SP.
+
 ## AI on every board
 
 Decided on 2026-10-31.
@@ -1299,7 +1366,8 @@ Moving a card to the Delivery board isn't a move. It's a handover.
     when placing it respaced the stage.
 - **Notifications.** None: removed assignees aren't told, and the others hear nothing.
 - **Not yet.** Cancelling an active agent run first (no board agent runs exist yet), and
-  repo-activity matching on aliases (the webhook matching ships with repo activity).
+  repo-activity matching on aliases (shipped with repo activity: an old key reaches the card on
+  its current board when that board links the repository).
 
 ## Handover flow
 
@@ -2251,6 +2319,48 @@ them use `board_card_events.to_category`, never stage names:
   - celebrations reuse existing KayKit tracks with exact names (`Cheering` on the assignee's
     character when a card is done);
   - all of it follows `frontend/src/engine/ARCHITECTURE.md`.
+
+### As built (backend): metrics and the Garden
+
+- **Board metrics.** `GET /boards/{key}/metrics` (viewer+) and `GET /boards/metrics/summary`
+  (every active board I hold a role on, by name; `METRICS` is now a reserved key). Service
+  `services/boards/metrics.py`; SQL in `repositories/board_metrics.py` (throughput, WIP,
+  aging, the visible boards) and `repositories/board_metrics_durations.py` (cycle and lead
+  times). Each number is one statement for all the boards asked about, so the summary runs the
+  same queries for one board or fifty (an integration test counts them).
+  - Throughput: events entering `done` (`to_category = done`, `from_category` not `done`) per
+    UTC week, `BOARDS_METRICS_THROUGHPUT_WEEKS` (12) weeks, zeros filled.
+  - Cycle time: per card done on the board within `BOARDS_METRICS_WINDOW_DAYS` (90), its first
+    `in_progress` entry (any board) to its latest `done` entry; `count`, `median_hours`,
+    `p85_hours` (`percentile_cont`).
+  - WIP: open cards by the `to_category` of their newest category-bearing event (all four
+    categories listed).
+  - Aging: open cards whose current category is `in_progress` and unchanged for
+    `BOARDS_AGING_DAYS` (14); `aging_count`, plus the oldest `BOARDS_METRICS_AGING_LIST_LIMIT`
+    (20) as `{key, title, since}` on one board's metrics.
+  - Idea to prod: card `created_at` to each of its `delivered` events in the window.
+  - Every response carries `window {window_days, weeks, aging_days}`.
+- **Phase drift.** It was missing after M5: `bud_metrics_phases` now marks a phase that a
+  `via: handover` status change left as `skipped_at_handover` with `drift_pct: null`
+  (`services/bud_metrics_skips.py`); the landed phase keeps its drift. `VIA_HANDOVER` lives in
+  `services/boards/constants.py`.
+- **Garden events.** `services/boards/garden.note_card_event`, called from `record_event`, so
+  every path is covered and imports (`imported`) stay quiet. After the commit, on
+  `board_activity:<org_id>`: `{kind: card_done | handover | bud_delivered, actor_id}`, plus
+  `board_key` and `card_key` only for org-visible boards; never titles. `card_done` is a
+  `created` / `moved` / `moved_board` event into a `done` stage from a non-done one;
+  `bud_delivered` is the card's `delivered` event (one per BUD).
+- **Forwarding.** `colyseus_forwarder.forward_activity_to_colyseus` (renamed) forwards
+  `agent_activity:` and `board_activity:` topics under their prefix as the bridge type. The
+  topic isn't in `TOPIC_RULES`, so browsers can't subscribe to it over `/ws`.
+- **Multiplayer.** `OrgRoom.handleBridgeEvent("board_activity")` validates with
+  `sim/BoardActivity.parseBoardActivityEvent` (known kind, uuid-or-null actor, key-shaped keys;
+  everything else dropped) and re-broadcasts the message `board_activity` to the room's
+  clients. No room state; the client effects come with the frontend pass.
+- **Room joins.** `/internal/colyseus/verify-token` accepts an active member holding
+  `workspace:engineering` **or** `boards:view` in the token's own org (the org must still
+  equal the room's; `member_permission_set` reads that org's role). This covers every room
+  (org, race, minigame, backlash), since they share the check.
 
 ## Existing BUDs
 
