@@ -35,6 +35,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.bud import BUDDocument, BUDStatus
 from app.repositories.bud_estimate import BUDEstimateSnapshotRepository
 from app.repositories.bud_timeline import BUDTimelineRepository
+from app.services.boards.constants import VIA_HANDOVER
+from app.services.bud_metrics_skips import skipped_by_handover
 
 logger = structlog.get_logger(__name__)
 
@@ -171,18 +173,21 @@ async def build_phase_metrics(
     """
     timeline_repo = BUDTimelineRepository(db, org_id=org_id)
     status_events = await timeline_repo.list_for_bud_by_event_type(bud.id, "status_change")
-    parsed: list[tuple[str, datetime]] = []
+    parsed: list[tuple[str, datetime, bool]] = []
     for ev in status_events:
         detail = ev.detail or {}
         to_phase = detail.get("to") if isinstance(detail, dict) else None
         if isinstance(to_phase, str):
-            parsed.append((to_phase, ev.created_at))
+            parsed.append((to_phase, ev.created_at, detail.get("via") == VIA_HANDOVER))
 
     snapshot_repo = BUDEstimateSnapshotRepository(db, org_id=org_id)
     earliest = await snapshot_repo.get_earliest_for_bud(bud.id)
     phase_estimates = earliest.phase_estimates if earliest else None
 
-    windows = _phase_windows_from_timeline(parsed, bud.created_at, bud_closed_at)
+    windows = _phase_windows_from_timeline(
+        [(to_phase, at) for to_phase, at, _via in parsed], bud.created_at, bud_closed_at
+    )
+    skipped = skipped_by_handover(parsed)
 
     out: dict[str, dict[str, Any]] = {}
     for phase in _TRACKED_PHASES:
@@ -195,9 +200,10 @@ async def build_phase_metrics(
         out[phase] = {
             "actual_days": actual_days,
             "estimated_days": estimated_days,
-            "drift_pct": _drift_pct(actual_days, estimated_days),
+            "drift_pct": None if phase in skipped else _drift_pct(actual_days, estimated_days),
             "entered_at": entry.isoformat(),
             "exited_at": exit_.isoformat(),
+            "skipped_at_handover": phase in skipped,
         }
     return out
 

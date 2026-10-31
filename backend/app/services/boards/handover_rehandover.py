@@ -46,9 +46,10 @@ from app.repositories import bud_version as bud_version_repo
 from app.repositories.bud import BUDRepository
 from app.schemas.boards.handover import HandoverConfirm
 from app.services.boards.access import BoardAccess
+from app.services.boards.constants import VIA_HANDOVER
 from app.services.boards.handover_bud import HandedOverBUD, origin_detail
 from app.services.boards.handover_errors import BUDNotReturnedError
-from app.services.boards.handover_landing import VIA_HANDOVER, land
+from app.services.boards.handover_landing import land
 from app.services.boards.handover_prepare import prepare
 from app.services.boards.handover_similar import draft_embedding
 from app.services.boards.reads import card_key

@@ -37,14 +37,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bud import BUDDocument, BUDStatus, BUDTimelineEventType
 from app.services import bud_estimate_after_commit
-from app.services.boards.constants import HANDOVER_LANDING_STATUSES
+from app.services.boards.constants import HANDOVER_LANDING_STATUSES, VIA_HANDOVER
 from app.services.bud_assignment import auto_assign_for_phase
 from app.services.bud_create import start_intake_agent
 from app.services.bud_stage_jobs import StageJobsOutcome, run_stage_jobs
 from app.services.bud_timeline import clock_now, record_event
 from app.services.feature_lifecycle import transition_feature_for_bud
 
-VIA_HANDOVER = "handover"
 # The estimate's trigger, as its snapshot records it.
 ESTIMATE_TRIGGER = "handover_landed"
 
