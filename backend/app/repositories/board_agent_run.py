@@ -17,11 +17,13 @@
 A card has at most one active run (the partial unique index
 ``uq_board_card_agent_runs_one_active``); :meth:`claim` inserts against it
 and reports a clash instead of raising, so a move into an ``on_enter``
-stage never fails because a run is already going.
+stage never fails because a run is already going. Starting runs in one org
+is serialised by :meth:`lock_starts`, so the run caps' count and the insert
+can't interleave; stale and interrupted runs live in
+:mod:`app.repositories.board_agent_run_sweep`.
 """
 
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select, text, update
@@ -34,9 +36,10 @@ from app.models.board_agent import (
     BoardCardAgentRun,
 )
 from app.models.board_card import BoardCard
-from app.repositories.base import BaseRepository, rowcount
+from app.repositories.base import BaseRepository
 
-INTERRUPTED = "The server restarted while this run was going. Run it again."
+# The first key of the per-org advisory lock that serialises run starts.
+_START_LOCK_NAMESPACE = 0x62617267
 _ACTIVE_WHERE = text("status IN (" + ", ".join(f"'{s.value}'" for s in ACTIVE_RUN_STATUSES) + ")")
 
 
@@ -138,19 +141,32 @@ class BoardCardAgentRunRepository(BaseRepository[BoardCardAgentRun]):
         """Hold the run's row until the transaction ends, and re-read it."""
         await self._db.refresh(run, with_for_update=True)
 
+    async def lock_starts(self) -> None:
+        """Hold the org's run-start lock until the transaction ends.
 
-async def recover_stuck_board_agent_runs(db: AsyncSession) -> int:
-    """Mark runs a restart left pending or running as failed; returns how many.
+        Taken before counting active runs for the caps and claiming one, so
+        two starts at the edge of a cap can't both pass. Callers that also
+        lock the card take the card first.
+        """
+        key = func.hashtext(str(self._org_id))
+        await self._db.execute(select(func.pg_advisory_xact_lock(_START_LOCK_NAMESPACE, key)))
 
-    Startup-only and cross-org: the in-memory jobs behind them are gone.
-    """
-    stmt = (
-        update(BoardCardAgentRun)
-        .where(BoardCardAgentRun.status.in_(ACTIVE_RUN_STATUSES))
-        .values(
-            status=BoardAgentRunStatus.FAILED,
-            error_message=INTERRUPTED,
-            finished_at=datetime.now(UTC),
+    async def mark_running(self, run: BoardCardAgentRun) -> bool:
+        """Move a pending run to running, stamping when; False when it isn't pending any more.
+
+        The row is re-read either way.
+        """
+        stmt = (
+            update(BoardCardAgentRun)
+            .where(
+                BoardCardAgentRun.id == run.id,
+                BoardCardAgentRun.org_id == self._org_id,
+                BoardCardAgentRun.status == BoardAgentRunStatus.PENDING,
+            )
+            .values(status=BoardAgentRunStatus.RUNNING, started_at=func.now())
+            .returning(BoardCardAgentRun.id)
+            .execution_options(synchronize_session=False)
         )
-    )
-    return rowcount(await db.execute(stmt))
+        started = (await self._db.execute(stmt)).scalar_one_or_none() is not None
+        await self._db.refresh(run)
+        return started

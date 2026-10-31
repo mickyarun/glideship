@@ -15,8 +15,9 @@
 """Enqueueing a committed run's job, and what happens when the queue is full.
 
 The in-memory queue is bounded. A run it can't take is marked failed with
-:data:`QUEUE_FULL` (so Retry starts it again) and its board hears
-``agent_run_updated``. From the Run button that is a 503 with ``Retry-After``;
+:data:`QUEUE_FULL` (so Retry starts it again) like any failed run: an
+``ai_run`` event on the card, ``agent_run_updated`` on its board and a notice
+to the card's assignees. From the Run button that is a 503 with ``Retry-After``;
 for a run an entry started, the move that started it has already committed,
 so the run is failed on its own session in the background.
 """
@@ -30,11 +31,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
+from app.models.board_agent import BoardCardAgentRun
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
-from app.repositories.board_card import BoardCardRepository
 from app.schemas.boards.agent import AgentRunAccepted, AgentRunRead, BoardAgentRunPayload
-from app.services.boards.agents.runs import queue_run_event, settle
+from app.services.boards.agents.apply import finish_failed
+from app.services.boards.agents.loading import run_row
 from app.services.boards.errors import BoardBusyError
 from app.services.job_queue import JOB_BOARD_AGENT_RUN, create_job_with_id
 
@@ -65,25 +66,21 @@ def _enqueue(run: BoardCardAgentRun) -> bool:
     return True
 
 
-async def _fail_queued(db: AsyncSession, board_id: uuid.UUID, run: BoardCardAgentRun) -> None:
-    await BoardCardAgentRunRepository(db, org_id=run.org_id).lock(run)
-    if run.status is BoardAgentRunStatus.PENDING:
-        settle(run, BoardAgentRunStatus.FAILED, error=QUEUE_FULL)
-        await db.flush()
-        queue_run_event(db, board_id, run)
-    await db.commit()
+async def _fail_queued(db: AsyncSession, run: BoardCardAgentRun) -> None:
+    """Fail a run the queue couldn't take, as any failed run is (commits)."""
+    row = await run_row(db, run)
+    if row is not None:
+        await finish_failed(db, row, QUEUE_FULL)
 
 
-async def enqueue_now(
-    db: AsyncSession, board_id: uuid.UUID, run: BoardCardAgentRun
-) -> AgentRunAccepted:
+async def enqueue_now(db: AsyncSession, run: BoardCardAgentRun) -> AgentRunAccepted:
     """Enqueue a run the caller just committed; the 202 body.
 
     Raises:
         BoardBusyError: The queue is full; the run is now failed (503).
     """
     if not _enqueue(run):
-        await _fail_queued(db, board_id, run)
+        await _fail_queued(db, run)
         wait = settings.boards.agent_busy_retry_after_seconds
         raise BoardBusyError(QUEUE_FULL, retry_after_seconds=wait)
     assert run.job_id is not None
@@ -108,15 +105,7 @@ async def _fail_in_background(org_id: uuid.UUID, run_id: uuid.UUID) -> None:
     try:
         async with AsyncSessionLocal() as db:
             run = await BoardCardAgentRunRepository(db, org_id=org_id).get_by_id(run_id)
-            board_id = await _board_of(db, run)
-            if run is not None and board_id is not None:
-                await _fail_queued(db, board_id, run)
+            if run is not None:
+                await _fail_queued(db, run)
     except Exception:
         logger.exception("board_agent_run_fail_queued_failed", run_id=str(run_id))
-
-
-async def _board_of(db: AsyncSession, run: BoardCardAgentRun | None) -> uuid.UUID | None:
-    if run is None:
-        return None
-    card = await BoardCardRepository(db, org_id=run.org_id).get_by_id(run.card_id)
-    return None if card is None else card.board_id

@@ -30,11 +30,14 @@ class StageAgentWrite(BaseModel):
     """One agent for a stage: a skill from the org's library and when it runs.
 
     Agents run in ``order`` (lowest first); a stage holds at most one
-    ``on_enter`` agent.
+    ``on_enter`` agent. ``id`` names one of the stage's agents to keep (its
+    runs keep counting as its own, and Retry with it still works); without
+    one, a new agent is added.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    id: uuid.UUID | None = None
     skill_id: uuid.UUID
     trigger: BoardAgentTrigger
     enabled: bool = True

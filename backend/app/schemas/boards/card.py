@@ -20,6 +20,7 @@ from enum import StrEnum
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.models.board_agent import BoardAgentRunStatus
 from app.models.board_enums import BoardHandoverStatus
 from app.models.bud import BUDPriority, BUDStatus
 from app.schemas.boards.text import CardDescription, CardTitle, IdList
@@ -138,8 +139,18 @@ class CardDelivery(StrEnum):
     DELIVERED = "delivered"
 
 
+class CardAgentRun(BaseModel):
+    """The agent run going on a card now (pending or running), for its tile.
+
+    ``skill_name`` is null when the run's skill was deleted.
+    """
+
+    status: BoardAgentRunStatus
+    skill_name: str | None
+
+
 class CardSummary(BaseModel):
-    """A card as a board column shows it."""
+    """A card as a board column shows it; ``agent_run`` is its active run, if any."""
 
     id: uuid.UUID
     key: str
@@ -162,6 +173,7 @@ class CardSummary(BaseModel):
     repo_id: uuid.UUID | None
     handovers: list[HandoverChip] = Field(default_factory=list)
     delivery: CardDelivery = CardDelivery.NONE
+    agent_run: CardAgentRun | None = None
 
 
 class CardPage(BaseModel):

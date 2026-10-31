@@ -14,7 +14,7 @@
 
 """Tunables for agents on board stages, part of ``BoardsConfig`` (``BOARDS_*`` variables)."""
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -48,4 +48,18 @@ class BoardAgentSettings(BaseSettings):
     )
     agent_runs_per_user_max: int = Field(
         default=5, gt=0, description="Pending plus running card runs one person may start."
+    )
+    agent_stale_grace_seconds: int = Field(
+        default=300,
+        ge=0,
+        description="How long past its deadline a pending or running run counts as stale.",
+    )
+    agent_stale_sweep_seconds: int = Field(
+        default=300, gt=0, description="How often stale card runs are swept."
+    )
+    agent_workers: int = Field(
+        default=2,
+        gt=0,
+        validation_alias=AliasChoices("JOB_BOARD_AGENT_WORKERS", "BOARDS_AGENT_WORKERS"),
+        description="Card runs going at once in this process.",
     )

@@ -39,10 +39,13 @@ from typing import Any
 import pytest
 
 from app.core import encryption
+from app.mcp import handlers_board_cards
 from app.services import (
     agent_activity_logger,
     ai_runner,
     bud_agent_handler,
+    bud_agent_loading,
+    bud_agent_records,
     bud_agent_retry,
     claude_env,
     claude_runner,
@@ -51,6 +54,10 @@ from app.services import (
     notification_service,
 )
 from app.services.ai_runner import capability_gate, cli_exec
+from app.services.boards.agents import loading as board_agent_loading
+from app.services.boards.agents import queue as board_agent_queue
+from app.services.boards.agents import stale_sweep as board_agent_stale_sweep
+from app.services.boards.agents import subject as board_agent_subject
 
 # Every credential variable ``claude_env`` manages, across providers.
 CRED_VARS = (
@@ -66,13 +73,20 @@ CRED_VARS = (
 CREDENTIAL_PATH: tuple[ModuleType, ...] = (
     agent_activity_logger,
     ai_runner,
+    board_agent_loading,
+    board_agent_queue,
+    board_agent_stale_sweep,
+    board_agent_subject,
     bud_agent_handler,
+    bud_agent_loading,
+    bud_agent_records,
     bud_agent_retry,
     capability_gate,
     claude_env,
     claude_runner,
     cli_exec,
     encryption,
+    handlers_board_cards,
     job_queue,
     job_utils,
     notification_service,

@@ -131,7 +131,8 @@ async def test_accepting_makes_a_new_current_version_and_sets_has_prd(
     ]
     assert ok(await client.get(d.url, headers=d.admin.headers))["has_prd"] is True
     doc_events = [e for e in events if e["event"] == "doc_updated"]
-    assert [e["state"] for e in doc_events] == ["current"]
+    # The retired draft too, so other viewers drop it from their lists.
+    assert [(e["version"], e["state"]) for e in doc_events] == [(1, "superseded"), (2, "current")]
     assert "card_updated" in [e["event"] for e in events]
     # Already reviewed: a second accept finds nothing waiting.
     again = await client.post(_review(d, draft, "accept"), json=body, headers=d.admin.headers)

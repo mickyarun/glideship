@@ -199,14 +199,25 @@ async def drain_background_work() -> None:
         await asyncio.gather(*list(background._tasks), return_exceptions=True)
 
 
+@pytest.fixture(autouse=True)
+def _engine_if_used(request: pytest.FixtureRequest) -> None:
+    """Bring in the test's database engine first, but only for a test that uses it.
+
+    A test without one starts no container. Requested here (outside any
+    event loop, so the migrations can run), the engine is disposed only after
+    :func:`_drain_background` has drained.
+    """
+    if "pg_session_factory" in request.fixturenames:
+        request.getfixturevalue("pg_session_factory")
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _drain_background(
-    monkeypatch: pytest.MonkeyPatch,
-    pg_session_factory: async_sessionmaker[AsyncSession],
+    _engine_if_used: None, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncIterator[None]:
     """Drain background work at teardown, while the test's patches and engine are still up.
 
-    Depending on ``monkeypatch`` and ``pg_session_factory`` puts this
+    Depending on ``monkeypatch`` and :func:`_engine_if_used` puts this
     teardown before theirs.
     """
     yield

@@ -117,6 +117,7 @@ from app.services.bud_stage_overrides import (
 )
 from app.services.bud_status_change import apply_status_change
 from app.services.bud_timeline import record_event
+from app.services.delivery_settings import DELIVERY_AI_OFF, delivery_ai_enabled, no_agent_reason
 from app.services.job_queue import JOB_BUD_AGENT, create_job
 from app.services.org_members import assert_new_assignee_in_org
 
@@ -467,7 +468,11 @@ async def regenerate_learning(
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No Learning Agent is configured for the closed stage in this org",
+            detail=await no_agent_reason(
+                db,
+                current_user.org_id,
+                "No Learning Agent is configured for the closed stage in this org",
+            ),
         )
     return {"status": "accepted", "bud_id": str(bud_id), "task_id": str(task.id)}
 
@@ -1196,7 +1201,9 @@ async def select_code_review_repos(
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No code-review agent is configured for this org",
+            detail=await no_agent_reason(
+                db, current_user.org_id, "No code-review agent is configured for this org"
+            ),
         )
     return {
         "status": "accepted",
@@ -1369,6 +1376,8 @@ async def regenerate_code_review(
             status_code=409,
             detail="Cannot re-review while an agent task is running",
         )
+    if not await delivery_ai_enabled(db, current_user.org_id):
+        raise HTTPException(status_code=409, detail=DELIVERY_AI_OFF)
 
     # Snapshot the prior comments before clearing them. If ``create_job``
     # later fails (Redis down, queue full, etc.) we put them back so the

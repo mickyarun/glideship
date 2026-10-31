@@ -25,12 +25,13 @@ run, the order the card tools and a move between boards take.
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board import Board
-from app.models.board_agent import ACTIVE_RUN_STATUSES, BoardAgentRunStatus
+from app.models.board_agent import ACTIVE_RUN_STATUSES
 from app.repositories.agent_skill import AgentSkillRepository
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
 from app.repositories.board_card import BoardCardRepository
-from app.services.boards.agents.apply import RunRefs, settle_canceled
-from app.services.boards.agents.runs import queue_run_event, settle, stop_job_after_commit
+from app.services.boards.agents.apply import settle_canceled
+from app.services.boards.agents.refs import RunRow
+from app.services.boards.agents.runs import stop_job_after_commit
 
 AI_SWITCHED_OFF = "AI was switched off on this board, so this run stopped."
 
@@ -51,14 +52,8 @@ async def cancel_board_runs(db: AsyncSession, board: Board) -> int:
         if run.status not in ACTIVE_RUN_STATUSES:
             continue
         skill = await skills.get_by_id(run.skill_id) if run.skill_id else None
-        if skill is not None:
-            await settle_canceled(
-                db, RunRefs(board=board, card=card, run=run, skill=skill), AI_SWITCHED_OFF
-            )
-        else:
-            settle(run, BoardAgentRunStatus.CANCELED, error=AI_SWITCHED_OFF)
-            await db.flush()
-            queue_run_event(db, board.id, run)
+        row = RunRow(board=board, card=card, run=run, skill=skill)
+        await settle_canceled(db, row, AI_SWITCHED_OFF)
         stop_job_after_commit(db, run, AI_SWITCHED_OFF)
         stopped += 1
     return stopped

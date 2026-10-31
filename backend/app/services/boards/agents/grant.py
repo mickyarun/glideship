@@ -33,7 +33,7 @@ from app.core.permission_deps import member_has_permission
 from app.core.permissions import WORKSPACE_ENGINEERING
 from app.mcp.token_grants import GrantRepo, InternalTokenGrant, create_scoped_mcp_token
 from app.repositories.board_repo import BoardRepoRepository
-from app.services.boards.agents.apply import RunRefs
+from app.services.boards.agents.refs import RunRefs
 from app.services.boards.agents.tools import BOARD_RUN_CODE_TOOLS, run_tools
 from app.services.claude_runner import MCPServerConfig
 

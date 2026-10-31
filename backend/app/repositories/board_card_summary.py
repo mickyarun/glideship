@@ -15,7 +15,7 @@
 """What a board column shows for each card, in one query per page.
 
 Assignee and label ids are ``array_agg``'d, the checklist counted, and the
-PRD and the handover chips looked up in correlated subqueries, so a page of
+PRD, the handover chips and the active agent run looked up in correlated subqueries, so a page of
 cards is one round trip with no lazy loads, however many cards it holds. Blank descriptions
 are stored as NULL and blank documents refused, so "has a description" and
 "has a PRD" are plain presence checks.
@@ -41,6 +41,7 @@ from app.repositories.board_card_handover_chips import (
     handover_chips,
     parse_chips,
 )
+from app.repositories.board_card_run_chip import RunChipRow, active_run_chip, parse_run_chip
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,7 @@ class CardSummaryRow:
     checklist_done: int = 0
     checklist_total: int = 0
     handovers: list[HandoverChipRow] = field(default_factory=list)
+    agent_run: RunChipRow | None = None
 
 
 def _per_card(column: Any, *conditions: ColumnElement[bool]) -> Any:
@@ -154,6 +156,7 @@ class BoardCardSummaryRepository:
             done.label("checklist_done"),
             total.label("checklist_total"),
             handover_chips().label("handovers"),
+            active_run_chip().label("agent_run"),
         ).where(BoardCard.org_id == self._org_id, BoardCard.board_id == board_id)
 
     async def _run(self, stmt: Select[Any]) -> list[CardSummaryRow]:
@@ -165,6 +168,7 @@ class BoardCardSummaryRepository:
                     "assignee_ids": list(row["assignee_ids"] or []),
                     "label_ids": list(row["label_ids"] or []),
                     "handovers": parse_chips(row["handovers"]),
+                    "agent_run": parse_run_chip(row["agent_run"]),
                 }
             )
             for row in rows

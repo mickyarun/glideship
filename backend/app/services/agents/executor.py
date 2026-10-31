@@ -26,12 +26,21 @@ import asyncio
 
 from app.database import AsyncSessionLocal
 from app.schemas.jobs import JobState
-from app.services.agents.subject import AgentRunRef, AgentSubject
+from app.services.agents.subject import AgentRunCanceledError, AgentRunRef, AgentSubject
 from app.services.ai_runner import run_agent_for_org_id
-from app.services.job_queue import get_job, update_job
+from app.services.job_queue import cancel_reason, is_shutting_down, update_job
 from app.services.job_utils import make_progress_callback
 
 DEFAULT_CANCEL_REASON = "Cancelled by user"
+RESTART_REASON = "The server restarted while this agent was running. Run it again."
+
+
+def _why_canceled(job_id: str) -> str:
+    """The reason ``cancel_job`` gave; otherwise a restart's, or the default."""
+    stated = cancel_reason(job_id)
+    if stated:
+        return stated
+    return RESTART_REASON if is_shutting_down() else DEFAULT_CANCEL_REASON
 
 
 async def execute_agent_run(job_id: str, run: AgentRunRef, subject: AgentSubject) -> None:
@@ -90,13 +99,17 @@ async def execute_agent_run(job_id: str, run: AgentRunRef, subject: AgentSubject
             summary = await subject.handle_output(db, result.output or "")
             await subject.record_success(db, summary)
 
+        except AgentRunCanceledError as stopped:
+            await db.rollback()
+            await subject.record_cancel(stopped.reason)
+            update_job(
+                job_id, state=JobState.CANCELLED, error=stopped.reason, status_message="Cancelled"
+            )
+            return
+
         except asyncio.CancelledError:
             await db.rollback()
-            # ``cancel_job`` stashes the reason on the job's status message
-            # before it cancels the asyncio task.
-            job = get_job(job_id)
-            reason = (job.status_message if job else None) or DEFAULT_CANCEL_REASON
-            await subject.record_cancel(reason)
+            await subject.record_cancel(_why_canceled(job_id))
             raise  # the worker's CancelledError branch emits the terminal event
 
         except Exception as exc:

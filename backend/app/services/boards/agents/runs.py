@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A card's agent runs: reading them, announcing changes, settling and canceling them."""
+"""A card's agent runs: reading them, announcing changes, settling and canceling them.
+
+A stale run (past its deadline plus a grace, :mod:`app.repositories.board_agent_run_sweep`)
+doesn't hold the card: starting a new run fails it first, and its job is
+stopped after the commit.
+"""
 
 import uuid
 from datetime import UTC, datetime
@@ -23,6 +28,7 @@ from app.config import settings
 from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
 from app.models.board_card import BoardCard
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
+from app.repositories.board_agent_run_sweep import STALE, fail_stale_runs
 from app.schemas.boards.agent import AgentRunRead
 from app.services.after_commit import call_after_commit
 from app.services.boards.access import CardAccess
@@ -31,6 +37,13 @@ from app.services.job_queue import cancel_job
 
 # What a run moved off its board says, for the run row and the job.
 MOVED_BOARD = "The card moved to another board, so its agent run stopped."
+# A stopped run's job reason when the run row names none.
+RUN_STOPPED = "This agent run was stopped."
+
+
+def stop_reason(run: BoardCardAgentRun) -> str:
+    """Why a run that is no longer going stopped, for its job."""
+    return run.error_message or RUN_STOPPED
 
 
 def run_json(run: BoardCardAgentRun) -> dict[str, object]:
@@ -50,6 +63,21 @@ def queue_run_event(
     changes = BoardChanges(board_id, actor_id, origin)
     changes.emit(BoardSocketEvent.AGENT_RUN_UPDATED, card_id=str(run.card_id), run=run_json(run))
     changes.queue(db)
+
+
+async def clear_stale(db: AsyncSession, board_id: uuid.UUID, card: BoardCard) -> None:
+    """Fail the card's active run if it is stale, so a new one can start; the caller commits."""
+    cfg = settings.boards
+    stale = await fail_stale_runs(
+        db,
+        timeout_seconds=cfg.agent_timeout_seconds,
+        grace_seconds=cfg.agent_stale_grace_seconds,
+        org_id=card.org_id,
+        card_id=card.id,
+    )
+    for run, _board_id in stale:
+        queue_run_event(db, board_id, run)
+        stop_job_after_commit(db, run, STALE)
 
 
 def settle(

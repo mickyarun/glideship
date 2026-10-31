@@ -24,10 +24,11 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select
 
-from app.models.bud import BUDDocument
+from app.models.bud import BUDDocument, BUDStatus
 from app.models.bud_agent_task import BUDAgentTask
 from app.services.bud_agent_trigger import create_agent_task_for_stage
 from app.services.bud_stage_seeder import seed_stage_mappings_for_org
+from app.services.delivery_settings import DELIVERY_AI_OFF
 from app.services.skill_loader import seed_skills_for_org
 from tests.integration.board_api_support import ok, person
 from tests.integration.bud_lifecycle_support import add_bud
@@ -93,3 +94,21 @@ async def test_with_delivery_ai_on_the_stage_agent_starts_as_before(
     org, bud_id = await _org_with_agents(pg_session_factory)
     task, jobs, tasks = await _start_prd_agent(pg_session_factory, org, bud_id)
     assert task is not None and (jobs, tasks) == (1, 1)
+
+
+async def test_with_delivery_ai_off_regenerating_learnings_says_the_switch_is_off(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org, _bud = await _org_with_agents(pg_session_factory)
+    owner = await person(pg_session_factory, org, "org_owner")
+    closed = await add_bud(
+        pg_session_factory,
+        org,
+        number=2,
+        status=BUDStatus.CLOSED,
+        auto_generate_phases={"closed": True},
+    )
+    ok(await client.patch(URL, json={"ai_enabled": False}, headers=owner.headers))
+    url = f"/api/v1/buds/{closed}/learning/regenerate"
+    refused = await client.post(url, headers=owner.headers)
+    assert (refused.status_code, refused.json()["detail"]) == (409, DELIVERY_AI_OFF)

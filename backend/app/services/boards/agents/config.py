@@ -17,8 +17,10 @@
 Any skill in the org's library may run on a stage, custom ones included; a
 skill from another org is refused. A stage holds at most one ``on_enter``
 agent (one active run per card means a second could never start) and each
-``order`` once. Replacing the list keeps past runs: they keep their skill and
-lose only the link to the removed agent row.
+``order`` once. Replacing the list keeps the agents it names by ``id``
+(so their runs' attempt counts carry on and Retry with that id still works),
+adds the ones without an id and removes the rest; a removed agent's past runs
+keep their skill and lose only the link to its row.
 """
 
 import uuid
@@ -41,6 +43,8 @@ from app.services.boards.stage_service import STAGE_NOT_FOUND
 
 ONE_ON_ENTER = "A stage can start only one agent when a card enters it."
 ORDER_TAKEN = "Give each agent on the stage its own order."
+AGENT_REPEATED = "Name each of the stage's agents once."
+AGENT_NOT_ON_STAGE = "One of those agents isn't on this stage any more. Reload and try again."
 
 
 def _read(agent: BoardStageAgent, skill: AgentSkill) -> StageAgentRead:
@@ -87,6 +91,8 @@ def _check_shape(body: list[StageAgentWrite]) -> None:
         raise BoardRuleError(ONE_ON_ENTER)
     if any(n > 1 for n in Counter(a.order for a in body).values()):
         raise BoardRuleError(ORDER_TAKEN)
+    if any(n > 1 for n in Counter(a.id for a in body if a.id is not None).values()):
+        raise BoardRuleError(AGENT_REPEATED)
 
 
 async def replace_stage_agents(
@@ -96,7 +102,8 @@ async def replace_stage_agents(
 
     Raises:
         BoardItemNotFoundError: The stage isn't on this board (404).
-        BoardRuleError: Two ``on_enter`` agents, or a repeated order (422).
+        BoardRuleError: Two ``on_enter`` agents, a repeated order or id, or an id
+            that isn't one of the stage's agents (422).
         SkillNotInLibraryError: A skill isn't in the org's library (422).
     """
     _check_shape(body)
@@ -104,6 +111,9 @@ async def replace_stage_agents(
     if await stages.lock(access.board.id, stage_id) is None:
         raise BoardItemNotFoundError(STAGE_NOT_FOUND)
     repo = BoardStageAgentRepository(db, org_id=access.org_id)
+    on_stage = {a.id for a, _s in await repo.list_for_stage(access.board.id, stage_id)}
+    if any(a.id is not None and a.id not in on_stage for a in body):
+        raise BoardRuleError(AGENT_NOT_ON_STAGE)
     wanted = {a.skill_id for a in body}
     skills = await repo.skills_by_ids(wanted)
     missing = sorted(wanted - skills.keys(), key=str)
@@ -111,6 +121,7 @@ async def replace_stage_agents(
         raise SkillNotInLibraryError(missing)
     rows = [
         BoardStageAgent(
+            **({} if a.id is None else {"id": a.id}),
             org_id=access.org_id,
             board_id=access.board.id,
             stage_id=stage_id,
@@ -122,8 +133,8 @@ async def replace_stage_agents(
         )
         for a in sorted(body, key=lambda a: a.order)
     ]
-    await repo.replace_for_stage(access.board.id, stage_id, rows)
-    result = [_read(row, skills[row.skill_id]) for row in rows]
+    stored = await repo.replace_for_stage(access.board.id, stage_id, rows)
+    result = [_read(row, skills[row.skill_id]) for row in stored]
     changes = BoardChanges.of(access)
     changes.emit(BoardSocketEvent.STAGE_AGENTS_CHANGED, stage_id=str(stage_id))
     await changes.commit(db)

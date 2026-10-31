@@ -1723,19 +1723,35 @@ nothing changes on the card until then. The AI never moves a card and never hand
   already active, the move goes ahead and nothing starts (`INSERT … ON CONFLICT DO NOTHING`
   against the partial index). The run row is written with the move; its job is enqueued after the
   commit (`call_after_commit`), so the job always finds it. A full queue fails the run with "Too
-  many agent runs are queued" (Retry restarts it); from the Run button that's 503 with
+  many agent runs are queued" (Retry restarts it), with the `ai_run` event, `agent_run_updated`
+  and the assignees' failure notice any failed run gets; from the Run button that's 503 with
   `Retry-After` (`BOARDS_AGENT_BUSY_RETRY_AFTER_SECONDS`). A restart fails interrupted runs
-  (`recover_stuck_board_agent_runs`, startup step 6d).
+  (`recover_stuck_board_agent_runs`, startup step 6d). A run whose job is still in flight when
+  the server shuts down is recorded with "The server restarted while this agent was running",
+  not its last progress line (BUD agent tasks too; the executor reads the reason `cancel_job`
+  gave, else the restart's).
+- **Stale runs.** A pending run older (since `created_at`) or a running run older (since
+  `started_at`) than its deadline (the skill's `timeout_seconds`, else
+  `BOARDS_AGENT_TIMEOUT_SECONDS`) plus `BOARDS_AGENT_STALE_GRACE_SECONDS` (300) no longer holds
+  its card. Starting a new run on the card fails it first ("This run went past its deadline…"),
+  and a sweep every `BOARDS_AGENT_STALE_SWEEP_SECONDS` (300, startup step 8l) fails them in every
+  org in one `UPDATE … RETURNING`; either way the board hears `agent_run_updated` and the job is
+  canceled after the commit. Ending a run on a fresh session (after a cancel or crash) works
+  without its skill, so a run whose skill was deleted mid-run still frees its card; if even that
+  fails, the sweep settles it.
 - **Moving between boards** cancels the card's active run in the same transaction (status
   `canceled`, "The card moved to another board…") and `cancel_job` runs after the commit; a run
   canceled meanwhile saves nothing.
 - **API** (under `/api/v1/boards`):
   - `GET /{key}/stages/{stage_id}/agents` (admin, `configure_agents`) and `PUT` the same path with
-    a body of `[{skill_id, trigger, enabled, order}]` (at most `BOARDS_STAGE_AGENTS_MAX`), which
-    replaces the list and returns `[{id, stage_id, skill_id, skill_name, skill_slug, agent_type,
-    output_kind, trigger, enabled, order}]` in order. 422 for two `on_enter` agents or a repeated
-    order, 422 `SKILL_NOT_IN_LIBRARY {skill_ids}` for a skill outside the org, 404 for a stage on
-    another board.
+    a body of `[{id?, skill_id, trigger, enabled, order}]` (at most `BOARDS_STAGE_AGENTS_MAX`),
+    which replaces the list and returns `[{id, stage_id, skill_id, skill_name, skill_slug,
+    agent_type, output_kind, trigger, enabled, order}]` in order. An entry with the `id` of one
+    of the stage's agents updates it in place and keeps the id (its runs' `attempt` count
+    carries on and Retry with it still works); entries without one are added; the stage's other
+    agents are removed. 422 for two `on_enter` agents, a repeated order or id, or an id that
+    isn't on the stage; 422 `SKILL_NOT_IN_LIBRARY {skill_ids}` for a skill outside the org, 404
+    for a stage on another board.
   - `GET /{key}/cards/{number}/agents` (viewer): `{ai_enabled, agents (the card stage's
     switched-on agents), runs (latest BOARDS_AGENT_RUNS_PAGE_SIZE, newest first), active}`.
   - `POST /{key}/cards/{number}/agents/{agent_id}/run` (editor, `run_agent`): 202 `{job_id, run}`
@@ -1752,6 +1768,13 @@ nothing changes on the card until then. The AI never moves a card and never hand
     only current versions.
 - **Board AI switch:** `PATCH /boards/{key}` `ai_enabled` (admin). A run queued before it was
   switched off is canceled when its job starts.
+- **Job state follows the run.** A run found stopped by someone else (no longer pending when
+  its job loads or starts, AI off, or canceled while the model answered) ends its job
+  `cancelled`, never done or failed, and saves nothing. The run goes `pending → running` with a
+  conditional update, so a run canceled between loading and starting never reaches the model.
+- **Card summaries** (board pages, card detail and every socket summary) carry `agent_run:
+  {status, skill_name} | null`, the card's pending or running run, read in the same page query
+  (`skill_name` is null when the skill was deleted). A tile's chip doesn't depend on live events.
 - **Run job** `board_agent_run` (`JOB_BOARD_AGENT_WORKERS`, default 2), payload `{org_id,
   run_id}`. Deadline: the skill's `timeout_seconds`, else `BOARDS_AGENT_TIMEOUT_SECONDS` (600);
   turns: the skill's, else `BOARDS_AGENT_MAX_TURNS` (20). No repository checkout yet; the prompt
@@ -1776,7 +1799,10 @@ nothing changes on the card until then. The AI never moves a card and never hand
   failed and canceled; `doc_updated {card_id, kind, version, state}` (`state` is `current`,
   `pending_review` or `rejected`); `stage_agents_changed {stage_id}` when an admin replaces a
   stage's agents. `agent_activity:<org_id>`: `skill_invoked`, `skill_completed`, `skill_failed`
-  with the run id as `task_id` and `card_key` only for org-visible boards. The card's history gets
+  with the run id as `task_id` and `card_key` only for org-visible boards; once the Garden heard a
+  run start it always hears it end (`skill_completed`, or `skill_failed` for a failure, crash or
+  cancel). Accepting a draft also sends `doc_updated` for the retired draft (`superseded`), so
+  other viewers' draft lists refresh. The card's history gets
   an `ai_run` event (`actor_id` null; detail `run_id`, `skill`, `status`, the summary or error).
 - **Notices** after commit to the card's assignees who can still open the board:
   `board_ai_draft` ("An AI draft is ready to review") or `board_ai_failed` ("An AI run failed"),
@@ -1829,7 +1855,8 @@ nothing changes on the card until then. The AI never moves a card and never hand
   count pending and running runs. From the Run button, going over is 429 `AGENT_RUN_LIMIT` with
   `Retry-After`, and no run is written. An `on_enter` entry over a cap records the run as `failed`
   with the reason, so the card's panel shows it and Retry can start it later. The move still goes
-  ahead. The counts aren't locked, so the caps bound load rather than being exact.
+  ahead. The count and the insert run under a per-org transaction advisory lock (taken after the
+  card's row lock), so two starts racing at a cap can't both pass.
 - **Drafts.** A draft over `CARD_DOC_MAX_CHARS` fails the run. `write_card_doc` already refused it,
   and `write_draft` checks it too. The card tools lock the card and then the run row, then refuse
   an archived card or a run that's no longer `running`. That closes the race with a cancel.
@@ -1849,11 +1876,15 @@ nothing changes on the card until then. The AI never moves a card and never hand
   category}`, when the caller can open the board.
 - **Tests.** Integration tests now drain background work at teardown (`_drain_background` in
   `tests/integration/conftest.py`). That covers `background.spawn` tasks and fake-Slack sends a
-  test left queued, and runs while the test's patches and engine are still up. The "coroutine
+  test left queued, and runs while the test's patches and engine are still up. It brings the
+  database engine in only for a test that already uses it, so the rest start no container. The "coroutine
   'send_dm' was never awaited" warnings are gone (0 across the agent, board, MCP, skill and BUD
   integration tests).
-- **Open.** The learning-recap and code-review regenerate routes answer 409 "no agent configured"
-  when Delivery AI is off; they should name the switch instead. Copilot's `--available-tools` MCP
+- **Delivery AI off** is what the learning-recap and code-review routes' 409 says when that's why
+  no agent started; regenerating a code review is refused (409) while it's off.
+- **Settings.** `JOB_BOARD_AGENT_WORKERS` is read by `BoardsConfig.agent_workers` (default 2);
+  the BUD agent deadline is `BUD_AGENT_TIMEOUT_SECONDS` (default 600).
+- **Open.** Copilot's `--available-tools` MCP
   naming hasn't been tried against a live CLI. If the names don't match, the model has no tools and
   the run falls back to saving the reply.
 

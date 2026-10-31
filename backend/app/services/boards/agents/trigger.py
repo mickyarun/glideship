@@ -23,6 +23,8 @@ move goes ahead and nothing starts. ``ENTRY_RULES`` says which entries start
 agents at all. A run records who started it (``triggered_by``: the clicker,
 or the person whose move or create caused the entry), which decides the
 read tools it gets; the per-org and per-person caps live in :mod:`.limits`.
+Locks: the card, then the org's run-start lock. A stale run on the card
+doesn't hold it (:func:`.runs.clear_stale`).
 """
 
 import uuid
@@ -40,6 +42,7 @@ from app.models.board_agent import (
 from app.models.board_card import BoardCard
 from app.repositories.board_agent import BoardStageAgentRepository
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
+from app.repositories.board_card import BoardCardRepository
 from app.schemas.boards.agent import AgentRunAccepted
 from app.services.after_commit import call_after_commit
 from app.services.boards.access import CardAccess
@@ -50,7 +53,7 @@ from app.services.boards.agents.errors import (
 )
 from app.services.boards.agents.limits import run_limit_reached
 from app.services.boards.agents.queue import enqueue_after_commit, enqueue_now
-from app.services.boards.agents.runs import queue_run_event, settle
+from app.services.boards.agents.runs import clear_stale, queue_run_event, settle
 from app.services.boards.card_checks import check_open
 from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.move_rules import ENTRY_RULES, EntryCause
@@ -88,10 +91,11 @@ async def queue_entry_agents(
 ) -> BoardCardAgentRun | None:
     """Start the stage's ``on_enter`` agent for a card entering it, when everything allows.
 
-    Call after the card's ``stage_id`` is set, inside the request that moves
-    it; the caller commits. ``actor_id`` is whoever moved or created the card
-    (None leaves the run without the engineering read tools). Returns the run,
-    or None when nothing started; over a run cap the run is recorded failed.
+    Call after the card's ``stage_id`` is set (and the card locked), inside
+    the request that moves it; the caller commits. ``actor_id`` is whoever
+    moved or created the card (None leaves the run without the engineering
+    read tools). Returns the run, or None when nothing started; over a run
+    cap the run is recorded failed.
     """
     if not ENTRY_RULES[cause].on_enter_agents or not board.ai_enabled:
         return None
@@ -101,6 +105,7 @@ async def queue_entry_agents(
     if found is None:
         return None
     agent, _skill = found
+    await clear_stale(db, board.id, card)
     over = await run_limit_reached(db, card.org_id, actor_id)
     runs = BoardCardAgentRunRepository(db, org_id=card.org_id)
     run = await runs.claim(_values(card, agent, BoardAgentTrigger.ON_ENTER, actor_id))
@@ -120,6 +125,7 @@ async def _agent_for(target: CardAccess, db: AsyncSession, agent_id: uuid.UUID) 
     access, card = target.access, target.card
     if not access.board.ai_enabled:
         raise BoardAiDisabledError()
+    await BoardCardRepository(db, org_id=access.org_id).lock(card)
     check_open(card)
     found = await BoardStageAgentRepository(db, org_id=access.org_id).get_in_board(
         access.board.id, agent_id
@@ -147,6 +153,7 @@ async def run_agent(db: AsyncSession, target: CardAccess, agent_id: uuid.UUID) -
     """
     agent = await _agent_for(target, db, agent_id)
     access, card = target.access, target.card
+    await clear_stale(db, access.board.id, card)
     over = await run_limit_reached(db, access.org_id, access.user_id)
     if over is not None:
         wait = settings.boards.agent_busy_retry_after_seconds
@@ -158,4 +165,4 @@ async def run_agent(db: AsyncSession, target: CardAccess, agent_id: uuid.UUID) -
         raise AgentRunActiveError(active.id if active else None)
     queue_run_event(db, access.board.id, run, actor_id=access.user_id, origin=access.origin)
     await db.commit()
-    return await enqueue_now(db, access.board.id, run)
+    return await enqueue_now(db, run)

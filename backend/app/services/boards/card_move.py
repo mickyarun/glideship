@@ -104,7 +104,7 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
             from_stage=from_stage,
             to_stage=to_stage,
         )
-        await queue_entry_agents(
+        started = await queue_entry_agents(
             db,
             board=access.board,
             card=card,
@@ -112,6 +112,8 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
             cause=EntryCause.MOVE,
             actor_id=access.user_id,
         )
+        if started is not None:
+            known = None  # the summary read before the move has no run on it
     detail = await card_detail(
         db, access.board, card, known=known, opens_buds=opens_buds(access.perms)
     )

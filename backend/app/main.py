@@ -35,8 +35,9 @@ from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.event_loop import configure_event_loop_policy
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
-from app.repositories.board_agent_run import recover_stuck_board_agent_runs
+from app.repositories.board_agent_run_sweep import recover_stuck_board_agent_runs
 from app.repositories.external_import_sweep import recover_stuck_external_imports
+from app.services.boards.agents.stale_sweep import run_forever as run_board_agent_stale_sweep
 from app.services.boards.due_reminders import run_forever as run_board_due_reminders
 from app.services.celebrations.scheduler import run_forever as run_celebrations
 from app.services.imports.sweeper import run_forever as run_import_sweep
@@ -332,6 +333,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 8k. Board due reminders: each morning (org time, leave digest timezone)
     # one DM and in-app note per assignee, claimed once per person-day.
     board_due_task = asyncio.create_task(run_board_due_reminders())
+    # 8l. Card agent runs past their deadline plus a grace are failed, so a
+    # hung or lost job never holds its card's one active run.
+    board_agent_stale_task = asyncio.create_task(run_board_agent_stale_sweep())
 
     # 9. PR-merge Redis-stream worker pool. One consumer per
     # (org, repo) stream; supervisor task spawns consumers lazily as
@@ -378,6 +382,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     celebrations_task.cancel()
     import_sweep_task.cancel()
     board_due_task.cancel()
+    board_agent_stale_task.cancel()
     if pr_merge_pool is not None:
         await pr_merge_pool.stop()
     await stop_workers()

@@ -27,7 +27,9 @@ from sqlalchemy import update
 
 from app.mcp import token_grants
 from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
-from app.services.boards.agents.subject import TOO_LONG
+from app.schemas.jobs import JobState
+from app.services.boards.agents.card_tools import RUN_OVER
+from app.services.boards.agents.output import TOO_LONG
 from app.services.boards.constants import CARD_DOC_MAX_CHARS, CARD_RUN_TOOLS
 from app.services.claude_runner import ClaudeRunnerConfig, ClaudeRunResult
 from tests.integration.board_agent_setup import Setup, agent_card, docs, start
@@ -135,19 +137,20 @@ async def test_write_card_doc_after_the_run_was_canceled_is_refused(
     client: AsyncClient, pg_session_factory: Factory, agent_env: AgentEnv
 ) -> None:
     s = await agent_card(client, pg_session_factory)
-    seen: list[int] = []
+    seen: list[tuple[int, str]] = []
 
     async def step(config: ClaudeRunnerConfig) -> ClaudeRunResult:
         await _cancel(pg_session_factory, s)
         write = {"params": {"card_id": s.card["id"], "kind": "prd", "content_md": "# PRD"}}
         resp = await client.post("/mcp/tools/write_card_doc", json=write, headers=_bearer(config))
-        seen.append(resp.status_code)
+        seen.append((resp.status_code, resp.json()["detail"]))
         return ClaudeRunResult(success=True, output="late reply")
 
     agent_env.runner.steps.append(step)
-    await start(client, s)
+    started = await start(client, s)
     await agent_env.jobs.run_all()
-    assert seen == [403]
+    assert seen == [(403, RUN_OVER)]
+    assert agent_env.jobs.state(started["job_id"]) is JobState.CANCELLED
     assert (await docs(client, s))["drafts"] == []
     (run,) = await runs_of(pg_session_factory, s.card["id"])
     assert run.status is BoardAgentRunStatus.CANCELED

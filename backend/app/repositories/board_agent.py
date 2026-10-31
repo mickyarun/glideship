@@ -44,19 +44,46 @@ class BoardStageAgentRepository(BaseRepository[BoardStageAgent]):
 
     async def replace_for_stage(
         self, board_id: uuid.UUID, stage_id: uuid.UUID, agents: list[BoardStageAgent]
-    ) -> None:
-        """Swap the stage's agents for ``agents`` (their runs keep their history)."""
-        await self._db.execute(
-            delete(BoardStageAgent).where(
-                BoardStageAgent.org_id == self._org_id,
-                BoardStageAgent.board_id == board_id,
-                BoardStageAgent.stage_id == stage_id,
+    ) -> list[BoardStageAgent]:
+        """Make ``agents`` the stage's list; the stored rows, in the order given.
+
+        An entry whose ``id`` is one of the stage's agents updates that row
+        in place, keeping its id; the others are inserted (the entries are
+        never added themselves when they name a row). The stage's agents not
+        named are deleted; their runs keep their history.
+        """
+        stmt = self._scoped(
+            select(BoardStageAgent).where(
+                BoardStageAgent.board_id == board_id, BoardStageAgent.stage_id == stage_id
             )
         )
-        # The old rows' order numbers are free only once the delete has run.
+        current = {a.id: a for a in (await self._db.execute(stmt)).scalars().all()}
+        kept = {a.id for a in agents if a.id in current}
+        gone = current.keys() - kept
+        if gone:
+            await self._db.execute(
+                delete(BoardStageAgent).where(
+                    BoardStageAgent.org_id == self._org_id, BoardStageAgent.id.in_(gone)
+                )
+            )
+        # Park the kept rows clear of the unique order and the one-on_enter
+        # index, so a swap of orders or triggers can't clash midway.
+        for parked, agent_id in enumerate(sorted(kept, key=str), start=1):
+            current[agent_id].execution_order = -parked
+            current[agent_id].trigger = BoardAgentTrigger.MANUAL
         await self._db.flush()
-        self._db.add_all(agents)
+        stored: list[BoardStageAgent] = []
+        for wanted in agents:
+            row = current.get(wanted.id) if wanted.id in kept else None
+            if row is None:
+                self._db.add(wanted)
+                stored.append(wanted)
+                continue
+            row.skill_id, row.execution_order = wanted.skill_id, wanted.execution_order
+            row.trigger, row.enabled = wanted.trigger, wanted.enabled
+            stored.append(row)
         await self._db.flush()
+        return stored
 
     async def on_enter_agent(
         self, board_id: uuid.UUID, stage_id: uuid.UUID

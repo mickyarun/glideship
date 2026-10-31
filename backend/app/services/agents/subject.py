@@ -35,6 +35,18 @@ from app.services.claude_runner import (
 )
 
 
+class AgentRunCanceledError(Exception):
+    """The run was stopped (canceled, switched off, or no longer pending); the job is canceled.
+
+    A subject raises it from any step once it finds its run settled by
+    someone else, so the job reads ``cancelled`` rather than done or failed.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 @dataclass(frozen=True)
 class AgentRunRef:
     """The ids every run carries: whose org it runs for, and its own row."""
@@ -108,7 +120,11 @@ class AgentSubject(Protocol):
         ...
 
     async def record_cancel(self, reason: str) -> None:
-        """Mark the run failed or canceled on its own session after a cancel."""
+        """Mark the run failed or canceled on its own session after a cancel.
+
+        Also called after :class:`AgentRunCanceledError`, so it must leave a run
+        that is already settled as it is.
+        """
         ...
 
     async def record_crash(self, exc: Exception) -> None:

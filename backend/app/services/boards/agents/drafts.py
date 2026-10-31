@@ -19,7 +19,8 @@ current version, so the card is unchanged until someone accepts it. A newer
 draft of the same kind retires the older ones. Accepting writes a new
 current version (so it can be reverted from the history like any other);
 rejecting marks the draft ``rejected``. Each announces ``doc_updated`` with
-the version's state.
+the version's state; accepting announces both the new current version and
+the draft it retired (``superseded``).
 """
 
 import uuid
@@ -141,6 +142,10 @@ async def accept_draft(
     draft = await _locked_draft(db, target, kind, doc_id)
     edited = body.body_md is not None and body.body_md != draft.body_md
     _reviewed(draft, target, BoardCardDocState.SUPERSEDED)
+    # Other viewers drop the draft from their lists; sent with the commit below.
+    retired = BoardChanges.of(target.access)
+    doc_event(retired, draft)
+    retired.queue(db)
     new = NewVersion(
         body_md=body.body_md if body.body_md is not None else draft.body_md,
         source=BUDEditSource.UI if edited else BUDEditSource.AGENT,

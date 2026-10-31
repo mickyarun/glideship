@@ -31,6 +31,10 @@ from app.schemas.delivery_settings import DeliverySettings, DeliverySettingsUpda
 logger = structlog.get_logger(__name__)
 
 DELIVERY_CONFIG_KEY: Final = "delivery"
+DELIVERY_AI_OFF: Final = (
+    "Delivery AI is switched off, so no agent runs. "
+    "An admin can switch it on in Settings, under Delivery."
+)
 
 
 def read_delivery_settings(org_config: dict[str, Any] | None) -> DeliverySettings:
@@ -51,6 +55,11 @@ async def get_delivery_settings(db: AsyncSession, org_id: uuid.UUID) -> Delivery
 async def delivery_ai_enabled(db: AsyncSession, org_id: uuid.UUID) -> bool:
     """Whether BUD stage agents may start in this org."""
     return (await get_delivery_settings(db, org_id)).ai_enabled
+
+
+async def no_agent_reason(db: AsyncSession, org_id: uuid.UUID, otherwise: str) -> str:
+    """Why a BUD agent didn't start: Delivery AI is off, else ``otherwise``."""
+    return otherwise if await delivery_ai_enabled(db, org_id) else DELIVERY_AI_OFF
 
 
 async def update_delivery_settings(

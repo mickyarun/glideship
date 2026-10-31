@@ -19,14 +19,15 @@ skill declares that the board-run allowlist keeps (:mod:`.tools`), cut back
 when the person behind the run lacks ``workspace:engineering`` or the board
 links no repository. Its MCP token covers one card and one run and expires
 with the deadline; it is revoked when the run ends. The CLI gets no built-in
-tools at all (``builtin_tools=[]``): no shell, files or web, only the MCP
-tools. The output is a ``pending_review`` draft: written through
-``write_card_doc``, or, when the tool wasn't called, saved from the agent's
-reply as the skill's kind of document (a reply over ``CARD_DOC_MAX_CHARS``
-fails the run). The agent runs with no repository checkout.
+tools (:mod:`.launch`). The output is a ``pending_review`` draft
+(:mod:`.output`). The agent runs with no repository checkout.
+
+A run found stopped by someone else at any step raises
+:class:`AgentRunCanceledError`, so its job ends canceled. Once the Garden heard
+the run start, it always hears it end: completed, or failed for a failure,
+crash or cancel.
 """
 
-from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -34,41 +35,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.mcp.token_grants import revoke_scoped_mcp_token
-from app.models.board_agent import BoardAgentRunStatus
 from app.models.board_enums import BoardCardDocKind
-from app.repositories.board_agent_run import BoardCardAgentRunRepository
-from app.repositories.board_card_doc import BoardCardDocRepository
 from app.schemas.boards.agent import BoardAgentRunPayload
-from app.services.agents.subject import AgentLaunch, AgentPrompt
+from app.services.agents.subject import AgentLaunch, AgentPrompt, AgentRunCanceledError
 from app.services.boards.agents import apply
-from app.services.boards.agents.apply import RunRefs
 from app.services.boards.agents.context import card_context
-from app.services.boards.agents.drafts import write_draft
+from app.services.boards.agents.garden import GardenRun, GardenTag
 from app.services.boards.agents.grant import RunReach, mint_run_token, run_reach
+from app.services.boards.agents.launch import mark_started, runner_config
 from app.services.boards.agents.loading import load_refs, on_fresh_session
+from app.services.boards.agents.output import save_output
 from app.services.boards.agents.prompt import build_card_prompt
-from app.services.boards.agents.runs import queue_run_event
-from app.services.boards.constants import (
-    AGENT_OUTPUT_KINDS,
-    CARD_DOC_MAX_CHARS,
-    DEFAULT_AGENT_OUTPUT_KIND,
-)
+from app.services.boards.agents.refs import RunRefs
+from app.services.boards.agents.runs import stop_reason
+from app.services.boards.constants import AGENT_OUTPUT_KINDS, DEFAULT_AGENT_OUTPUT_KIND
 from app.services.claude_runner import (
     NO_REPO_CONTEXT,
-    ClaudeRunnerConfig,
     ClaudeRunResult,
     MCPServerConfig,
     ProgressCallback,
 )
 
 logger = structlog.get_logger(__name__)
-
-NO_OUTPUT = "The agent finished without writing a draft."
-TOO_LONG = f"The agent's reply was over {CARD_DOC_MAX_CHARS} characters, so no draft was saved."
-
-
-class EmptyOutputError(Exception):
-    """The agent wrote no draft and replied with nothing to save (or too much)."""
 
 
 class CardAgentSubject:
@@ -81,6 +69,7 @@ class CardAgentSubject:
         self._refs: RunRefs | None = None
         self._reach: RunReach | None = None
         self._token: str | None = None
+        self._garden = GardenRun()
         self._completed = False
 
     @property
@@ -110,11 +99,16 @@ class CardAgentSubject:
         logger.info("board_agent_phase", phase=phase, run_id=str(self.run_id), **fields)
 
     async def load(self, db: AsyncSession) -> str | None:
-        """Load the run's rows; a run no longer pending (or whose skill is gone) stops here."""
+        """Load the run's rows; a deleted skill fails the run here.
+
+        Raises:
+            AgentRunCanceledError: The run isn't pending any more, or the board's AI is off.
+        """
         loaded = await load_refs(db, self.org_id, self.run_id)
         if isinstance(loaded, str):
             return loaded
         self._refs = loaded
+        self._garden.tag = GardenTag.of(loaded)
         self._reach = await run_reach(db, loaded)
         self.log_phase(
             "run_loaded", skill_slug=loaded.skill.skill_slug, tools=sorted(self._reach.tools)
@@ -148,23 +142,14 @@ class CardAgentSubject:
     async def prepare(
         self, db: AsyncSession, prompt: AgentPrompt, mcp: MCPServerConfig | None
     ) -> AgentLaunch:
-        """Mark the run running (announced on its board) and set the provider config."""
-        skill, run = self.refs.skill, self.refs.run
-        config = ClaudeRunnerConfig(
-            max_turns=skill.max_turns or settings.boards.agent_max_turns,
-            timeout_seconds=self.timeout_seconds,
-            mcp=mcp,
-            model=skill.model or None,
-            effort=skill.effort or None,
-            # No shell, files or web: only the run's MCP tools.
-            builtin_tools=[],
-        )
-        run.status = BoardAgentRunStatus.RUNNING
-        run.started_at = datetime.now(UTC)
-        await db.flush()
-        queue_run_event(db, self.refs.board.id, run)
-        await db.commit()
-        apply.garden_event(self.refs, "skill_invoked")
+        """Mark the run running (announced on its board) and set the provider config.
+
+        Raises:
+            AgentRunCanceledError: The run was stopped before it could start.
+        """
+        config = runner_config(self.refs.skill, self.timeout_seconds, mcp)
+        await mark_started(db, self.refs)
+        self._garden.started()
         return AgentLaunch(config=config, spawn_cwd=NO_REPO_CONTEXT)
 
     async def review(
@@ -179,51 +164,40 @@ class CardAgentSubject:
         return result
 
     async def handle_output(self, db: AsyncSession, output: str) -> dict[str, Any] | None:
-        """The draft the tool wrote, else the reply saved as one.
-
-        Raises:
-            EmptyOutputError: No draft and an empty reply.
-        """
-        refs = self.refs
-        await BoardCardAgentRunRepository(db, org_id=self.org_id).lock(refs.run)
-        if refs.run.status is not BoardAgentRunStatus.RUNNING:
-            # Canceled meanwhile (the card moved boards): save nothing.
-            return None
-        drafted = await BoardCardDocRepository(db, org_id=self.org_id).written_by_run(self.run_id)
-        if drafted is not None:
-            return {"kind": drafted.kind.value, "version": drafted.version, "via": "tool"}
-        if not output.strip():
-            raise EmptyOutputError(NO_OUTPUT)
-        if len(output) > CARD_DOC_MAX_CHARS:
-            raise EmptyOutputError(TOO_LONG)
-        doc = await write_draft(db, refs.board, refs.card, self.kind, output, run_id=self.run_id)
-        return {"kind": doc.kind.value, "version": doc.version, "via": "reply"}
+        """The draft the tool wrote, else the reply saved as one (:func:`.output.save_output`)."""
+        return await save_output(db, self.refs, self.kind, output)
 
     async def record_success(self, db: AsyncSession, summary: dict[str, Any] | None) -> None:
         """Settle the run completed and tell the card's assignees."""
         self._revoke()
-        self._completed = await apply.finish_succeeded(db, self.refs, summary or {})
+        self._completed = await apply.finish_succeeded(db, self.refs.row, summary or {})
+        if not self._completed:
+            raise AgentRunCanceledError(stop_reason(self.refs.run))
 
     async def record_failure(self, db: AsyncSession, error: str) -> None:
         """Settle the run failed; the card stays as it was."""
         self._revoke()
-        await apply.finish_failed(db, self.refs, error)
+        if not await apply.finish_failed(db, self.refs.row, error):
+            raise AgentRunCanceledError(stop_reason(self.refs.run))
+        self._garden.ended("skill_failed")
 
     async def record_cancel(self, reason: str) -> None:
         """Settle the run canceled on a fresh session, unless it already was."""
         self._revoke()
         await on_fresh_session(self.org_id, self.run_id, apply.finish_canceled, reason)
+        self._garden.ended("skill_failed")
 
     async def record_crash(self, exc: Exception) -> None:
         """Settle the run failed on a fresh session (the main one was rolled back)."""
         self._revoke()
         await on_fresh_session(self.org_id, self.run_id, apply.finish_failed, str(exc))
+        self._garden.ended("skill_failed")
         logger.exception("board_agent_run_failed", run_id=str(self.run_id))
 
     async def after_success(self) -> None:
         """Nothing more: the run's end was announced with its commit."""
 
     def announce(self) -> None:
-        """Tell the Garden the agent finished (not when the run was canceled meanwhile)."""
+        """Tell the Garden the agent finished."""
         if self._completed:
-            apply.garden_event(self.refs, "skill_completed")
+            self._garden.ended("skill_completed")

@@ -18,9 +18,9 @@ Pending and running runs count. Over either cap, the Run button answers 429
 ``AGENT_RUN_LIMIT`` (with ``Retry-After``) and no run is written. A card
 entering an ``on_enter`` stage still records its run, failed at once with
 the reason, so the card's AI panel shows why nothing ran and Retry can
-start it later; the move itself goes ahead. The count is read without a
-lock, so two starts racing at the edge can both pass: the caps bound load,
-they aren't exact.
+start it later; the move itself goes ahead. The count is taken under the
+org's run-start lock, held until the start commits, so two starts racing at
+the edge of a cap can't both pass.
 """
 
 import uuid
@@ -37,8 +37,13 @@ USER_LIMIT = "You have too many AI runs going right now. Try again when one fini
 async def run_limit_reached(
     db: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID | None
 ) -> str | None:
-    """Why another run can't start now, or None when it can."""
+    """Why another run can't start now, or None when it can.
+
+    Takes the org's run-start lock first (held until the caller commits),
+    so call it with the card already locked and claim the run right after.
+    """
     runs = BoardCardAgentRunRepository(db, org_id=org_id)
+    await runs.lock_starts()
     if await runs.count_active() >= settings.boards.agent_runs_per_org_max:
         return ORG_LIMIT
     if user_id is not None and (

@@ -26,7 +26,7 @@ from app.repositories.board_prefs import BoardPrefsRepository
 from app.repositories.board_repo import BoardRepoRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.board import BoardDetail, BoardRead
-from app.schemas.boards.card import CardDetail, CardSummary
+from app.schemas.boards.card import CardAgentRun, CardDetail, CardSummary
 from app.schemas.boards.filters import BoardFilters, saved_filters
 from app.schemas.boards.label import LabelRead
 from app.schemas.boards.stage import StageRead
@@ -100,6 +100,9 @@ def card_summary(board: Board, row: CardSummaryRow, *, opens_buds: bool = False)
         repo_id=row.repo_id,
         handovers=handover_chips.chips(row.handovers, can_open_bud=opens_buds),
         delivery=handover_chips.delivery(row.handovers),
+        agent_run=None
+        if row.agent_run is None
+        else CardAgentRun(status=row.agent_run.status, skill_name=row.agent_run.skill_name),
     )
 
 
@@ -129,7 +132,7 @@ async def card_detail(
 
     Flushes first, so the summary query sees this request's own changes.
     ``known`` is a summary row this request already read and whose
-    assignees, labels, checklist and documents it hasn't changed since; the
+    assignees, labels, checklist, documents and agent run it hasn't changed since; the
     card's own columns are taken from the refreshed row instead of a new query.
     ``opens_buds`` is whether the caller may open the BUDs its chips name.
     Chips carry their history (one more query, only when the card has any).

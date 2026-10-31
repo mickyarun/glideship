@@ -18,12 +18,14 @@ No model is ever called. :class:`Runner` stands in for ``run_agent_for_org_id``
 and plays one scripted step per run: reply with text, call MCP tools through
 the real ``/mcp/tools`` route with the run's own token, or fail. Jobs are
 captured instead of queued (:class:`Jobs`) and run by the test, so each run's
-steps happen in a known order.
+steps happen in a known order; each still gets an entry in the job store, so
+a test can read the state the executor left it in.
 """
 
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -37,6 +39,8 @@ from sqlalchemy import select
 from app.config import settings
 from app.models.agent_skill import AgentSkill, AgentType
 from app.models.board_agent import BoardCardAgentRun
+from app.schemas.jobs import JobState, JobStatusRead
+from app.services import job_queue
 from app.services.agents import executor
 from app.services.boards.agents import queue
 from app.services.boards.agents.run_handler import handle_board_agent_run_job
@@ -119,15 +123,26 @@ class Jobs:
             job_id, payload = self.queued.pop(0)
             await handle_board_agent_run_job(job_id, payload)
 
+    def state(self, job_id: str) -> JobState | None:
+        """Where the job store says the job ended up."""
+        job = job_queue.get_job(job_id)
+        return None if job is None else job.state
+
 
 def capture_jobs(monkeypatch: pytest.MonkeyPatch) -> Jobs:
     """Capture ``board_agent_run`` jobs and cancels instead of touching the real queue."""
     jobs = Jobs()
+    store: dict[str, Any] = {}
+    monkeypatch.setattr(job_queue, "_job_store", store)
 
     def _create(job_id: str, job_type: str, *, payload: dict[str, Any], **_: Any) -> None:
         if jobs.full:
             raise asyncio.QueueFull()
         jobs.queued.append((job_id, payload))
+        status = JobStatusRead(
+            job_id=job_id, job_type=job_type, state=JobState.QUEUED, status_message="Queued"
+        )
+        store[job_id] = job_queue._JobEntry(status, time.monotonic(), None, payload)
 
     def _cancel(job_id: str, *, reason: str) -> bool:
         jobs.canceled.append((job_id, reason))

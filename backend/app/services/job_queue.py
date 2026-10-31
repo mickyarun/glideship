@@ -83,6 +83,10 @@ JobHandler = Callable[[str, dict[str, Any]], Coroutine[Any, Any, None]]
 _registry: dict[str, tuple[JobHandler, int, asyncio.Queue[tuple[str, dict[str, Any]]]]] = {}
 _workers: list[asyncio.Task[None]] = []
 
+# The reason ``cancel_job`` gave, kept apart from the job's progress text
+# so a handler interrupted some other way (shutdown) can tell the two apart.
+_cancel_reasons: dict[str, str] = {}
+
 # Set once stop_workers() begins. Closes create_job() so jobs enqueued
 # during the uvicorn-reload / shutdown window don't get accepted into
 # queues that are about to be torn down.
@@ -273,6 +277,7 @@ def cleanup_completed_jobs() -> int:
 
     for jid in stale:
         del _job_store[jid]
+        _cancel_reasons.pop(jid, None)
         cleanup_topic(f"job:{jid}")
     return len(stale)
 
@@ -299,6 +304,7 @@ def cancel_job(job_id: str, *, reason: str = "Cancelled by user") -> bool:
     # Stash the cancel reason so the worker's CancelledError branch can
     # use it as the error message on the terminal update.
     entry.status.status_message = reason
+    _cancel_reasons[job_id] = reason
 
     task = _running_tasks.get(job_id)
     if task is None or task.done():
@@ -310,6 +316,16 @@ def cancel_job(job_id: str, *, reason: str = "Cancelled by user") -> bool:
 
     task.cancel()
     return True
+
+
+def cancel_reason(job_id: str) -> str | None:
+    """Why :func:`cancel_job` stopped ``job_id``; None when it never did."""
+    return _cancel_reasons.get(job_id)
+
+
+def is_shutting_down() -> bool:
+    """True once :func:`stop_workers` has begun (a cancel now is the restart)."""
+    return _shutting_down
 
 
 def is_job_running(job_id: str) -> bool:
