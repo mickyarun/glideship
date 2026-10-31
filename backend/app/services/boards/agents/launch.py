@@ -55,5 +55,5 @@ async def mark_started(db: AsyncSession, refs: RunRefs) -> None:
     run = refs.run
     if not await BoardCardAgentRunRepository(db, org_id=run.org_id).mark_running(run):
         raise AgentRunCanceledError(stop_reason(run))
-    queue_run_event(db, refs.board.id, run)
+    await queue_run_event(db, refs.board.id, run)
     await db.commit()

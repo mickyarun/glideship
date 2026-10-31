@@ -25,13 +25,19 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
+from app.models.board_agent import (
+    BoardAgentRunErrorCode,
+    BoardAgentRunStatus,
+    BoardCardAgentRun,
+)
 from app.models.board_card import BoardCard
+from app.repositories.agent_skill import AgentSkillRepository
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
 from app.repositories.board_agent_run_sweep import STALE, fail_stale_runs
 from app.schemas.boards.agent import AgentRunRead
 from app.services.after_commit import call_after_commit
 from app.services.boards.access import CardAccess
+from app.services.boards.constants import BoardAction
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 from app.services.job_queue import cancel_job
 
@@ -46,12 +52,27 @@ def stop_reason(run: BoardCardAgentRun) -> str:
     return run.error_message or RUN_STOPPED
 
 
+def run_read(run: BoardCardAgentRun, *, show_error: bool) -> AgentRunRead:
+    """One run for the API: ``error_code`` always, ``error_message`` only when ``show_error``.
+
+    The raw message can carry provider output, so only board admins read it;
+    everyone else gets the code, which the card's panel turns into words.
+    """
+    read = AgentRunRead.model_validate(run)
+    return read if show_error else read.model_copy(update={"error_message": None})
+
+
+def shows_run_errors(target: CardAccess) -> bool:
+    """Whether the caller reads runs' raw error messages (board admins)."""
+    return target.access.may(BoardAction.CONFIGURE_AGENTS)
+
+
 def run_json(run: BoardCardAgentRun) -> dict[str, object]:
-    """One run as a socket payload."""
-    return AgentRunRead.model_validate(run).model_dump(mode="json")
+    """One run as a socket payload: everyone on the board hears it, so no raw error."""
+    return run_read(run, show_error=False).model_dump(mode="json")
 
 
-def queue_run_event(
+async def queue_run_event(
     db: AsyncSession,
     board_id: uuid.UUID,
     run: BoardCardAgentRun,
@@ -59,9 +80,23 @@ def queue_run_event(
     actor_id: uuid.UUID | None = None,
     origin: str | None = None,
 ) -> None:
-    """Queue ``agent_run_updated`` with the run as it is now, for when ``db`` commits."""
+    """Queue ``agent_run_updated`` with the run as it is now, for when ``db`` commits.
+
+    ``skill_name`` names the run's skill (null once it was deleted), so a
+    tile's chip can say who is working without another read.
+    """
+    skill = (
+        await AgentSkillRepository(db, org_id=run.org_id).get_by_id(run.skill_id)
+        if run.skill_id
+        else None
+    )
     changes = BoardChanges(board_id, actor_id, origin)
-    changes.emit(BoardSocketEvent.AGENT_RUN_UPDATED, card_id=str(run.card_id), run=run_json(run))
+    changes.emit(
+        BoardSocketEvent.AGENT_RUN_UPDATED,
+        card_id=str(run.card_id),
+        run=run_json(run),
+        skill_name=None if skill is None else skill.name,
+    )
     changes.queue(db)
 
 
@@ -76,7 +111,7 @@ async def clear_stale(db: AsyncSession, board_id: uuid.UUID, card: BoardCard) ->
         card_id=card.id,
     )
     for run, _board_id in stale:
-        queue_run_event(db, board_id, run)
+        await queue_run_event(db, board_id, run)
         stop_job_after_commit(db, run, STALE)
 
 
@@ -85,10 +120,12 @@ def settle(
     status: BoardAgentRunStatus,
     *,
     error: str | None = None,
+    code: BoardAgentRunErrorCode | None = None,
 ) -> None:
-    """Give the run its final status, and when it finished."""
+    """Give the run its final status, why it ended without a draft, and when it finished."""
     run.status = status
     run.error_message = None if error is None else error[:500]
+    run.error_code = code
     run.finished_at = datetime.now(UTC)
 
 
@@ -99,9 +136,10 @@ async def card_runs(
     repo = BoardCardAgentRunRepository(db, org_id=target.access.org_id)
     recent = await repo.recent_for_card(target.card.id, settings.boards.agent_runs_page_size)
     active = await repo.active_for_card(target.card.id)
+    show = shows_run_errors(target)
     return (
-        [AgentRunRead.model_validate(r) for r in recent],
-        None if active is None else AgentRunRead.model_validate(active),
+        [run_read(r, show_error=show) for r in recent],
+        None if active is None else run_read(active, show_error=show),
     )
 
 
@@ -120,9 +158,9 @@ async def cancel_active_run(
     await repo.lock(run)
     if run.status not in (BoardAgentRunStatus.PENDING, BoardAgentRunStatus.RUNNING):
         return None
-    settle(run, BoardAgentRunStatus.CANCELED, error=reason)
+    settle(run, BoardAgentRunStatus.CANCELED, error=reason, code=BoardAgentRunErrorCode.CANCELED)
     await db.flush()
-    queue_run_event(db, card.board_id, run)
+    await queue_run_event(db, card.board_id, run)
     stop_job_after_commit(db, run, reason)
     return run
 

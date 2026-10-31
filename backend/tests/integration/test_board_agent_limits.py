@@ -20,7 +20,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.config import settings
-from app.models.board_agent import BoardAgentRunStatus
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus
 from app.services.boards.agents.limits import ORG_LIMIT
 from tests.integration.board_agent_setup import agent_card, ai_board, move, start
 from tests.integration.board_agent_support import AgentEnv, agent_env, runs_of
@@ -64,5 +64,6 @@ async def test_an_entry_over_the_org_cap_records_a_failed_run_and_queues_nothing
     ok(await move(client, admin, key, card["number"], stage_id(board, "In progress")))
     (run,) = await runs_of(pg_session_factory, card["id"])
     assert run.status is BoardAgentRunStatus.FAILED and run.error_message == ORG_LIMIT
+    assert run.error_code is BoardAgentRunErrorCode.QUEUE_FULL
     assert run.triggered_by == admin.id
     assert agent_env.jobs.queued == []

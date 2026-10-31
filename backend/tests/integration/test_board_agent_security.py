@@ -26,7 +26,7 @@ from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.mcp import token_grants
-from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus, BoardCardAgentRun
 from app.schemas.jobs import JobState
 from app.services.boards.agents.card_tools import RUN_OVER
 from app.services.boards.agents.output import TOO_LONG
@@ -165,4 +165,5 @@ async def test_an_oversized_reply_fails_the_run_and_saves_nothing(
     await agent_env.jobs.run_all()
     (run,) = await runs_of(pg_session_factory, s.card["id"])
     assert run.status is BoardAgentRunStatus.FAILED and run.error_message == TOO_LONG
+    assert run.error_code is BoardAgentRunErrorCode.OVER_LIMIT
     assert (await docs(client, s))["drafts"] == []

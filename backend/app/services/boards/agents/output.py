@@ -24,7 +24,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.board_agent import BoardAgentRunStatus
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus
 from app.models.board_enums import BoardCardDocKind
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
 from app.repositories.board_card_doc import BoardCardDocRepository
@@ -40,6 +40,10 @@ TOO_LONG = f"The agent's reply was over {CARD_DOC_MAX_CHARS} characters, so no d
 
 class EmptyOutputError(Exception):
     """The agent wrote no draft and replied with nothing to save (or too much)."""
+
+    def __init__(self, message: str, code: BoardAgentRunErrorCode) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 async def save_output(
@@ -59,8 +63,8 @@ async def save_output(
     if drafted is not None:
         return {"kind": drafted.kind.value, "version": drafted.version, "via": "tool"}
     if not output.strip():
-        raise EmptyOutputError(NO_OUTPUT)
+        raise EmptyOutputError(NO_OUTPUT, BoardAgentRunErrorCode.PROVIDER_FAILED)
     if len(output) > CARD_DOC_MAX_CHARS:
-        raise EmptyOutputError(TOO_LONG)
+        raise EmptyOutputError(TOO_LONG, BoardAgentRunErrorCode.OVER_LIMIT)
     doc = await write_draft(db, refs.board, refs.card, kind, output, run_id=run.id)
     return {"kind": doc.kind.value, "version": doc.version, "via": "reply"}

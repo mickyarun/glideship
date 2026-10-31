@@ -31,7 +31,7 @@ from sqlalchemy import delete, update
 
 from app.models.agent_skill import AgentSkill
 from app.models.board import Board
-from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus, BoardCardAgentRun
 from app.schemas.jobs import JobState
 from app.services import event_bus
 from app.services.boards import card_move
@@ -98,6 +98,7 @@ async def test_ai_switched_off_before_the_job_starts_cancels_run_and_job(
     await agent_env.jobs.run_all()
     (run,) = await runs_of(pg_session_factory, s.card["id"])
     assert (run.status, run.error_message) == (BoardAgentRunStatus.CANCELED, AI_OFF)
+    assert run.error_code is BoardAgentRunErrorCode.CANCELED
     assert agent_env.jobs.state(started["job_id"]) is JobState.CANCELLED
     assert agent_env.runner.configs == []
 

@@ -44,6 +44,7 @@ from app.services import job_queue
 from app.services.agents import executor
 from app.services.boards.agents import queue
 from app.services.boards.agents.run_handler import handle_board_agent_run_job
+from app.services.claude_errors import ClaudeErrorCode
 from app.services.claude_runner import ClaudeRunnerConfig, ClaudeRunResult
 from tests.fakes.app_state import bind_app_sessions
 from tests.integration.board_api_support import BOARDS, Person, ok
@@ -178,11 +179,13 @@ class Runner:
 
         self.steps.append(_step)
 
-    def fail(self, error: str = "credit balance too low") -> None:
-        """The next run fails at the provider."""
+    def fail(
+        self, error: str = "credit balance too low", code: ClaudeErrorCode | None = None
+    ) -> None:
+        """The next run fails at the provider (with the provider's ``code``, if any)."""
 
         async def _step(_config: ClaudeRunnerConfig) -> ClaudeRunResult:
-            return ClaudeRunResult(success=False, output="", error=error)
+            return ClaudeRunResult(success=False, output="", error=error, error_code=code)
 
         self.steps.append(_step)
 

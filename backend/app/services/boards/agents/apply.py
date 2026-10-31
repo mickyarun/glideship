@@ -29,7 +29,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.board_agent import ACTIVE_RUN_STATUSES, BoardAgentRunStatus
+from app.models.board_agent import (
+    ACTIVE_RUN_STATUSES,
+    BoardAgentRunErrorCode,
+    BoardAgentRunStatus,
+)
 from app.models.board_card import BoardCard
 from app.models.board_enums import BoardCardEventType
 from app.models.notification import NotificationType
@@ -51,14 +55,16 @@ async def _settle(
     status: BoardAgentRunStatus,
     *,
     error: str | None = None,
+    code: BoardAgentRunErrorCode | None = None,
     summary: dict[str, Any] | None = None,
+    actor_id: uuid.UUID | None = None,
 ) -> bool:
     """Settle the run if it's still active and record it on the card; False when it wasn't."""
     run = row.run
     await BoardCardAgentRunRepository(db, org_id=run.org_id).lock(run)
     if run.status not in ACTIVE_RUN_STATUSES:
         return False
-    settle(run, status, error=error)
+    settle(run, status, error=error, code=code)
     run.result_summary = summary
     detail: dict[str, Any] = {
         "run_id": str(run.id),
@@ -69,9 +75,11 @@ async def _settle(
     }
     if error is not None:
         detail["error"] = run.error_message
-    await record_event(db, row.card, BoardCardEventType.AI_RUN, actor_id=None, detail=detail)
+    if code is not None:
+        detail["error_code"] = code.value
+    await record_event(db, row.card, BoardCardEventType.AI_RUN, actor_id=actor_id, detail=detail)
     await db.flush()
-    queue_run_event(db, row.board.id, run)
+    await queue_run_event(db, row.board.id, run, actor_id=actor_id)
     return True
 
 
@@ -103,9 +111,11 @@ async def finish_succeeded(db: AsyncSession, row: RunRow, summary: dict[str, Any
     return True
 
 
-async def finish_failed(db: AsyncSession, row: RunRow, error: str) -> bool:
+async def finish_failed(
+    db: AsyncSession, row: RunRow, error: str, code: BoardAgentRunErrorCode
+) -> bool:
     """Mark the run failed (the card is untouched), tell the assignees, and commit."""
-    if not await _settle(db, row, BoardAgentRunStatus.FAILED, error=error):
+    if not await _settle(db, row, BoardAgentRunStatus.FAILED, error=error, code=code):
         await db.commit()
         return False
     notice = await stage_board_card_notice(
@@ -123,13 +133,27 @@ async def finish_failed(db: AsyncSession, row: RunRow, error: str) -> bool:
     return True
 
 
-async def settle_canceled(db: AsyncSession, row: RunRow, reason: str) -> bool:
+async def settle_canceled(
+    db: AsyncSession,
+    row: RunRow,
+    reason: str,
+    code: BoardAgentRunErrorCode = BoardAgentRunErrorCode.CANCELED,
+    *,
+    actor_id: uuid.UUID | None = None,
+) -> bool:
     """Mark a still-active run canceled and record it on the card; the caller commits."""
-    return await _settle(db, row, BoardAgentRunStatus.CANCELED, error=reason)
+    return await _settle(
+        db, row, BoardAgentRunStatus.CANCELED, error=reason, code=code, actor_id=actor_id
+    )
 
 
-async def finish_canceled(db: AsyncSession, row: RunRow, reason: str) -> bool:
+async def finish_canceled(
+    db: AsyncSession,
+    row: RunRow,
+    reason: str,
+    code: BoardAgentRunErrorCode = BoardAgentRunErrorCode.CANCELED,
+) -> bool:
     """Mark a still-active run canceled, with no notice, and commit; False when it wasn't."""
-    settled = await settle_canceled(db, row, reason)
+    settled = await settle_canceled(db, row, reason, code)
     await db.commit()
     return settled

@@ -32,7 +32,7 @@ from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.config import settings
-from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus, BoardCardAgentRun
 from app.repositories.board_agent_run_sweep import (
     INTERRUPTED,
     STALE,
@@ -96,6 +96,7 @@ async def test_a_restart_fails_active_runs_and_leaves_finished_ones(
             BoardAgentRunStatus.FAILED,
             INTERRUPTED,
         )
+        assert by_id[stuck].error_code is BoardAgentRunErrorCode.INTERRUPTED
 
 
 async def test_the_sweep_fails_a_stale_run_announces_it_and_stops_its_job(
@@ -118,6 +119,7 @@ async def test_the_sweep_fails_a_stale_run_announces_it_and_stops_its_job(
         event_bus.unsubscribe(f"board:{s.board_id}", queue)
     (stale,) = await runs_of(pg_session_factory, s.card["id"])
     assert (stale.status, stale.error_message) == (BoardAgentRunStatus.FAILED, STALE)
+    assert stale.error_code is BoardAgentRunErrorCode.STALE
     (kept,) = await runs_of(pg_session_factory, str(fresh["id"]))
     assert str(kept.id) == young["run"]["id"] and kept.status is BoardAgentRunStatus.PENDING
     updates = [e["run"] for e in events if e["event"] == "agent_run_updated"]

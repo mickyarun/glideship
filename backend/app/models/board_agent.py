@@ -67,6 +67,24 @@ class BoardAgentRunStatus(StrEnum):
     CANCELED = "canceled"
 
 
+class BoardAgentRunErrorCode(StrEnum):
+    """Why a run ended without a draft; clients pick their words from it.
+
+    The raw ``error_message`` stays on the run for logs and board admins.
+    """
+
+    AI_NOT_CONFIGURED = "AI_NOT_CONFIGURED"  # no provider CLI or key, or it can't run this
+    PROVIDER_FAILED = "PROVIDER_FAILED"  # the provider failed, or wrote nothing
+    TIMEOUT = "TIMEOUT"
+    QUEUE_FULL = "QUEUE_FULL"  # the queue, a run cap or the run-token store was full
+    SKILL_GONE = "SKILL_GONE"
+    STALE = "STALE"
+    INTERRUPTED = "INTERRUPTED"  # the server restarted
+    CANCELED = "CANCELED"
+    OVER_LIMIT = "OVER_LIMIT"  # the document was too long
+    UNKNOWN = "UNKNOWN"
+
+
 # A card has at most one run in these.
 ACTIVE_RUN_STATUSES = (BoardAgentRunStatus.PENDING, BoardAgentRunStatus.RUNNING)
 _ACTIVE_SQL = ", ".join(f"'{s.value}'" for s in ACTIVE_RUN_STATUSES)
@@ -151,6 +169,9 @@ class BoardCardAgentRun(BaseModel):
     attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     result_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[BoardAgentRunErrorCode | None] = mapped_column(
+        pg_enum(BoardAgentRunErrorCode, "board_agent_run_error_code"), nullable=True
+    )
     # Who pressed Run (null for on_enter runs).
     triggered_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

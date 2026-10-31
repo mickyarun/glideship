@@ -115,8 +115,13 @@ class AgentSubject(Protocol):
         """Mark the run completed and commit."""
         ...
 
-    async def record_failure(self, db: AsyncSession, error: str) -> None:
-        """Mark the run failed after the provider reported a failure, and commit."""
+    async def record_failure(
+        self, db: AsyncSession, error: str, error_code: str | None = None
+    ) -> None:
+        """Mark the run failed after the provider reported a failure, and commit.
+
+        ``error_code`` is the provider's stable code for it, if any.
+        """
         ...
 
     async def record_cancel(self, reason: str) -> None:

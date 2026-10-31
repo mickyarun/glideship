@@ -28,7 +28,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 
-from app.models.board_agent import BoardAgentRunStatus
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus
 from app.models.notification import NotificationType
 from app.services import event_bus
 from app.services.boards.agents import queue as agent_queue
@@ -137,6 +137,7 @@ async def test_an_entry_the_queue_cannot_take_fails_like_any_run(
         event_bus.unsubscribe(f"board:{board['board']['id']}", queue)
     (run,) = await runs_of(pg_session_factory, card["id"])
     assert (run.status, run.error_message) == (BoardAgentRunStatus.FAILED, QUEUE_FULL)
+    assert run.error_code is BoardAgentRunErrorCode.QUEUE_FULL
     statuses = [e["run"]["status"] for e in events if e["event"] == "agent_run_updated"]
     assert statuses[-1] == "failed"
     kinds = [n.type for n in await notes(pg_session_factory, assignee.id)]

@@ -31,11 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.models.board_agent import BoardCardAgentRun
+from app.models.board_agent import BoardAgentRunErrorCode, BoardCardAgentRun
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
-from app.schemas.boards.agent import AgentRunAccepted, AgentRunRead, BoardAgentRunPayload
+from app.schemas.boards.agent import AgentRunAccepted, BoardAgentRunPayload
 from app.services.boards.agents.apply import finish_failed
 from app.services.boards.agents.loading import run_row
+from app.services.boards.agents.runs import run_read
 from app.services.boards.errors import BoardBusyError
 from app.services.job_queue import JOB_BOARD_AGENT_RUN, create_job_with_id
 
@@ -70,7 +71,7 @@ async def _fail_queued(db: AsyncSession, run: BoardCardAgentRun) -> None:
     """Fail a run the queue couldn't take, as any failed run is (commits)."""
     row = await run_row(db, run)
     if row is not None:
-        await finish_failed(db, row, QUEUE_FULL)
+        await finish_failed(db, row, QUEUE_FULL, BoardAgentRunErrorCode.QUEUE_FULL)
 
 
 async def enqueue_now(db: AsyncSession, run: BoardCardAgentRun) -> AgentRunAccepted:
@@ -84,7 +85,8 @@ async def enqueue_now(db: AsyncSession, run: BoardCardAgentRun) -> AgentRunAccep
         wait = settings.boards.agent_busy_retry_after_seconds
         raise BoardBusyError(QUEUE_FULL, retry_after_seconds=wait)
     assert run.job_id is not None
-    return AgentRunAccepted(job_id=run.job_id, run=AgentRunRead.model_validate(run))
+    # Just queued: there is no error to show anyone yet.
+    return AgentRunAccepted(job_id=run.job_id, run=run_read(run, show_error=False))
 
 
 def enqueue_after_commit(run: BoardCardAgentRun) -> Callable[[], None]:

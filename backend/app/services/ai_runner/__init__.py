@@ -33,6 +33,7 @@ from app.services.ai_runner.capabilities import capabilities_for
 from app.services.ai_runner.capability_gate import adapt_config, unsupported_reason
 from app.services.ai_runner.claude_provider import ClaudeProvider
 from app.services.ai_runner.registry import provider_for
+from app.services.claude_errors import ClaudeErrorCode
 from app.services.claude_runner import (
     ClaudeRunnerConfig,
     ClaudeRunResult,
@@ -78,7 +79,9 @@ async def run_agent(
             org_id=str(org.id) if org else None,
             reason=blocked,
         )
-        return ClaudeRunResult(success=False, output="", error=blocked)
+        return ClaudeRunResult(
+            success=False, output="", error=blocked, error_code=ClaudeErrorCode.UNSUPPORTED
+        )
 
     cfg = adapt_config(caps, org, cfg)
     logger.info(

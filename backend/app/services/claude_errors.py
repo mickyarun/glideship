@@ -43,6 +43,8 @@ class ClaudeErrorCode(StrEnum):
     MAX_TURNS = "max_turns"
     TIMEOUT = "timeout"
     BINARY_MISSING = "binary_missing"
+    # The org's provider can't run this (capability gate).
+    UNSUPPORTED = "unsupported"
     UNKNOWN = "unknown"
 
 

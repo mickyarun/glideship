@@ -68,8 +68,10 @@ class BudAgentRecords(BudAgentState):
             )
         self.log_phase("result_saved", task_id=str(self.task_id), task_type=self.task_type)
 
-    async def record_failure(self, db: AsyncSession, error: str) -> None:
-        """Log the provider's failure and mark the task failed."""
+    async def record_failure(
+        self, db: AsyncSession, error: str, error_code: str | None = None
+    ) -> None:
+        """Log the provider's failure and mark the task failed (the job carries the code)."""
         await log_agent_activity(
             db,
             org_id=self.org_id,

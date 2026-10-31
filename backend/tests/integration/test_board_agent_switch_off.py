@@ -24,7 +24,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models.board_agent import BoardAgentRunStatus
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus
 from app.models.board_card_detail import BoardCardEvent
 from app.models.board_enums import BoardCardEventType
 from app.services import event_bus
@@ -64,6 +64,7 @@ async def test_switching_ai_off_cancels_a_queued_run(
         event_bus.unsubscribe(f"board:{s.board_id}", queue)
     (run,) = await runs_of(pg_session_factory, s.card["id"])
     assert run.status is BoardAgentRunStatus.CANCELED and run.error_message == AI_SWITCHED_OFF
+    assert run.error_code is BoardAgentRunErrorCode.CANCELED
     assert agent_env.jobs.canceled == [(started["job_id"], AI_SWITCHED_OFF)]
     updates = [e for e in events if e["event"] == "agent_run_updated"]
     assert updates[-1]["run"]["status"] == "canceled"

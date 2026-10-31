@@ -26,7 +26,7 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
-from app.models.board_agent import BoardAgentRunStatus, BoardAgentTrigger
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus, BoardAgentTrigger
 from tests.integration.board_agent_setup import ai_board, move
 from tests.integration.board_agent_support import (
     AgentEnv,
@@ -180,6 +180,7 @@ async def test_moving_to_another_board_cancels_the_run_and_starts_the_targets(
     old, new = await runs_of(pg_session_factory, made["id"])
     assert (old.id, old.status) == (first.id, BoardAgentRunStatus.CANCELED)
     assert old.error_message and "another board" in old.error_message
+    assert old.error_code is BoardAgentRunErrorCode.CANCELED
     assert [job for job, _ in agent_env.jobs.canceled] == [first.job_id]
     assert (new.status, new.stage_id) == (
         BoardAgentRunStatus.PENDING,

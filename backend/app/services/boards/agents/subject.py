@@ -38,12 +38,12 @@ from app.mcp.token_grants import revoke_scoped_mcp_token
 from app.models.board_enums import BoardCardDocKind
 from app.schemas.boards.agent import BoardAgentRunPayload
 from app.services.agents.subject import AgentLaunch, AgentPrompt, AgentRunCanceledError
-from app.services.boards.agents import apply
+from app.services.boards.agents import apply, end_codes
 from app.services.boards.agents.context import card_context
 from app.services.boards.agents.garden import GardenRun, GardenTag
 from app.services.boards.agents.grant import RunReach, mint_run_token, run_reach
 from app.services.boards.agents.launch import mark_started, runner_config
-from app.services.boards.agents.loading import load_refs, on_fresh_session
+from app.services.boards.agents.loading import FreshFinish, load_refs, on_fresh_session
 from app.services.boards.agents.output import save_output
 from app.services.boards.agents.prompt import build_card_prompt
 from app.services.boards.agents.refs import RunRefs
@@ -174,25 +174,31 @@ class CardAgentSubject:
         if not self._completed:
             raise AgentRunCanceledError(stop_reason(self.refs.run))
 
-    async def record_failure(self, db: AsyncSession, error: str) -> None:
-        """Settle the run failed; the card stays as it was."""
+    async def record_failure(
+        self, db: AsyncSession, error: str, error_code: str | None = None
+    ) -> None:
+        """Settle the run failed with the provider's reason; the card stays as it was."""
         self._revoke()
-        if not await apply.finish_failed(db, self.refs.row, error):
+        code = end_codes.provider_failure(error_code)
+        if not await apply.finish_failed(db, self.refs.row, error, code):
             raise AgentRunCanceledError(stop_reason(self.refs.run))
         self._garden.ended("skill_failed")
 
     async def record_cancel(self, reason: str) -> None:
         """Settle the run canceled on a fresh session, unless it already was."""
-        self._revoke()
-        await on_fresh_session(self.org_id, self.run_id, apply.finish_canceled, reason)
-        self._garden.ended("skill_failed")
+        code = end_codes.cancel()
+        await self._end_fresh(lambda db, row: apply.finish_canceled(db, row, reason, code))
 
     async def record_crash(self, exc: Exception) -> None:
         """Settle the run failed on a fresh session (the main one was rolled back)."""
-        self._revoke()
-        await on_fresh_session(self.org_id, self.run_id, apply.finish_failed, str(exc))
-        self._garden.ended("skill_failed")
+        code = end_codes.crash(exc)
+        await self._end_fresh(lambda db, row: apply.finish_failed(db, row, str(exc), code))
         logger.exception("board_agent_run_failed", run_id=str(self.run_id))
+
+    async def _end_fresh(self, finish: FreshFinish) -> None:
+        self._revoke()
+        await on_fresh_session(self.org_id, self.run_id, finish)
+        self._garden.ended("skill_failed")
 
     async def after_success(self) -> None:
         """Nothing more: the run's end was announced with its commit."""

@@ -86,7 +86,7 @@ async def execute_agent_run(job_id: str, run: AgentRunRef, subject: AgentSubject
 
             if not result.success:
                 error_msg = result.error or "Agent execution failed"
-                await subject.record_failure(db, error_msg)
+                await subject.record_failure(db, error_msg, result.error_code)
                 update_job(
                     job_id,
                     state=JobState.FAILED,

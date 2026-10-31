@@ -29,7 +29,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.models.agent_skill import AgentType
-from app.models.board_agent import BoardAgentRunStatus
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus
 from app.models.board_card_detail import BoardCardEvent
 from app.models.board_enums import BoardCardEventType
 from app.models.notification import NotificationType
@@ -169,6 +169,7 @@ async def test_an_empty_reply_without_a_draft_fails(
     (run,) = await runs_of(pg_session_factory, s.card["id"])
     assert run.status is BoardAgentRunStatus.FAILED
     assert "without writing a draft" in (run.error_message or "")
+    assert run.error_code is BoardAgentRunErrorCode.PROVIDER_FAILED
 
 
 async def test_the_prompt_lists_linked_repos_and_the_grant_only_safe_tools(

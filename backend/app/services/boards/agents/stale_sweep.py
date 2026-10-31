@@ -42,7 +42,7 @@ async def sweep_once() -> int:
             grace_seconds=cfg.agent_stale_grace_seconds,
         )
         for run, board_id in stale:
-            queue_run_event(db, board_id, run)
+            await queue_run_event(db, board_id, run)
             stop_job_after_commit(db, run, STALE)
         await db.commit()
     if stale:

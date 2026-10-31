@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent_skill import AgentSkill
 from app.models.board_agent import (
     ACTIVE_RUN_STATUSES,
+    BoardAgentRunErrorCode,
     BoardAgentRunStatus,
     BoardCardAgentRun,
 )
@@ -69,7 +70,12 @@ async def fail_stale_runs(
     stmt = (
         update(BoardCardAgentRun)
         .where(BoardCard.id == BoardCardAgentRun.card_id, _stale(timeout_seconds, grace_seconds))
-        .values(status=BoardAgentRunStatus.FAILED, error_message=STALE, finished_at=func.now())
+        .values(
+            status=BoardAgentRunStatus.FAILED,
+            error_message=STALE,
+            error_code=BoardAgentRunErrorCode.STALE,
+            finished_at=func.now(),
+        )
         .returning(BoardCardAgentRun, BoardCard.board_id)
         .execution_options(synchronize_session=False)
     )
@@ -91,6 +97,7 @@ async def recover_stuck_board_agent_runs(db: AsyncSession) -> int:
         .values(
             status=BoardAgentRunStatus.FAILED,
             error_message=INTERRUPTED,
+            error_code=BoardAgentRunErrorCode.INTERRUPTED,
             finished_at=datetime.now(UTC),
         )
     )

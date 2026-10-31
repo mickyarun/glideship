@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.board import Board, BoardStage
 from app.models.board_agent import (
+    BoardAgentRunErrorCode,
     BoardAgentRunStatus,
     BoardAgentTrigger,
     BoardCardAgentRun,
@@ -112,9 +113,9 @@ async def queue_entry_agents(
     if run is None:
         return None
     if over is not None:
-        settle(run, BoardAgentRunStatus.FAILED, error=over)
+        settle(run, BoardAgentRunStatus.FAILED, error=over, code=BoardAgentRunErrorCode.QUEUE_FULL)
         await db.flush()
-    queue_run_event(db, board.id, run)
+    await queue_run_event(db, board.id, run)
     if over is None:
         call_after_commit(db, enqueue_after_commit(run))
     return run
@@ -163,6 +164,6 @@ async def run_agent(db: AsyncSession, target: CardAccess, agent_id: uuid.UUID) -
     if run is None:
         active = await runs.active_for_card(card.id)
         raise AgentRunActiveError(active.id if active else None)
-    queue_run_event(db, access.board.id, run, actor_id=access.user_id, origin=access.origin)
+    await queue_run_event(db, access.board.id, run, actor_id=access.user_id, origin=access.origin)
     await db.commit()
     return await enqueue_now(db, run)

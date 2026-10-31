@@ -29,7 +29,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.models.board_agent import BoardAgentRunStatus, BoardCardAgentRun
+from app.models.board_agent import BoardAgentRunErrorCode, BoardAgentRunStatus, BoardCardAgentRun
 from app.repositories.agent_skill import AgentSkillRepository
 from app.repositories.board import BoardRepository
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
@@ -39,6 +39,9 @@ from app.services.boards.agents.apply import finish_canceled, finish_failed
 from app.services.boards.agents.refs import RunRefs, RunRow
 
 logger = structlog.get_logger(__name__)
+
+# Settles a run on its own session; whether it did.
+FreshFinish = Callable[[AsyncSession, RunRow], Awaitable[bool]]
 
 RUN_NOT_FOUND = "Agent run not found"
 RUN_NOT_PENDING = "This agent run was stopped before it started."
@@ -74,7 +77,7 @@ async def load_refs(db: AsyncSession, org_id: uuid.UUID, run_id: uuid.UUID) -> R
     if row is None:
         return RUN_NOT_FOUND
     if row.skill is None:
-        await finish_failed(db, row, SKILL_GONE)
+        await finish_failed(db, row, SKILL_GONE, BoardAgentRunErrorCode.SKILL_GONE)
         return SKILL_GONE
     if not row.board.ai_enabled:
         await finish_canceled(db, row, AI_OFF)
@@ -85,8 +88,7 @@ async def load_refs(db: AsyncSession, org_id: uuid.UUID, run_id: uuid.UUID) -> R
 async def on_fresh_session(
     org_id: uuid.UUID,
     run_id: uuid.UUID,
-    finish: Callable[[AsyncSession, RunRow, str], Awaitable[bool]],
-    message: str,
+    finish: FreshFinish,
 ) -> bool:
     """Run ``finish`` for the run on its own session; whether it settled the run.
 
@@ -96,7 +98,7 @@ async def on_fresh_session(
         async with AsyncSessionLocal() as db:
             run = await BoardCardAgentRunRepository(db, org_id=org_id).get_by_id(run_id)
             row = None if run is None else await run_row(db, run)
-            return False if row is None else await finish(db, row, message)
+            return False if row is None else await finish(db, row)
     except Exception:
         logger.exception("board_agent_run_settle_failed", run_id=str(run_id))
         return False

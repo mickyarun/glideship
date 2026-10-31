@@ -21,7 +21,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.agent_skill import AgentType
-from app.models.board_agent import BoardAgentRunStatus, BoardAgentTrigger
+from app.models.board_agent import (
+    BoardAgentRunErrorCode,
+    BoardAgentRunStatus,
+    BoardAgentTrigger,
+)
 from app.models.board_enums import BoardCardDocKind
 from app.schemas.boards.text import DocText
 
@@ -76,7 +80,12 @@ class StageSkillRead(BaseModel):
 
 
 class AgentRunRead(BaseModel):
-    """One agent run on a card."""
+    """One agent run on a card.
+
+    ``error_code`` says why a run ended without a draft (clients choose their
+    words from it). ``error_message`` is the raw reason, for board admins
+    only: it is null for everyone else and on live events.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,6 +100,7 @@ class AgentRunRead(BaseModel):
     attempt: int
     result_summary: dict[str, Any] | None
     error_message: str | None
+    error_code: BoardAgentRunErrorCode | None
     triggered_by: uuid.UUID | None
     started_at: datetime | None
     finished_at: datetime | None
