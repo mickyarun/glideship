@@ -268,6 +268,35 @@ class BUDRepository(BaseRepository[BUDDocument]):
         row = result.first()
         return (row[0], row[1]) if row else None
 
+    async def find_nearest_active(
+        self,
+        candidate_vector: list[float],
+        limit: int,
+        *,
+        max_distance: float | None = None,
+    ) -> list[tuple[BUDDocument, float]]:
+        """The ``limit`` nearest open BUDs by cosine distance, nearest first.
+
+        Open means neither closed nor discarded. ``max_distance`` keeps only
+        BUDs strictly closer than it; callers pass a threshold they import
+        (e.g. ``jira_dedup.THRESHOLD_REVIEW``) rather than a number of their own.
+        """
+        raw = BUDDocument.embedding.cosine_distance(candidate_vector)
+        distance = raw.label("distance")
+        stmt = self._scoped(
+            select(BUDDocument, distance)
+            .where(
+                BUDDocument.embedding.is_not(None),
+                BUDDocument.status.notin_((BUDStatus.CLOSED, BUDStatus.DISCARDED)),
+            )
+            .order_by(distance, BUDDocument.bud_number)
+            .limit(limit)
+        )
+        if max_distance is not None:
+            stmt = stmt.where(raw < max_distance)
+        result = await self._db.execute(stmt)
+        return [(row[0], float(row[1])) for row in result.all()]
+
     async def find_nearest_neighbor(
         self,
         candidate_vector: list[float],
