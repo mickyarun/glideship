@@ -36,6 +36,7 @@ from app.repositories.organization import OrganizationRepository
 from app.repositories.tracked_repository import TrackedRepoRepository
 from app.repositories.webhook_log import WebhookLogRepository
 from app.schemas.settings import GitHubAppStatus
+from app.services.boards.repo_activity import record_repo_activity
 from app.services.event_bus import publish as event_publish
 from app.services.github_webhook_handler import handle_github_event
 from app.services.pr_merge_worker import publish_pr_merge_delivery
@@ -236,6 +237,9 @@ async def github_webhook(request: Request) -> Response:
             payload=payload,
             db=db,
         )
+        # Card keys in PR titles, branches and commit messages on boards
+        # that link this repository (in a SAVEPOINT; never fails the delivery).
+        await record_repo_activity(db, repo, event_type, payload)
 
         # Commit the WebhookLog INSERT (and any PR-row updates the
         # handler did) before publishing to Redis. If the XADD raced

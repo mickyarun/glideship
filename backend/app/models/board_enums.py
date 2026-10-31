@@ -108,6 +108,8 @@ class BoardCardEventType(StrEnum):
     IMPORTED = "imported"
     DOC_UPDATED = "doc_updated"
     AI_RUN = "ai_run"
+    # A pull request or commit on a linked repository named the card's key.
+    REPO_ACTIVITY = "repo_activity"
 
 
 class BoardHandoverStatus(StrEnum):

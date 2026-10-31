@@ -19,11 +19,12 @@ from datetime import time
 from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 
+from app.config_board_activity import BoardActivitySettings
 from app.config_board_agents import BoardAgentSettings
 from app.config_board_imports import BoardImportSettings
 
 
-class BoardsConfig(BoardImportSettings, BoardAgentSettings):
+class BoardsConfig(BoardImportSettings, BoardAgentSettings, BoardActivitySettings):
     """Tunables for team boards: shape, ordering, history, imports, agents and reminders."""
 
     model_config = SettingsConfigDict(env_prefix="BOARDS_", env_file=".env", extra="ignore")

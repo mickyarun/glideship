@@ -44,6 +44,7 @@ from app.models.thread_columns import CommentColumns, OptionalAttachmentColumns
 
 CHECKLIST_GROUP_LENGTH = 255
 EXTERNAL_LABEL_LENGTH = 255
+EXTERNAL_REF_LENGTH = 128
 ATTACHMENT_URL_LENGTH = 2000
 
 
@@ -136,6 +137,14 @@ class BoardCardEvent(BaseModel):
             "created_at",
         ),
         Index("ix_board_card_events_card_created", "card_id", "created_at"),
+        # An event from outside (a pull request, a commit) is recorded once per card.
+        Index(
+            "uq_board_card_events_card_external_ref",
+            "card_id",
+            "external_ref",
+            unique=True,
+            postgresql_where=text("external_ref IS NOT NULL"),
+        ),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -166,3 +175,5 @@ class BoardCardEvent(BaseModel):
     detail: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
+    # What an event from outside is about, e.g. ``<repo id>:commit:<sha>``; null otherwise.
+    external_ref: Mapped[str | None] = mapped_column(String(EXTERNAL_REF_LENGTH), nullable=True)
