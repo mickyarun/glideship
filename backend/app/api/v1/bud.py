@@ -35,6 +35,7 @@ from app.api.v1.bud_qa import router as qa_router
 from app.api.v1.bud_todos import router as todos_router
 from app.api.v1.bud_versions import router as versions_router
 from app.api.v1.bud_workflows import router as workflows_router
+from app.config import settings
 from app.core.board_deps import board_caller
 from app.core.deps import get_current_user, get_db, get_user_permissions, require_permissions
 from app.database import AsyncSessionLocal
@@ -55,6 +56,7 @@ from app.repositories import bud_version as bud_version_repo
 from app.repositories.agent_skill import AgentSkillRepository
 from app.repositories.bud import BUDDesignRepository, BUDRepository
 from app.repositories.bud_agent_task import BUDAgentTaskRepository
+from app.repositories.bud_search import SEARCH_MAX_CHARS, BUDSearchRepository
 from app.repositories.bud_section_session import BUDSectionSessionRepository
 from app.repositories.bud_timeline import BUDTimelineRepository
 from app.repositories.bug import BugRepository
@@ -165,6 +167,13 @@ async def list_buds(
     order_by: Literal["priority"] | None = Query(
         None, description="Sort key. Omit for default (bud_number desc)."
     ),
+    q: str | None = Query(
+        None,
+        min_length=1,
+        max_length=SEARCH_MAX_CHARS,
+        description="Open BUDs whose title or key contains this, newest first, capped by "
+        "BOARDS_HANDOVER_LINK_SEARCH_LIMIT; order_by is ignored.",
+    ),
     current_user: User = Depends(get_current_user),
     caller: BoardCaller = Depends(board_caller),
     db: AsyncSession = Depends(get_db),
@@ -179,11 +188,17 @@ async def list_buds(
                 detail=f"Invalid status: {status_filter}",
             ) from None
 
-    bud_repo = BUDRepository(db, org_id=current_user.org_id)
-    buds = await bud_repo.list_buds(
-        status_filter=status_filter,
-        order_by_priority=order_by == "priority",
-    )
+    if q is not None and q.strip():
+        buds = await BUDSearchRepository(db, org_id=current_user.org_id).search_open(
+            q,
+            limit=settings.boards.handover_link_search_limit,
+            status=BUDStatus(status_filter) if status_filter else None,
+        )
+    else:
+        buds = await BUDRepository(db, org_id=current_user.org_id).list_buds(
+            status_filter=status_filter,
+            order_by_priority=order_by == "priority",
+        )
 
     # Batch-fetch open bug counts for all BUDs in one query
     bug_repo = BugRepository(db, org_id=current_user.org_id)

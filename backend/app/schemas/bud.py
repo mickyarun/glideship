@@ -264,6 +264,9 @@ class BUDRead(BaseModel):
     # Full retrospective is fetched lazily via GET /buds/{id}/learning so
     # the BUD list payload stays small.
     has_learning: bool = False
+    # A card handed over straight to design, with design generation on and no
+    # design started yet: the BUD page starts generating for whoever opens it.
+    design_pending: bool = False
     created_at: datetime
     updated_at: datetime
 

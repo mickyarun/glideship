@@ -94,7 +94,9 @@ async def test_chips_name_each_bud_without_its_title(
     assert [c["can_open_bud"] for c in theirs["handovers"]] == [False, False]
     assert mine["delivery"] == theirs["delivery"] == "in_progress"
     [summary] = listed["items"]
-    assert summary["handovers"] == theirs["handovers"]
+    # A page's chips carry no history; the card's own detail does.
+    assert summary["handovers"] == [{**c, "history": []} for c in theirs["handovers"]]
+    assert [len(c["history"]) for c in theirs["handovers"]] == [0, 1]
     assert SECRET_TITLE not in json.dumps(theirs) + json.dumps(listed)
 
 

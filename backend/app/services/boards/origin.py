@@ -38,6 +38,7 @@ from app.services.boards.comment_service import read_comments
 from app.services.boards.cursor import decode_time_cursor, encode_cursor
 from app.services.boards.errors import BoardItemNotFoundError
 from app.services.boards.handover_chips import opens_buds
+from app.services.boards.handover_history import history_by_bud
 from app.services.boards.handover_reads import handover_read
 from app.services.boards.reads import card_key
 
@@ -70,6 +71,7 @@ async def bud_origin(
     role = await access.role_for(card.board_id, caller.user_id, caller.perms)
     if board is None or role is None:
         return BUDOrigin(card=None, hidden=True)
+    history = await history_by_bud(db, org_id, card.id)
     return BUDOrigin(
         card=OriginCard(
             key=card_key(board.key, card.number),
@@ -79,7 +81,7 @@ async def bud_origin(
         ),
         comments=await _comments(db, org_id, card.id, cursor=cursor, limit=limit),
         handovers=[
-            handover_read(r, can_open_bud=opens_buds(caller.perms))
+            handover_read(r, can_open_bud=opens_buds(caller.perms), history=history)
             for r in await handovers.list_for_card(card.id)
         ],
     )

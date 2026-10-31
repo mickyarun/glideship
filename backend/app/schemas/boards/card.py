@@ -93,12 +93,33 @@ class CardMoveBoard(BaseModel):
     confirm_open_checklist: bool = False
 
 
+class HandoverHistoryKind(StrEnum):
+    """What happened to a handover after it was first made."""
+
+    RETURNED = "returned"
+    HANDED_OVER_AGAIN = "handed_over_again"
+
+
+class HandoverHistoryEntry(BaseModel):
+    """One send-back or re-handover of a card's BUD, from the card's own events.
+
+    ``reason`` is a send-back's (already posted on the card as a comment);
+    ``by_name`` is whoever did it, when known.
+    """
+
+    at: datetime
+    kind: HandoverHistoryKind
+    reason: str | None = None
+    by_name: str | None = None
+
+
 class HandoverChip(BaseModel):
     """A BUD this card was handed over to: its key and statuses, never its title.
 
     ``can_open_bud`` is whether the caller may open the BUD (``buds:view``
     and ``workspace:engineering``); socket payloads always send false, and
-    a client merging one keeps the value it last fetched.
+    a client merging one keeps the value it last fetched. ``history`` (newest
+    first) is filled on the card's own detail and empty on board pages and sockets.
     """
 
     bud_id: uuid.UUID
@@ -106,6 +127,7 @@ class HandoverChip(BaseModel):
     status: BUDStatus
     handover_status: BoardHandoverStatus
     can_open_bud: bool = False
+    history: list[HandoverHistoryEntry] = Field(default_factory=list)
 
 
 class CardDelivery(StrEnum):

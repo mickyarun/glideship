@@ -40,6 +40,7 @@ from app.repositories.feature_learning import FeatureLearningRepository
 from app.schemas.bud import BUDAgentTaskRead, BUDRead
 from app.schemas.bud_design import BUDDesignRead
 from app.services.agent_activity_logger import PHASE_WORKER_SLUGS
+from app.services.boards.design_pending import design_pending
 from app.services.bud_agent_trigger import should_auto_generate_phase
 from app.services.yield_offer_lock import is_awaiting_human_decision
 
@@ -149,5 +150,6 @@ async def build_bud_response(
         bud.auto_generate_phases, "closed"
     )
     bud_data.has_learning = row_has_content or awaiting_recap
+    bud_data.design_pending = await design_pending(db, bud)
 
     return bud_data

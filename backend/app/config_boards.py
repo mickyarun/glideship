@@ -108,6 +108,12 @@ class BoardsConfig(BoardImportSettings):
     handover_similar_limit: int = Field(
         default=5, gt=0, description="Similar open BUDs a handover preview lists."
     )
+    handover_link_search_limit: int = Field(
+        default=20, gt=0, description=r"Open BUDs one search of the BUD list (\`?q=\`) returns."
+    )
+    handover_history_limit: int = Field(
+        default=10, gt=0, description="Send-backs and re-handovers each handover lists."
+    )
     handover_embedding_cache_size: int = Field(
         default=256, gt=0, description="Preview embeddings kept for the confirm that follows."
     )

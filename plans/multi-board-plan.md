@@ -1575,6 +1575,28 @@ the next section.
   handover), `delivered` (every live BUD at prod or closed), else `in_progress`. Loaded in the
   summary query as one correlated `jsonb_agg` (`repositories/board_card_handover_chips.py`),
   so a page stays one statement. `CardDetail` inherits both.
+- **Handover history.** `HandoverRead.history` and each `CardDetail.handovers[]` chip carry
+  `history: [{at, kind: returned | handed_over_again, reason?, by_name?}]`, newest first, at
+  most `BOARDS_HANDOVER_HISTORY_LIMIT` (10) per handover, built from the card's own `returned`
+  and `handed_over {again: true}` events (the `returned` event's detail now also holds the
+  `reason`; `by_name` is the actor's name, else the event's `actor_label`). One statement per
+  card (`repositories/board_handover_history.py`, `row_number()` per BUD), on the handovers
+  list, the confirm result (taken from its card detail), the Origin panel and card detail.
+  Board page summaries and socket payloads send `history: []`. No BUD titles; send-back
+  reasons are already on the card as comments.
+- **Design pending.** `BUDRead.design_pending` (BUD detail, computed, no column): the BUD is in
+  `design` with `auto_generate_phases.design` on, its live handover row landed it at design
+  (`target_status = design`), and it has no `bud_designs` row of any status. No query unless
+  the first two hold, then one `EXISTS … AND NOT EXISTS`
+  (`repositories/bud_design_pending.py`, `services/boards/design_pending.py`). The BUD page
+  starts design generation for whoever opens it while this is true, which replaces the
+  confirm's one-shot `design_available` hint as the source of truth.
+- **Link picker search.** `GET /api/v1/buds/?q=` (1..200 chars): open BUDs (not closed or
+  discarded) whose title or key contains `q`, or whose number it names (`BUD-007`, `bud-7`
+  and `7` all match BUD-007), wildcards escaped, newest first, capped by
+  `BOARDS_HANDOVER_LINK_SEARCH_LIMIT` (20); `status` still narrows, `order_by` is ignored.
+  Without `q` the route is unchanged. `repositories/bud_search.py`. The link picker should
+  search with `q` instead of loading every BUD.
 - **Origin chips on the Delivery board.** `GET /api/v1/buds/` items carry `origin:
   {card_key, board_key, can_open} | null`: the BUD's live origin card (`live_handover`), only
   when the caller holds a role on that card's board (so `can_open` is always true when set);

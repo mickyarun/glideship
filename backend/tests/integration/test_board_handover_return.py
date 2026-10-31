@@ -79,6 +79,7 @@ async def test_a_bud_goes_back_before_development(
         "bud_id": str(bud_id),
         "bud_key": made["handover"]["bud_key"],
         "comment_id": str(comment.id),
+        "reason": "Wrong problem",
     }
 
 

@@ -158,7 +158,12 @@ async def _card_side(
         actor_id=actor_id,
         from_stage=locked.from_stage if moved.to_stage else None,
         to_stage=moved.to_stage,
-        detail={"bud_id": str(row.bud_id), "bud_key": key, "comment_id": str(comment.id)},
+        detail={
+            "bud_id": str(row.bud_id),
+            "bud_key": key,
+            "comment_id": str(comment.id),
+            "reason": reason,
+        },
     )
     return moved
 

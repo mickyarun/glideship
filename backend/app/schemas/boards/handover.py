@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.board_enums import BoardHandoverStatus
 from app.models.bud import BUDPriority, BUDStatus
-from app.schemas.boards.card import CardDetail
+from app.schemas.boards.card import CardDetail, HandoverHistoryEntry
 from app.services.boards.constants import (
     CARD_DOC_MAX_CHARS,
     HANDOVER_LANDING_STATUSES,
@@ -159,6 +159,8 @@ class HandoverRead(BaseModel):
     (``can_open_bud``); everyone who sees the card sees the key and statuses.
     ``stage_start_failed``: the target stage's agent didn't start after the
     confirm; ``POST .../handovers/{id}/retry-start`` (or the same key again) retries.
+    ``history`` is filled on the card's handovers list, the confirm and the
+    Origin panel (capped by ``BOARDS_HANDOVER_HISTORY_LIMIT``), else empty.
     """
 
     id: uuid.UUID
@@ -176,6 +178,8 @@ class HandoverRead(BaseModel):
     return_reason: str | None
     can_open_bud: bool
     stage_start_failed: bool
+    # Send-backs and re-handovers of this BUD from the card, newest first.
+    history: list[HandoverHistoryEntry] = Field(default_factory=list)
 
 
 class HandoverResult(BaseModel):

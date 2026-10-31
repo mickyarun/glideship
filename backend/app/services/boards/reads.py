@@ -33,6 +33,7 @@ from app.schemas.boards.stage import StageRead
 from app.services.boards import handover_chips
 from app.services.boards.access import BoardAccess
 from app.services.boards.errors import BoardItemNotFoundError
+from app.services.boards.handover_history import history_by_bud, with_history
 
 
 def card_key(board_key: str, number: int) -> str:
@@ -109,7 +110,10 @@ def summary_json(card: CardSummary) -> dict[str, object]:
     """
     fields = set(CardSummary.model_fields)
     summary = CardSummary.model_validate(card.model_dump(include=fields))
-    closed = [chip.model_copy(update={"can_open_bud": False}) for chip in summary.handovers]
+    closed = [
+        chip.model_copy(update={"can_open_bud": False, "history": []})
+        for chip in summary.handovers
+    ]
     return summary.model_copy(update={"handovers": closed}).model_dump(mode="json")
 
 
@@ -128,6 +132,7 @@ async def card_detail(
     assignees, labels, checklist and documents it hasn't changed since; the
     card's own columns are taken from the refreshed row instead of a new query.
     ``opens_buds`` is whether the caller may open the BUDs its chips name.
+    Chips carry their history (one more query, only when the card has any).
     """
     await db.flush()
     await db.refresh(card)
@@ -140,6 +145,11 @@ async def card_detail(
     else:
         known = _with_columns(known, card)
     summary = card_summary(board, known, opens_buds=opens_buds)
+    if summary.handovers:
+        history = await history_by_bud(db, board.org_id, card.id)
+        summary = summary.model_copy(
+            update={"handovers": with_history(summary.handovers, history)}
+        )
     return CardDetail(
         **summary.model_dump(),
         board_key=board.key,

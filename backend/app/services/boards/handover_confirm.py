@@ -43,6 +43,7 @@ from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.handover_bud import HandedOverBUD, create_and_land, link
 from app.services.boards.handover_card_stage import move_on_first_handover
 from app.services.boards.handover_chips import opens_buds
+from app.services.boards.handover_history import chip_history
 from app.services.boards.handover_locks import lock_for_confirm
 from app.services.boards.handover_notify import stage_owner_notice
 from app.services.boards.handover_reads import handover_read
@@ -159,7 +160,7 @@ async def _result(
     if row is None:
         raise BoardItemNotFoundError(HANDOVER_NOT_FOUND)
     return HandoverResult(
-        handover=handover_read(row, can_open_bud=opens),
+        handover=handover_read(row, can_open_bud=opens, history=chip_history(detail)),
         card=detail,
         design_available=started.design_available,
     )
