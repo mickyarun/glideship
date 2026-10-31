@@ -13,11 +13,13 @@
 // limitations under the License.
 
 /**
- * How the card's AI panel says a run ended: a stale run, one a restart
- * interrupted and a canceled one show the run's own words as the server
- * wrote them (a canceled run without a reason says it was stopped), and
- * Try again stays on offer.
+ * How the card's AI panel says a run ended: in product words for the run's
+ * error code, never the raw reason (that goes to the console). A server
+ * that sends no code yet reads as "not connected" when its message says
+ * so, else the default words. Whoever can connect the AI service gets a
+ * link to its settings. Try again stands in for that agent's Run button.
  */
+import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/socket', async () => (await import('./cardPageMockModules')).socketModule())
@@ -31,6 +33,9 @@ vi.mock('@/composables/useJobSocket', async () => ({
 
 import { cardAgents, makeRun } from '@/components/boards/__tests__/agentFixtures'
 import { EDITOR_CAPS } from '@/components/boards/__tests__/fixtures'
+import { RUN_ENDED_COPY, RUN_ENDED_DEFAULT } from '@/constants/agentRunEnded'
+import { useAuthStore } from '@/stores/auth'
+import type { User } from '@/types'
 import type { AgentRunRead, BoardAction } from '@/types/boards'
 import { buttonsWith, mountCardPage } from './cardPageHarness'
 import { cardDefaults, mocked } from './cardPageMocks'
@@ -38,27 +43,52 @@ import { cardDefaults, mocked } from './cardPageMocks'
 const { cardApi } = mocked
 const RUN_CAPS: BoardAction[] = [...EDITOR_CAPS, 'run_agent', 'review_draft']
 const panel = () => document.querySelector('.card-ai')?.textContent?.replace(/\s+/g, ' ') ?? ''
-// The server's own words (backend board_agent_run_sweep.STALE, executor.RESTART_REASON).
-const STALE = 'This run went past its deadline without finishing, so it was stopped. Run it again.'
-const RESTART = 'The server restarted while this agent was running. Run it again.'
-const STOPPED = 'It was stopped before it wrote a draft.'
+const RAW = 'Claude CLI not found. Install: curl -fsSL https://example.test/install.sh | bash'
 
 describe('BoardCardView AI panel: how a run ended', () => {
   beforeEach(() => cardDefaults(RUN_CAPS))
-  afterEach(() => document.body.replaceChildren())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    document.body.replaceChildren()
+  })
 
   it.each<[string, Partial<AgentRunRead>, string, string]>([
-    ['a stale run', { status: 'failed', error_message: STALE }, "PRD writer didn't finish", STALE],
-    ['a run a restart interrupted', { status: 'failed', error_message: RESTART }, "PRD writer didn't finish", RESTART],
-    ['a canceled run', { status: 'canceled', error_message: 'Cancelled by user' }, 'PRD writer was canceled', 'Cancelled by user.'],
-    ['a canceled run with no reason', { status: 'canceled' }, 'PRD writer was canceled', STOPPED],
-    ['a run whose words end without a stop', { status: 'failed', error_message: 'Claude CLI not found' }, "PRD writer didn't finish", 'Claude CLI not found.'],
-    ['a failed run with no reason', { status: 'failed' }, "PRD writer didn't finish", 'The run stopped before it wrote a draft.'],
-  ])('says how %s ended, with Try again', async (_name, over, title, words) => {
+    ['timed out', { status: 'failed', error_code: 'TIMEOUT', error_message: 'Timed out after 600s' }, "PRD writer didn't finish", RUN_ENDED_COPY.TIMEOUT],
+    ['found the queue full', { status: 'failed', error_code: 'QUEUE_FULL' }, "PRD writer didn't finish", 'AI is busy right now. Try again in a minute.'],
+    ['lost its skill', { status: 'failed', error_code: 'SKILL_GONE' }, "PRD writer didn't finish", "This agent's skill was removed. An admin can pick another in board settings."],
+    ['went stale', { status: 'failed', error_code: 'STALE', error_message: 'deadline' }, "PRD writer didn't finish", 'The run stopped before it finished. Try again.'],
+    ['was interrupted', { status: 'failed', error_code: 'INTERRUPTED' }, "PRD writer didn't finish", 'The run stopped before it finished. Try again.'],
+    ['was canceled', { status: 'canceled', error_code: 'CANCELED', error_message: 'Cancelled by user' }, 'PRD writer was canceled', 'Canceled.'],
+    ['was canceled, from an older server', { status: 'canceled' }, 'PRD writer was canceled', 'Canceled.'],
+    ['had no provider, from an older server', { status: 'failed', error_message: RAW }, "PRD writer didn't finish", RUN_ENDED_COPY.AI_NOT_CONFIGURED],
+    ['failed for a reason it has no words for', { status: 'failed', error_message: 'Boom: stack trace' }, "PRD writer didn't finish", RUN_ENDED_DEFAULT],
+    ['failed with a code from a newer server', { status: 'failed', error_code: 'NEW_THING' as AgentRunRead['error_code'] }, "PRD writer didn't finish", RUN_ENDED_DEFAULT],
+  ])('says so when a run %s, with Try again in place of Run', async (_name, over, title, words) => {
     cardApi.agents.mockResolvedValue(cardAgents({ runs: [makeRun('r1', over)] }))
     const { wrapper } = await mountCardPage()
     expect(panel()).toContain(title)
-    expect(panel()).toContain(`${words} Nothing on the card changed.`)
+    expect(panel()).toContain(words)
     expect(buttonsWith(wrapper, 'Try again')).toHaveLength(1)
+    expect(buttonsWith(wrapper, 'Run PRD writer')).toHaveLength(0)
+  })
+
+  it('keeps the raw reason off the screen and in the console', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    cardApi.agents.mockResolvedValue(cardAgents({ runs: [makeRun('r1', { status: 'failed', error_message: RAW })] }))
+    await mountCardPage()
+    expect(panel()).not.toContain('curl')
+    expect(logged).toHaveBeenCalledWith('[boards] agent run r1 failed:', RAW)
+  })
+
+  it('links whoever can connect the AI service to its settings', async () => {
+    cardApi.agents.mockResolvedValue(cardAgents({ runs: [makeRun('r1', { status: 'failed', error_code: 'AI_NOT_CONFIGURED' })] }))
+    const blank = { render: () => null }
+    const { wrapper } = await mountCardPage(undefined, {
+      watch: router => router.addRoute({ path: '/settings', name: 'settings', component: blank }),
+    })
+    expect(wrapper.find('.ai-ended__link').exists()).toBe(false)
+    useAuthStore().user = { permissions: ['integrations:configure'] } as User
+    await flushPromises()
+    expect(wrapper.find('.ai-ended__link').attributes('href')).toBe('/settings')
   })
 })

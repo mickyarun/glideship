@@ -18,7 +18,9 @@
      section toolbar (Edit / Preview, Export, Import). Saving writes a new
      version on top of the one the edit started from; if someone saved a
      newer one meanwhile, a note offers to compare or save mine anyway, and
-     the draft stays. Viewers read it with no toolbar. -->
+     the draft stays. ``seed`` opens it already editing that text (an edit
+     kept from an AI draft that went). Viewers read it with no toolbar.
+     The ``empty`` slot replaces the not-written-yet line. -->
 <template>
   <AppPanel :title="label" :note="doc ? `Version ${doc.version}` : 'Not written yet'">
     <template v-if="canEdit" #action>
@@ -65,14 +67,14 @@
       </div>
     </template>
     <div v-else-if="doc?.body_md" class="markdown-body" v-html="html" />
-    <p v-else class="doc-editor__empty">
-      No {{ DOC_NAMES[kind] }} yet.{{ canEdit ? ' Use Edit to write one.' : '' }}
-    </p>
+    <slot v-else name="empty" :start="md.toggle">
+      <p class="doc-editor__empty">No {{ DOC_NAMES[kind] }} yet.{{ canEdit ? ' Use Edit to write one.' : '' }}</p>
+    </slot>
   </AppPanel>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CardDocConflictNote from '@/components/boards/card/CardDocConflictNote.vue'
 import BUDSectionToolbar from '@/components/buds/BUDSectionToolbar.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
@@ -92,6 +94,8 @@ const props = defineProps<{
   maxLength: number | null
   /** Asks before an open draft is thrown away; resolves true to go ahead. */
   confirmDiscard: () => Promise<boolean>
+  /** Open already editing this text. */
+  seed?: string | null
 }>()
 const emit = defineEmits<{
   result: [error: string | null, success: string]
@@ -130,6 +134,11 @@ watch(() => md.editing.value, open => {
 })
 watch(dirty, isDirty => emit('dirty', isDirty ? `the ${DOC_NAMES[props.kind]}` : null), { immediate: true })
 onBeforeUnmount(() => emit('dirty', null))
+onMounted(() => {
+  if (!props.seed || !props.canEdit) return
+  md.toggle()
+  md.editValue.value = props.seed
+})
 
 async function commit(): Promise<void> {
   saving.value = true

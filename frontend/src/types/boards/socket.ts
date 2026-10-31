@@ -56,8 +56,9 @@ export type BoardSocketMessage =
   // ``state`` says whether it's the current version or an AI draft
   // (pending_review, or rejected); older servers send none (current).
   | (Base<'doc_updated'> & { card_id: string; kind: CardDocKind; version: number; state?: CardDocState })
-  // A stage agent's run on a card was queued, started, or ended.
-  | (Base<'agent_run_updated'> & { card_id: string; run: AgentRunRead })
+  // A stage agent's run on a card was queued, started, or ended; newer
+  // servers name its skill.
+  | (Base<'agent_run_updated'> & { card_id: string; run: AgentRunRead; skill_name?: string | null })
   // An admin replaced a stage's agents.
   | (Base<'stage_agents_changed'> & { stage_id: string })
   | (Base<'board_updated'> & { board: BoardRead })

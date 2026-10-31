@@ -14,8 +14,8 @@
  * limitations under the License.
  -->
 
-<!-- Add AI to a stage: a skill from the org's library (the board skills
-     suggested first, each hinting what it writes: "writes a PRD") and when
+<!-- Add AI to a stage: a skill from the org's library not already on it
+     (the board skills suggested first, each hinting what it writes: "writes a PRD") and when
      it runs. "When a card enters" is off while another agent on the stage
      has it. Output always lands as a draft on the card's Documents tab. -->
 <template>
@@ -32,7 +32,7 @@
       :error-messages="error || undefined"
       :hint="hint"
       persistent-hint
-      :no-data-text="loading ? 'Loading…' : 'No skills in your organization\'s library'"
+      :no-data-text="loading ? 'Loading…' : NO_SKILLS"
     />
     <span :id="runsId" class="agent-add__label">Runs</span>
     <AppPillToggle v-model="trigger" :options="triggers" :aria-labelledby="runsId" />
@@ -61,6 +61,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ add: [skill: BoardSkillOption, trigger: AgentTrigger]; cancel: [] }>()
 
+const NO_SKILLS = "No other skills in your organization's library"
 const runsId = useId()
 const skillId = ref<string | null>(null)
 const trigger = ref<AgentTrigger>(props.enterTaken ? 'manual' : 'on_enter')

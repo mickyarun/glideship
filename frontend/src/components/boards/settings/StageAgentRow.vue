@@ -16,8 +16,10 @@
 
 <!-- One agent on a stage, in run order: its skill and the document it
      drafts, when it runs (only one agent per stage may run when a card
-     enters, so that choice is off while another has it), a switch to pause
-     it, and move up, move down and remove for admins. -->
+     enters, so that choice is off while another has it), a labelled switch
+     to pause it, and move up, move down and remove for admins. Remove stays
+     on the skill's line; on a narrow page the trigger and switch wrap below.
+     With the board's AI off, a tag says the agent is paused. -->
 <template>
   <li class="agent-row" :class="{ 'agent-row--off': !agent.enabled }">
     <div class="agent-row__order">
@@ -31,24 +33,30 @@
       />
     </div>
     <div class="agent-row__skill">
-      <span class="agent-row__name">{{ agent.skill_name }}</span>
+      <span class="agent-row__name">
+        {{ agent.skill_name }}
+        <span v-if="boardOff && agent.enabled" class="agent-row__tag">Paused · AI is off</span>
+      </span>
       <span class="agent-row__meta">Drafts the {{ DOC_NAMES[agent.output_kind] }}</span>
     </div>
-    <span v-if="disabled" class="agent-row__meta">{{ triggerLabel }}</span>
-    <AppPillToggle
-      v-else
-      :model-value="agent.trigger"
-      :options="triggers"
-      :aria-label="`When ${agent.skill_name} runs`"
-      size="sm"
-      @update:model-value="t => emit('trigger', t)"
-    />
-    <v-switch
-      :model-value="agent.enabled" :disabled="disabled" color="primary" density="compact" hide-details inset
-      :aria-label="`${agent.skill_name} on`" @update:model-value="on => emit('enabled', !!on)"
-    />
+    <div class="agent-row__controls">
+      <span v-if="disabled" class="agent-row__meta">{{ triggerLabel }}</span>
+      <AppPillToggle
+        v-else
+        :model-value="agent.trigger"
+        :options="triggers"
+        :aria-label="`When ${agent.skill_name} runs`"
+        size="sm"
+        @update:model-value="t => emit('trigger', t)"
+      />
+      <v-switch
+        :model-value="agent.enabled" :disabled="disabled" :label="agent.enabled ? 'On' : 'Paused'"
+        color="primary" density="compact" hide-details inset
+        :aria-label="`${agent.skill_name} on`" @update:model-value="on => emit('enabled', !!on)"
+      />
+    </div>
     <v-btn
-      v-if="!disabled" icon="mdi-close" size="small" variant="text"
+      v-if="!disabled" class="agent-row__remove" icon="mdi-close" size="small" variant="text"
       :aria-label="`Remove ${agent.skill_name}`" @click="emit('remove')"
     />
   </li>
@@ -68,6 +76,8 @@ const props = defineProps<{
   /** Another agent on the stage already runs when a card enters. */
   enterTaken: boolean
   disabled: boolean
+  /** The board's AI is off, so the agent doesn't run either way. */
+  boardOff: boolean
 }>()
 const emit = defineEmits<{ move: [by: -1 | 1]; trigger: [trigger: AgentTrigger]; enabled: [on: boolean]; remove: [] }>()
 
@@ -105,11 +115,37 @@ const triggers = computed(() =>
   font-size: 14px;
   font-weight: 500;
 }
+.agent-row__tag {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: rgb(var(--v-theme-on-surface-variant));
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
 .agent-row__meta {
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
+.agent-row__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
 .agent-row :deep(.v-switch) {
   flex: none;
+}
+/* Narrow: the skill keeps Remove on its line; the trigger and switch go below it. */
+@container stage-agents (max-width: 560px) {
+  .agent-row__skill {
+    flex-basis: 0;
+  }
+  .agent-row__controls {
+    order: 1;
+    flex-basis: 100%;
+  }
 }
 </style>

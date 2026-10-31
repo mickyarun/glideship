@@ -38,8 +38,8 @@ export interface CardLiveHooks {
   onUpdated: () => void
   /** Comments, attachments or the history changed elsewhere. */
   onActivity: () => void
-  /** A document got a new version, or an AI draft, elsewhere. */
-  onDoc: (kind: CardDocKind, state: CardDocState) => void
+  /** A document got a new version, or an AI draft, elsewhere (``actor`` made it). */
+  onDoc: (kind: CardDocKind, state: CardDocState, actor: string | null) => void
   /** Anything about the card changed elsewhere, so its history has a new entry. */
   onHistory: () => void
 }
@@ -152,7 +152,7 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
       },
       doc_updated: message => {
         if (!isMine(message.card_id)) return
-        hooks.onDoc(message.kind, message.state ?? 'current')
+        hooks.onDoc(message.kind, message.state ?? 'current', message.actor_id)
         hooks.onHistory()
       },
     },

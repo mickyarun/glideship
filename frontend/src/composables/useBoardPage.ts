@@ -176,7 +176,7 @@ export function useBoardPage(key: Ref<string>) {
         if (forOpenBoard() && message.kind === 'prd' && current) cards.patchCard(message.card_id, { has_prd: true })
       },
       agent_run_updated: message => {
-        if (forOpenBoard()) agentRuns.apply(message.card_id, message.run)
+        if (forOpenBoard()) agentRuns.apply(message.card_id, message.run, message.skill_name ?? null)
       },
       repos_changed: message => {
         if (!forOpenBoard()) return

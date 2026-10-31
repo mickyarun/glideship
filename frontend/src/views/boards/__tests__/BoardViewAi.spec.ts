@@ -15,8 +15,8 @@
 /**
  * AI on the board's tiles: a card shows a quiet AI chip while a stage
  * agent is queued or drafting on it (its summary's run, then the board's
- * live channel), and loses it when the run ends; a reload shows what the
- * summaries say. An AI draft arriving doesn't count as the
+ * live channel, named when it says the skill), and loses it when the run
+ * ends, even if a late "queued" follows; a reload shows what the summaries say. An AI draft arriving doesn't count as the
  * card's PRD; an accepted one does.
  */
 import { flushPromises } from '@vue/test-utils'
@@ -97,6 +97,21 @@ describe('BoardView AI on tiles', () => {
     send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1', { status: 'failed' }) })
     await flushPromises()
     expect(chip('3')).not.toBeNull()
+  })
+
+  it('keeps a run ended when its late "queued" arrives after the failure', async () => {
+    await mountBoardPage()
+    send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1', { status: 'failed', finished_at: '2026-10-31T10:01:00Z' }) })
+    send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1', { status: 'pending', started_at: null }) })
+    await flushPromises()
+    expect(chip('3')).toBeNull()
+  })
+
+  it('names the run from the live update when it says the skill', async () => {
+    await mountBoardPage()
+    send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1', { status: 'pending' }), skill_name: 'PRD writer' })
+    await flushPromises()
+    expect(chip('3')?.getAttribute('aria-label')).toBe('PRD writer queued')
   })
 
   it("counts only an accepted PRD as the card's, not a draft", async () => {

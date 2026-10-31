@@ -50,8 +50,8 @@ export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) 
       attachments.value?.reload()
       activity.refresh()
     },
-    onDoc: (kind, state) => {
-      void docs.refresh(kind)
+    onDoc: (kind, state, actor) => {
+      void docs.refresh(kind, { state, actor })
       // A PRD saved elsewhere: the card has one now (card_updated follows
       // with the rest), so stages that need one let it in. A draft isn't one yet.
       if (kind !== 'prd' || state !== 'current' || !detail.value) return

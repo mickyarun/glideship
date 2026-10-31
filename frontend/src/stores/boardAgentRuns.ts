@@ -18,21 +18,24 @@
  * reloads the board's ``agent_run_updated`` messages and the card page (its
  * panel's load and its own Run, whose echo this tab skips) patch the loaded
  * card. The newest run seen on each card is kept, so an older run's late
- * end never clears a newer one. Forgotten when another board opens.
+ * end never clears a newer one, and an update less far along than the one
+ * held (a late "queued" after it failed) is dropped. Forgotten when
+ * another board opens.
  */
 import { defineStore } from 'pinia'
 
 import { ACTIVE_RUN_STATUSES } from '@/constants/boardAgents'
 import { useBoardCardsStore } from '@/stores/boardCards'
 import type { AgentRunRead, CardAgentRun } from '@/types/boards'
+import { isBehind, type RunProgress } from '@/utils/agentRunOrder'
 import { locate } from '@/utils/boardColumns'
 
 const isActive = (status: AgentRunRead['status']): status is CardAgentRun['status'] => ACTIVE_RUN_STATUSES.has(status)
 
 export const useBoardAgentRunsStore = defineStore('boardAgentRuns', () => {
   const cards = useBoardCardsStore()
-  /** The newest run seen on each card, by card id. */
-  let newest = new Map<string, string>()
+  /** The newest run seen on each card, by card id, and how far along it was. */
+  let newest = new Map<string, RunProgress & { id: string }>()
 
   /** Start on a board: no runs seen yet. */
   function reset(): void {
@@ -51,12 +54,13 @@ export const useBoardAgentRunsStore = defineStore('boardAgentRuns', () => {
       return
     }
     const held = newest.get(cardId)
-    if (held && held !== run.id && !isActive(run.status)) return
-    newest.set(cardId, run.id)
+    const sameRun = !held || held.id === run.id
+    if (!sameRun && !isActive(run.status)) return
+    if (held && sameRun && isBehind(run, held)) return
+    newest.set(cardId, { id: run.id, status: run.status, finished_at: run.finished_at })
     if (!found) return
     const status = run.status
     const shown = found.card.agent_run
-    const sameRun = !held || held === run.id
     found.card.agent_run = isActive(status)
       ? { status, skill_name: skillName ?? (sameRun ? shown?.skill_name ?? null : null) }
       : null

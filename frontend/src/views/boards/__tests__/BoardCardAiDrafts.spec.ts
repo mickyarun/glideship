@@ -68,7 +68,8 @@ describe('BoardCardView AI drafts', () => {
   it('shows the draft against the current version, with who wrote it', async () => {
     const wrapper = await openDocs()
     expect(text()).toContain('Draft from PRD writer')
-    expect(text()).toContain('would become version 4')
+    expect(text()).toContain('Would become the current version')
+    expect(text()).not.toContain('version 4')
     expect(text()).toContain('Showing the draft against version 3')
     expect(lines(wrapper)).toEqual(['−Removed: Old line', '+Added: New line'])
     expect(wrapper.find('[role="radiogroup"][aria-label="Document"]').text()).toContain('PRD · AI draft')

@@ -15,16 +15,17 @@
  -->
 
 <!-- One stage's agents in the AI settings, in run order, with Add AI for
-     admins. Each change saves the stage's whole list at once. A stage with
-     none suggests the two board skills (a PRD writer and a design helper)
-     when the library has them. -->
+     admins. Each change saves the stage's whole list at once, so nothing is
+     offered until the list has loaded: a stage that didn't load shows why,
+     with Try again, and no Add AI. With the board's AI off, each agent says
+     it's paused. -->
 <template>
   <section class="stage-agents" :aria-labelledby="headingId">
     <header class="stage-agents__head">
       <h3 :id="headingId" class="stage-agents__name">{{ stage.name }}</h3>
       <span class="stage-agents__category">{{ CATEGORY_LABELS[stage.category] }}</span>
       <v-spacer />
-      <v-btn v-if="!disabled && !adding" variant="text" size="small" :prepend-icon="AI_ICON" @click="openAdd">Add AI</v-btn>
+      <v-btn v-if="!disabled && !adding && ready" variant="text" size="small" :prepend-icon="AI_ICON" @click="openAdd">Add AI</v-btn>
     </header>
     <v-skeleton-loader v-if="list?.loading && !items.length" type="list-item" />
     <AppCallout v-else-if="list?.error" variant="error" role="alert" :title="`${stage.name}'s AI didn't load`">
@@ -36,16 +37,17 @@
     <ul v-else-if="items.length" class="stage-agents__list" :aria-label="`AI on ${stage.name}`">
       <StageAgentRow
         v-for="(agent, i) in items" :key="agent.id" :agent="agent" :index="i" :count="items.length"
-        :enter-taken="items.some(a => a.id !== agent.id && a.trigger === 'on_enter')" :disabled="disabled"
+        :enter-taken="items.some(a => a.id !== agent.id && a.trigger === 'on_enter')" :disabled="disabled || !ready"
+        :board-off="boardOff"
         @move="by => move(agent, by)" @remove="remove(agent)"
         @trigger="t => change(agent, { trigger: t }, `${agent.skill_name} now runs ${t === 'manual' ? 'only by hand' : 'when a card enters'}`)"
         @enabled="on => change(agent, { enabled: on }, `${on ? 'Switched on' : 'Paused'} ${agent.skill_name}`)"
       />
     </ul>
-    <p v-else class="stage-agents__empty">{{ emptyText }}</p>
+    <p v-else class="stage-agents__empty">No AI on this stage.</p>
     <StageAgentAddForm
-      v-if="adding"
-      :stage-name="stage.name" :skills="agents.skills.value" :loading="agents.skillsLoading.value"
+      v-if="adding && ready"
+      :stage-name="stage.name" :skills="freeSkills" :loading="agents.skillsLoading.value"
       :error="agents.skillsError.value" :enter-taken="items.some(a => a.trigger === 'on_enter')" :busy="busy"
       @add="add" @cancel="adding = false"
     />
@@ -61,19 +63,25 @@ import type { AgentEdit, StageAgents } from '@/composables/useStageAgents'
 import { AI_ICON } from '@/constants/boardAgents'
 import { CATEGORY_LABELS } from '@/constants/boards'
 import type { AgentTrigger, BoardSkillOption, StageAgentRead, StageRead } from '@/types/boards'
-import { wordList } from '@/utils/format'
 
-const props = defineProps<{ stage: StageRead; agents: StageAgents; disabled: boolean }>()
+const props = defineProps<{
+  stage: StageRead
+  agents: StageAgents
+  disabled: boolean
+  /** The board's AI is off: every agent here is paused. */
+  boardOff: boolean
+}>()
 
 const headingId = useId()
 const adding = ref(false)
 const busy = ref(false)
 const list = computed(() => props.agents.lists.value[props.stage.id])
 const items = computed(() => list.value?.items ?? [])
-const emptyText = computed(() => {
-  const suggested = props.agents.skills.value.filter(s => s.suggested).map(s => s.name)
-  const hint = !props.disabled && suggested.length ? ` Try ${wordList(suggested, 'or')}: they draft documents from the card.` : ''
-  return `No AI on this stage.${hint}`
+const ready = computed(() => props.agents.ready(props.stage.id))
+/** The library's skills not already on this stage. */
+const freeSkills = computed(() => {
+  const taken = new Set(items.value.map(a => a.skill_id))
+  return props.agents.skills.value.filter(s => !taken.has(s.id))
 })
 
 const plain = (a: StageAgentRead): AgentEdit => ({ id: a.id, skill_id: a.skill_id, trigger: a.trigger, enabled: a.enabled })
@@ -118,6 +126,7 @@ async function add(skill: BoardSkillOption, trigger: AgentTrigger): Promise<void
 
 <style scoped>
 .stage-agents {
+  container: stage-agents / inline-size;
   display: flex;
   flex-direction: column;
   gap: 8px;

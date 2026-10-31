@@ -16,8 +16,8 @@
 
 <template>
   <SettingsPageShell
-    title="QA Automation & BUD Stages"
-    subtitle="Configure the test automation framework and BUD lifecycle stages for your organization"
+    title="AI, QA & BUD stages"
+    subtitle="Configure the Delivery board's AI, the test automation framework and BUD lifecycle stages for your organization"
     :loading="settingsStore.loading"
     :saving="settingsStore.saving"
     :valid="isValid"

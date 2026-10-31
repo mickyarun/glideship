@@ -15,7 +15,7 @@
 // AI on board stages: the words, icon and timings the settings section,
 // the card's AI panel and the board's tiles share.
 
-import type { AgentRunRead, AgentRunStatus, AgentTrigger, CardAgentRun, CardDocKind } from '@/types/boards'
+import type { AgentRunStatus, AgentTrigger, CardAgentRun, CardDocKind } from '@/types/boards'
 
 /** The spark that marks AI on a board (settings, the card panel, a tile's chip). */
 export const AI_ICON = 'mdi-creation-outline'
@@ -36,25 +36,6 @@ export const ACTIVE_RUN_STATUSES: ReadonlySet<AgentRunStatus> = new Set(['pendin
 
 /** How often a running run's elapsed time ticks. */
 export const RUN_ELAPSED_TICK_MS = 1000
-
-/** How a run that ended reads at the top of the card's AI panel. */
-export const RUN_ENDED_TITLES: Partial<Record<AgentRunStatus, (skill: string) => string>> = {
-  failed: skill => `${skill} didn't finish`,
-  canceled: skill => `${skill} was canceled`,
-}
-
-const STOPPED = 'It was stopped before it wrote a draft.'
-const UNFINISHED = 'The run stopped before it wrote a draft.'
-
-/** A sentence's end, so the panel's own words can follow a message that has none. */
-const SENTENCE_END = /[.!?…]$/
-
-/** Why a run ended: the run's own words (a stale run, a restart, a cancel's reason), else what its status means. */
-export function runEndedWords(run: Pick<AgentRunRead, 'status' | 'error_message'>): string {
-  const own = run.error_message?.trim()
-  if (!own) return run.status === 'canceled' ? STOPPED : UNFINISHED
-  return SENTENCE_END.test(own) ? own : `${own}.`
-}
 
 /** A tile's AI chip, naming the skill when the card's summary does. */
 export function chipTitle(run: CardAgentRun): string {
@@ -77,3 +58,4 @@ export const AI_OFF_NOTE = 'A board admin turned AI off. Existing drafts stay; n
 /** The Delivery board's AI switch, in its settings. */
 export const DELIVERY_AI_NOTE = "When off, BUD stage agents don't start; per-BUD agent choices stay as they are."
 export const DELIVERY_AI_READONLY = 'Only people who can change organization settings can switch this.'
+export const DELIVERY_AI_SAVES = 'Saves as you flip it.'

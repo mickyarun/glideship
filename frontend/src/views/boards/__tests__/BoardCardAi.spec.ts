@@ -113,12 +113,13 @@ describe('BoardCardView AI panel', () => {
     expect(panel()).not.toContain('is drafting')
   })
 
-  it('shows a failed run with its error and retries it', async () => {
-    const failed = makeRun('r1', { status: 'failed', error_message: 'The AI service timed out after 10 minutes.' })
+  it('shows a failed run in its own words and retries it', async () => {
+    const failed = makeRun('r1', { status: 'failed', error_code: 'TIMEOUT', error_message: 'Timed out after 600s' })
     cardApi.agents.mockResolvedValue(cardAgents({ runs: [failed] }))
     const { wrapper } = await mountCardPage()
     expect(panel()).toContain("PRD writer didn't finish")
-    expect(panel()).toContain('The AI service timed out after 10 minutes. Nothing on the card changed.')
+    expect(panel()).toContain('The AI service took too long, so the run was stopped. Nothing on the card changed.')
+    expect(panel()).not.toContain('600s')
     cardApi.runAgent.mockResolvedValue({ job_id: 'job-r2', run: makeRun('r2', { attempt: 2 }) })
     await buttonsWith(wrapper, 'Try again')[0].trigger('click')
     await flushPromises()

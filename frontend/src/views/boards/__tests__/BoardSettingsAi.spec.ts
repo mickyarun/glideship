@@ -78,11 +78,14 @@ describe('BoardSettingsView: AI', () => {
     document.body.replaceChildren()
   })
 
-  it("lists each stage's agents in order, and suggests the board skills on an empty stage", async () => {
+  it("lists each stage's agents in order, and suggests the board skills once for the empty stages", async () => {
     await mountSettings(PATH)
     expect(settings.stageAgents).toHaveBeenCalledTimes(4)
     expect(stageText('Doing')).toMatch(/PRD writer.*Design helper/)
-    expect(stageText('To do')).toContain('No AI on this stage. Try Design helper or PRD writer')
+    expect(stageText('To do')).toContain('No AI on this stage.')
+    expect(stageText('To do')).not.toContain('Try')
+    const hints = document.querySelectorAll('.ai-section__hint')
+    expect([...hints].map(h => h.textContent)).toEqual(['Try Design helper or PRD writer on a stage: they draft documents from the card.'])
   })
 
   it('switches the board AI off, and says the agents are paused', async () => {
@@ -94,16 +97,14 @@ describe('BoardSettingsView: AI', () => {
     expect(document.body.textContent).toContain('AI is off: the agents below are paused')
   })
 
-  it('adds a skill, suggested ones first, as a by-hand agent when the stage already has one on entry', async () => {
+  it('adds a skill as a by-hand agent when the stage already has one on entry', async () => {
     const { wrapper } = await mountSettings(PATH)
     const doing = [...document.querySelectorAll('.stage-agents')][1]
     ;[...doing.querySelectorAll('button')].find(b => b.textContent?.includes('Add AI'))!.click()
     await flushPromises()
     const select = wrapper.findComponent(VSelect)
-    expect((select.props('items') as { title: string; props?: { subtitle: string } }[]).map(i => [i.title, i.props?.subtitle])).toEqual([
-      ['Suggested for boards', undefined], ['Design helper', 'writes a design brief'], ['PRD writer', 'writes a PRD'],
-      ['Your library', undefined], ['Release notes', 'writes notes'],
-    ])
+    // PRD writer and Design helper are on Doing already.
+    expect((select.props('items') as { title: string }[]).map(i => i.title)).toEqual(['Your library', 'Release notes'])
     // Design helper already runs when a card enters Doing.
     const runs = [...document.querySelectorAll<HTMLButtonElement>('.agent-add [role="radio"]')]
     expect(runs.map(r => [r.textContent?.trim(), r.disabled, r.getAttribute('aria-checked')])).toEqual([

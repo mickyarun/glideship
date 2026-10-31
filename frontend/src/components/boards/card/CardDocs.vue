@@ -15,11 +15,13 @@
  -->
 
 <!-- A card's Documents tab: pick the PRD, design brief or notes; read or
-     edit it; and its versions beside it, with the card's AI below them
-     (the ``aside`` slot). Picking an older version shows what changed
-     since, with Restore. An AI draft waiting for review shows in the
-     document's place until it's accepted or rejected. Switching document
-     or version over an unsaved edit asks first. -->
+     edit it; and beside it the card's AI (the ``aside`` slot, on top so it
+     shows without scrolling) and the versions. Picking an older version
+     shows what changed since, with Restore. An AI draft waiting for review
+     shows in the document's place until it's accepted (then Undo, for a
+     moment) or rejected; my edit of it survives the draft going elsewhere.
+     A document not written yet offers a by-hand agent that writes it.
+     Switching document or version over an unsaved edit asks first. -->
 <template>
   <div class="card-docs">
     <AppPillToggle
@@ -54,41 +56,53 @@
           :can-review="canReview" :max-length="maxLength"
           @result="(error, success) => emit('result', error, success)"
           @dirty="what => { draft = what; emit('dirty', what) }"
+          @edit="text => (keep.editText.value = text)"
+          @accepted="(version, previous) => (keep.accepted.value = { kind, version, previous })"
         />
         <template v-else>
           <!-- A draft that lands mid-edit waits: the edit is never swapped away. -->
           <AppCallout v-if="aiDraft" variant="info" role="status" class="mb-3">
             An AI draft of the {{ DOC_NAMES[kind] }} arrived. Save or cancel your edit to review it.
           </AppCallout>
+          <AppCallout v-if="kept" variant="info" role="status" class="mb-3">{{ kept.note }}</AppCallout>
+          <CardDocAccepted
+            v-if="accepted?.kind === kind && accepted.version === doc?.version"
+            class="mb-3" :kind="kind" :version="accepted.version" :can-undo="canEdit && accepted.previous !== null"
+            :undoing="keep.undoing.value" @undo="undo"
+          />
           <CardDocEditor
             :key="kind"
-            :kind="kind"
-            :doc="doc"
-            :card-key="cardKey"
-            :can-edit="canEdit"
-            :max-length="maxLength"
-            :confirm-discard="confirmDiscard"
+            :kind="kind" :doc="doc" :card-key="cardKey" :can-edit="canEdit" :max-length="maxLength"
+            :confirm-discard="confirmDiscard" :seed="kept?.text"
             @result="(error, success) => emit('result', error, success)"
-            @dirty="what => { draft = what; editorDirty = !!what; emit('dirty', what) }"
-          />
+            @dirty="editorChanged"
+          >
+            <template #empty="{ start }">
+              <CardDocEmpty :kind="kind" :can-edit="canEdit" :can-run="canRun" @write="start" />
+            </template>
+          </CardDocEditor>
         </template>
       </div>
-      <aside class="card-docs__aside" :aria-label="`${DOC_LABELS[kind]} versions`">
-        <CardDocVersions :kind="kind" :selected-id="compareId" :name-for="nameFor" @select="select" />
+      <aside class="card-docs__aside" :aria-label="`${DOC_LABELS[kind]} versions and AI`">
         <slot name="aside" />
+        <CardDocVersions :kind="kind" :selected-id="compareId" :name-for="nameFor" @select="select" />
       </aside>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
+import CardDocAccepted from '@/components/boards/ai/CardDocAccepted.vue'
 import CardDocDraft from '@/components/boards/ai/CardDocDraft.vue'
+import CardDocEmpty from '@/components/boards/ai/CardDocEmpty.vue'
 import CardDocCompare from '@/components/boards/card/CardDocCompare.vue'
 import CardDocEditor from '@/components/boards/card/CardDocEditor.vue'
 import CardDocVersions from '@/components/boards/card/CardDocVersions.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
+import { useDocCompare } from '@/composables/useDocCompare'
+import { useDraftKeep } from '@/composables/useDraftKeep'
 import { DOC_KINDS, DOC_LABELS, DOC_NAMES } from '@/constants/boards'
 import { useBoardCardAgentsStore } from '@/stores/boardCardAgents'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
@@ -99,6 +113,8 @@ const props = defineProps<{
   canEdit: boolean
   /** Editors accept or reject AI drafts. */
   canReview: boolean
+  /** Editors run the stage's by-hand agents. */
+  canRun: boolean
   maxLength: number | null
   nameFor: (id: string) => string
   /** Asks before an open draft is thrown away; resolves true to go ahead. */
@@ -110,19 +126,31 @@ const docs = useBoardCardDocsStore()
 const agents = useBoardCardAgentsStore()
 /** The document shown; the page sets it too (to the PRD, for a stage that needs one). */
 const kind = defineModel<CardDocKind>('kind', { default: DOC_KINDS[0] })
-const compareId = ref<string | null>(null)
 /** What the editor has unsaved, if anything. */
 const draft = ref<string | null>(null)
 /** The editor has unsaved text, so an AI draft arriving waits behind it. */
 const editorDirty = ref(false)
+const keep = useDraftKeep(kind, props.nameFor)
+const { kept, accepted } = keep
 const kindOptions = computed(() =>
   DOC_KINDS.map(k => ({ label: docs.drafts[k] ? `${DOC_LABELS[k]} · AI draft` : DOC_LABELS[k], value: k })),
 )
 
 const doc = computed(() => docs.current[kind.value])
 const aiDraft = computed(() => docs.drafts[kind.value])
-const history = computed(() => docs.history[kind.value])
-const comparing = computed(() => history.value?.items.find(v => v.id === compareId.value) ?? null)
+
+function editorChanged(what: string | null): void {
+  draft.value = what
+  // A kept edit's note has done its job once that edit is saved or cancelled.
+  if (editorDirty.value && !what) keep.settled()
+  editorDirty.value = !!what
+  emit('dirty', what)
+}
+
+async function undo(): Promise<void> {
+  const { error, success } = await keep.undo()
+  emit('result', error, success)
+}
 
 /** Go ahead only when there's no draft, or I agree to drop it. */
 async function leaveDraft(): Promise<boolean> {
@@ -133,26 +161,7 @@ async function pickKind(next: CardDocKind): Promise<void> {
   if (next !== kind.value && (await leaveDraft())) kind.value = next
 }
 
-async function select(id: string): Promise<void> {
-  const picked = history.value?.items.find(v => v.id === id)
-  // The current version has nothing to compare with; show the document.
-  const next = !picked || picked.version === doc.value?.version ? null : id
-  if (next !== compareId.value && (await leaveDraft())) compareId.value = next
-}
-
-/** Back to the document, with focus on the version that was open. */
-async function closeCompare(): Promise<void> {
-  const id = compareId.value
-  compareId.value = null
-  await nextTick()
-  document.querySelector<HTMLElement>(`[data-version-id="${id}"]`)?.focus()
-}
-
-// A new kind, or a new card opened under the tab: load that history.
-watch([kind, () => docs.card], ([k]) => {
-  compareId.value = null
-  if (!docs.history[k]?.loaded) void docs.loadVersions(k)
-}, { immediate: true })
+const { compareId, comparing, select, closeCompare } = useDocCompare(kind, leaveDraft)
 </script>
 
 <style scoped>

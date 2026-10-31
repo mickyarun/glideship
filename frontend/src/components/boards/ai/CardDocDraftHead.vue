@@ -15,7 +15,8 @@
  -->
 
 <!-- The top of an AI draft waiting for review: which agent wrote it and
-     when, the version it would become, a note when the document was saved
+     when, that accepting makes it the current version (the server numbers
+     it, so no number is promised here), a note when the document was saved
      after the draft was written (the comparison uses that newer version, so
      nothing in it is lost), and the review buttons for editors. -->
 <template>
@@ -26,7 +27,7 @@
         Draft from {{ skillName }} · {{ when }}
       </span>
       <span class="draft-head__meta">
-        <span role="status">AI draft of the {{ DOC_NAMES[kind] }}, waiting for review</span> · would become version {{ nextVersion }}
+        <span role="status">AI draft of the {{ DOC_NAMES[kind] }}, waiting for review.</span> Would become the current version
       </span>
       <span v-if="stale" class="draft-head__stale">
         Version {{ current?.version }} was saved after this draft was written. The changes below compare the draft with
@@ -65,7 +66,6 @@ const emit = defineEmits<{ accept: []; edit: []; reject: [] }>()
 
 const now = useNow()
 const when = computed(() => relativeTime(props.draft.created_at, now.value))
-const nextVersion = computed(() => (props.current?.version ?? 0) + 1)
 const stale = computed(() => !!props.current && Date.parse(props.current.created_at) > Date.parse(props.draft.created_at))
 </script>
 

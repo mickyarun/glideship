@@ -51,7 +51,8 @@
         <CardDocs
           v-if="tab === 'documents'"
           v-model:kind="docKind"
-          :card-key="detail.key" :can-edit="canEdit" :can-review="canReview" :max-length="limits?.doc_max ?? null"
+          :card-key="detail.key" :can-edit="canEdit" :can-review="canReview" :can-run="ai.canRun"
+          :max-length="limits?.doc_max ?? null"
           :name-for="nameFor" :confirm-discard="drafts.confirmDiscard"
           @result="actions.docResult" @dirty="what => drafts.report('document', what)"
         >

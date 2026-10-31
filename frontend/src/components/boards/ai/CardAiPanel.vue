@@ -16,8 +16,9 @@
 
 <!-- The card's AI, beside its sections: the agents switched on for its
      stage (what each writes and when it runs), the run going now or the
-     last one that failed or was canceled (with Retry), and a Run button
-     for each by-hand agent. Only editors run agents; everyone sees what's
+     last one that failed or was canceled (with Retry, which stands in for
+     that agent's Run button), and a Run button for each by-hand agent. In
+     a narrow column the callout's buttons sit under its words. Only editors run agents; everyone sees what's
      set up. With the board's AI off it says so and offers nothing to run.
      A server without stage agents shows no panel at all. -->
 <template>
@@ -43,7 +44,7 @@
         v-else-if="ended"
         :run="ended"
         :skill-name="agents.skillName(ended)"
-        :can-retry="canRun && !!agents.agentFor(ended)"
+        :can-retry="!!retryAgent"
         :busy="!!agents.starting || agents.waiting"
         @retry="retry"
       />
@@ -106,16 +107,20 @@ const ended = computed(() => {
 })
 const settingsLink = computed(() => sectionPath(props.boardKey, 'ai'))
 
-const runnable = (agent: StageAgentRead) => props.canRun && !!data.value?.ai_enabled && agent.trigger === 'manual'
+/** The agent Try again runs, while the last run failed and its agent is still here. */
+const retryAgent = computed(() => (props.canRun && ended.value ? agents.agentFor(ended.value) : null))
+
+const runnable = (agent: StageAgentRead) =>
+  props.canRun && !!data.value?.ai_enabled && agent.trigger === 'manual' && agent.id !== retryAgent.value?.id
 
 function retry(): void {
-  const agent = agents.agentFor(ended.value)
-  if (agent) void agents.run(agent)
+  if (retryAgent.value) void agents.run(retryAgent.value)
 }
 </script>
 
 <style scoped>
 .card-ai :deep(.app-panel__body) {
+  container: card-ai / inline-size;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -148,5 +153,15 @@ function retry(): void {
 }
 .card-ai__run {
   margin: 4px 0 0;
+}
+/* A narrow column (the Documents tab's side, a phone): buttons under the words. */
+@container card-ai (max-width: 420px) {
+  .card-ai :deep(.app-callout) {
+    grid-template-columns: auto 1fr;
+  }
+  .card-ai :deep(.app-callout__actions) {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
 }
 </style>

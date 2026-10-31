@@ -89,6 +89,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   result: [error: string | null, success: string]
   dirty: [what: string | null]
+  /** My unsaved edit of the draft, so it outlives the draft going elsewhere. */
+  edit: [text: string | null]
+  /** Accepted as ``version``, on top of ``previous`` (null when it's the first). */
+  accepted: [version: number, previous: number | null]
 }>()
 
 const review = useDraftReview()
@@ -119,9 +123,10 @@ async function accept(body?: string): Promise<void> {
     note.value = result.error ?? ''
     return
   }
-  const version = result.error ? '' : ` as version ${(base ?? 0) + 1}`
+  const version = result.version === null ? '' : ` as version ${result.version}`
   emit('result', result.error, `Accepted the ${DOC_NAMES[props.kind]} draft${version}`)
   if (!result.error) editing.value = false
+  if (result.version !== null) emit('accepted', result.version, base)
   await review.settle()
 }
 
@@ -143,7 +148,11 @@ watch(() => props.draft.id, () => {
   note.value = ''
 })
 watch(dirty, isDirty => emit('dirty', isDirty ? `the ${DOC_NAMES[props.kind]} draft` : null), { immediate: true })
-onBeforeUnmount(() => emit('dirty', null))
+watch([dirty, text], ([isDirty, body]) => emit('edit', isDirty ? body : null))
+onBeforeUnmount(() => {
+  emit('dirty', null)
+  emit('edit', null)
+})
 </script>
 
 <style scoped>

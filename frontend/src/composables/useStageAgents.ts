@@ -21,6 +21,9 @@
 // positions, so two agents never share one; the UI offers "when a card
 // enters" to one agent per stage, and the server refuses a second (422)
 // in words the section shows. Another admin's change reloads that stage.
+// Nothing is saved over a stage whose list never loaded (that would wipe
+// agents the page never saw), and a reply older than the stage's latest
+// (a slow GET behind a newer PUT) is dropped.
 
 import { computed, ref, watch } from 'vue'
 import type { BoardPage } from '@/composables/useBoardPage'
@@ -36,7 +39,14 @@ interface StageList {
   items: StageAgentRead[]
   loading: boolean
   error: string
+  /** The list came back (from a GET or a save) at least once, and its last GET didn't fail. */
+  loaded: boolean
 }
+
+const NOT_LOADED = "This stage's AI didn't load, so nothing was saved. Load it again and retry."
+
+/** A refusal in the page's own words, shaped like a server reply so the section shows it. */
+const refusal = (detail: string) => Object.assign(new Error(detail), { response: { data: { detail } } })
 
 /** What a change sets on an agent (``id`` when it's already on the stage); its order is its position in the list. */
 export type AgentEdit = Pick<StageAgentRead, 'skill_id' | 'trigger' | 'enabled'> & { id?: string }
@@ -52,6 +62,9 @@ export function useStageAgents(page: BoardPage, status: BoardSettingsStatus, all
   const skillsError = ref('')
   const skillsLoading = ref(false)
   const key = computed(() => page.board.detail.value?.board.key ?? '')
+  /** Each stage's latest request; an older reply is dropped. */
+  const latest: Record<string, number> = {}
+  const next = (stageId: string) => (latest[stageId] = (latest[stageId] ?? 0) + 1)
   const stages = computed(() => page.board.detail.value?.stages ?? [])
 
   /** Suggested skills first, then the rest of the library by name. */
@@ -62,17 +75,23 @@ export function useStageAgents(page: BoardPage, status: BoardSettingsStatus, all
   async function loadStage(stageId: string): Promise<void> {
     const k = key.value
     if (!k || !allowed()) return
-    lists.value[stageId] = { items: lists.value[stageId]?.items ?? [], loading: true, error: '' }
+    const mine = next(stageId)
+    const held = lists.value[stageId]
+    lists.value[stageId] = { items: held?.items ?? [], loading: true, error: '', loaded: held?.loaded ?? false }
+    const current = () => k === key.value && mine === latest[stageId]
     try {
       const items = await boardSettingsApi.stageAgents(k, stageId)
-      if (k === key.value) lists.value[stageId] = { items, loading: false, error: '' }
+      if (current()) lists.value[stageId] = { items, loading: false, error: '', loaded: true }
     } catch (err) {
       logFailure('boards', 'stage agents fetch', err)
-      if (k === key.value) {
-        lists.value[stageId] = { items: [], loading: false, error: extractApiError(err, "Couldn't load this stage's AI.") }
+      if (current()) {
+        lists.value[stageId] = { items: [], loading: false, error: extractApiError(err, "Couldn't load this stage's AI."), loaded: false }
       }
     }
   }
+
+  /** The stage's list is in hand, so a change can build on it. */
+  const ready = (stageId: string) => !!lists.value[stageId]?.loaded && !lists.value[stageId]?.error
 
   async function loadSkills(): Promise<void> {
     const k = key.value
@@ -93,13 +112,17 @@ export function useStageAgents(page: BoardPage, status: BoardSettingsStatus, all
    * Save a stage's whole list, built by ``edit`` from the list as it stands
    * when this change's turn comes (after any change still on its way), so
    * quick changes build on each other; the reply replaces what's shown.
+   * A stage whose list isn't loaded is never saved.
    */
   function save(stageId: string, edit: (items: StageAgentRead[]) => AgentEdit[], done: string): Promise<boolean> {
+    if (!ready(stageId)) return Promise.resolve(false)
     return status.run(
       async k => {
-        const next = edit(lists.value[stageId]?.items ?? [])
-        const items = await boardSettingsApi.putStageAgents(k, stageId, next.map(toWrite))
-        lists.value[stageId] = { items, loading: false, error: '' }
+        if (!ready(stageId)) throw refusal(NOT_LOADED)
+        const body = edit(lists.value[stageId].items).map(toWrite)
+        const mine = next(stageId)
+        const items = await boardSettingsApi.putStageAgents(k, stageId, body)
+        if (mine === latest[stageId]) lists.value[stageId] = { items, loading: false, error: '', loaded: true }
       },
       done,
       { refresh: false, fallback: "Couldn't save the stage's AI. Try again." },
@@ -134,7 +157,7 @@ export function useStageAgents(page: BoardPage, status: BoardSettingsStatus, all
     if (can) stages.value.forEach(s => void loadStage(s.id))
   })
 
-  return { lists, skills: sortedSkills, skillsError, skillsLoading, loadSkills, loadStage, save, setEnabled }
+  return { lists, skills: sortedSkills, skillsError, skillsLoading, ready, loadSkills, loadStage, save, setEnabled }
 }
 
 export type StageAgents = ReturnType<typeof useStageAgents>

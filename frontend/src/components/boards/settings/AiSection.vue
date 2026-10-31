@@ -17,7 +17,8 @@
 <!-- AI: the board's switch, then each stage's agents. Agents write drafts
      a person accepts; they never move cards or hand them over, and with
      the switch off every one of them is paused. Admins change it all here,
-     each change saved as it's made; anyone else sees only the switch. -->
+     each change saved as it's made; anyone else sees only the switch. When
+     a stage has no AI, one line at the top suggests the board skills. -->
 <template>
   <AppPanel title="AI on this board" :note="AI_SWITCH_NOTE">
     <template #action>
@@ -37,7 +38,11 @@
       AI is off: the agents below are paused and no new runs start. Drafts already waiting stay on their cards.
     </AppCallout>
     <template v-if="!disabled">
-      <StageAgentList v-for="stage in stages" :key="stage.id" :stage="stage" :agents="agents" :disabled="disabled" />
+      <p v-if="suggestion" class="ai-section__hint">{{ suggestion }}</p>
+      <StageAgentList
+        v-for="stage in stages" :key="stage.id" :stage="stage" :agents="agents" :disabled="disabled"
+        :board-off="!board.ai_enabled"
+      />
     </template>
     <p v-else class="ai-section__readonly">The board's admins choose which agents run on each stage.</p>
   </AppPanel>
@@ -53,6 +58,7 @@ import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
 import { useStageAgents } from '@/composables/useStageAgents'
 import { AI_SWITCH_NOTE } from '@/constants/boardAgents'
 import type { BoardRead } from '@/types/boards'
+import { wordList } from '@/utils/format'
 
 const props = defineProps<{ board: BoardRead; status: BoardSettingsStatus; disabled: boolean }>()
 
@@ -60,6 +66,12 @@ const page = useBoardContext()
 // Only admins may read a stage's agents, so nobody else loads them.
 const agents = useStageAgents(page, props.status, () => !props.disabled)
 const stages = computed(() => [...(page.board.detail.value?.stages ?? [])].sort((a, b) => a.position - b.position))
+/** Once, above the stages: the board skills to try, while a loaded stage has no AI. */
+const suggestion = computed(() => {
+  const suggested = agents.skills.value.filter(s => s.suggested).map(s => s.name)
+  const empty = stages.value.some(s => agents.ready(s.id) && !agents.lists.value[s.id].items.length)
+  return empty && suggested.length ? `Try ${wordList(suggested, 'or')} on a stage: they draft documents from the card.` : ''
+})
 
 onMounted(() => {
   if (!props.disabled) void agents.loadSkills()
@@ -69,6 +81,11 @@ onMounted(() => {
 <style scoped>
 .ai-section__paused {
   margin-bottom: 8px;
+}
+.ai-section__hint {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .ai-section__readonly {
   margin: 0;

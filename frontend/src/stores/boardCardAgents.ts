@@ -32,6 +32,7 @@ import { ACTIVE_RUN_STATUSES } from '@/constants/boardAgents'
 import { boardCardApi } from '@/services/boardCardApi'
 import { useBoardAgentRunsStore } from '@/stores/boardAgentRuns'
 import type { AgentRunRead, CardAgents, StageAgentRead } from '@/types/boards'
+import { isBehind } from '@/utils/agentRunOrder'
 import { agentFailure, waitWords, type AgentFailure } from '@/utils/boardAgentErrors'
 import { extractApiError } from '@/utils/errors'
 import { logFailure } from '@/utils/logFailure'
@@ -104,10 +105,15 @@ export const useBoardCardAgentsStore = defineStore('boardCardAgents', () => {
     clear()
   }
 
-  /** A run changed (here or live): it heads the list, and is the active one while it's going. */
+  /**
+   * A run changed (here or live): it heads the list, and is the active one
+   * while it's going. A late update less far along than what's held is dropped.
+   */
   function applyRun(run: AgentRunRead): void {
     const held = data.value
     if (!held || run.card_id !== card.value?.id) return
+    const known = held.active?.id === run.id ? held.active : held.runs.find(r => r.id === run.id)
+    if (known && isBehind(run, known)) return
     const going = ACTIVE_RUN_STATUSES.has(run.status)
     const stillActive = held.active && held.active.id !== run.id ? held.active : null
     data.value = {

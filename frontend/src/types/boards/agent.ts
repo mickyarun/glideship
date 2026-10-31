@@ -23,6 +23,17 @@ import type { CardDocKind } from '@/types/boards/doc'
 export type AgentTrigger = 'on_enter' | 'manual'
 export type AgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled'
 
+/** Why a run ended without a draft. Older servers send none (only ``error_message``). */
+export type AgentRunErrorCode =
+  | 'AI_NOT_CONFIGURED'
+  | 'PROVIDER_FAILED'
+  | 'TIMEOUT'
+  | 'QUEUE_FULL'
+  | 'SKILL_GONE'
+  | 'STALE'
+  | 'INTERRUPTED'
+  | 'CANCELED'
+
 /**
  * One agent for a stage, as the admin's list sends it (lowest ``order`` runs
  * first). ``id`` keeps one of the stage's agents; without it one is added.
@@ -70,7 +81,9 @@ export interface AgentRunRead {
   job_id: string | null
   attempt: number
   result_summary: Record<string, unknown> | null
+  /** The raw reason, for logs only: people read the words for ``error_code``. */
   error_message: string | null
+  error_code?: AgentRunErrorCode | null
   triggered_by: string | null
   started_at: string | null
   finished_at: string | null

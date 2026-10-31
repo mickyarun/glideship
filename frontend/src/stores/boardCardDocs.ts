@@ -13,13 +13,12 @@
 // limitations under the License.
 
 /**
- * The open card's documents (PRD, design brief, notes): each one's
- * current version, the AI draft waiting for review (the newest per kind),
- * its version history a page at a time, and old versions' text for comparing. Saving writes a new version on top of
- * the one the edit started from; if someone saved in between, the server
- * refuses (409), and the documents reload so the person can redo it on
- * the newer text. Replies for a card no longer open are dropped. The store
- * empties when the card page closes, access is lost, or I sign out.
+ * The open card's documents (PRD, design brief, notes): each one's current
+ * version, the AI draft waiting for review (the newest per kind), its
+ * history a page at a time, old versions' text, and the last change made
+ * elsewhere. Saving writes a new version on top of the one the edit started
+ * from; a 409 (someone saved in between) reloads the documents. Replies for
+ * a card no longer open are dropped; it empties when the page closes or I sign out.
  */
 import { isAxiosError } from 'axios'
 import { defineStore } from 'pinia'
@@ -28,7 +27,7 @@ import { ref, watch } from 'vue'
 import type { CardRef } from '@/composables/useCardChecklist'
 import { boardCardApi } from '@/services/boardCardApi'
 import { useAuthStore } from '@/stores/auth'
-import type { CardDocKind, DocRead, DocVersionRead } from '@/types/boards'
+import type { CardDocKind, CardDocState, DocRead, DocVersionRead } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
 
 interface History {
@@ -39,6 +38,12 @@ interface History {
 }
 
 const emptyHistory = (): History => ({ items: [], next: null, loading: false, loaded: false })
+
+/** A change made elsewhere, as the board's channel told it: what it made, and who. */
+export interface DocChange {
+  state: CardDocState
+  actor: string | null
+}
 
 /** A save's outcome: the error to show, and whether someone saved a newer version first. */
 export interface WriteResult {
@@ -51,6 +56,8 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
   const current = ref<Partial<Record<CardDocKind, DocRead>>>({})
   const drafts = ref<Partial<Record<CardDocKind, DocRead>>>({})
   const history = ref<Partial<Record<CardDocKind, History>>>({})
+  /** The last change to each document made elsewhere (to say what became of a draft). */
+  const changes = ref<Partial<Record<CardDocKind, DocChange>>>({})
   const loading = ref(false)
   const error = ref('')
   const texts = new Map<string, string>()
@@ -81,17 +88,23 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
     }
   }
 
+  /** Nothing held for any card. */
+  function clear(): void {
+    current.value = {}
+    drafts.value = {}
+    history.value = {}
+    changes.value = {}
+    error.value = ''
+    texts.clear()
+  }
+
   /** Forget the open card's documents. */
   function reset(): void {
     seq++
     loaded = false
     card.value = null
-    current.value = {}
-    drafts.value = {}
-    history.value = {}
     loading.value = false
-    error.value = ''
-    texts.clear()
+    clear()
   }
   watch(() => useAuthStore().token, token => {
     if (!token) reset()
@@ -102,11 +115,7 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
     seq++
     loaded = false
     card.value = next
-    current.value = {}
-    drafts.value = {}
-    history.value = {}
-    error.value = ''
-    texts.clear()
+    clear()
     return loadDocs()
   }
 
@@ -146,8 +155,9 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
     }
   }
 
-  /** A document got a new version (here or elsewhere): reload what's shown of it. */
-  async function refresh(kind: CardDocKind): Promise<void> {
+  /** A document got a new version (here, or elsewhere as ``change``): reload what's shown of it. */
+  async function refresh(kind: CardDocKind, change?: DocChange): Promise<void> {
+    if (change) changes.value = { ...changes.value, [kind]: change }
     await loadDocs()
     if (history.value[kind]?.loaded) await loadVersions(kind)
   }
@@ -191,7 +201,7 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
   }
 
   return {
-    card, current, drafts, history, loading, error,
+    card, current, drafts, history, changes, loading, error,
     open, reset, loadDocs, loadVersions, versionText, refresh, write, save, restore,
   }
 })

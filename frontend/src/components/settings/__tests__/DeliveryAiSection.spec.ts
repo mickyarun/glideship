@@ -49,13 +49,14 @@ describe('DeliveryAiSection', () => {
   })
   afterEach(() => document.body.replaceChildren())
 
-  it('reads the switch and explains it', async () => {
+  it('reads the switch and explains it, and that it saves as it flips', async () => {
     api.get.mockResolvedValue({ ai_enabled: true })
     await mountSection(['buds:view', 'org:edit_settings'])
     expect(api.get).toHaveBeenCalledTimes(1)
     expect(toggle().checked).toBe(true)
     expect(toggle().disabled).toBe(false)
     expect(text()).toContain("When off, BUD stage agents don't start; per-BUD agent choices stay as they are.")
+    expect(text()).toContain('Saves as you flip it.')
   })
 
   it('switches AI off at once and says no BUD stage agent starts', async () => {
@@ -84,6 +85,7 @@ describe('DeliveryAiSection', () => {
     await mountSection(['buds:view'])
     expect(toggle().disabled).toBe(true)
     expect(text()).toContain('Only people who can change organization settings can switch this.')
+    expect(text()).not.toContain('Saves as you flip it.')
     toggle().click()
     await flushPromises()
     expect(api.update).not.toHaveBeenCalled()

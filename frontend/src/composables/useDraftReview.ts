@@ -32,6 +32,8 @@ export interface ReviewResult {
   error: string | null
   /** Someone saved a newer version while I reviewed. */
   conflict: boolean
+  /** The document's current version once the draft was accepted, as the server numbered it. */
+  version: number | null
 }
 
 export function useDraftReview() {
@@ -48,9 +50,9 @@ export function useDraftReview() {
     )
     busy.value = null
     if (result.conflict) {
-      return { error: `Someone saved a newer ${DOC_NAMES[draft.kind]} while you reviewed. The changes now compare with it; check them and accept again.`, conflict: true }
+      return { error: `Someone saved a newer ${DOC_NAMES[draft.kind]} while you reviewed. The changes now compare with it; check them and accept again.`, conflict: true, version: null }
     }
-    return result
+    return { ...result, version: result.error ? null : docs.current[draft.kind]?.version ?? null }
   }
 
   async function reject(draft: DocRead): Promise<string | null> {
