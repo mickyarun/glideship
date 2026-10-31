@@ -1395,6 +1395,86 @@ wrapped in the same swallow-and-log pattern as its other steps. It does three th
 
 No XP and no SP are involved.
 
+### As built (backend): handing over, create and link
+
+Return, re-handover, the delivered hook, BUD chips and the Origin panel are still to come.
+
+- **Shared BUD services first** (refactor commit, no behaviour change):
+  `services/bud_create.create_bud` (POST `/buds` calls it; takes a precomputed `embedding` and
+  `start_stage=False`), `bud_create.start_intake` (assign + PM agent for `bud`),
+  `services/bud_stage_jobs.run_stage_jobs` (the agent part of `_trigger_status_jobs`; the
+  UAT/Prod re-estimate stays in the handler), `services/bud_status_change.apply_status_change`,
+  `services/bud_stage_overrides`, `services/bud_discard.discard_bud` (what `PATCH {status:
+  discarded}` does; `DELETE /buds/{id}` is a hard delete and was left alone), and
+  `BUDRepository.find_nearest_active(vec, limit, *, max_distance)` (open = not closed or
+  discarded, nearest first).
+- **Data.** `board_card_handovers` (migration `e662f2fa580b`): `status`
+  (`board_handover_status`: `active`, `returned`), `linked_existing`, `target_status` (null for a
+  link), `handed_over_by/at`, `returned_by/at`, `return_reason`, `idempotency_key`. Unique
+  `(card_id, bud_id)`, unique `(card_id, idempotency_key)` (per card, not per org), and a partial
+  unique index on `bud_id WHERE status = 'active'`. New `BUDTimelineEventType` values
+  `handed_over_from_board`, `returned_to_board`.
+- **Access.** New `BoardAction.HAND_OVER` (editor). Preview and confirm also need
+  `workspace:engineering` and `buds:create`, plus `buds:edit` for a link, re-checked in the
+  service: 403 `{code: HANDOVER_NEEDS_PERMISSION, permission}`. Viewer 403, members-only 404, as
+  every board route. The board must have `handover_enabled` (409 `HANDOVER_DISABLED`), the card
+  must not be archived (409). Delivery has no cards (`BUD` is a reserved key, so
+  `/boards/BUD/...` is 404).
+- **Routes** under `/api/v1/boards/{key}/cards/{number}/handovers`:
+  - `GET` (viewer): `HandoverList {items: HandoverRead[], can_hand_over}`, oldest first.
+    `can_hand_over` is the create-mode check (role, board switch, card open, permissions).
+  - `POST /preview` (writes nothing): body `HandoverRequest {mode: "create"|"link" = create,
+    target_status?: "bud"|"design"|"tech_arch" (default: the board's), bud_id? (link only)}` →
+    `HandoverPreview {mode, target_status, title, requirements_md, figma_url, priority,
+    impacted_repos: [{repo_id, repo_name}], similar: [{bud_id, key, title, status, distance}],
+    warnings: [{code, message}]}`. Warning codes: `SIMILAR_BUDS`, `ALREADY_HANDED_OVER`,
+    `NO_REQUIREMENTS`, `CHECKLIST_OPEN` (the first handover would complete a card with open
+    items). A link preview shows the BUD as it is and no similar list.
+  - `POST` (confirm, 201): body `HandoverConfirm` = the request plus `idempotency_key` (UUID),
+    `overrides? {title?, requirements_md?, impacted_repo_ids?}`, `confirm_open_checklist`,
+    `auto_generate_phases` (as on BUD create; default all off) → `HandoverResult {handover:
+    HandoverRead, card: CardDetail}`. `HandoverRead {id, card_id, status, linked_existing,
+    target_status, bud_id, bud_key, bud_title, bud_status, handed_over_by, handed_over_at,
+    returned_at, return_reason}`. The same key on that card returns the first result (201),
+    concurrent double clicks included: the confirm locks the card first.
+- **Content.** Title = card title; `requirements_md` = current PRD, else description, then
+  `## From the board` (checklist as a task list with group names, attachments as links, files
+  named with a link to the card, the design brief, "Handed over from [SEO-14](<frontend_url>/
+  boards/SEO/cards/14)"). `figma_url` = the first link attachment that is a Figma URL.
+  Priority = card's, else P2. `impacted_repos` = the card's repo if active, else every active
+  repo the board links. Similar = `find_nearest_active` below `jira_dedup.THRESHOLD_REVIEW`,
+  at most `BOARDS_HANDOVER_SIMILAR_LIMIT` (5).
+- **Embedding reuse.** The preview's vector is cached in-process (`cachetools.TTLCache`,
+  `BOARDS_HANDOVER_EMBEDDING_CACHE_SIZE` 256, `..._SECONDS` 900) keyed by org and a hash of the
+  exact text the BUD is embedded from; a confirm with unchanged title and requirements reuses
+  it, an edited one is embedded again.
+- **Refusals.** 422 `HANDOVER_NEEDS_REQUIREMENTS` for `tech_arch` with no PRD or description
+  (preview and confirm); link: 404 unknown BUD, 409 `BUD_NOT_OPEN` (closed or discarded), 409
+  `BUD_ALREADY_LINKED` (this card holds it), 409 `BUD_HAS_OTHER_ORIGIN` (another card's live
+  origin). First handover into the handover stage: 422 `STAGE_REQUIREMENTS_MISSING` / 409
+  `CHECKLIST_OPEN` as any move (`EntryCause.HANDOVER`); resend with
+  `confirm_open_checklist: true`. 422 when an `impacted_repo_ids` entry isn't an active repo.
+- **One transaction.** Lock the card's stage and the handover stage, then the card; replay by
+  key; on the card's first handover (no rows yet, returned ones count) move it to the bottom of
+  `handover_stage_id`. Create: `create_bud` at `bud` (`created` source `board`, no stage
+  started), `impacted_repos` set, a first `bud_versions` row (`source=ui`,
+  `edited_by` = the handing-over user, reason "Handed over from SEO-14"),
+  `handed_over_from_board {board_id, card_id, card_key, target_status}`, then
+  `handover_landing.land`: per skipped stage `transition_feature_for_bud` and a `status_change
+  {from, to, via: "handover"}` with the handing-over user as actor. Link: lock the BUD,
+  `handed_over_from_board {..., linked: true}` and nothing else. Then the handover row and a
+  `handed_over` card event `{bud_id, bud_key, mode, bud_status}` (with from/to stage when it
+  moved).
+- **After commit.** Create only: assignment and the agent for the target stage
+  (`start_target_stage`: `start_intake` at `bud`, else `auto_assign_for_phase` +
+  `run_stage_jobs`); skipped stages' agents never run. Then the owner (the BUD's assignee, not
+  the actor) gets an in-app `board_handover` row (link `/buds/<number>`) and a DM through
+  `board_handovers`: "SEO-14 was handed over as *BUD-001* Title." The card key is named to
+  any owner, as the BUD's own "From the board" link and `handed_over_from_board` event already
+  name it. Failures here are logged, not raised; the handover stays saved.
+- **Live events** on `board:<id>`: `stage_reordered` (if respaced), `card_moved {card,
+  from_stage_id}` (first handover only), then `card_handed_over {card_id, handover}`.
+
 ## AI on board stages
 
 ### What it does

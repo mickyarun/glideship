@@ -108,6 +108,13 @@ class BoardCardEventType(StrEnum):
     AI_RUN = "ai_run"
 
 
+class BoardHandoverStatus(StrEnum):
+    """Whether a card's handover to a BUD stands, or the BUD was sent back."""
+
+    ACTIVE = "active"
+    RETURNED = "returned"
+
+
 class BoardAttachmentKind(StrEnum):
     """A stored file, or a link to somewhere else."""
 

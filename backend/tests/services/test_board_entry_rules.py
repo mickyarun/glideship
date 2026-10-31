@@ -68,7 +68,12 @@ def test_every_required_field_has_one_test_and_one_label() -> None:
 def test_every_cause_says_which_rules_it_applies() -> None:
     assert set(ENTRY_RULES) == set(EntryCause)
     chosen = {cause for cause, rules in ENTRY_RULES.items() if rules.required_fields}
-    assert chosen == {EntryCause.MOVE, EntryCause.MOVE_BOARD, EntryCause.CREATE}
+    assert chosen == {
+        EntryCause.MOVE,
+        EntryCause.MOVE_BOARD,
+        EntryCause.CREATE,
+        EntryCause.HANDOVER,
+    }
     assert all(r.required_fields == r.open_checklist for r in ENTRY_RULES.values())
 
 
@@ -89,7 +94,9 @@ async def test_placing_causes_skip_both_rules_without_reading_the_card(cause: En
     assert loader.calls == 0
 
 
-@pytest.mark.parametrize("cause", [EntryCause.MOVE, EntryCause.MOVE_BOARD, EntryCause.CREATE])
+@pytest.mark.parametrize(
+    "cause", [EntryCause.MOVE, EntryCause.MOVE_BOARD, EntryCause.CREATE, EntryCause.HANDOVER]
+)
 async def test_choosing_causes_apply_the_required_fields(cause: EntryCause) -> None:
     stage = _stage(DOING, StageRequiredField.DUE_DATE)
     with pytest.raises(StageRequirementsMissingError) as raised:

@@ -48,6 +48,11 @@ _FIGMA_URL_RE = re.compile(
 )
 
 
+def is_figma_url(value: str) -> bool:
+    """Whether ``value`` is a Figma file, design or prototype URL a BUD accepts."""
+    return _FIGMA_URL_RE.match(value) is not None
+
+
 def _validate_optional_figma_url(value: str | None) -> str | None:
     """Pydantic validator hook — ``None`` / ``""`` pass through, malformed raises.
 

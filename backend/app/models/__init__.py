@@ -43,6 +43,7 @@ from app.models.board_enums import (
     BoardCardDocKind,
     BoardCardDocState,
     BoardCardEventType,
+    BoardHandoverStatus,
     BoardLabelColor,
     BoardMemberRole,
     BoardStageCategory,
@@ -50,6 +51,7 @@ from app.models.board_enums import (
     BoardVisibility,
     StageRequiredField,
 )
+from app.models.board_handover import BoardCardHandover
 from app.models.board_member import BoardMember, BoardTeam, BoardUserPrefs
 from app.models.board_repo import BoardRepo
 from app.models.bud import (
@@ -192,8 +194,10 @@ __all__ = [
     "BoardCardDocState",
     "BoardCardEvent",
     "BoardCardEventType",
+    "BoardCardHandover",
     "BoardCardKeyAlias",
     "BoardCardLabel",
+    "BoardHandoverStatus",
     "BoardLabel",
     "BoardLabelColor",
     "BoardMember",

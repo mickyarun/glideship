@@ -90,6 +90,8 @@ class BoardAction(StrEnum):
     EDIT_CARD = "edit_card"
     MOVE_CARD = "move_card"
     ARCHIVE_CARD = "archive_card"
+    # Also needs ``workspace:engineering`` and ``buds:create`` (``buds:edit`` to link).
+    HAND_OVER = "hand_over"
     REVIEW_DRAFT = "review_draft"
     RUN_AGENT = "run_agent"
     EDIT_SETTINGS = "edit_settings"
@@ -109,6 +111,7 @@ _EDITOR_ACTIONS: Final = (
     BoardAction.EDIT_CARD,
     BoardAction.MOVE_CARD,
     BoardAction.ARCHIVE_CARD,
+    BoardAction.HAND_OVER,
     BoardAction.REVIEW_DRAFT,
     BoardAction.RUN_AGENT,
 )

@@ -56,6 +56,8 @@ class BoardSocketEvent(StrEnum):
     # by-key lookup where it went. The target board hears ``card_created``.
     CARD_LEFT_BOARD = "card_left_board"
     CARD_ACTIVITY = "card_activity"
+    # A card was handed over to dev: ``card_id`` and the ``handover`` read.
+    CARD_HANDED_OVER = "card_handed_over"
     DOC_UPDATED = "doc_updated"
     STAGE_CHANGED = "stage_changed"
     STAGE_REORDERED = "stage_reordered"

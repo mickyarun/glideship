@@ -42,6 +42,7 @@ BOARD_API_MODULES = (
     "comments",
     "docs",
     "finder",
+    "handovers",
     "imports",
     "labels",
     "members",

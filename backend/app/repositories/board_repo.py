@@ -100,6 +100,21 @@ class BoardRepoRepository:
         )
         return (await self._db.execute(stmt)).scalar_one_or_none()
 
+    async def active_among(self, repo_ids: list[uuid.UUID]) -> list[TrackedRepository]:
+        """The org's active repositories among ``repo_ids``, by name."""
+        if not repo_ids:
+            return []
+        stmt = (
+            select(TrackedRepository)
+            .where(
+                TrackedRepository.org_id == self._org_id,
+                TrackedRepository.id.in_(repo_ids),
+                TrackedRepository.status == RepoStatus.ACTIVE,
+            )
+            .order_by(func.lower(TrackedRepository.name), TrackedRepository.id)
+        )
+        return list((await self._db.execute(stmt)).scalars().all())
+
     async def link(self, board_id: uuid.UUID, repo_id: uuid.UUID) -> bool:
         """Link the repository; False when the board already links it."""
         stmt = (

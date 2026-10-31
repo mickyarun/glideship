@@ -24,6 +24,7 @@ from app.api.v1.boards import (
     comments,
     docs,
     finder,
+    handovers,
     imports,
     labels,
     members,
@@ -54,5 +55,6 @@ for part in (
     comments,
     attachments,
     docs,
+    handovers,
 ):
     router.include_router(part.router, prefix=PREFIX)

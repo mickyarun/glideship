@@ -105,6 +105,15 @@ class BoardsConfig(BoardImportSettings):
     move_board_window_seconds: int = Field(
         default=60, gt=0, description="The window move_board_limit counts over."
     )
+    handover_similar_limit: int = Field(
+        default=5, gt=0, description="Similar open BUDs a handover preview lists."
+    )
+    handover_embedding_cache_size: int = Field(
+        default=256, gt=0, description="Preview embeddings kept for the confirm that follows."
+    )
+    handover_embedding_cache_seconds: int = Field(
+        default=900, gt=0, description="How long a preview's embedding is kept for its confirm."
+    )
 
     @model_validator(mode="after")
     def _epsilon_below_gap(self) -> "BoardsConfig":

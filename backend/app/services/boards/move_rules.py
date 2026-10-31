@@ -16,9 +16,11 @@
 
 Every path that puts a card in a stage calls :func:`enter_stage` with why
 (:class:`EntryCause`), and ``ENTRY_RULES`` says which rules that cause
-applies. Someone moving a card (on its board or to another) or creating
-one in a stage meets both rules; restoring an archived card, moving a deleted stage's cards on and
-importing place cards without anyone choosing the stage, so they skip them.
+applies. Someone moving a card (on its board or to another), creating one
+in a stage, or handing it over (which moves it to the handover stage) meets
+both rules; restoring an archived card, moving a deleted stage's cards on
+and importing place cards without anyone choosing the stage, so they skip
+them.
 """
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -80,6 +82,7 @@ class EntryCause(StrEnum):
     RESTORE = "restore"
     STAGE_DELETE = "stage_delete"
     IMPORT = "import"
+    HANDOVER = "handover"
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,8 @@ ENTRY_RULES: Final[Mapping[EntryCause, EntryRules]] = MappingProxyType(
         EntryCause.RESTORE: _PLACED,
         EntryCause.STAGE_DELETE: _PLACED,
         EntryCause.IMPORT: _PLACED,
+        # A card's first handover moves it to the handover stage like any move.
+        EntryCause.HANDOVER: _CHOSEN,
     }
 )
 
