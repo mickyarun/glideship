@@ -84,6 +84,7 @@
           @archive="act.archive"
           @restore="act.restore"
           @copied="feedback.announce('Link copied')"
+          @failed="feedback.fail"
           @load="more => cards.loadStage(stage.id, { more })"
         />
       </div>

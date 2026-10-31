@@ -50,6 +50,7 @@
           @archive="emit('archive', $event)"
           @restore="emit('restore', $event)"
           @copied="emit('copied', $event)"
+          @failed="emit('failed', $event)"
         />
       </VueDraggable>
 
@@ -124,6 +125,7 @@ const emit = defineEmits<{
   archive: [card: CardSummary]
   restore: [card: CardSummary]
   copied: [card: CardSummary]
+  failed: [error: string]
   load: [more: boolean]
 }>()
 

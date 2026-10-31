@@ -89,7 +89,8 @@ export function dragOptions(boardId: string, enabled: boolean) {
     delay: DRAG_TOUCH_DELAY_MS,
     delayOnTouchOnly: true,
     draggable: '[data-card-id]',
-    filter: '.card-tile__menu',
+    // The ⋯ menu and the quick-edit buttons (due date, assignees) click; they never drag.
+    filter: '.card-tile__menu, .card-tile__quick',
     preventOnFilter: false,
     ghostClass: 'card-tile--ghost',
   }

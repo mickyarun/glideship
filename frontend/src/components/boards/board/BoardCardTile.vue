@@ -15,25 +15,27 @@
  -->
 
 <!-- One card on a team board. The title link stretches over the card, so
-     the ⋯ menu sits above it and stays separately clickable without
-     nesting interactive elements. Same rhythm as the BUD board card. -->
+     the ⋯ menu, the due date and the assignees sit above it and stay
+     separately clickable without nesting interactive elements (editors
+     change the last two right here). Same rhythm as the BUD board card. -->
 <template>
   <article class="card-tile" :class="{ 'card-tile--archived': card.archived_at }" :data-card-id="card.id">
     <div class="card-tile__top">
       <span class="card-tile__key">{{ card.key }}</span>
       <BudPriorityChip v-if="card.priority" :priority="card.priority" />
-      <BoardCardMenu
-        class="card-tile__menu"
-        :card="card"
-        :stages="stages"
-        :board-key="boardKey"
-        :can-move="canMove"
-        :can-archive="canArchive"
-        @move="(stageId) => emit('move', card, stageId)"
-        @archive="emit('archive', card)"
-        @restore="emit('restore', card)"
-        @copied="emit('copied', card)"
-      />
+      <span class="card-tile__menu">
+        <BoardCardMenu
+          :card="card"
+          :stages="stages"
+          :board-key="boardKey"
+          :can-move="canMove"
+          :can-archive="canArchive"
+          @move="(stageId) => emit('move', card, stageId)"
+          @archive="emit('archive', card)"
+          @restore="emit('restore', card)"
+          @copied="emit('copied', card)"
+        />
+      </span>
     </div>
 
     <h3 class="card-tile__title">
@@ -46,10 +48,8 @@
       </AppTag>
     </div>
 
-    <div v-if="date || card.checklist_total || card.assignee_ids.length" class="card-tile__foot">
-      <span v-if="date" class="card-tile__date" :class="`card-tile__date--${date.tone}`">
-        <v-icon :icon="date.icon" size="14" aria-hidden="true" />{{ date.text }}
-      </span>
+    <div v-if="quickEdits || date || card.checklist_total || card.assignee_ids.length" class="card-tile__foot">
+      <CardDuePicker :card="card" :now="now" :can-edit="quickEdits" @failed="emit('failed', $event)" />
       <span
         v-if="card.checklist_total"
         class="card-tile__checklist"
@@ -59,15 +59,7 @@
         {{ card.checklist_done }}/{{ card.checklist_total }}
       </span>
       <span class="card-tile__people">
-        <AppMonogram
-          v-for="id in card.assignee_ids"
-          :key="id"
-          :name="nameFor(id)"
-          :src="photoFor(id)"
-          :size="22"
-          :title="nameFor(id)"
-          :label="`Assigned to ${nameFor(id)}`"
-        />
+        <CardAssigneePicker :card="card" :can-edit="quickEdits" @failed="emit('failed', $event)" />
       </span>
     </div>
   </article>
@@ -76,10 +68,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BoardCardMenu from '@/components/boards/board/BoardCardMenu.vue'
+import CardAssigneePicker from '@/components/boards/board/CardAssigneePicker.vue'
+import CardDuePicker from '@/components/boards/board/CardDuePicker.vue'
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
-import AppMonogram from '@/components/common/AppMonogram.vue'
 import AppTag from '@/components/common/AppTag.vue'
-import { useMemberDirectory } from '@/composables/useMemberDirectory'
+import { useCardQuickEdit } from '@/composables/useCardQuickEdit'
 import { labelColor } from '@/constants/boards'
 import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
 import { dateChip } from '@/utils/cardChips'
@@ -99,9 +92,10 @@ const emit = defineEmits<{
   archive: [card: CardSummary]
   restore: [card: CardSummary]
   copied: [card: CardSummary]
+  failed: [error: string]
 }>()
 
-const { nameFor, photoFor } = useMemberDirectory()
+const { canEdit } = useCardQuickEdit()
 
 const cardRoute = computed(() => ({
   name: 'board-card',
@@ -111,6 +105,8 @@ const labels = computed(() =>
   props.card.label_ids.map(id => props.labelsById.get(id)).filter((l): l is LabelRead => !!l),
 )
 const date = computed(() => dateChip(props.card, props.now))
+// Editors pick assignees and the due date right here; archived cards stay as they are.
+const quickEdits = computed(() => canEdit.value && !props.card.archived_at)
 </script>
 
 <style scoped>
@@ -118,8 +114,8 @@ const date = computed(() => dateChip(props.card, props.now))
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--board-card-gap);
+  padding: var(--board-card-padding);
   background: rgb(var(--v-theme-surface));
   border: 1px solid rgb(var(--v-theme-rule));
   border-radius: var(--radius-card);
@@ -170,7 +166,6 @@ const date = computed(() => dateChip(props.card, props.now))
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-.card-tile__date,
 .card-tile__checklist {
   display: inline-flex;
   align-items: center;
@@ -178,9 +173,6 @@ const date = computed(() => dateChip(props.card, props.now))
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
-.card-tile__date--error { color: rgb(var(--v-theme-error)); }
-.card-tile__date--warning { color: rgb(var(--v-theme-warning)); }
-.card-tile__date--success { color: rgb(var(--v-theme-success)); }
 .card-tile--archived {
   border-style: dashed;
 }
@@ -188,8 +180,6 @@ const date = computed(() => dateChip(props.card, props.now))
   opacity: 0.4;
 }
 .card-tile__people {
-  display: inline-flex;
-  gap: 2px;
   margin-left: auto;
 }
 </style>
