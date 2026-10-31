@@ -21,7 +21,7 @@ test('a PM creates a BUD from the board and lands on its requirements', async ({
   const org = await stack.seedOrg({ members: [{ key: 'pm', role: 'pm' }] })
   const page = await signedIn(org.members.pm)
   await page.goto('/buds')
-  await expect(page.getByRole('heading', { name: 'Board', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Delivery', level: 1 })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'No BUDs yet' })).toBeVisible()
 
   await createBudFromBoard(page, 'Export invoices as CSV', 'P1')
@@ -31,7 +31,7 @@ test('a PM creates a BUD from the board and lands on its requirements', async ({
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('BUD-001')
   await expectSection(page, 'Requirements')
 
-  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Board' }).click()
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Delivery' }).click()
   await expect(budCard(page, 'Export invoices as CSV')).toBeVisible()
 })
 

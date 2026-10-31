@@ -38,7 +38,7 @@ test('the engineering screens', async ({ signedIn, stack }) => {
   const bud = await createBud(await stack.api(org.members.owner), 'Accessible BUD')
   const page = await signedIn(org.members.owner)
   await check(page, '/dashboard', /^Good/)
-  await check(page, '/buds', 'Board')
+  await check(page, '/buds', 'Delivery')
   await check(page, `/buds/${bud.id}`, /Accessible BUD/)
   await check(page, '/bugs', 'Bugs')
   await check(page, '/features', 'Features')
