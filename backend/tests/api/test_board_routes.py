@@ -47,6 +47,7 @@ BOARD_API_MODULES = (
     "imports",
     "labels",
     "members",
+    "metrics",
     "people",
     "prefs",
     "repos",
@@ -172,7 +173,7 @@ def test_fixed_path_segments_can_never_be_a_board_key() -> None:
         for r in board_routes()
         if r.path.startswith(f"{PREFIX}/") and not r.path.startswith(f"{PREFIX}/{{")
     }
-    assert {"templates", "switcher", "cards", "limits", "imports"} <= fixed
+    assert {"templates", "switcher", "cards", "limits", "imports", "metrics"} <= fixed
     for segment in fixed:
         key = segment.upper()
         assert key in RESERVED_BOARD_KEYS or not BOARD_KEY_PATTERN.fullmatch(key), segment

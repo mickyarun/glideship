@@ -36,7 +36,17 @@ BOARD_KEY_MAX_LENGTH: Final = 10
 DELIVERY_BOARD_KEY: Final = "BUD"
 
 RESERVED_BOARD_KEYS: Final = frozenset(
-    {DELIVERY_BOARD_KEY, "BUG", "CARDS", "IMPORTS", "LIMITS", "SKILLS", "SWITCHER", "TEMPLATES"}
+    {
+        DELIVERY_BOARD_KEY,
+        "BUG",
+        "CARDS",
+        "IMPORTS",
+        "LIMITS",
+        "METRICS",
+        "SKILLS",
+        "SWITCHER",
+        "TEMPLATES",
+    }
 )
 
 BOARD_KEY_PATTERN: Final = re.compile(rf"^[A-Z]{{{BOARD_KEY_MIN_LENGTH},{BOARD_KEY_MAX_LENGTH}}}$")
@@ -80,6 +90,9 @@ DELIVERY_BOARD_PATH: Final = "/buds"
 # accepts BUDs still at one of these statuses.
 _BUD_ORDER: Final = list(BUDStatus)
 HANDOVER_LANDING_STATUSES: Final = tuple(_BUD_ORDER[: _BUD_ORDER.index(BUDStatus.DEVELOPMENT)])
+# How a handover tags the BUD status changes it writes, so learning metrics
+# can tell skipped stages from finished ones.
+VIA_HANDOVER: Final = "handover"
 # A send-back reason becomes a card comment after a short lead naming the
 # BUD ("Sent back from BUD-012: "), so it leaves room for that lead.
 HANDOVER_RETURN_LEAD_MAX_CHARS: Final = 100
