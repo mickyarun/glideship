@@ -74,8 +74,11 @@ def test_only_today_has_no_overdue_heading() -> None:
 def test_due_local_date_takes_a_time_or_text() -> None:
     zone = ZoneInfo("Asia/Kolkata")
     at = datetime(2030, 3, 4, 3, 0, tzinfo=UTC)
-    assert due_local_date(at, zone, time(8, 0)) == due_local_date(at, zone, "08:00")
-    assert due_local_date(at, zone, time(9, 0)) is None
+    window = timedelta(hours=3)
+    assert due_local_date(at, zone, time(8, 0), window=window) == due_local_date(
+        at, zone, "08:00", window=window
+    )
+    assert due_local_date(at, zone, time(9, 0), window=window) is None
 
 
 async def test_a_failed_tick_is_logged_and_the_loop_goes_on(

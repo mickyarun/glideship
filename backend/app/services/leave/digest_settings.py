@@ -22,7 +22,6 @@ import structlog
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.leave_policy import LeavePolicyRepository
 from app.repositories.organization import OrganizationRepository
 from app.schemas.leave_digest import LeaveDigestSettings
 from app.services.leave.policies import ensure_default_policy
@@ -71,17 +70,19 @@ async def digest_zone(
     return resolve_zone(name)
 
 
-async def org_zone(
-    db: AsyncSession, org_id: uuid.UUID, org_config: dict[str, Any] | None
+def org_zone(
+    org_config: dict[str, Any] | None, policy_timezone: str | None, org_id: uuid.UUID | None = None
 ) -> tzinfo:
-    """The zone :func:`digest_zone` resolves, without creating the default policy.
+    """The zone :func:`digest_zone` resolves, without creating the default policy (no I/O).
 
     For other daily messages (board due reminders) that follow the same
-    timezone but mustn't set up leave for an org that doesn't use it. With
-    no policy yet, the presence timezone the default would start from.
+    timezone but mustn't set up leave for an org that doesn't use it.
+    ``policy_timezone`` is the default leave policy's, when there is one;
+    without it, the presence timezone the default would start from.
     """
-    name = digest_settings(org_config, org_id).timezone
-    if not name:
-        policy = await LeavePolicyRepository(db, org_id=org_id).get_default()
-        name = policy.timezone if policy else get_presence_settings(org_config).timezone
+    name = (
+        digest_settings(org_config, org_id).timezone
+        or policy_timezone
+        or get_presence_settings(org_config).timezone
+    )
     return resolve_zone(name or "UTC")

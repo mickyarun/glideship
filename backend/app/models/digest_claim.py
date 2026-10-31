@@ -15,15 +15,17 @@
 """One row per person per local day for each kind of daily personal message.
 
 The unique (org, kind, user, day) row is the claim: whichever scheduler
-tick inserts it first sends, so a restart, a second tick or a second
-instance never sends twice.
+tick inserts it first writes the in-app notification and sends, so a
+restart, a second tick or a second instance never writes it twice. A
+failed or stuck Slack message is re-claimed by a later tick (``attempts``
+counts those retries), which sends the DM again but no second in-app row.
 """
 
 import uuid
 from datetime import date
 from enum import StrEnum
 
-from sqlalchemy import Date, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -75,5 +77,7 @@ class DigestClaim(BaseModel):
     status: Mapped[DigestClaimStatus] = mapped_column(
         pg_enum(DigestClaimStatus, "digest_claim_status"), nullable=False
     )
+    # Retries taken after the first send; capped by the scheduler's setting.
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     # Why the message didn't go, as a short code (never message text).
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -48,15 +48,22 @@ async def run_tick_loop(
         await asyncio.sleep(tick_seconds)
 
 
-def due_local_date(now_utc: datetime, zone: tzinfo, post_time: str | time) -> date | None:
+def due_local_date(
+    now_utc: datetime, zone: tzinfo, post_time: str | time, *, window: timedelta
+) -> date | None:
     """The local date whose message is due now, or None outside the window.
+
+    The window runs from ``post_time`` for ``window`` on the same local
+    date, so it ends at local midnight however long it is. A scheduler that
+    was down for less than the window sends late the same day; one down
+    for longer skips that day.
 
     ``post_time`` is a local time, or one written ``"HH:MM"``.
     """
     local = now_utc.astimezone(zone)
     at = post_time if isinstance(post_time, time) else _clock(post_time)
     start = datetime.combine(local.date(), time(at.hour, at.minute), tzinfo=zone)
-    return local.date() if start <= local < start + LATEST_AFTER else None
+    return local.date() if start <= local < start + window else None
 
 
 def _clock(text: str) -> time:

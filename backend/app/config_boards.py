@@ -72,6 +72,33 @@ class BoardsConfig(BoardImportSettings):
     due_reminder_max_cards: int = Field(
         default=15, gt=0, description="Cards one due-reminder message lists before 'and N more'."
     )
+    due_reminder_window_minutes: int = Field(
+        default=180,
+        gt=0,
+        description="How long after the fire time reminders still go out (clipped at midnight).",
+    )
+    due_reminder_lookahead_hours: int = Field(
+        default=48,
+        gt=0,
+        description="Cards due within this many hours put an org on the scheduler's list.",
+    )
+    due_reminder_max_retries: int = Field(
+        default=3, ge=0, description="Times a failed or stuck reminder DM is sent again."
+    )
+    due_reminder_stale_minutes: int = Field(
+        default=30, gt=0, description="A claim still unfinished after this is retried."
+    )
+    due_reminder_org_concurrency: int = Field(
+        default=4, gt=0, description="Orgs whose reminders are sent at the same time."
+    )
+    due_reminder_dm_concurrency: int = Field(
+        default=2, gt=0, description="Reminder DMs in flight at once within one org."
+    )
+    due_reminder_dm_interval_seconds: float = Field(
+        default=1.2,
+        ge=0,
+        description="Least gap between reminder DMs in one org (Slack Tier 3 is ~50/min).",
+    )
     move_board_limit: int = Field(
         default=30, gt=0, description="Cards one person may move between boards per window."
     )

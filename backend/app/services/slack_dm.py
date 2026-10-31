@@ -18,6 +18,7 @@ Best effort: failures are logged and never raised, since the change that
 triggered the message is already saved and visible in the app.
 """
 
+import asyncio
 import uuid
 from collections.abc import Mapping
 
@@ -33,6 +34,7 @@ from app.services.notifications import (
     category_default,
     category_permission,
 )
+from app.services.scheduling.pace import Pace
 from app.services.slack_client import chat_post_message, conversations_open
 
 logger = structlog.get_logger(__name__)
@@ -67,23 +69,31 @@ async def send_dm(
 
 
 async def send_each(
-    org_id: uuid.UUID, category: NotificationCategory, texts: Mapping[uuid.UUID, str]
+    org_id: uuid.UUID,
+    category: NotificationCategory,
+    texts: Mapping[uuid.UUID, str],
+    *,
+    pace: Pace | None = None,
 ) -> dict[uuid.UUID, bool]:
     """DM each person their own text; whether it reached them, per recipient.
 
     People who muted ``category``, can't receive it or aren't linked to
     Slack are left out of the result, as is everyone when Slack isn't
-    connected.
+    connected. ``pace`` spaces the DMs out (one at a time without it), so a
+    large batch stays inside Slack's rate limits instead of failing en masse.
     """
     async with AsyncSessionLocal() as session:
         token = await bot_token(session, org_id)
         if not token:
             return {}
         pairs = await _recipients(session, org_id, category, set(texts))
-    return {
-        user_id: await _deliver_one(org_id, token, slack_id, texts[user_id])
-        for user_id, slack_id in pairs
-    }
+    turns = pace or Pace(1, 0.0)
+
+    async def _one(user_id: uuid.UUID, slack_id: str) -> tuple[uuid.UUID, bool]:
+        async with turns.turn():
+            return user_id, await _deliver_one(org_id, token, slack_id, texts[user_id])
+
+    return dict(await asyncio.gather(*(_one(uid, sid) for uid, sid in pairs)))
 
 
 async def _recipients(

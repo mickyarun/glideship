@@ -27,6 +27,7 @@ from sqlalchemy import select
 from app.models.digest_claim import DigestClaim, DigestClaimStatus
 from app.models.notification import Notification, NotificationType
 from app.models.organization import Organization
+from app.repositories.board_due import DueOrg
 from app.services.boards import due_reminders
 from tests.integration.board_api_support import (
     BOARDS,
@@ -57,13 +58,13 @@ def slack(monkeypatch: pytest.MonkeyPatch, pg_session_factory: Factory) -> Slack
     return fake_slack(monkeypatch, pg_session_factory)
 
 
-async def _configure(factory: Factory, org: uuid.UUID) -> dict[str, Any]:
+async def _configure(factory: Factory, org: uuid.UUID) -> DueOrg:
     async with factory() as db:
         organization = await db.get(Organization, org)
         assert organization is not None
         organization.config = CONFIG
         await db.commit()
-    return CONFIG
+    return DueOrg(org_id=org, config=CONFIG, policy_timezone=None)
 
 
 async def _card(
@@ -115,10 +116,10 @@ async def test_one_reminder_per_person_per_day_with_only_open_cards(
     ok(await client.patch(f"{url}/{ticked['number']}", json=patch, headers=ed.headers))
 
     await _settled(slack)
-    await due_reminders.org_pass(org, config, BEFORE)
+    await due_reminders.org_pass(config, BEFORE)
     assert await slack.flush() == [] and await _claims(pg_session_factory, org) == []
 
-    await due_reminders.org_pass(org, config, AT)
+    await due_reminders.org_pass(config, AT)
     (text,) = slack.to(ids[ed.id])
     overdue, today = text.split("*Due today*")
     assert "Late" in overdue and "Early today" not in overdue
@@ -131,8 +132,8 @@ async def test_one_reminder_per_person_per_day_with_only_open_cards(
     assert note.message == "You have 1 card overdue and 2 cards due today."
 
     # A second tick, and a restart (a fresh pass reads only the database).
-    await due_reminders.org_pass(org, config, LATER)
-    await due_reminders.org_pass(org, config, AT)
+    await due_reminders.org_pass(config, LATER)
+    await due_reminders.org_pass(config, AT)
     assert len(slack.posts) == 2
     assert len(await _due_notes(pg_session_factory, ed.id)) == 1
     claims = await _claims(pg_session_factory, org)
@@ -158,7 +159,7 @@ async def test_lost_access_archived_boards_and_muting(
     await mute(pg_session_factory, team.editor.id, "board_due_reminders")
 
     await _settled(slack)
-    await due_reminders.org_pass(org, config, AT)
+    await due_reminders.org_pass(config, AT)
     assert await slack.flush() == []
     assert ids  # both linked; neither should hear on Slack
     # The viewer can't open the board any more: nothing at all.
