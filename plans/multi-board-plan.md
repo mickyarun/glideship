@@ -1364,6 +1364,23 @@ In upload mode **we never fetch attachment URLs from the uploaded file.** They'r
 only. That avoids pulling arbitrary URLs from user-supplied JSON. API mode downloads only from
 `api.trello.com` attachment endpoints, using IDs from the API response.
 
+### As built (backend)
+
+- `ImportSource` also has `prepare(ctx)` (stages, labels and people on the target, find-or-make
+  so a resume is safe), `prefetch(item, ctx)` (file downloads before the batch takes its stage
+  and numbering locks), `discard(item)` and `close()`. `iter_items` takes the session.
+- API mode stores the fetched board and comments as the session's file, so both modes parse
+  the same JSON. Sessions gain `source_ref` (the Trello board id) and `result` (per-status
+  counts and what was dropped).
+- People mapped onto a **new** board become its editors, as they were members of the Trello
+  board. On an existing board they must already have access.
+- A new stage name the target board already has is refused at review; the list maps onto the
+  existing stage instead.
+- Uploads are also bound by the global request body limit (`MAX_REQUEST_BODY_MB`, and nginx's
+  `client_max_body_size`), which sits below the 50 MB import default.
+- The board hears one `board_imported` socket event when the run finishes; the frontend union
+  gains it with the import UI.
+
 ## Notifications
 
 Three new `NotificationCategory` entries go in `services/notifications/categories.py`, following

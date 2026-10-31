@@ -24,6 +24,7 @@ from app.api.v1.boards import (
     comments,
     docs,
     finder,
+    imports,
     labels,
     members,
     prefs,
@@ -35,9 +36,10 @@ from app.core.permissions_boards import BOARDS_VIEW
 PREFIX = "/api/v1/boards"
 
 router = APIRouter(dependencies=[Depends(require_permissions(BOARDS_VIEW))])
-# ``finder`` first: its fixed paths must win over ``/{key}``.
+# ``finder`` and ``imports`` first: their fixed paths must win over ``/{key}``.
 for part in (
     finder,
+    imports,
     boards,
     stages,
     members,
