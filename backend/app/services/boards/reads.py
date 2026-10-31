@@ -30,6 +30,7 @@ from app.schemas.boards.card import CardDetail, CardSummary
 from app.schemas.boards.filters import BoardFilters, saved_filters
 from app.schemas.boards.label import LabelRead
 from app.schemas.boards.stage import StageRead
+from app.services.boards import handover_chips
 from app.services.boards.access import BoardAccess
 from app.services.boards.errors import BoardItemNotFoundError
 
@@ -74,8 +75,8 @@ async def restored_filters(db: AsyncSession, access: BoardAccess, raw: object) -
     return filters.model_copy(update={"repo_ids": [r for r in filters.repo_ids if r in linked]})
 
 
-def card_summary(board: Board, row: CardSummaryRow) -> CardSummary:
-    """One summary row as the API returns it."""
+def card_summary(board: Board, row: CardSummaryRow, *, opens_buds: bool = False) -> CardSummary:
+    """One summary row as the API returns it; ``opens_buds``: the caller may open its BUDs."""
     return CardSummary(
         id=row.id,
         key=card_key(board.key, row.number),
@@ -96,17 +97,29 @@ def card_summary(board: Board, row: CardSummaryRow) -> CardSummary:
         has_description=row.has_description,
         has_prd=row.has_prd,
         repo_id=row.repo_id,
+        handovers=handover_chips.chips(row.handovers, can_open_bud=opens_buds),
+        delivery=handover_chips.delivery(row.handovers),
     )
 
 
 def summary_json(card: CardSummary) -> dict[str, object]:
-    """A card's summary fields as a socket payload (never the full detail)."""
+    """A card's summary fields as a socket payload (never the full detail).
+
+    Every watcher gets the same payload, so no chip says the BUD can be opened.
+    """
     fields = set(CardSummary.model_fields)
-    return CardSummary.model_validate(card.model_dump(include=fields)).model_dump(mode="json")
+    summary = CardSummary.model_validate(card.model_dump(include=fields))
+    closed = [chip.model_copy(update={"can_open_bud": False}) for chip in summary.handovers]
+    return summary.model_copy(update={"handovers": closed}).model_dump(mode="json")
 
 
 async def card_detail(
-    db: AsyncSession, board: Board, card: BoardCard, *, known: CardSummaryRow | None = None
+    db: AsyncSession,
+    board: Board,
+    card: BoardCard,
+    *,
+    known: CardSummaryRow | None = None,
+    opens_buds: bool = False,
 ) -> CardDetail:
     """One card with its summary fields and the rest of its page header.
 
@@ -114,6 +127,7 @@ async def card_detail(
     ``known`` is a summary row this request already read and whose
     assignees, labels, checklist and documents it hasn't changed since; the
     card's own columns are taken from the refreshed row instead of a new query.
+    ``opens_buds`` is whether the caller may open the BUDs its chips name.
     """
     await db.flush()
     await db.refresh(card)
@@ -125,7 +139,7 @@ async def card_detail(
         known = rows[0]
     else:
         known = _with_columns(known, card)
-    summary = card_summary(board, known)
+    summary = card_summary(board, known, opens_buds=opens_buds)
     return CardDetail(
         **summary.model_dump(),
         board_key=board.key,

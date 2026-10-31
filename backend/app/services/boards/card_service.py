@@ -42,6 +42,7 @@ from app.services.boards.card_timing import enter_category
 from app.services.boards.cursor import encode_cursor
 from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.events import record_event
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 from app.services.boards.move_rules import EntryCause, enter_stage
 from app.services.boards.reads import card_detail, card_summary, summary_json
@@ -67,7 +68,9 @@ async def list_cards(db: AsyncSession, access: BoardAccess, query: CardQuery) ->
     page = rows[: query.limit]
     last = page[-1] if page and len(rows) > query.limit else None
     return CardPage(
-        items=[card_summary(access.board, row) for row in page],
+        items=[
+            card_summary(access.board, row, opens_buds=opens_buds(access.perms)) for row in page
+        ],
         next_cursor=None if last is None else encode_cursor(last.position, str(last.id)),
     )
 

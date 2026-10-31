@@ -21,6 +21,7 @@ from typing import Any
 from sqlalchemy import Row, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.board_card import BoardCard
 from app.models.board_enums import BoardHandoverStatus
 from app.models.board_handover import BoardCardHandover
 from app.models.bud import BUDDocument, BUDStatus
@@ -70,13 +71,6 @@ class BoardHandoverRepository:
         stmt = stmt.order_by(BoardCardHandover.handed_over_at, BoardCardHandover.id)
         return [_row(row) for row in (await self._db.execute(stmt)).all()]
 
-    async def count_for_card(self, card_id: uuid.UUID) -> int:
-        """How many handovers the card has ever had, returned ones included."""
-        stmt = select(func.count()).where(
-            BoardCardHandover.org_id == self._org_id, BoardCardHandover.card_id == card_id
-        )
-        return int((await self._db.execute(stmt)).scalar_one())
-
     async def active_for_bud(self, bud_id: uuid.UUID) -> BoardCardHandover | None:
         """The BUD's live origin, if a card holds one."""
         stmt = select(BoardCardHandover).where(
@@ -94,6 +88,80 @@ class BoardHandoverRepository:
             BoardCardHandover.bud_id == bud_id,
         )
         return (await self._db.execute(stmt)).first() is not None
+
+    async def cards_for_bud(self, bud_id: uuid.UUID) -> list[tuple[uuid.UUID, uuid.UUID]]:
+        """``(board_id, card_id)`` of each card holding a handover of the BUD, live or returned."""
+        stmt = (
+            select(BoardCard.board_id, BoardCard.id)
+            .join(
+                BoardCardHandover,
+                (BoardCardHandover.card_id == BoardCard.id)
+                & (BoardCardHandover.org_id == BoardCard.org_id),
+            )
+            .where(BoardCardHandover.org_id == self._org_id, BoardCardHandover.bud_id == bud_id)
+            .order_by(BoardCard.id)
+        )
+        return [(row[0], row[1]) for row in (await self._db.execute(stmt)).all()]
+
+    async def latest_for_bud(self, bud_id: uuid.UUID) -> BoardCardHandover | None:
+        """The BUD's live origin, else the handover most recently made for it."""
+        stmt = (
+            select(BoardCardHandover)
+            .where(BoardCardHandover.org_id == self._org_id, BoardCardHandover.bud_id == bud_id)
+            .order_by(
+                (BoardCardHandover.status == BoardHandoverStatus.ACTIVE).desc(),
+                BoardCardHandover.handed_over_at.desc(),
+                BoardCardHandover.id.desc(),
+            )
+            .limit(1)
+        )
+        return (await self._db.execute(stmt)).scalar_one_or_none()
+
+    async def returned_discarded(self, card_id: uuid.UUID) -> BoardCardHandover | None:
+        """The card's most recently returned handover whose BUD is still discarded."""
+        stmt = (
+            select(BoardCardHandover)
+            .join(
+                BUDDocument,
+                (BUDDocument.id == BoardCardHandover.bud_id)
+                & (BUDDocument.org_id == BoardCardHandover.org_id),
+            )
+            .where(
+                BoardCardHandover.org_id == self._org_id,
+                BoardCardHandover.card_id == card_id,
+                BoardCardHandover.status == BoardHandoverStatus.RETURNED,
+                BUDDocument.status == BUDStatus.DISCARDED,
+            )
+            .order_by(BoardCardHandover.returned_at.desc(), BoardCardHandover.id.desc())
+            .limit(1)
+        )
+        return (await self._db.execute(stmt)).scalar_one_or_none()
+
+    async def active_bud_statuses(self, card_id: uuid.UUID) -> list[BUDStatus]:
+        """The status of each BUD the card holds a live handover of."""
+        stmt = (
+            select(BUDDocument.status)
+            .join(
+                BoardCardHandover,
+                (BUDDocument.id == BoardCardHandover.bud_id)
+                & (BUDDocument.org_id == BoardCardHandover.org_id),
+            )
+            .where(
+                BoardCardHandover.org_id == self._org_id,
+                BoardCardHandover.card_id == card_id,
+                BoardCardHandover.status == BoardHandoverStatus.ACTIVE,
+            )
+        )
+        return list((await self._db.execute(stmt)).scalars().all())
+
+    async def count_active_for_card(self, card_id: uuid.UUID) -> int:
+        """How many live handovers the card holds."""
+        stmt = select(func.count()).where(
+            BoardCardHandover.org_id == self._org_id,
+            BoardCardHandover.card_id == card_id,
+            BoardCardHandover.status == BoardHandoverStatus.ACTIVE,
+        )
+        return int((await self._db.execute(stmt)).scalar_one())
 
     def _with_bud(self) -> Select[Any]:
         return (

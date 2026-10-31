@@ -132,7 +132,14 @@ async def _announce(
 async def _read(
     db: AsyncSession, target: CardAccess, comments: list[BoardCardComment]
 ) -> list[CommentRead]:
-    people = await UserRepository(db, org_id=target.access.org_id).get_people_by_ids(
+    return await read_comments(db, target.access.org_id, comments)
+
+
+async def read_comments(
+    db: AsyncSession, org_id: uuid.UUID, comments: list[BoardCardComment]
+) -> list[CommentRead]:
+    """Comments as the API returns them, their authors looked up in one query."""
+    people = await UserRepository(db, org_id=org_id).get_people_by_ids(
         {c.author_id for c in comments if c.author_id is not None}
     )
     return [_comment(c, people.get(c.author_id) if c.author_id else None) for c in comments]

@@ -64,7 +64,8 @@ class HandedOverBUD:
     previous: BUDStatus | None
 
 
-def _origin(access: BoardAccess, card: BoardCard, **extra: Any) -> dict[str, Any]:
+def origin_detail(access: BoardAccess, card: BoardCard, **extra: Any) -> dict[str, Any]:
+    """The ``handed_over_from_board`` event's detail: the board, the card and its key."""
     return {
         "board_id": str(access.board.id),
         "card_id": str(card.id),
@@ -85,15 +86,24 @@ async def _repos(
     return impacted(found)
 
 
-async def create_and_land(
-    db: AsyncSession,
-    access: BoardAccess,
-    card: BoardCard,
-    body: HandoverConfirm,
-    *,
-    actor_name: str | None,
-) -> HandedOverBUD:
-    """Create the card's BUD at ``bud`` and land it at the target status.
+@dataclass(frozen=True)
+class PreparedBUD:
+    """What a confirm writes into the BUD: the create body, its repositories and target."""
+
+    create: BUDCreate
+    repos: list[ImpactedRepo]
+    target: BUDStatus
+
+    @property
+    def impacted_repos_json(self) -> list[dict[str, Any]] | None:
+        """The repositories as ``bud_documents.impacted_repos`` stores them."""
+        return [repo.model_dump(mode="json") for repo in self.repos] or None
+
+
+async def prepare(
+    db: AsyncSession, access: BoardAccess, card: BoardCard, body: HandoverConfirm
+) -> PreparedBUD:
+    """The card's draft with the dialog's edits, checked for the landing it asks for.
 
     Raises:
         HandoverNeedsRequirementsError: A tech-plan landing with nothing to plan from.
@@ -112,7 +122,27 @@ async def create_and_land(
         priority=draft.priority,
         figma_url=draft.figma_url,
         auto_generate_phases={s.value: on for s, on in body.auto_generate_phases.items()},
+        stage_skill_overrides=body.stage_skill_overrides,
     )
+    return PreparedBUD(create=create, repos=repos, target=target)
+
+
+async def create_and_land(
+    db: AsyncSession,
+    access: BoardAccess,
+    card: BoardCard,
+    body: HandoverConfirm,
+    *,
+    actor_name: str | None,
+) -> HandedOverBUD:
+    """Create the card's BUD at ``bud`` and land it at the target status.
+
+    Raises:
+        HandoverNeedsRequirementsError: A tech-plan landing with nothing to plan from.
+        BoardRuleError: An overridden repository isn't one of the org's active ones.
+    """
+    prepared = await prepare(db, access, card, body)
+    create, target = prepared.create, prepared.target
     bud = await create_bud(
         db,
         org_id=access.org_id,
@@ -120,10 +150,10 @@ async def create_and_land(
         actor_id=access.user_id,
         actor_name=actor_name,
         source=SOURCE_BOARD,
-        embedding=await draft_embedding(access.org_id, title, create.requirements_md),
+        embedding=await draft_embedding(access.org_id, create.title, create.requirements_md),
         start_stage=False,
     )
-    bud.impacted_repos = [repo.model_dump(mode="json") for repo in repos] or None
+    bud.impacted_repos = prepared.impacted_repos_json
     await bud_version_repo.insert_snapshot(
         db,
         bud=bud,
@@ -139,7 +169,7 @@ async def create_and_land(
         BUDTimelineEventType.HANDED_OVER_FROM_BOARD.value,
         actor_id=access.user_id,
         actor_name=actor_name,
-        detail=_origin(access, card, target_status=target.value),
+        detail=origin_detail(access, card, target_status=target.value),
     )
     previous = await land(
         db, access.org_id, bud, target, actor_id=access.user_id, actor_name=actor_name
@@ -171,6 +201,6 @@ async def link(
         BUDTimelineEventType.HANDED_OVER_FROM_BOARD.value,
         actor_id=access.user_id,
         actor_name=actor_name,
-        detail=_origin(access, card, linked=True),
+        detail=origin_detail(access, card, linked=True),
     )
     return HandedOverBUD(bud=bud, previous=None)

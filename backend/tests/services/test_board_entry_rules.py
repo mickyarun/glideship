@@ -86,7 +86,9 @@ def test_missing_fields_come_back_in_declaration_order() -> None:
     assert missing_fields(NewCardFacts(assignee_ids=[uuid.uuid4()], has_prd=True), required) == []
 
 
-@pytest.mark.parametrize("cause", [EntryCause.RESTORE, EntryCause.STAGE_DELETE, EntryCause.IMPORT])
+@pytest.mark.parametrize(
+    "cause", [EntryCause.RESTORE, EntryCause.STAGE_DELETE, EntryCause.IMPORT, EntryCause.RETURN]
+)
 async def test_placing_causes_skip_both_rules_without_reading_the_card(cause: EntryCause) -> None:
     loader = _Loader(OPEN_ITEM)
     stage = _stage(DONE, *StageRequiredField)

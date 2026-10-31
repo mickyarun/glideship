@@ -52,6 +52,19 @@ class BoardCardEventRepository(BaseRepository[BoardCardEvent]):
         )
         return (await self._db.execute(stmt)).scalar_one_or_none()
 
+    async def has_for_bud(
+        self, card_id: uuid.UUID, event_type: BoardCardEventType, bud_id: uuid.UUID
+    ) -> bool:
+        """Whether the card already has a ``event_type`` event naming the BUD."""
+        stmt = self._scoped(
+            select(BoardCardEvent.id).where(
+                BoardCardEvent.card_id == card_id,
+                BoardCardEvent.type == event_type,
+                BoardCardEvent.detail["bud_id"].astext == str(bud_id),
+            )
+        )
+        return (await self._db.execute(stmt.limit(1))).first() is not None
+
     async def page(
         self, card_id: uuid.UUID, *, before: uuid.UUID | None, limit: int
     ) -> list[BoardCardEvent]:

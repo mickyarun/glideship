@@ -30,6 +30,7 @@ from app.schemas.boards.prefs import SwitcherRead
 from app.schemas.boards.text import SEARCH_MAX_LENGTH
 from app.services.boards import attachment_rules, board_service, prefs_service
 from app.services.boards.access import BoardCaller, resolve_card_by_key
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.reads import card_detail
 
 router = APIRouter(tags=["boards"])
@@ -67,4 +68,5 @@ async def card_by_key(
     target = await resolve_card_by_key(
         db, user_id=caller.user_id, org_id=caller.org_id, perms=caller.perms, key=card_key
     )
-    return await card_detail(db, target.access.board, target.card)
+    access = target.access
+    return await card_detail(db, access.board, target.card, opens_buds=opens_buds(access.perms))

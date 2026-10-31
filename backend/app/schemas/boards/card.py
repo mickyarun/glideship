@@ -16,10 +16,12 @@
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from app.models.bud import BUDPriority
+from app.models.board_enums import BoardHandoverStatus
+from app.models.bud import BUDPriority, BUDStatus
 from app.schemas.boards.text import CardDescription, CardTitle, IdList
 from app.services.boards.constants import BOARD_KEY_MAX_LENGTH
 
@@ -92,10 +94,26 @@ class CardMoveBoard(BaseModel):
 
 
 class HandoverChip(BaseModel):
-    """A BUD this card was handed over to (filled in once handover ships)."""
+    """A BUD this card was handed over to: its key and statuses, never its title.
+
+    ``can_open_bud`` is whether the caller may open the BUD (``buds:view``
+    and ``workspace:engineering``); socket payloads always send false, and
+    a client merging one keeps the value it last fetched.
+    """
 
     bud_id: uuid.UUID
-    status: str
+    bud_key: str
+    status: BUDStatus
+    handover_status: BoardHandoverStatus
+    can_open_bud: bool = False
+
+
+class CardDelivery(StrEnum):
+    """How far the card's live handovers are: none, some still in dev, all in prod."""
+
+    NONE = "none"
+    IN_PROGRESS = "in_progress"
+    DELIVERED = "delivered"
 
 
 class CardSummary(BaseModel):
@@ -121,6 +139,7 @@ class CardSummary(BaseModel):
     has_prd: bool
     repo_id: uuid.UUID | None
     handovers: list[HandoverChip] = Field(default_factory=list)
+    delivery: CardDelivery = CardDelivery.NONE
 
 
 class CardPage(BaseModel):

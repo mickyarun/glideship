@@ -93,6 +93,8 @@ class HandoverConfirm(HandoverRequest):
     confirm_open_checklist: bool = False
     # Which of the new BUD's phases our agents run (as on BUD create).
     auto_generate_phases: dict[BUDStatus, bool] = Field(default_factory=dict)
+    # Per-stage skill picks (as on BUD create); omitted stages use the org's default.
+    stage_skill_overrides: dict[BUDStatus, uuid.UUID] | None = None
 
 
 class ImpactedRepo(BaseModel):

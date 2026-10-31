@@ -38,16 +38,20 @@ from app.repositories.user import UserRepository
 from app.schemas.boards.handover import HandoverConfirm, HandoverMode, HandoverRead, HandoverResult
 from app.services.boards.access import BoardAccess, CardAccess
 from app.services.boards.card_notify import send
+from app.services.boards.errors import BoardRuleError
 from app.services.boards.events import record_event
 from app.services.boards.handover_bud import HandedOverBUD, create_and_land, link
 from app.services.boards.handover_card_stage import CardStage, lock_card, move_on_first_handover
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.handover_landing import start_target_stage
 from app.services.boards.handover_notify import stage_owner_notice
 from app.services.boards.handover_reads import handover_read
+from app.services.boards.handover_rehandover import hand_over_again, reactivate
 from app.services.boards.handover_rules import check_allowed
 from app.services.boards.handover_similar import bud_key
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 from app.services.boards.reads import card_detail, summary_json
+from app.services.bud_stage_overrides import StageSkillOverrideError
 
 logger = structlog.get_logger(__name__)
 
@@ -68,22 +72,26 @@ async def confirm(db: AsyncSession, target: CardAccess, body: HandoverConfirm) -
     locked = await lock_card(db, target)
     handovers = BoardHandoverRepository(db, org_id=access.org_id)
     replay = await handovers.by_idempotency_key(card.id, body.idempotency_key)
+    opens = opens_buds(access.perms)
     if replay is not None:
-        return HandoverResult(
-            handover=handover_read(replay), card=await card_detail(db, access.board, card)
-        )
-    first = await handovers.count_for_card(card.id) == 0
+        detail = await card_detail(db, access.board, card, opens_buds=opens)
+        return HandoverResult(handover=handover_read(replay), card=detail)
+    # Moves into the handover stage when the card holds no live handover:
+    # its first, or the first since every earlier one was sent back.
+    first = await handovers.count_active_for_card(card.id) == 0
     stage = await move_on_first_handover(
         db, target, locked, first=first, confirm_open_checklist=body.confirm_open_checklist
     )
     actor_name = await _actor_name(db, access)
+    reused = None
     if body.mode is HandoverMode.LINK:
         assert body.bud_id is not None  # the schema requires it for a link
         result = await link(db, access, card, body.bud_id, actor_name=actor_name)
     else:
-        result = await create_and_land(db, access, card, body, actor_name=actor_name)
-    read = await _record(db, target, body, result, stage)
-    detail = await card_detail(db, access.board, card)
+        reused = await handovers.returned_discarded(card.id)
+        result = await _create(db, target, body, reused, actor_name)
+    read = await _record(db, target, body, result, stage, reused)
+    detail = await card_detail(db, access.board, card, opens_buds=opens)
     changes = BoardChanges.of(access)
     if stage.rebalanced and stage.to_stage is not None:
         changes.emit(BoardSocketEvent.STAGE_REORDERED, stage_id=str(stage.to_stage.id))
@@ -103,29 +111,51 @@ async def confirm(db: AsyncSession, target: CardAccess, body: HandoverConfirm) -
     return HandoverResult(handover=read, card=detail)
 
 
+async def _create(
+    db: AsyncSession,
+    target: CardAccess,
+    body: HandoverConfirm,
+    reused: BoardCardHandover | None,
+    actor_name: str | None,
+) -> HandedOverBUD:
+    """A new BUD, or the returned one restored when the card has one still discarded."""
+    access, card = target.access, target.card
+    try:
+        if reused is not None:
+            return await hand_over_again(db, access, card, body, reused, actor_name=actor_name)
+        return await create_and_land(db, access, card, body, actor_name=actor_name)
+    except StageSkillOverrideError as exc:
+        raise BoardRuleError(str(exc)) from exc
+
+
 async def _record(
     db: AsyncSession,
     target: CardAccess,
     body: HandoverConfirm,
     result: HandedOverBUD,
     stage: CardStage,
+    reused: BoardCardHandover | None = None,
 ) -> HandoverRead:
-    """Insert the handover row and the card's ``handed_over`` event."""
+    """Insert the handover row (or reactivate the reused one) and a ``handed_over`` event."""
     access, card, bud = target.access, target.card, result.bud
     linked = body.mode is HandoverMode.LINK
-    row = await BoardHandoverRepository(db, org_id=access.org_id).add(
-        BoardCardHandover(
-            org_id=access.org_id,
-            card_id=card.id,
-            bud_id=bud.id,
-            status=BoardHandoverStatus.ACTIVE,
-            linked_existing=linked,
-            target_status=None if linked else bud.status,
-            handed_over_by=access.user_id,
-            handed_over_at=datetime.now(UTC),
-            idempotency_key=body.idempotency_key,
+    if reused is not None:
+        row = reactivate(reused, access.user_id, bud.status, body.idempotency_key)
+        await db.flush()
+    else:
+        row = await BoardHandoverRepository(db, org_id=access.org_id).add(
+            BoardCardHandover(
+                org_id=access.org_id,
+                card_id=card.id,
+                bud_id=bud.id,
+                status=BoardHandoverStatus.ACTIVE,
+                linked_existing=linked,
+                target_status=None if linked else bud.status,
+                handed_over_by=access.user_id,
+                handed_over_at=datetime.now(UTC),
+                idempotency_key=body.idempotency_key,
+            )
         )
-    )
     await record_event(
         db,
         card,
@@ -138,6 +168,7 @@ async def _record(
             "bud_key": bud_key(bud.bud_number),
             "mode": body.mode.value,
             "bud_status": bud.status.value,
+            **({"again": True} if reused is not None else {}),
         },
     )
     return handover_read((row, HandoverBUD(bud.bud_number, bud.title, bud.status)))

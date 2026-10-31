@@ -33,6 +33,7 @@ the same way it always does.
 """
 
 import uuid
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +42,7 @@ from app.models.bud import BUDDocument, BUDStatus
 from app.models.user import User
 from app.repositories.bud_timeline import BUDTimelineRepository
 from app.repositories.organization import OrganizationRepository
+from app.services.boards.handover_live import queue_origin_card_refresh
 from app.services.bud_timeline import record_event
 from app.services.feature_lifecycle import restore_feature_for_bud
 from app.services.org_settings import get_phase_order
@@ -106,18 +108,45 @@ async def restore_discarded_bud(
 
     Callers must have verified ``bud.status is BUDStatus.DISCARDED``.
     """
-    target = await resolve_restore_status(db, current_user.org_id, bud)
+    return await restore_bud(
+        db,
+        current_user.org_id,
+        bud,
+        actor_id=current_user.id,
+        actor_name=current_user.name,
+    )
 
-    await restore_feature_for_bud(db, current_user.org_id, bud.bud_number)
+
+async def restore_bud(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    bud: BUDDocument,
+    *,
+    actor_id: uuid.UUID,
+    actor_name: str | None,
+    to_status: BUDStatus | None = None,
+    detail: dict[str, Any] | None = None,
+) -> BUDStatus:
+    """Restore ``bud`` as :func:`restore_discarded_bud` does, for callers in code.
+
+    ``to_status`` picks the phase instead of the one it was discarded from
+    (handing a returned card over again restores at ``bud`` and lands it
+    from there); ``detail`` adds to the ``status_change`` event's detail.
+    The caller holds the BUD's row lock and has checked it is discarded.
+    """
+    target = to_status or await resolve_restore_status(db, org_id, bud)
+
+    await restore_feature_for_bud(db, org_id, bud.bud_number)
 
     await record_event(
         db,
-        current_user.org_id,
+        org_id,
         bud.id,
         "status_change",
-        actor_id=current_user.id,
-        actor_name=current_user.name,
+        actor_id=actor_id,
+        actor_name=actor_name,
         detail={
+            **(detail or {}),
             "from": BUDStatus.DISCARDED.value,
             "to": target.value,
             "restored": True,
@@ -147,6 +176,7 @@ async def restore_discarded_bud(
         bud_id=str(bud.id),
         bud_number=bud.bud_number,
         restored_to=target.value,
-        actor_id=str(current_user.id),
+        actor_id=str(actor_id),
     )
+    await queue_origin_card_refresh(db, org_id, bud.id)
     return target

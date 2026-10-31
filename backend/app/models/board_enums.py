@@ -103,6 +103,8 @@ class BoardCardEventType(StrEnum):
     HANDED_OVER = "handed_over"
     RETURNED = "returned"
     DELIVERED = "delivered"
+    # Every live handover on the card has reached prod.
+    FULLY_DELIVERED = "fully_delivered"
     IMPORTED = "imported"
     DOC_UPDATED = "doc_updated"
     AI_RUN = "ai_run"

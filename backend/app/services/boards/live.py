@@ -38,6 +38,7 @@ from app.schemas.boards.card import CardDetail
 from app.services.access_recheck import recheck_topic
 from app.services.after_commit import publish_after_commit
 from app.services.boards.access import BoardAccess
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.reads import card_detail, summary_json
 from app.services.ws_topic_policy import ACCESS_CHANGED_KEY
 
@@ -58,6 +59,12 @@ class BoardSocketEvent(StrEnum):
     CARD_ACTIVITY = "card_activity"
     # A card was handed over to dev: ``card_id`` and the ``handover`` read.
     CARD_HANDED_OVER = "card_handed_over"
+    # A BUD was sent back: ``card_id`` and the ``handover``'s ids, key and
+    # statuses (never the BUD's title; clients fetch details).
+    CARD_HANDOVER_RETURNED = "card_handover_returned"
+    # A BUD the card was handed over to changed status: ``card_id`` only;
+    # open boards refetch the card's summary for its chips.
+    CARD_HANDOVERS_CHANGED = "card_handovers_changed"
     DOC_UPDATED = "doc_updated"
     STAGE_CHANGED = "stage_changed"
     STAGE_REORDERED = "stage_reordered"
@@ -88,18 +95,27 @@ class BoardChanges:
     """
 
     def __init__(
-        self, board_id: uuid.UUID, actor_id: uuid.UUID | None, origin: str | None = None
+        self,
+        board_id: uuid.UUID,
+        actor_id: uuid.UUID | None,
+        origin: str | None = None,
+        *,
+        opens_buds: bool = False,
     ) -> None:
         self.board_id = board_id
         self.actor_id = actor_id
         self.origin = origin
+        # Whether the actor may open BUDs, for the detail returned to them.
+        self.opens_buds = opens_buds
         self._events: list[tuple[BoardSocketEvent, dict[str, Any]]] = []
         self._recheck: set[uuid.UUID] | None = set()
 
     @classmethod
     def of(cls, access: BoardAccess) -> "BoardChanges":
         """Changes made by the caller of ``access`` on its board."""
-        return cls(access.board.id, access.user_id, access.origin)
+        return cls(
+            access.board.id, access.user_id, access.origin, opens_buds=opens_buds(access.perms)
+        )
 
     def emit(self, event: BoardSocketEvent, **payload: Any) -> None:
         """Queue one event for after the commit."""
@@ -113,7 +129,7 @@ class BoardChanges:
         ``has_prd``, ...), so open boards check stage entry rules against
         what's true now. Returns the card's detail for the response.
         """
-        detail = await card_detail(db, board, card)
+        detail = await card_detail(db, board, card, opens_buds=self.opens_buds)
         self.emit(BoardSocketEvent.CARD_UPDATED, card=summary_json(detail))
         return detail
 

@@ -14,9 +14,9 @@
 
 """What a board column shows for each card, in one query per page.
 
-Assignee and label ids are ``array_agg``'d, the checklist counted and the
-PRD looked up in correlated subqueries, so a page of cards is one round
-trip with no lazy loads, however many cards it holds. Blank descriptions
+Assignee and label ids are ``array_agg``'d, the checklist counted, and the
+PRD and the handover chips looked up in correlated subqueries, so a page of
+cards is one round trip with no lazy loads, however many cards it holds. Blank descriptions
 are stored as NULL and blank documents refused, so "has a description" and
 "has a PRD" are plain presence checks.
 """
@@ -36,6 +36,11 @@ from app.models.board_card_doc import BoardCardDoc
 from app.models.board_enums import BoardCardDocKind, BoardCardDocState
 from app.models.bud import BUDPriority
 from app.repositories.board_card_filters import CardQuery, card_filters
+from app.repositories.board_card_handover_chips import (
+    HandoverChipRow,
+    handover_chips,
+    parse_chips,
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,7 @@ class CardSummaryRow:
     label_ids: list[uuid.UUID] = field(default_factory=list)
     checklist_done: int = 0
     checklist_total: int = 0
+    handovers: list[HandoverChipRow] = field(default_factory=list)
 
 
 def _per_card(column: Any, *conditions: ColumnElement[bool]) -> Any:
@@ -147,6 +153,7 @@ class BoardCardSummaryRepository:
             labels.label("label_ids"),
             done.label("checklist_done"),
             total.label("checklist_total"),
+            handover_chips().label("handovers"),
         ).where(BoardCard.org_id == self._org_id, BoardCard.board_id == board_id)
 
     async def _run(self, stmt: Select[Any]) -> list[CardSummaryRow]:
@@ -157,6 +164,7 @@ class BoardCardSummaryRepository:
                     **row,
                     "assignee_ids": list(row["assignee_ids"] or []),
                     "label_ids": list(row["label_ids"] or []),
+                    "handovers": parse_chips(row["handovers"]),
                 }
             )
             for row in rows

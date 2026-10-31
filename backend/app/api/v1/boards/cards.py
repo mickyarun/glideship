@@ -37,6 +37,7 @@ from app.schemas.boards.text import SEARCH_MAX_LENGTH
 from app.services.boards import card_board_move, card_edit, card_move, card_service
 from app.services.boards.access import BoardAccess, CardAccess
 from app.services.boards.cursor import CURSOR_MAX_LENGTH, decode_position_cursor
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.reads import card_detail
 
 router = APIRouter(tags=["boards"])
@@ -89,7 +90,8 @@ async def get_card(
     target: CardAccess = Depends(can.view_card), db: AsyncSession = Depends(get_db)
 ) -> CardDetail:
     """One card."""
-    return await card_detail(db, target.access.board, target.card)
+    access = target.access
+    return await card_detail(db, access.board, target.card, opens_buds=opens_buds(access.perms))
 
 
 @router.patch("/{key}/cards/{number}", response_model=CardDetail)

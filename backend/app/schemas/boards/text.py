@@ -34,6 +34,7 @@ from app.services.boards.constants import (
     CHECKLIST_MAX_ITEMS,
     CHECKLIST_TEXT_MAX_CHARS,
     COMMENT_MAX_CHARS,
+    HANDOVER_RETURN_REASON_MAX_CHARS,
     ID_LIST_MAX_ITEMS,
     SEARCH_MAX_CHARS,
 )
@@ -48,6 +49,7 @@ StageName = Annotated[str, _trimmed(STAGE_NAME_LENGTH)]
 LabelName = Annotated[str, _trimmed(LABEL_NAME_LENGTH)]
 CardTitle = Annotated[str, _trimmed(CARD_TITLE_LENGTH)]
 CommentText = Annotated[str, _trimmed(COMMENT_MAX_CHARS)]
+ReturnReason = Annotated[str, _trimmed(HANDOVER_RETURN_REASON_MAX_CHARS)]
 ChecklistText = Annotated[str, _trimmed(CHECKLIST_TEXT_MAX_CHARS)]
 BoardDescription = Annotated[str, Field(max_length=BOARD_DESCRIPTION_MAX_CHARS)]
 Description = Annotated[str, Field(max_length=CARD_DESCRIPTION_MAX_CHARS)]

@@ -53,6 +53,7 @@ from app.services.boards.errors import (
     BoardRateLimitedError,
     BoardRuleError,
 )
+from app.services.boards.handover_chips import opens_buds
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 from app.services.boards.move_rules import EntryCause, enter_stage
 from app.services.boards.reads import card_detail, summary_json
@@ -104,7 +105,7 @@ async def move_to_board(db: AsyncSession, source: CardAccess, body: CardMoveBoar
     )
     move = Relocation(access.board, target.board, from_stage, to_stage, carry)
     placed = await relocate_card(db, card, move, actor_id=access.user_id)
-    detail = await card_detail(db, target.board, card)
+    detail = await card_detail(db, target.board, card, opens_buds=opens_buds(target.perms))
     left = BoardChanges.of(access)
     # Only the id: the target may be a board some of the source's
     # watchers can't see, so its key and the card's new key stay out.

@@ -21,6 +21,7 @@ yet, and a change that failed is never announced, whichever code path
 commits the session.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import event
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session, SessionTransaction
 from app.services import event_bus
 
 _PENDING = "publish_after_commit"
+_CALLBACKS = "call_after_commit"
 
 
 def publish_after_commit(db: AsyncSession, topic: str, data: dict[str, Any]) -> None:
@@ -50,3 +52,31 @@ def _discard(session: Session, transaction: SessionTransaction) -> None:
     # parent, so one rolled back mid-request leaves the queue alone.
     if transaction.parent is None:
         session.info.pop(_PENDING, None)
+
+
+def publish_after_commit_once(db: AsyncSession, topic: str, data: dict[str, Any]) -> None:
+    """Like :func:`publish_after_commit`, unless the same message is already queued."""
+    pending = db.sync_session.info.setdefault(_PENDING, [])
+    if (topic, data) not in pending:
+        pending.append((topic, data))
+
+
+def call_after_commit(db: AsyncSession, callback: Callable[[], None]) -> None:
+    """Run ``callback`` once ``db``'s transaction commits; a rollback drops it.
+
+    For work that must only follow a saved change, such as sending a staged
+    notice, from code that doesn't own the commit. ``callback`` must not raise.
+    """
+    db.sync_session.info.setdefault(_CALLBACKS, []).append(callback)
+
+
+@event.listens_for(Session, "after_commit")
+def _call(session: Session) -> None:
+    for callback in session.info.pop(_CALLBACKS, []):
+        callback()
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _drop(session: Session, transaction: SessionTransaction) -> None:
+    if transaction.parent is None:
+        session.info.pop(_CALLBACKS, None)

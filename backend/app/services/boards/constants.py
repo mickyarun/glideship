@@ -79,6 +79,10 @@ DELIVERY_BOARD_PATH: Final = "/buds"
 # accepts BUDs still at one of these statuses.
 _BUD_ORDER: Final = list(BUDStatus)
 HANDOVER_LANDING_STATUSES: Final = tuple(_BUD_ORDER[: _BUD_ORDER.index(BUDStatus.DEVELOPMENT)])
+# A send-back reason becomes a card comment after a short lead naming the
+# BUD ("Sent back from BUD-012: "), so it leaves room for that lead.
+HANDOVER_RETURN_LEAD_MAX_CHARS: Final = 100
+HANDOVER_RETURN_REASON_MAX_CHARS: Final = COMMENT_MAX_CHARS - HANDOVER_RETURN_LEAD_MAX_CHARS
 
 
 class BoardAction(StrEnum):

@@ -41,6 +41,7 @@ from app.api.v1.backlash import internal_router as backlash_internal_router
 from app.api.v1.backlash import router as backlash_router
 from app.api.v1.boards import router as boards_router
 from app.api.v1.bud import router as bud_router
+from app.api.v1.bud_origin import router as bud_origin_router
 from app.api.v1.bug_attachments import router as bug_attachments_router
 from app.api.v1.bug_comments import router as bug_comments_router
 from app.api.v1.bugs import router as bugs_router
@@ -191,6 +192,7 @@ engineering_router = APIRouter(
 )
 engineering_router.include_router(claude_router, prefix="/api/v1/claude")
 engineering_router.include_router(bud_router, prefix="/api/v1/buds")
+engineering_router.include_router(bud_origin_router, prefix="/api/v1/buds")
 engineering_router.include_router(bugs_router, prefix="/api/v1/bugs")
 engineering_router.include_router(bug_comments_router, prefix="/api/v1/bugs")
 engineering_router.include_router(bug_attachments_router, prefix="/api/v1/bugs")

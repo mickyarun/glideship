@@ -25,6 +25,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bud import BUDDocument, BUDStatus, BUDTimelineEventType
+from app.services.boards.handover_live import queue_origin_card_refresh
 from app.services.bud_assignment import auto_assign_for_phase
 from app.services.bud_development import on_bud_development_started
 from app.services.bud_timeline import record_event
@@ -66,3 +67,5 @@ async def apply_status_change(
     # tech spec and assigned to the lead, PERT estimation scheduled.
     if entering_development:
         await on_bud_development_started(db, org_id, bud, actor_id=actor_id, actor_name=actor_name)
+    # Boards holding the BUD refresh its chip once this commits; logged, never raised.
+    await queue_origin_card_refresh(db, org_id, bud.id)

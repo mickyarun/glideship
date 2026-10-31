@@ -25,6 +25,8 @@ the post-closure rewards and learning hooks:
 3. **Compute BUD learning metrics** (only on CLOSED transitions).
 4. **Spawn the post-close Learning Agent** when the BUD opted in via
    ``auto_generate_phases.closed``.
+5. **Tell the BUD's origin card** it was delivered
+   (``services/boards/notify.notify_origin_card``; no XP or SP).
 
 Repo scans are NOT triggered from here — they are owned by the PR-merge
 GitHub webhook (``api/v1/github_webhook.py`` → ``services/scan/pr_merge_update.py``)
@@ -50,6 +52,7 @@ from app.models.bud import BUDDocument, BUDStatus
 from app.models.dev_activity import DevActivityLog
 from app.models.organization import Organization
 from app.models.pull_request import PullRequest
+from app.services.boards.notify import notify_origin_card
 from app.services.bud_agent_trigger import (
     create_agent_task_for_stage,
     should_auto_generate_phase,
@@ -83,6 +86,20 @@ async def on_bud_closed(
     only fire at CLOSED so the full lifecycle is captured (PROD→CLOSED
     happens later via auto-close).
     """
+    # The card the BUD was handed over from hears it was delivered (once per
+    # BUD). A SAVEPOINT, like the metrics block, so a failure rolls back only
+    # its own writes and never blocks the close.
+    try:
+        async with db.begin_nested():
+            await notify_origin_card(db, org_id, bud, actor_id=actor_id)
+    except Exception:
+        logger.warning(
+            "origin_card_notify_failed",
+            bud_id=str(bud.id),
+            bud_number=bud.bud_number,
+            exc_info=True,
+        )
+
     await _award_contributor_xp(db, org_id, bud)
 
     if bud.status == BUDStatus.CLOSED:
