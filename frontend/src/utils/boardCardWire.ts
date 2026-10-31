@@ -19,6 +19,7 @@
 import type { CommentWire, ThreadComment } from '@/stores/commentThread'
 import type { CardAttachmentList, CardAttachmentRead, CardCommentPage, CardCommentRead } from '@/types/boards'
 import type { AttachmentWire, StoredAttachment } from '@/utils/attachmentWire'
+import { importSourceLabel } from '@/utils/importSummary'
 
 function comment(c: CardCommentRead): ThreadComment {
   return {
@@ -27,6 +28,7 @@ function comment(c: CardCommentRead): ThreadComment {
     // An imported comment keeps its original author's name as a label.
     authorName: c.author_name ?? c.author_label,
     authorAvatarUrl: c.author_avatar_url,
+    importLabel: importSourceLabel(c.import_source),
     body: c.body,
     editedAt: c.edited_at,
     deletedAt: c.deleted_at,

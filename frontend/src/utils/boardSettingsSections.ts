@@ -44,3 +44,8 @@ export function sectionPath(boardKey: string, section: BoardSettingsSection): st
   const base = `/boards/${encodeURIComponent(boardKey)}/settings`
   return section === 'general' ? base : `${base}?${SECTION_QUERY_KEY}=${section}`
 }
+
+/** The Import from Trello page, under a board's settings. */
+export function importPath(boardKey: string): string {
+  return `/boards/${encodeURIComponent(boardKey)}/settings/import`
+}

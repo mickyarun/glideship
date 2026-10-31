@@ -1,0 +1,73 @@
+// Copyright 2025-2026 Arun Rajkumar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The import wizard's words: its steps, the line under the title once a
+// board is read, and the error to show (a refused request, or a session
+// whose board couldn't be read, which starting it again reads afresh).
+
+import type { WizardStep } from '@/components/boards/imports/ImportStepper.vue'
+import type { ImportStep } from '@/composables/useImportSession'
+import type { ImportMode, ImportSessionRead } from '@/types/boards'
+import type { ImportFailure } from '@/utils/importErrors'
+import { plural } from '@/utils/format'
+
+export interface WizardProblem {
+  title: string
+  text: string
+  /** Starting the session again is the fix (it reads the board afresh). */
+  retry: boolean
+}
+
+const TITLES: Record<number, string> = {
+  413: 'That file is too large',
+  429: 'Too many imports started',
+  503: 'Imports are busy',
+}
+
+export function wizardSteps(mode: ImportMode | null, canConnect: boolean): WizardStep[] {
+  const first = mode === 'api' ? 'Connect' : mode === 'upload' || !canConnect ? 'Upload' : 'Upload or connect'
+  return [
+    { id: 'source', label: first },
+    { id: 'map', label: 'Map lists and people' },
+    { id: 'import', label: 'Import' },
+    { id: 'done', label: 'Done' },
+  ]
+}
+
+/** `"Ops requests" from Trello · uploaded export · 214 cards, 9 lists, 11 members` */
+export function wizardSubtitle(session: ImportSessionRead | null): string | undefined {
+  const found = session?.discovery
+  if (!session || !found) return undefined
+  const how = session.mode === 'api' ? 'Trello connection' : 'uploaded export'
+  const sizes = [
+    plural(found.counts.cards, 'card'),
+    plural(found.lists.length, 'list'),
+    plural(found.members.length, 'member'),
+  ].join(', ')
+  return `"${found.board_name}" from Trello · ${how} · ${sizes}`
+}
+
+export function wizardProblem(
+  failure: ImportFailure | null, session: ImportSessionRead | null, step: ImportStep,
+): WizardProblem | null {
+  if (failure) return { title: (failure.status && TITLES[failure.status]) || '', text: failure.message, retry: false }
+  if (session?.status === 'failed' && step === 'source') {
+    return {
+      title: "The board couldn't be read",
+      text: session.error || 'Something stopped the read part-way.',
+      retry: true,
+    }
+  }
+  return null
+}

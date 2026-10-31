@@ -53,6 +53,19 @@ export interface MembersRead {
   teams: { team_id: string; name: string; role: BoardRole }[]
 }
 
+/** Someone who can open a board (a role of their own or through a team). */
+export interface BoardPersonRead {
+  id: string
+  name: string
+  avatar_url: string | null
+  role: BoardRole
+  via: string
+}
+
+export interface BoardPeopleRead {
+  items: BoardPersonRead[]
+}
+
 /** A team in the org, for giving it a role on a board. */
 export interface TeamOption {
   id: string
@@ -87,4 +100,6 @@ export interface BoardLimits {
   stage_page_size: number
   recent_done_days: number
   attachments: { max_file_mb: number; max_files: number; accepted_extensions: string[] }
+  /** The largest board export an import takes, when the server says. */
+  import_max_upload_mb?: number
 }

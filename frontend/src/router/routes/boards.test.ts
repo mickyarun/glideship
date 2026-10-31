@@ -42,4 +42,11 @@ describe('board routes', () => {
     expect(router().resolve('/boards/OPS').name).toBe('board')
     expect(router().resolve('/boards/OPS/settings').name).toBe('board-settings')
   })
+
+  it('imports into a new board with boards:create, and into a board from its settings', () => {
+    const fresh = router().resolve('/boards/imports/trello')
+    expect(fresh.name).toBe('board-import-new')
+    expect(fresh.meta.permission).toBe('boards:create')
+    expect(router().resolve('/boards/OPS/settings/import').name).toBe('board-import')
+  })
 })

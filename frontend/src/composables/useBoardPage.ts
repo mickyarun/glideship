@@ -114,6 +114,10 @@ export function useBoardPage(key: Ref<string>) {
       stage_changed: refresh,
       board_updated: refresh,
       label_changed: refresh,
+      // An import run ended: new stages, labels and a lot of cards at once.
+      board_imported: () => {
+        if (forOpenBoard()) void resync()
+      },
       member_changed: () => {
         refresh()
         void loadMembers(key.value)

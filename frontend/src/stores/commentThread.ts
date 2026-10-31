@@ -27,6 +27,8 @@ export interface ThreadComment {
   authorId: string | null
   authorName: string | null
   authorAvatarUrl?: string | null
+  /** "via Trello import" on a comment that came in with an import. */
+  importLabel?: string | null
   body: string
   editedAt: string | null
   deletedAt: string | null

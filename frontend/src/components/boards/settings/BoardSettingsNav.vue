@@ -16,7 +16,8 @@
 
 <!-- The sections of a board's settings: the settings list beside the page
      on wide screens, a select above it on narrow ones. Either way the open
-     section lives in the URL. -->
+     section lives in the URL. Admins also get Import from Trello, its own
+     page under settings. -->
 <template>
   <SettingsSectionNav
     v-if="mdAndUp"
@@ -28,7 +29,7 @@
   <v-select
     v-else
     :model-value="section"
-    :items="BOARD_SETTINGS_SECTIONS"
+    :items="selectItems"
     item-title="title"
     item-value="value"
     label="Section"
@@ -44,23 +45,38 @@ import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import SettingsSectionNav from '@/components/settings/SettingsSectionNav.vue'
 import {
-  BOARD_SETTINGS_SECTIONS, sectionPath, type BoardSettingsSection,
+  BOARD_SETTINGS_SECTIONS, importPath, sectionPath, type BoardSettingsSection,
 } from '@/utils/boardSettingsSections'
 
-const props = defineProps<{ boardKey: string; section: BoardSettingsSection }>()
+const IMPORT = 'import'
+
+const props = withDefaults(
+  defineProps<{ boardKey: string; section: BoardSettingsSection; canImport?: boolean }>(),
+  { canImport: false },
+)
 
 const router = useRouter()
 const { mdAndUp } = useDisplay()
 
+const importItem = computed(() =>
+  props.canImport ? [{ title: 'Import from Trello', to: importPath(props.boardKey) }] : [],
+)
 const groups = computed(() => [
   {
     label: '',
-    items: BOARD_SETTINGS_SECTIONS.map(s => ({ title: s.title, to: sectionPath(props.boardKey, s.value) })),
+    items: [
+      ...BOARD_SETTINGS_SECTIONS.map(s => ({ title: s.title, to: sectionPath(props.boardKey, s.value) })),
+      ...importItem.value,
+    ],
   },
 ])
+const selectItems = computed(() => [
+  ...BOARD_SETTINGS_SECTIONS,
+  ...(props.canImport ? [{ value: IMPORT, title: 'Import from Trello' }] : []),
+])
 
-function open(section: BoardSettingsSection): void {
-  void router.push(sectionPath(props.boardKey, section))
+function open(section: BoardSettingsSection | typeof IMPORT): void {
+  void router.push(section === IMPORT ? importPath(props.boardKey) : sectionPath(props.boardKey, section))
 }
 </script>
 

@@ -69,10 +69,13 @@ describe('BoardsIndexView', () => {
     const creator = await mountIndex()
     expect(creator.text()).toContain('Give your team a board')
     expect(creator.findAll('button').some(b => b.text().includes('New board'))).toBe(true)
-    expect(creator.text()).not.toContain('Import from Trello')
+    const imports = creator.findAll('a').filter(a => a.text().includes('Import from Trello'))
+    expect(imports.length).toBeGreaterThan(0)
+    expect(imports[0]!.attributes('href')).toBe('/boards/imports/trello')
     const viewer = await mountIndex(['boards:view'])
     expect(viewer.text()).toContain('Ask an admin to make one and add you.')
     expect(viewer.findAll('button').some(b => b.text().includes('New board'))).toBe(false)
+    expect(viewer.text()).not.toContain('Import from Trello')
   })
 
   it('shows tiles with counts and meta, Delivery full width, sorted by last visit', async () => {

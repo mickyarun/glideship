@@ -19,6 +19,7 @@
 import api from '@/services/api'
 import type {
   BoardCreate,
+  BoardPeopleRead,
   BoardDetail,
   BoardLimits,
   BoardList,
@@ -72,6 +73,8 @@ export const boardsApi = {
   create: async (body: BoardCreate) => (await api.post<BoardDetail>(BASE, body)).data,
   get: async (key: string) => (await api.get<BoardDetail>(boardUrl(key))).data,
   members: async (key: string) => (await api.get<MembersRead>(`${boardUrl(key)}/members`)).data,
+  /** Everyone who can open the board, so cards can be assigned to them. */
+  people: async (key: string) => (await api.get<BoardPeopleRead>(`${boardUrl(key)}/people`)).data,
   prefs: async (key: string) => (await api.get<PrefsRead>(`${boardUrl(key)}/prefs`)).data,
   savePrefs: async (key: string, filters: SavedFilters) =>
     (await api.put<PrefsRead>(`${boardUrl(key)}/prefs`, filters)).data,

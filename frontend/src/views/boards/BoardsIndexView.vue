@@ -15,12 +15,13 @@
  -->
 
 <!-- Every board I can open, with Delivery pinned full width for engineering
-     members, a search and a sort, and "New board" for people who may create
-     one (?new=1 opens it, from the switcher). Lists nothing it can't open:
+     members, a search and a sort, and "New board" and "Import from Trello"
+     for people who may create one (?new=1 opens New board, from the switcher). Lists nothing it can't open:
      members-only boards I'm not on never reach this page. -->
 <template>
   <AppPage title="Boards" :subtitle="subtitle">
     <template v-if="canCreateBoards" #actions>
+      <v-btn variant="outlined" prepend-icon="mdi-import" :to="{ name: 'board-import-new' }">Import from Trello</v-btn>
       <v-btn color="primary" prepend-icon="mdi-plus" @click="creating = true">New board</v-btn>
     </template>
 
@@ -45,6 +46,7 @@
     >
       <template v-if="canCreateBoards" #actions>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="creating = true">New board</v-btn>
+        <v-btn variant="outlined" prepend-icon="mdi-import" :to="{ name: 'board-import-new' }">Import from Trello</v-btn>
       </template>
     </AppEmptyState>
 

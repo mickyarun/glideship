@@ -15,14 +15,22 @@
  -->
 
 <!-- "Boards / {board}" above a board's title, or "Boards / {board} /
-     {page}" above one of its pages (a card, its settings). Shared by team
-     boards and the Delivery board, which links to its own route. -->
+     {page}" above one of its pages (a card, its settings), with an
+     optional crumb between them ("Settings" above a settings page). Shared
+     by team boards and the Delivery board, which links to its own route.
+     With no board it's "Boards / {page}" (importing into a new board). -->
 <template>
   <nav aria-label="Breadcrumb" class="board-crumbs">
     <router-link :to="{ name: 'boards' }">Boards</router-link>
-    <span aria-hidden="true">/</span>
-    <router-link v-if="current" :to="boardRoute">{{ board.name }}</router-link>
-    <span v-else aria-current="page">{{ board.name }}</span>
+    <template v-if="board">
+      <span aria-hidden="true">/</span>
+      <router-link v-if="current" :to="boardRoute">{{ board.name }}</router-link>
+      <span v-else aria-current="page">{{ board.name }}</span>
+    </template>
+    <template v-if="via">
+      <span aria-hidden="true">/</span>
+      <router-link :to="via.to">{{ via.label }}</router-link>
+    </template>
     <template v-if="current">
       <span aria-hidden="true">/</span>
       <span aria-current="page" :class="{ 'board-crumbs__mono': mono }">{{ current }}</span>
@@ -36,16 +44,18 @@ import type { RouteLocationRaw } from 'vue-router'
 import type { BoardRead } from '@/types/boards'
 
 const props = defineProps<{
-  board: Pick<BoardRead, 'key' | 'name'>
+  board: Pick<BoardRead, 'key' | 'name'> | null
   /** The page under the board; without it the board is the current page. */
   current?: string
   /** Set the current crumb in the mono face (a card key). */
   mono?: boolean
   /** Where the board crumb goes, when it isn't a team board's own route. */
   to?: RouteLocationRaw
+  /** A crumb between the board and the current page. */
+  via?: { label: string; to: RouteLocationRaw }
 }>()
 
-const boardRoute = computed(() => props.to ?? { name: 'board', params: { key: props.board.key } })
+const boardRoute = computed(() => props.to ?? { name: 'board', params: { key: props.board?.key ?? '' } })
 </script>
 
 <style scoped>

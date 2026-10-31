@@ -18,6 +18,7 @@
 
 import type { BUDPriority } from '@/types'
 import type { StageCategory } from '@/types/boards/board'
+import type { ImportSourceKind } from '@/types/boards/imports'
 
 /** Card edits; omitted fields stay, ``null`` clears a nullable one. */
 export interface CardUpdate {
@@ -46,6 +47,8 @@ export interface CardCommentRead {
   author_label: string | null
   author_name: string | null
   author_avatar_url: string | null
+  /** Where an imported comment came from; null for one written here. */
+  import_source?: ImportSourceKind | null
   body: string
   edited_at: string | null
   deleted_at: string | null

@@ -78,6 +78,7 @@ export async function mountSettings(
         children: [
           { path: '', name: 'board', component: blank },
           { path: 'settings', name: 'board-settings', component: BoardSettingsView },
+          { path: 'settings/import', name: 'board-import', component: blank },
         ],
       },
     ],

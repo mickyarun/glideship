@@ -17,46 +17,23 @@
 // org visibility unless they choose members-only. Errors come back from
 // the server as text (a taken key or name reads the same either way).
 
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
+import { useBoardKeyFields } from '@/composables/useBoardKeyFields'
 import { useBoardsStore } from '@/stores/boards'
 import type { BoardDetail, BoardVisibility } from '@/types/boards'
-import { normaliseKey, suggestKey } from '@/utils/boardIndex'
 
 export function useNewBoardForm() {
   const store = useBoardsStore()
-  const name = ref('')
-  const key = ref('')
-  const keyEdited = ref(false)
+  const fields = useBoardKeyFields()
+  const { name, key, keyHint, keyLimits, setKey } = fields
   const template = ref('')
   const visibility = ref<BoardVisibility>('org')
   const saving = ref(false)
   const error = ref('')
   const loadError = ref('')
 
-  const keyLimits = computed(() =>
-    store.limits ? { min: store.limits.board_key_min, max: store.limits.board_key_max } : null,
-  )
-
-  watch(name, value => {
-    if (!keyEdited.value) key.value = suggestKey(value, keyLimits.value)
-  })
-
-  function setKey(raw: string | null): void {
-    keyEdited.value = true
-    key.value = normaliseKey(raw ?? '', keyLimits.value?.max ?? null)
-  }
-
-  /** "Cards will be EVT-1, EVT-2…", or what the key still needs. */
-  const keyHint = computed(() => {
-    const min = keyLimits.value?.min ?? 1
-    if (key.value.length < min) return `Letters only, at least ${min}. Cards are numbered from it.`
-    return `Cards will be ${key.value}-1, ${key.value}-2… Can't be changed later.`
-  })
-
   async function reset(): Promise<void> {
-    name.value = ''
-    key.value = ''
-    keyEdited.value = false
+    fields.reset()
     visibility.value = 'org'
     error.value = ''
     loadError.value = ''
@@ -70,11 +47,7 @@ export function useNewBoardForm() {
   }
 
   const canSubmit = computed(
-    () =>
-      !!name.value.trim() &&
-      key.value.length >= (keyLimits.value?.min ?? 1) &&
-      !!template.value &&
-      !saving.value,
+    () => fields.complete.value && !!template.value && !saving.value,
   )
 
   /** Create the board; resolves to it, or null with `error` set. */

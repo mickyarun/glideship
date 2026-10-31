@@ -126,6 +126,16 @@ describe('BoardView', () => {
     await wrapper.findAll('button').find(b => b.text().includes('Add your first card'))!.trigger('click')
     await flushPromises()
     expect(wrapper.find('textarea').exists()).toBe(true)
+    // Importing is for the board's admins.
+    expect(wrapper.text()).not.toContain('Import from Trello')
+  })
+
+  it('offers an admin Import from Trello on a new board', async () => {
+    s1Cards = []
+    board([...EDITOR_CAPS, 'import'])
+    const { wrapper } = await mountBoardPage()
+    const link = wrapper.findAll('a').find(a => a.text() === 'Import from Trello')!
+    expect(link.attributes('href')).toBe('/boards/OPS/settings/import')
   })
 
   it('shows one panel when the filters match nothing', async () => {

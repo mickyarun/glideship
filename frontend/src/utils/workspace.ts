@@ -37,6 +37,7 @@ export function canOpenWorkspace(
 }
 
 export const BOARDS_VIEW = 'boards:view'
+export const BOARDS_CREATE = 'boards:create'
 
 /**
  * Landing route for a signed-in user, based on what they can open:

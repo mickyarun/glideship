@@ -56,6 +56,9 @@
       <v-btn v-if="canCreate && defaultStageId" color="primary" @click="composeIn = defaultStageId">
         Add your first card
       </v-btn>
+      <v-btn v-if="board.can('import')" variant="text" :to="{ name: 'board-import', params: { key: detail.board.key } }">
+        Import from Trello
+      </v-btn>
     </BoardStatePanel>
 
     <template v-if="detail.stages.length && !noMatch">

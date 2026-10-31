@@ -43,6 +43,7 @@ export async function mountBoardPage(path = '/boards/OPS', { width = 1280 } = {}
         children: [
           { path: '', name: 'board', component: BoardView },
           { path: 'settings', name: 'board-settings', component: blank },
+          { path: 'settings/import', name: 'board-import', component: blank },
           { path: 'cards/:number', name: 'board-card', component: blank },
         ],
       },

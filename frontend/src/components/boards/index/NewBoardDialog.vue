@@ -23,27 +23,7 @@
       <h2 id="new-board-title" class="new-board__title mb-2">New board</h2>
       <v-card-text class="new-board__body">
         <AppCallout v-if="form.loadError.value" variant="error">{{ form.loadError.value }}</AppCallout>
-        <div>
-          <div class="new-board__row">
-            <v-text-field
-              v-model="form.name.value"
-              label="Name"
-              autofocus
-              :maxlength="limits?.board_name_max"
-              hide-details="auto"
-            />
-            <v-text-field
-              :model-value="form.key.value"
-              label="Key"
-              class="new-board__key"
-              :maxlength="limits?.board_key_max"
-              :aria-describedby="keyHintId"
-              hide-details
-              @update:model-value="form.setKey"
-            />
-          </div>
-          <p :id="keyHintId" class="new-board__hint">{{ form.keyHint.value }}</p>
-        </div>
+        <BoardNameKeyFields :fields="form" :limits="limits" autofocus />
         <TemplatePicker v-model="form.template.value" :templates="store.templates" />
         <BoardVisibilityField v-model="form.visibility.value" />
         <AppCallout v-if="form.error.value" variant="error">{{ form.error.value }}</AppCallout>
@@ -59,9 +39,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useId, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
+import BoardNameKeyFields from '@/components/boards/BoardNameKeyFields.vue'
 import BoardVisibilityField from '@/components/boards/BoardVisibilityField.vue'
 import TemplatePicker from '@/components/boards/index/TemplatePicker.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
@@ -75,7 +56,6 @@ const form = useNewBoardForm()
 const router = useRouter()
 const { xs } = useDisplay()
 const limits = computed(() => store.limits)
-const keyHintId = useId()
 
 watch(open, isOpen => {
   if (isOpen) void form.reset()
@@ -103,27 +83,6 @@ async function create(): Promise<void> {
   /* Room above the first field for its floating label, which the
      scrolling body would otherwise clip. */
   padding: 8px 0 0 !important;
-}
-/* Top-aligned so the name field keeps its own height next to the key. */
-.new-board__row {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
-}
-.new-board__hint {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: rgb(var(--v-theme-on-surface-variant));
-}
-.new-board__key :deep(input) {
-  font-family: var(--font-mono);
-  text-transform: uppercase;
-}
-@media (max-width: 600px) {
-  .new-board__row {
-    grid-template-columns: 1fr;
-  }
 }
 .new-board__actions {
   justify-content: flex-end;

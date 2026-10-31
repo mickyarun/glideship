@@ -42,7 +42,7 @@
       <span class="d-sr-only" role="status" aria-live="polite">{{ status.announcement.value }}</span>
     </template>
     <div class="board-settings">
-      <BoardSettingsNav :board-key="detail.board.key" :section="section" />
+      <BoardSettingsNav :board-key="detail.board.key" :section="section" :can-import="board.can('import')" />
       <div class="board-settings__main">
         <AppCallout v-if="board.archived.value" variant="warning" icon="mdi-archive-outline">
           This board is archived.

@@ -19,7 +19,7 @@
  */
 import type { RouteRecordRaw } from 'vue-router'
 import { DELIVERY_BOARD } from '@/constants/boards'
-import { BOARDS_VIEW } from '@/utils/workspace'
+import { BOARDS_CREATE, BOARDS_VIEW } from '@/utils/workspace'
 
 const meta = { permission: BOARDS_VIEW }
 
@@ -29,6 +29,14 @@ export const boardRoutes: RouteRecordRaw[] = [
     name: 'boards',
     meta,
     component: () => import('@/views/boards/BoardsIndexView.vue'),
+  },
+  // Importing into a new board needs boards:create, as the server checks.
+  // ``imports`` is a reserved board key, so this never shadows a board.
+  {
+    path: 'boards/imports/trello',
+    name: 'board-import-new',
+    meta: { permission: BOARDS_CREATE },
+    component: () => import('@/views/boards/NewBoardImportView.vue'),
   },
   // The Delivery board's key, typed as a board address, opens the BUD board.
   { path: `boards/${DELIVERY_BOARD.key}`, redirect: DELIVERY_BOARD.path },
@@ -44,6 +52,12 @@ export const boardRoutes: RouteRecordRaw[] = [
         path: 'settings',
         name: 'board-settings',
         component: () => import('@/views/boards/BoardSettingsView.vue'),
+      },
+      {
+        // Board admins only; the page says so to anyone else.
+        path: 'settings/import',
+        name: 'board-import',
+        component: () => import('@/views/boards/BoardImportView.vue'),
       },
       {
         path: 'cards/:number',

@@ -14,7 +14,7 @@
  * limitations under the License.
  -->
 
-<!-- One comment: author, time, edit/delete controls and the body,
+<!-- One comment: author, time (and where it came from, if imported), edit/delete controls and the body,
      or an inline editor while ``editing``. The thread owns which comment
      is being edited and does the saving. -->
 <template>
@@ -23,6 +23,7 @@
       <AppMonogram :name="comment.authorName" :src="comment.authorAvatarUrl" :size="20" />
       <span class="text-caption font-weight-medium">{{ comment.authorName || 'Unknown' }}</span>
       <span class="text-caption text-medium-emphasis">{{ formatDateTime(comment.createdAt) }}</span>
+      <span v-if="comment.importLabel" class="text-caption text-medium-emphasis">· {{ comment.importLabel }}</span>
       <span v-if="comment.editedAt && !comment.deletedAt" class="text-caption text-medium-emphasis">
         (edited)
       </span>
