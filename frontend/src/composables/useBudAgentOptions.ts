@@ -17,7 +17,9 @@
 // learning recap included: it feeds the estimator), and each stage is
 // pre-filled with that agent's current default skill so the form shows what
 // would run if nothing changes. Only non-default picks are sent, so the BUD
-// keeps following whatever the org marks as default later.
+// keeps following whatever the org marks as default later. A BUD that
+// starts later than requirements (a handover landing at design) never runs
+// the stages before it: they're left out of the form and sent as off.
 
 import { computed, ref, watch, type Ref } from 'vue'
 import { useAgentSkillsStore, type AgentSkill, type AgentType } from '@/stores/agentSkills'
@@ -50,6 +52,12 @@ export interface AgentChoices {
   phases: Record<string, boolean>
   /** Only the stages whose skill isn't the default; undefined when none. */
   overrides: Record<string, string> | undefined
+}
+
+/** The stages from ``from`` on (every stage when it isn't one of them). */
+export function stagesFrom(from?: BUDStatus): readonly CreateStage[] {
+  const at = CREATE_STAGES.findIndex(s => s.value === from)
+  return at > 0 ? CREATE_STAGES.slice(at) : CREATE_STAGES
 }
 
 export function useBudAgentOptions(open: Ref<boolean>) {
@@ -91,18 +99,33 @@ export function useBudAgentOptions(open: Ref<boolean>) {
     if (open.value) prefillDefaults()
   })
 
-  function choices(): AgentChoices {
+  const customSkill = (stage: CreateStage) => {
+    const picked = stageSkillPicks.value[stage.value]
+    return !!picked && picked !== defaultSkillId(stage.agentType)
+  }
+
+  /** What a BUD starting at ``from`` runs; earlier stages are off. */
+  function choices(from?: BUDStatus): AgentChoices {
+    const shown = stagesFrom(from)
     const overrides: Record<string, string> = {}
     const phases: Record<string, boolean> = {}
     for (const stage of CREATE_STAGES) {
-      const picked = stageSkillPicks.value[stage.value]
-      if (picked && picked !== defaultSkillId(stage.agentType)) overrides[stage.value] = picked
-      phases[stage.value] = !!autoGenerate.value[stage.value]
+      const on = shown.includes(stage) && !!autoGenerate.value[stage.value]
+      phases[stage.value] = on
+      if (shown.includes(stage) && customSkill(stage)) overrides[stage.value] = stageSkillPicks.value[stage.value] as string
     }
     return { phases, overrides: Object.keys(overrides).length > 0 ? overrides : undefined }
   }
 
-  return { stageSkillPicks, autoGenerate, skillsLoading, skillsForStage, choices, reset }
+  /** "4 on, default skills", for a folded agents section. */
+  function summary(from?: BUDStatus): string {
+    const shown = stagesFrom(from)
+    const on = shown.filter(s => autoGenerate.value[s.value]).length
+    const skills = shown.some(s => autoGenerate.value[s.value] && customSkill(s)) ? 'custom skills' : 'default skills'
+    return `${on} on, ${skills}`
+  }
+
+  return { stageSkillPicks, autoGenerate, skillsLoading, skillsForStage, choices, summary, reset }
 }
 
 export type BudAgentOptions = ReturnType<typeof useBudAgentOptions>

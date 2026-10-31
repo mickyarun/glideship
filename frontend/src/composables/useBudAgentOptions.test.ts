@@ -16,7 +16,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { CREATE_STAGES, useBudAgentOptions } from '@/composables/useBudAgentOptions'
+import { CREATE_STAGES, stagesFrom, useBudAgentOptions } from '@/composables/useBudAgentOptions'
 import { useAgentSkillsStore, type AgentSkill } from '@/stores/agentSkills'
 
 const skill = (id: string, agentType: AgentSkill['agentType'], isDefault: boolean) =>
@@ -38,4 +38,20 @@ describe('useBudAgentOptions', () => {
     expect(options.choices().overrides).toEqual({ design: 'd2' })
     expect(options.choices().phases.closed).toBe(false)
   })
+
+  it('leaves out and turns off the stages before a later start, and sums up the rest', async () => {
+    setActivePinia(createPinia())
+    useAgentSkillsStore().skills = [skill('d1', 'design', true), skill('d2', 'design', false)]
+    const options = useBudAgentOptions(ref(true))
+    await nextTick()
+    expect(stagesFrom('design').map(s => s.value)).toEqual(['design', 'tech_arch', 'testing', 'closed'])
+    expect(stagesFrom(undefined)).toEqual(CREATE_STAGES)
+    expect(options.choices('design').phases).toMatchObject({ bud: false, design: true })
+    expect(options.summary('design')).toBe('4 on, default skills')
+    options.stageSkillPicks.value.design = 'd2'
+    options.autoGenerate.value.testing = false
+    expect(options.summary('design')).toBe('3 on, custom skills')
+    expect(options.summary()).toBe('4 on, custom skills')
+  })
 })
+

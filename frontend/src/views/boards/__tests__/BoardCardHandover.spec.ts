@@ -27,7 +27,7 @@ vi.mock('@/services/boardCardApi', async () => (await import('./cardPageMockModu
 vi.mock('@/services/api', async () => (await import('./cardPageMockModules')).apiModule())
 vi.mock('@/composables/useMemberDirectory', async () => (await import('./cardPageMockModules')).directoryModule())
 vi.mock('@/services/handoverApi', () => ({
-  handoverApi: { list: vi.fn(), preview: vi.fn(), confirm: vi.fn(), buds: vi.fn(), retryStart: vi.fn() },
+  handoverApi: { list: vi.fn(), preview: vi.fn(), confirm: vi.fn(), searchBuds: vi.fn(), retryStart: vi.fn() },
 }))
 
 import { EDITOR_CAPS, makeCardDetail, makeDetail, makeStage } from '@/components/boards/__tests__/fixtures'
@@ -58,7 +58,7 @@ describe('BoardCardView: Delivery panel', () => {
     boardWith(CAPS, CARD, { board: HANDING.board, stages: HANDING.stages })
     api.list.mockResolvedValue({ items: [], can_hand_over: true })
     api.preview.mockResolvedValue(PREVIEW)
-    api.buds.mockResolvedValue([])
+    api.searchBuds.mockResolvedValue([])
   })
   afterEach(() => document.body.replaceChildren())
 
@@ -124,6 +124,16 @@ describe('BoardCardView: Delivery panel', () => {
     expect(document.body.textContent).toContain('OPS-3 handed over as BUD-123')
     expect(document.body.textContent).toContain('Open BUD')
     expect(panel()?.textContent).toContain('BUD-123')
+  })
+
+  it('keeps the message up with Start designs when the BUD landed at design with designs to start', async () => {
+    api.confirm.mockResolvedValue({ handover: handover(), card: makeCardDetail('3', { stage_id: 's2' }), design_available: true })
+    await openCard('/boards/OPS/cards/3?handover=1')
+    await vi.waitFor(() => expect(api.preview).toHaveBeenCalled())
+    ;[...document.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Create BUD and hand over')?.click()
+    await flushPromises()
+    expect(document.body.textContent).toContain('OPS-3 handed over as BUD-123. Its designs start when you open it.')
+    expect([...document.querySelectorAll('button')].some(b => b.textContent?.trim() === 'Start designs')).toBe(true)
   })
 
   it("retries a stage whose agents didn't start", async () => {

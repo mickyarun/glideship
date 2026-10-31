@@ -132,8 +132,11 @@ export function useStageEntry(o: Options) {
       if (!(await askAbout(card, stage?.name ?? UNKNOWN_STAGE, refusal.open, refusal.total))) return null
       result = await send(true)
     }
-    if (result.refusal?.code === 'STAGE_REQUIREMENTS_MISSING' && stage) {
-      refuse(card, stage, result.refusal.missing)
+    // The server names the stage it checked, which this tab may have had wrong.
+    const refused = result.refusal?.code === 'STAGE_REQUIREMENTS_MISSING' ? result.refusal : null
+    const named = refused ? stageOf(refused.stageId) ?? stage : null
+    if (refused && named) {
+      refuse(card, named, refused.missing)
       return null
     }
     return o.feedback.fail(result.error) ? null : result

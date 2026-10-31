@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The handover dialog's preview: what a confirm would create (or link) for
-// the chosen mode, landing stage and BUD. It's asked again whenever one of
-// those changes; a reply to an earlier choice is dropped. The draft title
-// and requirements start from it and stay as I edit them, until the
-// choice changes; only edited values are sent as overrides.
+// The handover dialog's draft: the preview for the chosen mode and landing,
+// and my edits to its title, requirements, repositories and priority. A
+// new choice asks for a new preview; what I've edited stays (it differs
+// from the preview it started from) and only untouched fields take the new
+// preview's values. A preview that fails keeps the last good one in view,
+// with the failure beside the choice that caused it, so I can pick again.
 
 import { computed, ref } from 'vue'
 import { handoverApi } from '@/services/handoverApi'
+import type { BUDPriority } from '@/types'
 import type { HandoverMode, HandoverOverrides, HandoverPreview, HandoverRequest } from '@/types/boards'
 import type { HandoverTarget } from '@/types/boards/settings'
 import { handoverFailure, type HandoverFailure } from '@/utils/handoverErrors'
@@ -31,6 +33,9 @@ export interface HandoverChoice {
   budId: string | null
 }
 
+const repoIdsOf = (p: HandoverPreview) => p.impacted_repos.map(r => r.repo_id)
+const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every(id => b.includes(id))
+
 export function useHandoverPreview(cardRef: () => { key: string; number: number } | null) {
   const preview = ref<HandoverPreview | null>(null)
   const loading = ref(false)
@@ -38,11 +43,22 @@ export function useHandoverPreview(cardRef: () => { key: string; number: number 
   const title = ref('')
   const requirements = ref('')
   const repoIds = ref<string[]>([])
+  const priority = ref<BUDPriority>('P2')
   let seq = 0
 
   function request(choice: HandoverChoice): HandoverRequest | null {
     if (choice.mode === 'link') return choice.budId ? { mode: 'link', bud_id: choice.budId } : null
     return { mode: 'create', target_status: choice.target }
+  }
+
+  /** Take the new preview's values where I haven't changed the last one's. */
+  function adopt(next: HandoverPreview): void {
+    const was = preview.value
+    if (!was || title.value === was.title) title.value = next.title
+    if (!was || requirements.value === was.requirements_md) requirements.value = next.requirements_md
+    if (!was || sameIds(repoIds.value, repoIdsOf(was))) repoIds.value = repoIdsOf(next)
+    if (!was || priority.value === was.priority) priority.value = next.priority
+    preview.value = next
   }
 
   /** Ask for the preview of this choice; a link with no BUD picked has none. */
@@ -59,14 +75,9 @@ export function useHandoverPreview(cardRef: () => { key: string; number: number 
     loading.value = true
     try {
       const got = await handoverApi.preview(card.key, card.number, body)
-      if (mine !== seq) return
-      preview.value = got
-      title.value = got.title
-      requirements.value = got.requirements_md
-      repoIds.value = got.impacted_repos.map(r => r.repo_id)
+      if (mine === seq) adopt(got)
     } catch (err) {
       if (mine !== seq) return
-      preview.value = null
       failure.value = handoverFailure(err, "Couldn't prepare the handover. Try again.")
       logFailure('boards', 'handover preview', err)
     } finally {
@@ -81,13 +92,17 @@ export function useHandoverPreview(cardRef: () => { key: string; number: number 
     const out: HandoverOverrides = {}
     if (title.value.trim() && title.value.trim() !== p.title) out.title = title.value.trim()
     if (requirements.value !== p.requirements_md) out.requirements_md = requirements.value
-    const original = p.impacted_repos.map(r => r.repo_id)
-    if (repoIds.value.length !== original.length || repoIds.value.some(id => !original.includes(id))) {
-      out.impacted_repo_ids = [...repoIds.value]
-    }
+    if (!sameIds(repoIds.value, repoIdsOf(p))) out.impacted_repo_ids = [...repoIds.value]
     return Object.keys(out).length ? out : undefined
   })
 
+  /** The priority I picked, when it isn't the preview's (the card's, else P2). */
+  const priorityChange = computed<BUDPriority | undefined>(() => {
+    const p = preview.value
+    return p && p.mode === 'create' && priority.value !== p.priority ? priority.value : undefined
+  })
+
+  /** Forget the draft: the next preview fills every field afresh. */
   function clear(): void {
     seq++
     preview.value = null
@@ -95,7 +110,7 @@ export function useHandoverPreview(cardRef: () => { key: string; number: number 
     loading.value = false
   }
 
-  return { preview, loading, failure, title, requirements, repoIds, overrides, load, clear }
+  return { preview, loading, failure, title, requirements, repoIds, priority, overrides, priorityChange, load, clear }
 }
 
 export type HandoverPreviewState = ReturnType<typeof useHandoverPreview>

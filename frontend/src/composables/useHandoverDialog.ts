@@ -29,7 +29,6 @@ import { useHandoverPreview } from '@/composables/useHandoverPreview'
 import { useStageEntry } from '@/composables/useStageEntry'
 import { newUuid } from '@/services/clientId'
 import { handoverApi } from '@/services/handoverApi'
-import { useBUDStore } from '@/stores/bud'
 import type { BoardDetail, CardSummary, HandoverConfirm, HandoverMode, HandoverResult, StageRequiredField } from '@/types/boards'
 import type { HandoverTarget } from '@/types/boards/settings'
 import { entryRefusal } from '@/utils/entryRefusal'
@@ -46,8 +45,12 @@ interface Options {
   fix: (field: StageRequiredField, stageId: string) => void
 }
 
+/** The board's landing, unless it's Tech arch and the card has nothing to plan from: then Design. */
+function landing(target: HandoverTarget, card: CardSummary | null): HandoverTarget {
+  return target === 'tech_arch' && card && !card.has_prd && !card.has_description ? 'design' : target
+}
+
 export function useHandoverDialog(o: Options) {
-  const budStore = useBUDStore()
   const feedback = useBoardFeedback()
   const agents = useBudAgentOptions(o.open)
   const boardKey = () => o.board()?.board.key ?? ''
@@ -91,12 +94,13 @@ export function useHandoverDialog(o: Options) {
     }
     opening = true
     mode.value = 'create'
-    target.value = o.board()?.board.handover_target_status ?? 'bud'
+    target.value = landing(o.board()?.board.handover_target_status ?? 'bud', o.card())
     budId.value = null
     opening = false
     key.value = newUuid()
     failure.value = null
     feedback.toastOpen.value = false
+    draft.clear()
     void reload()
   }, { immediate: true })
 
@@ -113,11 +117,13 @@ export function useHandoverDialog(o: Options) {
   function body(confirmOpen: boolean): HandoverConfirm {
     const base = { idempotency_key: key.value, confirm_open_checklist: confirmOpen }
     if (mode.value === 'link') return { ...base, mode: 'link', bud_id: budId.value ?? undefined }
-    const { phases, overrides } = agents.choices()
+    const { phases, overrides } = agents.choices(target.value)
+    const priority = draft.priorityChange.value
     return {
       ...base,
       mode: 'create',
       target_status: target.value,
+      ...(priority ? { priority } : {}),
       overrides: draft.overrides.value,
       auto_generate_phases: phases,
       stage_skill_overrides: overrides,
@@ -125,7 +131,7 @@ export function useHandoverDialog(o: Options) {
   }
 
   const ready = computed(() => {
-    if (busy.value || draft.loading.value || !draft.preview.value) return false
+    if (busy.value || draft.loading.value || draft.failure.value || !draft.preview.value) return false
     return mode.value === 'link' ? !!budId.value : !!draft.title.value.trim()
   })
 
@@ -148,9 +154,7 @@ export function useHandoverDialog(o: Options) {
           return { error: null, refusal, result: null }
         }
       })
-      const result = sent?.result ?? null
-      if (result?.design_available && result.handover.bud_id) budStore.designPendingFor = result.handover.bud_id
-      return result
+      return sent?.result ?? null
     } finally {
       busy.value = false
     }

@@ -14,15 +14,16 @@
  * limitations under the License.
  -->
 
-<!-- Picking the BUD to link the card to: search open BUDs by key or title,
-     then pick one from the list (a BUD this card already holds can't be
-     picked). The list is a listbox of options, so it reads as one choice. -->
+<!-- Picking the BUD to link the card to: type a key, number or title to
+     search open BUDs, then pick one from the list (a BUD this card already
+     holds can't be picked). The list is a listbox of options, so it reads
+     as one choice. -->
 <template>
   <div class="link-picker">
     <v-text-field
       v-model="search.query.value"
       type="search"
-      label="Search BUDs by key or title"
+      label="Search open BUDs by key or title"
       prepend-inner-icon="mdi-magnify"
       hide-details
       autofocus
@@ -30,10 +31,11 @@
     <AppCallout v-if="search.error.value" variant="error" role="alert">
       {{ search.error.value }}
       <template #actions>
-        <v-btn variant="outlined" size="small" @click="search.load()">Try again</v-btn>
+        <v-btn variant="outlined" size="small" @click="search.search()">Try again</v-btn>
       </template>
     </AppCallout>
     <v-progress-linear v-else-if="search.loading.value" indeterminate />
+    <p v-else-if="!search.settled.value" class="link-picker__empty">Type a BUD's key, number or title.</p>
     <p v-else-if="!search.options.value.length" class="link-picker__empty">No open BUD matches that.</p>
     <div v-else role="listbox" aria-label="Matching BUDs" class="link-picker__list">
       <button
@@ -57,15 +59,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import type { useOpenBudSearch } from '@/composables/useOpenBudSearch'
 import { statusLabel } from '@/utils/handoverChips'
 
-const props = defineProps<{ search: ReturnType<typeof useOpenBudSearch> }>()
+defineProps<{ search: ReturnType<typeof useOpenBudSearch> }>()
 const picked = defineModel<string | null>({ required: true })
-
-onMounted(() => void props.search.load())
 </script>
 
 <style scoped>

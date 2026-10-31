@@ -62,7 +62,7 @@ export function handoverDefaults(): void {
   vi.resetAllMocks()
   api.preview.mockResolvedValue(PREVIEW)
   api.confirm.mockResolvedValue(RESULT)
-  api.buds.mockResolvedValue([])
+  api.searchBuds.mockResolvedValue([])
 }
 
 export function refusal(status: number, data: Record<string, unknown>): AxiosError {

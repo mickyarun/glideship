@@ -44,6 +44,9 @@
   padding: 4px 24px 16px;
   overflow-y: auto;
 }
+.handover-dialog__modes {
+  align-self: flex-start;
+}
 .handover-dialog__foot {
   display: flex;
   flex-wrap: wrap;
@@ -61,7 +64,10 @@
 @media (max-width: 600px) {
   .handover-dialog__head,
   .handover-dialog__body,
-  .handover-dialog__foot {
+  .handover-dialog__modes {
+  align-self: flex-start;
+}
+.handover-dialog__foot {
     padding-left: 16px;
     padding-right: 16px;
   }

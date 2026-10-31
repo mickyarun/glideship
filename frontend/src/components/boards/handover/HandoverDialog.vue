@@ -16,15 +16,14 @@
 
 <!-- "Hand over to Delivery": create a BUD from the card (the default) or
      link one that exists. Create shows similar open BUDs first, then the
-     draft (title, landing stage, priority, repositories, requirements) and
-     the agents it runs, as New BUD does. A discarded BUD that a create
-     brings back says so. Refusals stay here in their code's words; a
-     stage that needs fields offers "Show me", an open checklist asks.
-     State: useHandoverDialog. -->
+     draft (title, landing, priority, repositories, requirements) and the
+     agents it runs from its landing on. A BUD a create brings back says
+     so. Refusals stay here in their code's words; a stage that needs
+     fields offers "Show me". State: useHandoverDialog. -->
 <template>
   <v-dialog
     :model-value="modelValue" max-width="760" scrollable :fullscreen="xs" :persistent="state.busy.value"
-    :aria-labelledby="titleId" @update:model-value="close"
+    content-class="handover-dialog__overlay" :aria-labelledby="titleId" @update:model-value="close"
   >
     <v-card color="surface" class="handover-dialog">
       <div class="handover-dialog__head">
@@ -32,7 +31,9 @@
         <p class="handover-dialog__desc">{{ description }}</p>
       </div>
       <div class="handover-dialog__body">
-        <AppPillToggle v-if="canLink" v-model="state.mode.value" :options="MODES" aria-label="How to hand over" />
+        <AppPillToggle
+          v-if="canLink" v-model="state.mode.value" :options="MODES" aria-label="How to hand over" class="handover-dialog__modes"
+        />
         <AppCallout v-if="reopens" variant="info">
           This reopens {{ reopens.bud_key }} ({{ reopens.status === 'discarded' ? 'returned' : statusLabel(reopens.status) }}), with the same number.
         </AppCallout>
@@ -46,30 +47,28 @@
           @link="linkSimilar"
         />
         <AppCallout v-for="w in notes" :key="w.code" variant="warning">{{ w.message }}</AppCallout>
-        <AppCallout v-if="state.failure.value || draft.failure.value" variant="error" role="alert">
-          {{ (state.failure.value ?? draft.failure.value)?.text }}
+        <AppCallout v-if="failure" variant="error" role="alert">
+          {{ failure.text }}
           <template v-if="!state.failure.value" #actions>
             <v-btn variant="outlined" size="small" @click="state.reload()">Try again</v-btn>
           </template>
         </AppCallout>
         <v-progress-linear v-if="draft.loading.value" indeterminate />
-        <template v-else-if="state.mode.value === 'create' && preview">
+        <template v-if="drafting">
           <HandoverDraftFields
             v-model:target="state.target.value"
             :draft="draft" :card-priority="card.priority" :has-prd="card.has_prd"
             :has-requirements="card.has_prd || card.has_description"
             :doc-max="docMax"
           />
-          <v-expansion-panels variant="accordion">
-            <v-expansion-panel title="Agents for the new BUD">
-              <v-expansion-panel-text><BudAgentOptions :options="state.agents" /></v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
+          <HandoverFold title="Agents" :meta="state.agents.summary(state.target.value)">
+            <BudAgentOptions :options="state.agents" :from="state.target.value" />
+          </HandoverFold>
         </template>
       </div>
       <div class="handover-dialog__foot">
         <span class="handover-dialog__hint">You'll stay on the card. A message links to the BUD.</span>
-        <v-btn variant="text" :disabled="state.busy.value" @click="close(false)">Cancel</v-btn>
+        <v-btn variant="outlined" :disabled="state.busy.value" @click="close(false)">Cancel</v-btn>
         <v-btn color="primary" variant="flat" :loading="state.busy.value" :disabled="!state.ready.value" @click="submit">
           {{ action }}
         </v-btn>
@@ -86,6 +85,7 @@ import { useDisplay } from 'vuetify'
 import BoardFeedback from '@/components/boards/board/BoardFeedback.vue'
 import ChecklistConfirmDialog from '@/components/boards/board/ChecklistConfirmDialog.vue'
 import HandoverDraftFields from '@/components/boards/handover/HandoverDraftFields.vue'
+import HandoverFold from '@/components/boards/handover/HandoverFold.vue'
 import HandoverLinkPicker from '@/components/boards/handover/HandoverLinkPicker.vue'
 import HandoverSimilarList from '@/components/boards/handover/HandoverSimilarList.vue'
 import BudAgentOptions from '@/components/buds/BudAgentOptions.vue'
@@ -142,7 +142,15 @@ const draft = state.draft
 const preview = computed(() => draft.preview.value)
 const reopens = computed(() => (state.mode.value === 'create' ? preview.value?.reopens ?? null : null))
 // The similar list and the checklist question say these already.
-const notes = computed(() => (preview.value?.warnings ?? []).filter(w => w.code !== 'SIMILAR_BUDS' && w.code !== 'CHECKLIST_OPEN'))
+// The draft keeps the last good preview while another loads or fails, so its landing can be changed.
+const drafting = computed(() => state.mode.value === 'create' && preview.value?.mode === 'create')
+// The similar list and the checklist question say their own; the draft says a card has no requirements.
+const notes = computed(() =>
+  (preview.value?.warnings ?? []).filter(w =>
+    w.code !== 'SIMILAR_BUDS' && w.code !== 'CHECKLIST_OPEN' && !(drafting.value && w.code === 'NO_REQUIREMENTS')),
+)
+// A failed preview shows under its landing while the draft is in view.
+const failure = computed(() => state.failure.value ?? (drafting.value ? null : draft.failure.value))
 // A similar BUD's key, kept: the link preview that follows has no similar list.
 const similarKeys = new Map<string, string>()
 function linkSimilar(id: string): void {
@@ -154,7 +162,9 @@ const linkedKey = computed(() => {
   const id = state.budId.value
   return search.find(id)?.key ?? (id ? similarKeys.get(id) : undefined) ?? ''
 })
-const linked = computed(() => (linkedKey.value && preview.value ? `${linkedKey.value} · ${preview.value.title}` : ''))
+const linked = computed(() =>
+  linkedKey.value && preview.value?.mode === 'link' ? `${linkedKey.value} · ${preview.value.title}` : '',
+)
 
 const heading = computed(() =>
   state.mode.value === 'link' ? `Link ${props.card.key} to an existing BUD` : `Hand over ${props.card.key} to Delivery`,
@@ -187,3 +197,4 @@ async function submit(): Promise<void> {
 </script>
 
 <style scoped src="./handover-dialog.css"></style>
+<style src="./handover-overlay.css"></style>

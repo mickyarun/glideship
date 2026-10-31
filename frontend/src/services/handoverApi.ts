@@ -46,6 +46,6 @@ export const handoverApi = {
     (await api.post<HandoverRead>(`${bud(budId)}/return-to-board`, { reason })).data,
   origin: async (budId: string, limit: number, cursor: string | null = null) =>
     (await api.get<BUDOrigin>(`${bud(budId)}/origin`, { params: cursor ? { limit, cursor } : { limit } })).data,
-  /** Every BUD I can see; the link picker keeps the open ones. */
-  buds: async () => (await api.get<BUDListItem[]>('/v1/buds/')).data,
+  /** Open BUDs whose key, number or title matches ``q``, newest first (the server caps them). */
+  searchBuds: async (q: string) => (await api.get<BUDListItem[]>('/v1/buds/', { params: { q } })).data,
 }

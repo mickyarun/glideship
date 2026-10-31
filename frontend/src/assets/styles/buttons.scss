@@ -30,6 +30,14 @@ html .v-btn--variant-outlined:focus-visible {
   border-color: color-mix(in srgb, currentColor 42%, transparent);
 }
 
+// Keyboard focus on any button draws the app's focus ring (--color-focus,
+// per theme), the same as links and plain controls; Vuetify's own focus
+// overlay alone is too faint to find on the dark theme.
+html .v-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 // A page header's action row (BUD and card pages): text, filled, outlined
 // and the square overflow button all stand at one height, and grow to the
 // 44px touch target on touch screens.

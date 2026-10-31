@@ -14,15 +14,11 @@
  * limitations under the License.
  -->
 
-<!-- Open BUDs that look like the draft, closest first, each with "Link
-     this instead" (when I may link) so the card joins that BUD rather than
-     making a second one. -->
+<!-- Open BUDs that look like the draft, closest first, in a warning
+     callout, each with "Link this instead" (when I may link) so the card
+     joins that BUD rather than making a second one. -->
 <template>
-  <div class="handover-similar" role="note">
-    <div class="handover-similar__head">
-      <v-icon icon="mdi-alert-outline" size="16" color="warning" aria-hidden="true" />
-      <span>Check these first: they look similar</span>
-    </div>
+  <AppCallout variant="warning" title="Check these first: they look similar" role="note">
     <ul class="handover-similar__list">
       <li v-for="bud in similar" :key="bud.bud_id" class="handover-similar__row">
         <span class="handover-similar__key">{{ bud.key }}</span>
@@ -39,10 +35,11 @@
         </v-btn>
       </li>
     </ul>
-  </div>
+  </AppCallout>
 </template>
 
 <script setup lang="ts">
+import AppCallout from '@/components/common/AppCallout.vue'
 import type { SimilarBUD } from '@/types/boards'
 import { statusLabel } from '@/utils/handoverChips'
 
@@ -60,27 +57,11 @@ function closeness(distance: number): string {
 </script>
 
 <style scoped>
-.handover-similar {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  border-radius: var(--radius-card);
-  border: 1px solid rgba(var(--v-theme-warning), 0.35);
-  background: rgba(var(--v-theme-warning), 0.08);
-}
-.handover-similar__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
 .handover-similar__list {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -102,6 +83,7 @@ function closeness(distance: number): string {
   flex: 1 1 200px;
   min-width: 0;
   font-size: 14px;
+  color: rgb(var(--v-theme-on-surface));
 }
 .handover-similar__meta {
   font-size: 12px;

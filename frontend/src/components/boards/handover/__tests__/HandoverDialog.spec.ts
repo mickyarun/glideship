@@ -22,11 +22,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VTextField } from 'vuetify/components'
 
 vi.mock('@/services/handoverApi', () => ({
-  handoverApi: { preview: vi.fn(), confirm: vi.fn(), buds: vi.fn(), list: vi.fn() },
+  handoverApi: { preview: vi.fn(), confirm: vi.fn(), searchBuds: vi.fn(), list: vi.fn() },
 }))
 
 import { CREATE_STAGES } from '@/composables/useBudAgentOptions'
-import { useBUDStore } from '@/stores/bud'
 import { api, click, handoverDefaults, openDialog, PREVIEW, RESULT, sent, text } from './handoverHarness'
 
 describe('HandoverDialog', () => {
@@ -39,12 +38,12 @@ describe('HandoverDialog', () => {
     expect(api.preview).toHaveBeenCalledWith('SEO', 14, { mode: 'create', target_status: 'design' })
     expect(text()).toContain('Hand over SEO-14 to Delivery')
     expect(text()).toContain('SEO-14 moves to Ready for dev')
-    expect(text()).toContain('P1, from the card')
+    expect(text()).toContain('From the card.')
     expect(text()).toContain('web')
     expect(document.querySelector('.markdown-body strong')?.textContent).toBe('rebuild')
   })
 
-  it('sends my title edit as an override with every agent on, as New BUD does', async () => {
+  it('sends my title edit as an override with every agent from its landing on, as New BUD does', async () => {
     const w = await openDialog()
     w.findComponent(VTextField).vm.$emit('update:modelValue', 'Saved bug filters')
     await flushPromises()
@@ -52,7 +51,9 @@ describe('HandoverDialog', () => {
     const body = sent()
     expect(body).toMatchObject({ mode: 'create', target_status: 'design', confirm_open_checklist: false })
     expect(body.overrides).toEqual({ title: 'Saved bug filters' })
-    expect(body.auto_generate_phases).toEqual(Object.fromEntries(CREATE_STAGES.map(s => [s.value, true])))
+    // It lands at design, so the PRD writer never runs.
+    expect(body.auto_generate_phases).toEqual({ ...Object.fromEntries(CREATE_STAGES.map(s => [s.value, true])), bud: false })
+    expect(body).not.toHaveProperty('priority')
     // Default skills aren't sent, so the BUD follows the org's default later.
     expect(body.stage_skill_overrides).toBeUndefined()
     expect(w.emitted('done')?.[0]).toEqual([RESULT])
@@ -129,13 +130,6 @@ describe('HandoverDialog', () => {
     expect(text()).toContain('This reopens BUD-012 (returned)')
     await click('Bring back BUD-012 and hand over')
     expect(api.confirm).toHaveBeenCalled()
-  })
-
-  it('leaves design generation waiting for the BUD when the result says designs can start', async () => {
-    api.confirm.mockResolvedValue({ ...RESULT, design_available: true })
-    await openDialog()
-    await click('Create BUD and hand over')
-    expect(useBUDStore().designPendingFor).toBe('b123')
   })
 
   it("doesn't offer linking without permission to edit BUDs", async () => {
