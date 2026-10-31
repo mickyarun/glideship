@@ -130,3 +130,26 @@ class BoardCardDocState(StrEnum):
     PENDING_REVIEW = "pending_review"
     REJECTED = "rejected"
     SUPERSEDED = "superseded"
+
+
+class StageRequiredField(StrEnum):
+    """What a card must have before it may enter a stage that lists it."""
+
+    ASSIGNEE = "assignee"
+    DUE_DATE = "due_date"
+    PRIORITY = "priority"
+    LABEL = "label"
+    DESCRIPTION = "description"
+    PRD = "prd"
+
+
+class BoardAccessVia(StrEnum):
+    """How someone holds their role on a board (computed, never stored).
+
+    ``member`` is their own row, ``team`` a team's row, and ``org`` the
+    board's org-wide visibility or the ``boards:manage`` permission.
+    """
+
+    MEMBER = "member"
+    TEAM = "team"
+    ORG = "org"

@@ -14,9 +14,9 @@
 
 """What a board column shows for each card, in one query per page.
 
-Assignee and label ids are ``array_agg``'d and the checklist counted in
-correlated subqueries, so a page of cards is one round trip with no lazy
-loads, however many cards it holds.
+Assignee and label ids are ``array_agg``'d, the checklist counted and the
+PRD looked up in correlated subqueries, so a page of cards is one round
+trip with no lazy loads, however many cards it holds.
 """
 
 import uuid
@@ -24,29 +24,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Double, Select, func, literal, or_, select, tuple_
+from sqlalchemy import ColumnElement, Double, Select, false, func, literal, select, tuple_
 from sqlalchemy.dialects.postgresql import UUID, aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.board_card import INT4_MAX, BoardCard, BoardCardAssignee, BoardCardLabel
+from app.models.board_card import BoardCard, BoardCardAssignee, BoardCardLabel
 from app.models.board_card_detail import BoardCardChecklistItem
+from app.models.board_card_doc import BoardCardDoc
+from app.models.board_enums import BoardCardDocKind, BoardCardDocState
 from app.models.bud import BUDPriority
-from app.repositories.board import like_pattern
-
-
-@dataclass(frozen=True)
-class CardQuery:
-    """One page of a stage's cards, narrowed by the board filters."""
-
-    stage_id: uuid.UUID | None
-    limit: int
-    # The (position, id) of the last card on the previous page.
-    after: tuple[float, uuid.UUID] | None = None
-    q: str | None = None
-    assignee: uuid.UUID | None = None
-    label: uuid.UUID | None = None
-    priority: BUDPriority | None = None
-    archived: bool = False
+from app.repositories.board_card_filters import CardQuery, card_filters
 
 
 @dataclass(frozen=True)
@@ -64,14 +51,35 @@ class CardSummaryRow:
     due_done: bool
     archived_at: datetime | None
     updated_at: datetime
+    repo_id: uuid.UUID | None = None
+    has_description: bool = False
+    has_prd: bool = False
     assignee_ids: list[uuid.UUID] = field(default_factory=list)
     label_ids: list[uuid.UUID] = field(default_factory=list)
     checklist_done: int = 0
     checklist_total: int = 0
 
 
+# Anything but whitespace, the same test ``move_rules.has_text`` makes.
+_HAS_TEXT = r"\S"
+
+
 def _per_card(column: Any, *conditions: ColumnElement[bool]) -> Any:
     return select(column).where(*conditions).correlate(BoardCard).scalar_subquery()
+
+
+def _has_prd() -> ColumnElement[bool]:
+    return (
+        select(BoardCardDoc.id)
+        .where(
+            BoardCardDoc.card_id == BoardCard.id,
+            BoardCardDoc.kind == BoardCardDocKind.PRD,
+            BoardCardDoc.state == BoardCardDocState.CURRENT,
+            BoardCardDoc.body_md.regexp_match(_HAS_TEXT),
+        )
+        .correlate(BoardCard)
+        .exists()
+    )
 
 
 class BoardCardSummaryRepository:
@@ -87,7 +95,7 @@ class BoardCardSummaryRepository:
         One stage when ``query.stage_id`` is set (seeking the stage's
         ``(stage_id, position, id)`` index), else the whole board.
         """
-        stmt = self._select(board_id).where(*self._filters(query))
+        stmt = self._select(board_id).where(*card_filters(query))
         if query.stage_id is not None:
             stmt = stmt.where(BoardCard.stage_id == query.stage_id)
         if query.after is not None:
@@ -135,46 +143,16 @@ class BoardCardSummaryRepository:
             BoardCard.due_done,
             BoardCard.archived_at,
             BoardCard.updated_at,
+            BoardCard.repo_id,
+            func.coalesce(BoardCard.description_md.regexp_match(_HAS_TEXT), false()).label(
+                "has_description"
+            ),
+            _has_prd().label("has_prd"),
             assignees.label("assignee_ids"),
             labels.label("label_ids"),
             done.label("checklist_done"),
             total.label("checklist_total"),
         ).where(BoardCard.org_id == self._org_id, BoardCard.board_id == board_id)
-
-    @staticmethod
-    def _filters(query: CardQuery) -> list[ColumnElement[bool]]:
-        archived = BoardCard.archived_at
-        clauses: list[ColumnElement[bool]] = [
-            archived.is_not(None) if query.archived else archived.is_(None)
-        ]
-        if query.q:
-            text = query.q.strip()
-            match = BoardCard.title.ilike(like_pattern(text))
-            clauses.append(
-                or_(match, BoardCard.number == int(text))
-                if text.isascii() and text.isdigit() and int(text) <= INT4_MAX
-                else match
-            )
-        if query.assignee is not None:
-            clauses.append(
-                select(BoardCardAssignee.id)
-                .where(
-                    BoardCardAssignee.card_id == BoardCard.id,
-                    BoardCardAssignee.user_id == query.assignee,
-                )
-                .exists()
-            )
-        if query.label is not None:
-            clauses.append(
-                select(BoardCardLabel.id)
-                .where(
-                    BoardCardLabel.card_id == BoardCard.id, BoardCardLabel.label_id == query.label
-                )
-                .exists()
-            )
-        if query.priority is not None:
-            clauses.append(BoardCard.priority == query.priority)
-        return clauses
 
     async def _run(self, stmt: Select[Any]) -> list[CardSummaryRow]:
         rows = (await self._db.execute(stmt)).mappings().all()

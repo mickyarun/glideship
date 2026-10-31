@@ -27,7 +27,9 @@ from app.api.v1.boards import (
     imports,
     labels,
     members,
+    people,
     prefs,
+    repos,
     stages,
 )
 from app.core.deps import require_permissions
@@ -43,7 +45,9 @@ for part in (
     boards,
     stages,
     members,
+    people,
     labels,
+    repos,
     prefs,
     cards,
     checklist,

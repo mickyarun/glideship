@@ -33,7 +33,7 @@ from sqlalchemy import (
     false,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import BaseModel
@@ -42,6 +42,7 @@ from app.models.board_enums import (
     BoardStageCategory,
     BoardStatus,
     BoardVisibility,
+    StageRequiredField,
     pg_enum,
 )
 from app.models.board_fks import board_fk
@@ -147,6 +148,13 @@ class BoardStage(BaseModel):
     wip_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_default: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
+    )
+    # What a card must have before it may enter, in declaration order.
+    required_fields: Mapped[list[StageRequiredField]] = mapped_column(
+        ARRAY(pg_enum(StageRequiredField, "stage_required_field")),
+        nullable=False,
+        default=list,
+        server_default=text("'{}'"),
     )
 
     def __repr__(self) -> str:

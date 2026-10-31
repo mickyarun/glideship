@@ -48,8 +48,10 @@ from app.models.board_enums import (
     BoardStageCategory,
     BoardStatus,
     BoardVisibility,
+    StageRequiredField,
 )
 from app.models.board_member import BoardMember, BoardTeam, BoardUserPrefs
+from app.models.board_repo import BoardRepo
 from app.models.bud import (
     BUDChatMessage,
     BUDDesign,
@@ -195,12 +197,14 @@ __all__ = [
     "BoardLabelColor",
     "BoardMember",
     "BoardMemberRole",
+    "BoardRepo",
     "BoardStage",
     "BoardStageCategory",
     "BoardStatus",
     "BoardTeam",
     "BoardUserPrefs",
     "BoardVisibility",
+    "StageRequiredField",
     "BUDChatMessage",
     "BUDDesign",
     "BUDDesignStatus",

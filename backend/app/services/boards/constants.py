@@ -22,7 +22,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
-from app.models.board_enums import BoardMemberRole
+from app.models.board_enums import BoardMemberRole, StageRequiredField
 from app.models.bud import BUDStatus
 
 BOARD_KEY_MIN_LENGTH: Final = 2
@@ -52,6 +52,20 @@ ID_LIST_MAX_ITEMS: Final = 50
 WIP_LIMIT_MAX: Final = 999
 
 # The BUD board, listed beside team boards for members of the engineering workspace.
+GITHUB_WEB_URL: Final = "https://github.com"
+
+# How a refused move names each missing field: "needs an assignee and a PRD".
+STAGE_REQUIRED_FIELD_LABELS: Final = MappingProxyType(
+    {
+        StageRequiredField.ASSIGNEE: "an assignee",
+        StageRequiredField.DUE_DATE: "a due date",
+        StageRequiredField.PRIORITY: "a priority",
+        StageRequiredField.LABEL: "a label",
+        StageRequiredField.DESCRIPTION: "a description",
+        StageRequiredField.PRD: "a PRD",
+    }
+)
+
 DELIVERY_BOARD_NAME: Final = "Delivery"
 DELIVERY_BOARD_PATH: Final = "/buds"
 
@@ -77,6 +91,7 @@ class BoardAction(StrEnum):
     MANAGE_MEMBERS = "manage_members"
     MANAGE_LABELS = "manage_labels"
     CONFIGURE_AGENTS = "configure_agents"
+    MANAGE_REPOS = "manage_repos"
     IMPORT = "import"
     ARCHIVE_BOARD = "archive_board"
     REMOVE_ANY_ATTACHMENT = "remove_any_attachment"
@@ -97,6 +112,7 @@ _ADMIN_ACTIONS: Final = (
     BoardAction.MANAGE_MEMBERS,
     BoardAction.MANAGE_LABELS,
     BoardAction.CONFIGURE_AGENTS,
+    BoardAction.MANAGE_REPOS,
     BoardAction.IMPORT,
     BoardAction.ARCHIVE_BOARD,
     BoardAction.REMOVE_ANY_ATTACHMENT,

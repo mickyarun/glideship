@@ -14,6 +14,9 @@
 
 """Turn board domain errors into HTTP responses, in one place."""
 
+from collections.abc import Mapping
+from typing import Any
+
 from fastapi import FastAPI, status
 
 from app.api.v1._domain_errors import ErrorTable, register_domain_errors
@@ -54,6 +57,10 @@ def _headers(exc: Exception) -> dict[str, str] | None:
     return None
 
 
+def _extra(exc: Exception) -> Mapping[str, Any]:
+    return exc.body() if isinstance(exc, BoardError) else {}
+
+
 def register_board_errors(app: FastAPI) -> None:
     """Install the handler; call once wherever the API router is mounted."""
-    register_domain_errors(app, BoardError, _STATUS, headers=_headers)
+    register_domain_errors(app, BoardError, _STATUS, headers=_headers, extra=_extra)

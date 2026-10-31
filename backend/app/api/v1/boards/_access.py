@@ -29,6 +29,7 @@ restore_board = require_action(BoardAction.ARCHIVE_BOARD, writable=False)
 manage_stages = require_action(BoardAction.MANAGE_STAGES)
 manage_members = require_action(BoardAction.MANAGE_MEMBERS)
 manage_labels = require_action(BoardAction.MANAGE_LABELS)
+manage_repos = require_action(BoardAction.MANAGE_REPOS)
 create_card = require_action(BoardAction.CREATE_CARD)
 
 view_card = require_card_action(BoardAction.VIEW)

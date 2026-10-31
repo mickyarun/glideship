@@ -53,6 +53,8 @@ class BoardSocketEvent(StrEnum):
     STAGE_REORDERED = "stage_reordered"
     LABEL_CHANGED = "label_changed"
     MEMBER_CHANGED = "member_changed"
+    # A repository was linked or unlinked; ``repo_id`` and ``linked`` say which.
+    REPOS_CHANGED = "repos_changed"
     # One summary when an import finishes; the board reloads rather than
     # hearing about each imported card.
     BOARD_IMPORTED = "board_imported"

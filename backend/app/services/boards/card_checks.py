@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Checks a card write must pass: who can be assigned, which labels fit, dates."""
+"""Checks a card write must pass: who can be assigned, which labels and repo fit, dates."""
 
 import uuid
 from collections.abc import Iterable
@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.board_card import BoardCard
 from app.repositories.board_access import BoardAccessRepository
 from app.repositories.board_label import BoardLabelRepository
+from app.repositories.board_repo import BoardRepoRepository
 from app.services.boards.access import BoardAccess
 from app.services.boards.errors import BoardConflictError, BoardRuleError
 
@@ -45,6 +46,19 @@ async def check_labels(
     repo = BoardLabelRepository(db, org_id=access.org_id)
     if wanted - await repo.ids_in_board(access.board.id, wanted):
         raise BoardRuleError("Labels must be labels of this board.")
+
+
+async def check_repo(db: AsyncSession, access: BoardAccess, repo_id: uuid.UUID | None) -> None:
+    """A card names only a repository its board links.
+
+    Holds the link until the write commits, so it can't be unlinked
+    underneath; call it before locking the card (the order unlinking uses).
+    """
+    if repo_id is None:
+        return
+    repo = BoardRepoRepository(db, org_id=access.org_id)
+    if not await repo.hold_link(access.board.id, repo_id):
+        raise BoardRuleError("Pick one of the repositories this board links.")
 
 
 def check_dates(start_at: datetime | None, due_at: datetime | None) -> None:

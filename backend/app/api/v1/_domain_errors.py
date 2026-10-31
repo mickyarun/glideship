@@ -19,13 +19,15 @@ show; this turns them into ``{"detail": message}`` with the status from
 its table, checked in order, so a subclass listed first wins.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 ErrorTable = Sequence[tuple[type[Exception], int]]
 HeadersFor = Callable[[Exception], dict[str, str] | None]
+ExtraFor = Callable[[Exception], Mapping[str, Any]]
 
 
 def status_for(exc: Exception, table: ErrorTable) -> int:
@@ -41,15 +43,22 @@ def register_domain_errors(
     table: ErrorTable,
     *,
     headers: HeadersFor | None = None,
+    extra: ExtraFor | None = None,
 ) -> None:
-    """Answer every ``base`` error raised by a route from ``table``."""
+    """Answer every ``base`` error raised by a route from ``table``.
+
+    ``extra`` adds fields next to ``detail`` (a machine-readable ``code``
+    and what a client needs to act on it); ``detail`` stays the message.
+    """
 
     async def _respond(_request: Request, exc: Exception) -> JSONResponse:
         if not isinstance(exc, base):  # only ever registered for ``base``
             raise exc
-        extra = headers(exc) if headers is not None else None
+        fields = extra(exc) if extra is not None else {}
         return JSONResponse(
-            {"detail": str(exc)}, status_code=status_for(exc, table), headers=extra
+            {**fields, "detail": str(exc)},
+            status_code=status_for(exc, table),
+            headers=headers(exc) if headers is not None else None,
         )
 
     app.add_exception_handler(base, _respond)

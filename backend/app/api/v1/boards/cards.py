@@ -23,7 +23,7 @@ from app.api.v1.boards import _access as can
 from app.config import settings
 from app.core.deps import get_db
 from app.models.bud import BUDPriority
-from app.repositories.board_card_summary import CardQuery
+from app.repositories.board_card_filters import CardQuery
 from app.schemas.boards.card import CardCreate, CardDetail, CardMove, CardPage, CardUpdate
 from app.schemas.boards.text import SEARCH_MAX_LENGTH
 from app.services.boards import card_edit, card_move, card_service
@@ -43,6 +43,7 @@ async def list_cards(
     assignee: uuid.UUID | None = None,
     label: uuid.UUID | None = None,
     priority: BUDPriority | None = None,
+    repo: uuid.UUID | None = None,
     archived: bool = False,
     access: BoardAccess = Depends(can.view_board),
     db: AsyncSession = Depends(get_db),
@@ -59,6 +60,7 @@ async def list_cards(
         assignee=assignee,
         label=label,
         priority=priority,
+        repo=repo,
         archived=archived,
     )
     return await card_service.list_cards(db, access, query)

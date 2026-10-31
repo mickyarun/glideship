@@ -77,6 +77,9 @@ def card_summary(board: Board, row: CardSummaryRow) -> CardSummary:
         label_ids=row.label_ids,
         checklist_done=row.checklist_done,
         checklist_total=row.checklist_total,
+        has_description=row.has_description,
+        has_prd=row.has_prd,
+        repo_id=row.repo_id,
     )
 
 

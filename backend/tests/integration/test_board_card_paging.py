@@ -27,7 +27,8 @@ from sqlalchemy import event, update
 
 from app.config import settings
 from app.models.board_card import BoardCard
-from app.repositories.board_card_summary import BoardCardSummaryRepository, CardQuery
+from app.repositories.board_card_filters import CardQuery
+from app.repositories.board_card_summary import BoardCardSummaryRepository
 from tests.integration.board_api_support import (
     BOARDS,
     Person,
@@ -162,15 +163,16 @@ async def test_a_page_is_one_query_however_many_cards_it_holds(
         201,
     )
     for i in range(12):
-        card = await make_card(client, pm, key, f"C{i}", label_ids=[label["id"]])
+        described = {"description_md": "Why"} if i % 2 else {"description_md": " \n "}
+        card = await make_card(client, pm, key, f"C{i}", label_ids=[label["id"]], **described)
+        card_url = f"{BOARDS}/{key}/cards/{card['number']}"
         ok(
-            await client.post(
-                f"{BOARDS}/{key}/cards/{card['number']}/checklist",
-                json={"text": "step"},
-                headers=pm.headers,
-            ),
+            await client.post(f"{card_url}/checklist", json={"text": "step"}, headers=pm.headers),
             201,
         )
+        if i % 3 == 0:
+            body = {"body_md": "The PRD" if i % 2 else "   ", "base_version": None}
+            ok(await client.put(f"{card_url}/docs/prd", json=body, headers=pm.headers))
 
     async with pg_session_factory() as db:
         repo = BoardCardSummaryRepository(db, org_id=await _org_of(client, pm))
@@ -180,6 +182,12 @@ async def test_a_page_is_one_query_however_many_cards_it_holds(
     assert len(rows) == 12 and len(seen) == 1
     assert all(r.label_ids == [uuid.UUID(label["id"])] for r in rows)
     assert all((r.checklist_done, r.checklist_total) == (0, 1) for r in rows)
+    by_title = {r.title: r for r in rows}
+    for i in range(12):
+        row = by_title[f"C{i}"]
+        assert row.has_description is bool(i % 2), i
+        assert row.has_prd is (i % 3 == 0 and bool(i % 2)), i
+        assert row.repo_id is None
 
     with _count_statements(pg_session_factory) as small:
         await page(client, pm, key, backlog, limit=2)

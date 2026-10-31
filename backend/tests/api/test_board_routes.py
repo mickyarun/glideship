@@ -45,13 +45,18 @@ BOARD_API_MODULES = (
     "imports",
     "labels",
     "members",
+    "people",
     "prefs",
+    "repos",
     "stages",
 )
 PREFIX = "/api/v1/boards"
 # Reads only an admin may make: the team picker lists the org's teams,
 # which a viewer has no business seeing.
-ADMIN_READS = {f"{PREFIX}/{{key}}/teams/options": BoardAction.MANAGE_MEMBERS}
+ADMIN_READS = {
+    f"{PREFIX}/{{key}}/teams/options": BoardAction.MANAGE_MEMBERS,
+    f"{PREFIX}/{{key}}/repos/options": BoardAction.MANAGE_REPOS,
+}
 ADMIN = BoardMemberRole.ADMIN
 
 # Writes that don't need an active board: restoring one, and personal prefs.
@@ -127,7 +132,7 @@ def test_settings_routes_need_an_admin() -> None:
         settings_route = any(part in route.path for part in ADMIN_PATHS) or (
             route.path == f"{PREFIX}/{{key}}" and _method(route) == "PATCH"
         )
-        member_write = "/members/" in route.path or "/labels" in route.path
+        member_write = any(part in route.path for part in ("/members/", "/labels", "/repos"))
         if settings_route or (member_write and _method(route) != "GET"):
             assert dep.board_min_role is ADMIN, route.path
 

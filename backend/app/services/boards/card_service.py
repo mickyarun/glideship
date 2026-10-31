@@ -22,18 +22,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.board_card import BoardCard
 from app.models.board_enums import BoardCardEventType
 from app.repositories.board_card import BoardCardRepository
+from app.repositories.board_card_filters import CardQuery
 from app.repositories.board_card_links import BoardCardLinkRepository
-from app.repositories.board_card_summary import BoardCardSummaryRepository, CardQuery
+from app.repositories.board_card_summary import BoardCardSummaryRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.card import CardCreate, CardDetail, CardPage
 from app.services.boards.access import BoardAccess
-from app.services.boards.card_checks import check_assignees, check_dates, check_labels
+from app.services.boards.card_checks import (
+    check_assignees,
+    check_dates,
+    check_labels,
+    check_repo,
+)
 from app.services.boards.card_place import place_card
 from app.services.boards.card_timing import enter_category
 from app.services.boards.cursor import encode_cursor
 from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
+from app.services.boards.move_rules import check_entry, facts_of_new_card
 from app.services.boards.reads import card_detail, card_summary, summary_json
 from app.services.boards.stage_service import STAGE_NOT_FOUND
 
@@ -63,14 +70,19 @@ async def list_cards(db: AsyncSession, access: BoardAccess, query: CardQuery) ->
 
 
 async def create_card(db: AsyncSession, access: BoardAccess, body: CardCreate) -> CardDetail:
-    """A new card at the bottom of its stage, numbered last so the board row is held briefly."""
+    """A new card at the bottom of its stage, numbered last so the board row is held briefly.
+
+    The card must meet the stage's entry rules, as a move into it would.
+    """
     board = access.board
+    await check_repo(db, access, body.repo_id)
     stages = BoardStageRepository(db, org_id=access.org_id)
     stage = await (
         stages.lock(board.id, body.stage_id) if body.stage_id else stages.default_stage(board.id)
     )
     if stage is None:
         raise BoardItemNotFoundError(STAGE_NOT_FOUND)
+    check_entry(stage, facts_of_new_card(body), confirm_open_checklist=body.confirm_open_checklist)
     check_dates(body.start_at, body.due_at)
     await check_assignees(db, access, body.assignee_ids)
     await check_labels(db, access, body.label_ids)
@@ -88,6 +100,7 @@ async def create_card(db: AsyncSession, access: BoardAccess, body: CardCreate) -
         priority=body.priority,
         start_at=body.start_at,
         due_at=body.due_at,
+        repo_id=body.repo_id,
         created_by=access.user_id,
     )
     enter_category(card, stage.category, datetime.now(UTC))

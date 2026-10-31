@@ -15,12 +15,27 @@
 """Board stages: the columns, their categories, WIP limits and order."""
 
 import uuid
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from app.models.board_enums import BoardStageCategory
+from app.models.board_enums import BoardStageCategory, StageRequiredField
 from app.schemas.boards.text import OrderList, StageName
 from app.services.boards.constants import WIP_LIMIT_MAX
+
+
+def _no_repeats(fields: list[StageRequiredField]) -> list[StageRequiredField]:
+    if len(set(fields)) != len(fields):
+        raise ValueError("List each required field once.")
+    return fields
+
+
+# What a card must have to enter the stage; each field at most once.
+RequiredFields = Annotated[
+    list[StageRequiredField],
+    Field(max_length=len(StageRequiredField)),
+    AfterValidator(_no_repeats),
+]
 
 
 class StageCreate(BaseModel):
@@ -32,10 +47,14 @@ class StageCreate(BaseModel):
     category: BoardStageCategory
     wip_limit: int | None = Field(default=None, gt=0, le=WIP_LIMIT_MAX)
     is_default: bool = False
+    required_fields: RequiredFields = Field(default_factory=list)
 
 
 class StageUpdate(BaseModel):
-    """Stage settings; omitted fields stay. Send ``wip_limit: null`` to clear it."""
+    """Stage settings; omitted fields stay. Send ``wip_limit: null`` to clear it.
+
+    ``required_fields`` replaces the whole list; send ``[]`` to require nothing.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -43,6 +62,7 @@ class StageUpdate(BaseModel):
     category: BoardStageCategory | None = None
     wip_limit: int | None = Field(default=None, gt=0, le=WIP_LIMIT_MAX)
     is_default: bool | None = None
+    required_fields: RequiredFields | None = None
 
 
 class StageOrder(BaseModel):
@@ -64,4 +84,5 @@ class StageRead(BaseModel):
     position: int
     wip_limit: int | None
     is_default: bool
+    required_fields: list[StageRequiredField]
     open_cards: int = 0

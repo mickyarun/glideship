@@ -32,8 +32,11 @@ from tests.integration.board_api_support import (
     BOARDS,
     CardTeam,
     card_team,
+    link_repo,
     ok,
+    org_of,
     stage_id,
+    tracked_repo,
     use_local_storage,
 )
 from tests.integration.scan_features_bugs_support import Factory
@@ -48,9 +51,11 @@ def _storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     use_local_storage(tmp_path, monkeypatch)
 
 
-async def _ids(client: AsyncClient, team: CardTeam) -> dict[str, str]:
+async def _ids(client: AsyncClient, team: CardTeam, factory: Factory) -> dict[str, str]:
     """Real ids for every path parameter, made by the board's admin."""
     admin = team.admin.headers
+    repo = await tracked_repo(factory, await org_of(factory, team.admin))
+    await link_repo(client, team.admin, team.key, repo)
     board = ok(await client.get(f"{BOARDS}/{team.key}", headers=admin))
     item = ok(await client.post(f"{team.url}/checklist", json={"text": "x"}, headers=admin), 201)
     files = {"file": ("a.png", b"\x89PNG", "application/octet-stream")}
@@ -67,6 +72,7 @@ async def _ids(client: AsyncClient, team: CardTeam) -> dict[str, str]:
         "kind": "prd",
         "version": "1",
         "stage": stage_id(board, "To do"),
+        "repo_id": str(repo),
     }
 
 
@@ -82,6 +88,9 @@ READS: dict[str, dict[str, str]] = {
     f"{BOARDS}/cards/by-key/{{card_key}}": {},
     f"{BOARDS}/{{key}}": {},
     f"{BOARDS}/{{key}}/members": {},
+    f"{BOARDS}/{{key}}/people": {},
+    f"{BOARDS}/{{key}}/repos": {},
+    f"{BOARDS}/{{key}}/repos/{{repo_id}}": {},
     f"{BOARDS}/{{key}}/labels": {},
     f"{BOARDS}/{{key}}/prefs": {},
     f"{BOARDS}/{{key}}/cards": {"stage_id": "{stage}"},
@@ -146,7 +155,7 @@ async def test_viewers_read_and_editors_edit(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     team = await card_team(client, pg_session_factory)
-    ids = await _ids(client, team)
+    ids = await _ids(client, team, pg_session_factory)
     for path, params in READS.items():
         resp = await client.get(
             _url(path, ids), params=_fill(params, ids), headers=team.viewer.headers

@@ -27,6 +27,8 @@ from sqlalchemy import select
 
 from app.models.permission import Permission
 from app.models.role import Role, RolePermission, RoleScopeType
+from app.models.tracked_repository import RepoStatus, TrackedRepository
+from app.models.user import OrgToUser
 from app.services.boards import attachment_links, attachment_service
 from app.services.file_storage import FileStorage
 from tests.integration.board_support import board_key
@@ -154,3 +156,38 @@ def use_local_storage(root: Path, monkeypatch: pytest.MonkeyPatch) -> FileStorag
     for module in (attachment_service, attachment_links):
         monkeypatch.setattr(module, "get_file_storage", lambda: storage)
     return storage
+
+
+async def tracked_repo(
+    factory: Factory,
+    org: uuid.UUID,
+    *,
+    full_name: str | None = None,
+    status: RepoStatus = RepoStatus.ACTIVE,
+) -> uuid.UUID:
+    """A tracked repository in ``org``."""
+    async with factory() as db:
+        name = f"repo-{uuid.uuid4().hex[:6]}"
+        repo = TrackedRepository(
+            org_id=org,
+            path=f"/tmp/{name}",
+            name=name,
+            status=status,
+            github_repo_full_name=full_name,
+        )
+        db.add(repo)
+        await db.commit()
+        return repo.id
+
+
+async def org_of(factory: Factory, who: Person) -> uuid.UUID:
+    """The org ``who`` is a member of."""
+    async with factory() as db:
+        org = await db.scalar(select(OrgToUser.org_id).where(OrgToUser.user_id == who.id))
+        assert org is not None
+        return org
+
+
+async def link_repo(client: AsyncClient, admin: Person, key: str, repo: uuid.UUID) -> Any:
+    """Link ``repo`` to the board; the board's linked repositories."""
+    return ok(await client.put(f"{BOARDS}/{key}/repos/{repo}", headers=admin.headers))

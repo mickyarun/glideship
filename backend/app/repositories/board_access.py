@@ -32,29 +32,14 @@ subscriptions, notification recipients) goes through these queries.
 import uuid
 from typing import Protocol
 
-from sqlalchemy import (
-    CTE,
-    ColumnElement,
-    Subquery,
-    and_,
-    cast,
-    func,
-    literal,
-    select,
-    union_all,
-)
+from sqlalchemy import Subquery, literal, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions_boards import BOARDS_MANAGE, BOARDS_VIEW
 from app.models.board import Board
-from app.models.board_enums import BoardMemberRole, BoardStatus, BoardVisibility
-from app.models.board_member import BoardMember, BoardTeam
-from app.models.team import Team, TeamMember, TeamStatus
-from app.models.user import OrgToUser, User
-from app.repositories.membership_predicates import membership_holds
-
-_ROLE_TYPE = BoardMember.__table__.c.role.type
+from app.models.board_enums import BoardMemberRole, BoardStatus
+from app.repositories.board_role_rows import highest_roles, member_grants, role_literal
 
 
 class PermissionChecker(Protocol):
@@ -63,10 +48,6 @@ class PermissionChecker(Protocol):
     def has(self, permission: str) -> bool:
         """Return True if the holder has ``permission``."""
         ...
-
-
-def _role(role: BoardMemberRole) -> ColumnElement[BoardMemberRole]:
-    return cast(literal(role.value), _ROLE_TYPE)
 
 
 class BoardAccessRepository:
@@ -88,7 +69,7 @@ class BoardAccessRepository:
             literal(perms.has(BOARDS_VIEW)).label("can_view"),
             literal(perms.has(BOARDS_MANAGE)).label("can_manage"),
         ).cte(f"{name}_grants")
-        rows = self._roles(grants, name)
+        rows = highest_roles(self._org_id, grants, name)
         return select(rows.c.board_id, rows.c.role).subquery(name)
 
     async def role_for(
@@ -119,7 +100,8 @@ class BoardAccessRepository:
             select(roles.c.board_id)
             .join(Board, Board.id == roles.c.board_id)
             .where(
-                roles.c.role == _role(BoardMemberRole.ADMIN), Board.status == BoardStatus.ACTIVE
+                roles.c.role == role_literal(BoardMemberRole.ADMIN),
+                Board.status == BoardStatus.ACTIVE,
             )
             .limit(1)
         )
@@ -131,68 +113,7 @@ class BoardAccessRepository:
         """Which of ``user_ids`` are active members holding any role on the board."""
         if not user_ids:
             return set()
-        grants = (
-            select(
-                OrgToUser.user_id.label("user_id"),
-                membership_holds(BOARDS_VIEW).label("can_view"),
-                membership_holds(BOARDS_MANAGE).label("can_manage"),
-            )
-            .join(User, User.id == OrgToUser.user_id)
-            .where(
-                OrgToUser.org_id == self._org_id,
-                OrgToUser.user_id.in_(user_ids),
-                User.is_active.is_(True),
-            )
-            .cte("board_grants")
-        )
-        rows = self._roles(grants, "board_roles")
+        grants = member_grants(self._org_id, user_ids, "board_grants")
+        rows = highest_roles(self._org_id, grants, "board_roles")
         stmt = select(rows.c.user_id).where(rows.c.board_id == board_id)
         return set((await self._db.execute(stmt)).scalars().all())
-
-    def _roles(self, grants: CTE, name: str) -> Subquery:
-        """``(user_id, board_id, role)``: the highest role per person and board.
-
-        ``grants`` has one row per person: ``user_id``, ``can_view``
-        (holds ``boards:view``) and ``can_manage`` (holds ``boards:manage``).
-        """
-        org_boards = Board.org_id == self._org_id
-        manage = (
-            select(
-                grants.c.user_id,
-                Board.id.label("board_id"),
-                _role(BoardMemberRole.ADMIN).label("role"),
-            )
-            .select_from(grants)
-            .join(Board, org_boards)
-            # boards:manage widens boards:view; on its own it opens nothing.
-            .where(grants.c.can_manage, grants.c.can_view)
-        )
-        members = (
-            select(BoardMember.user_id, BoardMember.board_id, BoardMember.role)
-            .join(grants, grants.c.user_id == BoardMember.user_id)
-            .where(BoardMember.org_id == self._org_id, grants.c.can_view)
-        )
-        teams = (
-            select(TeamMember.user_id, BoardTeam.board_id, BoardTeam.role)
-            .select_from(BoardTeam)
-            .join(TeamMember, TeamMember.team_id == BoardTeam.team_id)
-            .join(Team, Team.id == BoardTeam.team_id)
-            .join(grants, grants.c.user_id == TeamMember.user_id)
-            .where(
-                BoardTeam.org_id == self._org_id,
-                Team.status == TeamStatus.ACTIVE,
-                grants.c.can_view,
-            )
-        )
-        org_visible = (
-            select(grants.c.user_id, Board.id, _role(BoardMemberRole.VIEWER))
-            .select_from(grants)
-            .join(Board, and_(org_boards, Board.visibility == BoardVisibility.ORG))
-            .where(grants.c.can_view)
-        )
-        rows = union_all(manage, members, teams, org_visible).subquery(f"{name}_rows")
-        return (
-            select(rows.c.user_id, rows.c.board_id, func.max(rows.c.role).label("role"))
-            .group_by(rows.c.user_id, rows.c.board_id)
-            .subquery(f"{name}_max")
-        )

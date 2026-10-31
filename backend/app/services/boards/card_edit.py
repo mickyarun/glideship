@@ -30,6 +30,7 @@ from app.services.boards.card_checks import (
     check_dates,
     check_labels,
     check_open,
+    check_repo,
 )
 from app.services.boards.errors import BoardRuleError
 from app.services.boards.events import record_edit, record_event
@@ -37,13 +38,18 @@ from app.services.boards.live import BoardChanges, BoardSocketEvent
 from app.services.boards.reads import card_detail, summary_json
 
 # Plain fields a PATCH can set; ``title`` and ``due_done`` can't be null.
-_FIELDS = ("title", "description_md", "priority", "start_at", "due_at", "due_done")
+_FIELDS = ("title", "description_md", "priority", "start_at", "due_at", "due_done", "repo_id")
 _REQUIRED = frozenset({"title", "due_done"})
 
 
 async def update_card(db: AsyncSession, target: CardAccess, body: CardUpdate) -> CardDetail:
-    """Apply the edits in ``body`` and record them in the card's history."""
+    """Apply the edits in ``body`` and record them in the card's history.
+
+    Edits never check the stage's required fields; those apply on entry.
+    """
     access, card = target.access, target.card
+    if "repo_id" in body.model_fields_set:
+        await check_repo(db, access, body.repo_id)
     # Held so two edits can't both add the same assignee or label.
     await BoardCardRepository(db, org_id=access.org_id).lock(card)
     check_open(card)

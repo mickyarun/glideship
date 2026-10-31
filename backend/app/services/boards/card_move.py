@@ -15,9 +15,11 @@
 """Moving a card within its board, and archiving or restoring it.
 
 Moves lock the target stage row before reading neighbours, so concurrent
-moves into one stage take turns. A move to another stage records a
+moves into one stage take turns. A move to another stage must meet that
+stage's entry rules (:mod:`app.services.boards.move_rules`) and records a
 ``moved`` event with both categories frozen; reordering inside a stage
-records nothing.
+checks and records nothing. Restoring an archived card puts it back in its
+own stage without the entry rules.
 """
 
 import uuid
@@ -28,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.board import BoardStage
 from app.models.board_enums import BoardCardEventType
 from app.repositories.board_card import BoardCardRepository
+from app.repositories.board_card_summary import BoardCardSummaryRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.card import CardDetail, CardMove
 from app.services.boards.access import CardAccess
@@ -37,6 +40,7 @@ from app.services.boards.card_timing import enter_category
 from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
+from app.services.boards.move_rules import check_entry, facts_of_summary
 from app.services.boards.reads import card_detail, summary_json
 from app.services.boards.stage_service import STAGE_NOT_FOUND
 
@@ -67,6 +71,8 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
     if from_stage is None:
         # Moved by someone else between loading and locking.
         raise BoardConflictError(STALE_NEIGHBOURS)
+    if to_stage.id != from_stage.id:
+        await _check_entry(db, target, to_stage, body)
     placement = await place_card(
         db,
         access.org_id,
@@ -100,6 +106,16 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
     )
     await changes.commit(db)
     return detail
+
+
+async def _check_entry(
+    db: AsyncSession, target: CardAccess, to_stage: BoardStage, body: CardMove
+) -> None:
+    summaries = BoardCardSummaryRepository(db, org_id=target.access.org_id)
+    (row,) = await summaries.summaries_by_ids(target.access.board.id, [target.card.id])
+    check_entry(
+        to_stage, facts_of_summary(row), confirm_open_checklist=body.confirm_open_checklist
+    )
 
 
 async def set_card_archived(db: AsyncSession, target: CardAccess, *, archived: bool) -> CardDetail:

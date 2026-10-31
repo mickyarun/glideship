@@ -66,6 +66,14 @@ class BoardCard(BaseModel):
             ["board_stages.id", "board_stages.board_id"],
             name="fk_board_cards_stage_board",
         ),
+        # The repository must be one the card's board links. Unlinking nulls
+        # the cards first; deleting the repository nulls ``repo_id`` through
+        # its own key before this one is checked.
+        ForeignKeyConstraint(
+            ["board_id", "repo_id"],
+            ["board_repos.board_id", "board_repos.repo_id"],
+            name="fk_board_cards_board_repo",
+        ),
         # Keyset paging of one stage's open cards on ``(position, id)``.
         Index(
             "ix_board_cards_stage_position",
@@ -112,6 +120,11 @@ class BoardCard(BaseModel):
     # Entry into ``done`` or ``canceled``; cleared when the card reopens.
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    repo_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tracked_repositories.id", ondelete="SET NULL", name="fk_board_cards_repo"),
+        nullable=True,
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

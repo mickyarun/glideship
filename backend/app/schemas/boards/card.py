@@ -36,6 +36,10 @@ class CardCreate(BaseModel):
     due_at: AwareDatetime | None = None
     assignee_ids: IdList = Field(default_factory=list)
     label_ids: IdList = Field(default_factory=list)
+    # One of the board's linked repositories.
+    repo_id: uuid.UUID | None = None
+    # Same rule as a move into a ``done`` stage.
+    confirm_open_checklist: bool = False
 
 
 class CardUpdate(BaseModel):
@@ -51,12 +55,15 @@ class CardUpdate(BaseModel):
     due_done: bool | None = None
     assignee_ids: IdList | None = None
     label_ids: IdList | None = None
+    repo_id: uuid.UUID | None = None
 
 
 class CardMove(BaseModel):
     """Where a card goes on its board: after one card and/or before another.
 
-    With neither neighbour the card goes to the bottom of the stage.
+    With neither neighbour the card goes to the bottom of the stage. Moving
+    into a ``done`` stage with open checklist items needs
+    ``confirm_open_checklist``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -64,6 +71,7 @@ class CardMove(BaseModel):
     stage_id: uuid.UUID
     after_id: uuid.UUID | None = None
     before_id: uuid.UUID | None = None
+    confirm_open_checklist: bool = False
 
 
 class HandoverChip(BaseModel):
@@ -92,6 +100,9 @@ class CardSummary(BaseModel):
     label_ids: list[uuid.UUID]
     checklist_done: int
     checklist_total: int
+    has_description: bool
+    has_prd: bool
+    repo_id: uuid.UUID | None
     handovers: list[HandoverChip] = Field(default_factory=list)
 
 

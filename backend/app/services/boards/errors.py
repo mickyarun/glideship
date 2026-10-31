@@ -15,13 +15,21 @@
 """Errors board services raise; ``api/v1/_board_errors.py`` maps them to HTTP.
 
 Each message is written for the person using the board and is sent as the
-response ``detail``. Access errors (no role, too low a role, archived
-board) live in :mod:`app.services.boards.access`.
+response ``detail``. An error a client acts on also sends a ``code`` and
+its facts next to it (:meth:`BoardError.body`). Access errors (no role,
+too low a role, archived board) live in :mod:`app.services.boards.access`.
 """
+
+from collections.abc import Mapping
+from typing import Any
 
 
 class BoardError(Exception):
     """Base class for board errors."""
+
+    def body(self) -> Mapping[str, Any]:
+        """Fields sent next to ``detail``; none unless a subclass names a code."""
+        return {}
 
 
 class BoardItemNotFoundError(BoardError):

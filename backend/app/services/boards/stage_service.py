@@ -33,6 +33,7 @@ from app.schemas.boards.stage import StageCreate, StageOrder, StageRead, StageUp
 from app.services.boards.access import BoardAccess
 from app.services.boards.errors import BoardConflictError, BoardItemNotFoundError, BoardRuleError
 from app.services.boards.live import BoardChanges, BoardSocketEvent
+from app.services.boards.move_rules import ordered_fields
 from app.services.boards.stage_rules import check_stage_count, check_stages
 
 STAGE_NOT_FOUND = "Stage not found."
@@ -78,6 +79,7 @@ async def create_stage(db: AsyncSession, access: BoardAccess, body: StageCreate)
         position=max((s.position for s in stages), default=-1) + 1,
         wip_limit=body.wip_limit,
         is_default=False,
+        required_fields=ordered_fields(body.required_fields),
     )
     stages.append(stage)
     if body.is_default:
@@ -91,7 +93,10 @@ async def create_stage(db: AsyncSession, access: BoardAccess, body: StageCreate)
 async def update_stage(
     db: AsyncSession, access: BoardAccess, stage_id: uuid.UUID, body: StageUpdate
 ) -> StageRead:
-    """Rename, re-categorise, set the WIP limit or make a stage the default.
+    """Rename, re-categorise, set the WIP limit or required fields, or make it the default.
+
+    New required fields apply to cards entering from now on; cards already
+    in the stage stay.
 
     The default moves by naming a new one; un-setting the only default is refused.
     """
@@ -106,6 +111,8 @@ async def update_stage(
         stage.category = body.category
     if "wip_limit" in body.model_fields_set:
         stage.wip_limit = body.wip_limit
+    if body.required_fields is not None:
+        stage.required_fields = ordered_fields(body.required_fields)
     if body.is_default:
         _make_default(stages, stage)
     elif body.is_default is False and stage.is_default:
