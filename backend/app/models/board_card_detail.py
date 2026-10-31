@@ -39,6 +39,7 @@ from app.models.board_enums import (
     pg_enum,
 )
 from app.models.board_fks import board_fk, card_fk
+from app.models.external_import import ImportSourceKind
 from app.models.thread_columns import CommentColumns, OptionalAttachmentColumns
 
 CHECKLIST_GROUP_LENGTH = 255
@@ -66,7 +67,11 @@ class BoardCardChecklistItem(BaseModel):
 
 
 class BoardCardComment(CommentColumns):
-    """A comment on a card. Imported comments have a label and no author."""
+    """A comment on a card.
+
+    Imported comments carry ``import_source``; one by an unmapped person has
+    an ``author_label`` and no author.
+    """
 
     __tablename__ = "board_card_comments"
     __table_args__ = (
@@ -81,6 +86,10 @@ class BoardCardComment(CommentColumns):
     )
     # Shown when there's no author, e.g. "Priya (Trello)".
     author_label: Mapped[str | None] = mapped_column(String(EXTERNAL_LABEL_LENGTH), nullable=True)
+    # Set on every imported comment, mapped author or not, so it reads as imported.
+    import_source: Mapped[ImportSourceKind | None] = mapped_column(
+        pg_enum(ImportSourceKind, "import_source_kind"), nullable=True
+    )
 
 
 class BoardCardAttachment(OptionalAttachmentColumns):

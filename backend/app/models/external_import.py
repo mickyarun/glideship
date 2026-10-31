@@ -24,7 +24,16 @@ import uuid
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy import UniqueConstraint as Unique
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -63,6 +72,19 @@ class ExternalImportStatus(StrEnum):
 
 # A server restart leaves these sessions with no job behind them.
 IN_FLIGHT_IMPORT_STATUSES = frozenset({ExternalImportStatus.PARSING, ExternalImportStatus.RUNNING})
+# Not finished yet: these count against the open-import caps.
+OPEN_IMPORT_STATUSES = frozenset(
+    {
+        ExternalImportStatus.PENDING,
+        ExternalImportStatus.PARSING,
+        ExternalImportStatus.READY,
+        ExternalImportStatus.RUNNING,
+    }
+)
+# Left alone past the retention window, these are swept with their files.
+ABANDONED_IMPORT_STATUSES = frozenset(
+    {ExternalImportStatus.PENDING, ExternalImportStatus.READY, ExternalImportStatus.FAILED}
+)
 
 
 class ExternalItemStatus(StrEnum):
@@ -91,6 +113,7 @@ class ExternalImportSession(BaseModel):
         ),
         Index("ix_external_import_sessions_org_status", "org_id", "status"),
         Index("ix_external_import_sessions_org_creator", "org_id", "created_by"),
+        Index("ix_external_import_sessions_status_updated", "status", "updated_at"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(
@@ -122,6 +145,10 @@ class ExternalImportSession(BaseModel):
         Integer, nullable=False, default=0, server_default=text("0")
     )
     last_processed_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Attachment bytes copied so far, kept across resumes for the byte caps.
+    attachment_bytes: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
     job_id: Mapped[str | None] = mapped_column(String(JOB_ID_LENGTH), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
@@ -136,7 +163,12 @@ class ExternalImportSession(BaseModel):
 
 
 class ExternalItemMap(BaseModel):
-    """One source item and the card it became (or why it didn't)."""
+    """One source item and the card it became (or why it didn't).
+
+    A map outlives its session (``session_id`` goes null when an abandoned
+    session is swept), so what was imported stays imported. A map whose
+    card was deleted (``card_id`` null) can be imported again.
+    """
 
     __tablename__ = "external_item_maps"
     __table_args__ = (
@@ -157,10 +189,14 @@ class ExternalItemMap(BaseModel):
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    session_id: Mapped[uuid.UUID] = mapped_column(
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("external_import_sessions.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey(
+            "external_import_sessions.id",
+            ondelete="SET NULL",
+            name="fk_external_item_maps_session",
+        ),
+        nullable=True,
     )
     source_kind: Mapped[ImportSourceKind] = mapped_column(
         pg_enum(ImportSourceKind, "import_source_kind"), nullable=False
