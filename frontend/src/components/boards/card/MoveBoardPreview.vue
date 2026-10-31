@@ -17,7 +17,8 @@
 <!-- What a move to another board changes, before it's sent: the new key
      and what the card loses (labels, people, its repository), and, from a
      members-only board, who gets to read it. What a refusal says sits
-     under it, with its way on ("Open card"). -->
+     under it as an error, with its way on ("Open card", "Pick another
+     stage"), and so does a rate limit's countdown (``wait``). -->
 <template>
   <div class="move-preview">
     <div v-if="changes.length" class="move-preview__changes">
@@ -29,11 +30,8 @@
     <AppCallout v-if="membersOnly && targetName" variant="warning" icon="mdi-eye-outline">
       Everyone who can see {{ targetName }} will see this card's comments, checklist and history.
     </AppCallout>
-    <AppCallout
-      v-if="feedback.toastOpen.value && feedback.toast.value"
-      :variant="feedback.toast.value.error ? 'error' : 'warning'"
-      role="alert"
-    >
+    <AppCallout v-if="wait" variant="error" icon="mdi-timer-sand">{{ wait }}</AppCallout>
+    <AppCallout v-else-if="feedback.toastOpen.value && feedback.toast.value" variant="error" role="alert">
       {{ feedback.toast.value.text }}
       <template v-if="feedback.toast.value.action" #actions>
         <v-btn variant="outlined" size="small" @click="feedback.toast.value.action.run()">
@@ -54,6 +52,8 @@ defineProps<{
   membersOnly: boolean
   targetName: string | null
   feedback: ReturnType<typeof useBoardFeedback>
+  /** "Try again in 12s" while the server holds moves back. */
+  wait: string
 }>()
 </script>
 

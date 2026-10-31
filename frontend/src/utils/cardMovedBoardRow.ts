@@ -12,41 +12,68 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A card's ``moved_board`` history row: where it came from, its old and
-// new keys, and what it lost on the way. Someone who can't see the source
-// board gets it without the source's name, stage or labels (null, or a
-// board with null fields), so each part is shown only when it's there,
-// and people and repositories are counted, never named by id.
+// A card's ``moved_board`` history row: which board it left and which it
+// went to, read from the board I'm on, its old and new keys, and what it
+// lost on the way. Each side is redacted for someone who can't see it:
+// a hidden source has no name, stage, old key, repository or labels, and a
+// hidden target no name or new key (both come as null, or a board with
+// null fields). So the row names a board only when it's there, says "here"
+// only when the card came to this board, gives the keys only when both
+// are known, and names the landing stage only when it's one of this
+// board's (the event's stage ids are never shown as such). People and
+// repositories are counted, never named by id.
 
 import type { CardEventRead } from '@/types/boards'
-import { actor, text, section, type ActivityRow } from '@/utils/activity'
+import { actor, section, text, type ActivityPart, type ActivityRow } from '@/utils/activity'
 
-const named = (value: unknown): string | null => {
-  const name = (value as { name?: unknown } | null)?.name
-  return typeof name === 'string' && name ? name : null
+interface Board {
+  id: string | null
+  name: string | null
 }
+
 const word = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
+const named = (value: unknown): string | null => word((value as { name?: unknown } | null)?.name)
+const board = (value: unknown): Board => ({ id: word((value as { id?: unknown } | null)?.id), name: named(value) })
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter(v => typeof v === 'string' && v) : [])
 
-export function movedBoardRow(e: CardEventRead, who: string | null, stage: (id: string | null) => string): ActivityRow {
+/** "moved this card from SEO to Ops", or as much of it as I may see, from the board ``here``. */
+function movedWords(from: Board, to: Board, here: string | null): ActivityPart[] {
+  const toHere = !!here && to.id === here
+  const fromHere = !!here && from.id === here
+  if (from.name && to.name) return [text('moved this card from'), section(from.name), text('to'), section(to.name)]
+  if (to.name) {
+    return toHere ? [text('moved this card here from another board')] : [text('moved this card from another board to'), section(to.name)]
+  }
+  if (from.name && !fromHere) return [text('moved this card from'), section(from.name), text('to another board')]
+  return [text('moved this card to another board')]
+}
+
+/**
+ * The row for a move between boards. ``here`` is the board the history is
+ * read on (null: unknown), ``stage`` names one of its stages.
+ */
+export function movedBoardRow(
+  e: CardEventRead,
+  who: string | null,
+  stage: (id: string | null) => string,
+  here: string | null,
+): ActivityRow {
   const d = e.detail
-  const from = named(d.from_board)
-  const primary = from
-    ? [...actor(who), text('moved this card here from'), section(from)]
-    : [...actor(who), text('moved this card here from another board')]
+  const from = board(d.from_board)
+  const to = board(d.to_board)
+  const toHere = !!here && to.id === here
   const lines: string[] = []
   const oldKey = word(d.old_key)
   const newKey = word(d.new_key)
-  if (oldKey && newKey) lines.push(`${oldKey} is now ${newKey}`)
+  if (oldKey && newKey) lines.push(`${oldKey} became ${newKey}`)
   const fromStage = named(d.from_stage)
-  if (fromStage) lines.push(`Was in ${fromStage}`)
-  if (e.to_stage_id) lines.push(`Landed in ${stage(e.to_stage_id)}`)
+  if (fromStage && from.name) lines.push(`Was in ${fromStage}`)
+  if (toHere && e.to_stage_id) lines.push(`Landed in ${stage(e.to_stage_id)}`)
   const dropped = strings(d.dropped_labels)
   if (dropped.length) lines.push(`Labels dropped: ${dropped.join(', ')}`)
+  const target = toHere ? 'this board' : to.name ?? 'the new board'
   const removed = Array.isArray(d.removed_assignees) ? d.removed_assignees.length : 0
-  if (removed) {
-    lines.push(`${removed} ${removed === 1 ? 'assignee' : 'assignees'} who can't edit this board removed`)
-  }
-  if (d.cleared_repo) lines.push('Repository cleared: not linked on this board')
-  return { primary, lines }
+  if (removed) lines.push(`${removed} ${removed === 1 ? 'assignee' : 'assignees'} who can't edit ${target} removed`)
+  if (d.cleared_repo) lines.push(`Repository cleared: not linked on ${target}`)
+  return { primary: [...actor(who), ...movedWords(from, to, here)], lines }
 }

@@ -15,13 +15,14 @@
 /**
  * Moving a card to another board from the board: the ⋯ menu opens the
  * dialog, and a card that went leaves its column, saying where it went
- * with Open; a stage that refuses it offers Open card on the field.
+ * with Open; a stage that refuses it offers Open card on the field. A
+ * card that leaves or is archived meanwhile closes the dialog, saying so.
  */
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VSelect } from 'vuetify/components'
 
-vi.mock('@/services/socket', () => ({ subscribe: vi.fn(), unsubscribe: vi.fn(), onRevoked: vi.fn(() => () => {}) }))
+vi.mock('@/services/socket', async () => (await import('./cardPageMockModules')).socketModule())
 vi.mock('@/services/boardsApi', () => ({
   boardsApi: {
     get: vi.fn(), cards: vi.fn(), members: vi.fn(), switcher: vi.fn(), limits: vi.fn(), savePrefs: vi.fn(), list: vi.fn(),
@@ -34,9 +35,11 @@ vi.mock('@/composables/useMemberDirectory', () => ({
 
 import { makeBoardItem, makeCard, makeCardDetail, makeDetail, makeStage } from '@/components/boards/__tests__/fixtures'
 import BoardStageColumn from '@/components/boards/board/BoardStageColumn.vue'
+import CardMoveBoardDialog from '@/components/boards/card/CardMoveBoardDialog.vue'
 import { boardsApi } from '@/services/boardsApi'
 import type { CardSummary } from '@/types/boards'
 import { mountBoardPage } from './boardViewHarness'
+import { listeners } from './cardPageMockModules'
 
 const api = vi.mocked(boardsApi)
 const CARD = makeCard('14', { key: 'OPS-14', number: 14 })
@@ -51,6 +54,8 @@ const inColumn = (w: Wrapper) =>
   w.findAllComponents(BoardStageColumn).find(c => c.props('stage').id === 's1')!.props('column').items.map((c: CardSummary) => c.id)
 const button = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)
 const body = () => document.body.textContent ?? ''
+const send = (data: object) => listeners.get('board:b1')?.forEach(cb => cb({ actor_id: 'u2', origin: 'other-tab', ...data }))
+const dialogOpen = (w: Wrapper) => w.findComponent(CardMoveBoardDialog).props('modelValue')
 
 async function openMoveDialog(w: Wrapper): Promise<void> {
   await w.find('button[aria-label="Actions for OPS-14"]').trigger('click')
@@ -64,6 +69,7 @@ async function openMoveDialog(w: Wrapper): Promise<void> {
 describe('BoardView moving a card to another board', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    listeners.clear()
     const ops = makeDetail({ stages: [makeStage('s1', { name: 'Ideas', is_default: true, open_cards: 1 })] })
     api.get.mockImplementation(async key => (key === 'PDT' ? PDT : ops))
     api.cards.mockResolvedValue({ items: [CARD], next_cursor: null })
@@ -102,5 +108,33 @@ describe('BoardView moving a card to another board', () => {
     button('Open card')?.click()
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/boards/OPS/cards/14?focus=due_date'))
     expect(api.moveCardToBoard).not.toHaveBeenCalled()
+  })
+
+  it('closes the dialog, saying so, when the card leaves the board meanwhile', async () => {
+    const { wrapper } = await mountBoardPage()
+    await openMoveDialog(wrapper)
+    expect(dialogOpen(wrapper)).toBe(true)
+    send({ event: 'card_left_board', card_id: CARD.id })
+    await flushPromises()
+    expect(dialogOpen(wrapper)).toBe(false)
+    expect(body()).toContain('This card moved or was archived meanwhile.')
+  })
+
+  it('closes the dialog when the card is archived meanwhile', async () => {
+    const { wrapper } = await mountBoardPage()
+    await openMoveDialog(wrapper)
+    send({ event: 'card_archived', card: { ...CARD, archived_at: '2026-10-31T00:00:00Z', updated_at: '2030-01-01T00:00:00Z' } })
+    await flushPromises()
+    expect(dialogOpen(wrapper)).toBe(false)
+    expect(body()).toContain('This card moved or was archived meanwhile.')
+  })
+
+  it("says nothing of the sort after my own move", async () => {
+    api.moveCardToBoard.mockResolvedValue(MOVED)
+    const { wrapper } = await mountBoardPage()
+    await openMoveDialog(wrapper)
+    button('Move')?.click()
+    await flushPromises()
+    expect(body()).not.toContain('meanwhile')
   })
 })

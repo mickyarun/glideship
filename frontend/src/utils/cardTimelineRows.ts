@@ -28,6 +28,8 @@ import { wordList } from '@/utils/format'
 export interface CardTimelineNames {
   stage: (id: string | null) => string
   person: (id: string) => string
+  /** The board the history is read on, so a move between boards can say "here". */
+  boardId?: string | null
 }
 
 /** Edited fields as the history says them. */
@@ -79,7 +81,7 @@ export function cardTimelineRenderers(names: CardTimelineNames): ActivityRendere
         ],
       }),
     },
-    moved_board: { icon: 'mdi-swap-horizontal', color: 'primary', row: e => movedBoardRow(e, who(e), names.stage) },
+    moved_board: { icon: 'mdi-swap-horizontal', color: 'primary', row: e => movedBoardRow(e, who(e), names.stage, names.boardId ?? null) },
     edited: {
       icon: 'mdi-pencil',
       color: 'primary',

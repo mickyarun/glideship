@@ -77,7 +77,7 @@
           @drop="act.drop"
           @blocked="act.blockedDrop"
           @move="act.menuMove"
-          @move-board="moveToBoard"
+          @move-board="moving.start"
           @archive="act.archive"
           @restore="act.restore"
           @copied="feedback.announce('Link copied')"
@@ -93,11 +93,11 @@
     <BoardFeedback :feedback="feedback" />
     <ChecklistConfirmDialog :confirm="act.confirm" />
     <CardMoveBoardDialog
-      v-if="movingCard"
-      v-model="moveOpen"
-      :card="movingCard" :board="detail" :people="page.people.people.value" fix-label="Open card"
-      @moved="(moved, name) => movingCard && act.movedBoard(movingCard, moved, name)"
-      @fix="field => movingCard && act.fixForMove(movingCard, field)"
+      v-if="moving.card.value"
+      v-model="moving.open.value"
+      :card="moving.card.value" :board="detail" :people="page.people.people.value" fix-label="Open card"
+      @moved="(moved, name) => moving.card.value && act.movedBoard(moving.card.value, moved, name)"
+      @fix="field => moving.card.value && act.fixForMove(moving.card.value, field)"
     />
   </div>
 </template>
@@ -117,13 +117,13 @@ import CardMoveBoardDialog from '@/components/boards/card/CardMoveBoardDialog.vu
 import { useBoardActions } from '@/composables/useBoardActions'
 import { useBoardContext } from '@/composables/useBoardContext'
 import { useBoardFeedback } from '@/composables/useBoardFeedback'
+import { useBoardMoveDialog } from '@/composables/useBoardMoveDialog'
 import { useBoardStats } from '@/composables/useBoardStats'
 import { dragBlocks, dragging, dropBlocks, overBlocked } from '@/composables/useCardDrag'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { useNow } from '@/composables/useNow'
 import { useBoardsStore } from '@/stores/boards'
 import '@/assets/styles/board-layout.css'
-import type { CardSummary } from '@/types/boards'
 import { emptyColumn, locate } from '@/utils/boardColumns'
 
 const page = useBoardContext()
@@ -168,13 +168,8 @@ const shownStages = computed(() => {
 // The stage whose composer is open; "New card" opens the default stage's,
 // and on phones switches to that stage.
 const composeIn = ref<string | null>(null)
-// The card the "Move to another board" dialog is for (kept while it closes).
-const movingCard = ref<CardSummary | null>(null)
-const moveOpen = ref(false)
-function moveToBoard(card: CardSummary): void {
-  movingCard.value = card
-  moveOpen.value = true
-}
+// The "Move to another board" dialog, closed when its card leaves meanwhile.
+const moving = useBoardMoveDialog(() => cards.columns, feedback)
 watch(composeIn, id => {
   if (id && xs.value) phoneStage.value = id
 })

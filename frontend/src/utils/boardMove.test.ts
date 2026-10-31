@@ -16,7 +16,8 @@
 import { describe, expect, it } from 'vitest'
 import { httpError, makeBoardItem, makeCard, makeStage } from '@/components/boards/__tests__/fixtures'
 import type { BoardPersonRead } from '@/types/boards'
-import { arriving, landingStage, moveChanges, moveError, moveTargets, type MoveSource, type MoveTarget } from '@/utils/boardMove'
+import { arriving, landingStage, moveChanges, moveTargets, type MoveSource, type MoveTarget } from '@/utils/boardMove'
+import { moveError, moveLost } from '@/utils/boardMoveErrors'
 
 const person = (id: string, name: string, role: BoardPersonRead['role']): BoardPersonRead => ({
   id, name, avatar_url: null, role, via: 'member', team_name: null,
@@ -70,7 +71,7 @@ describe('moveChanges', () => {
 
   it('says the new key, the labels dropped, the people removed and a cleared repository', () => {
     expect(moveChanges(source, target)).toEqual([
-      'Becomes OPS-? (the next number on Ops). Links to SEO-14 keep working.',
+      'Gets the next Ops number; links to SEO-14 keep working.',
       'Labels not on Ops are dropped: Copy, Urgent',
       "Removed: Ben and 1 other, who can't edit Ops",
       'Repository cleared: not linked on Ops',
@@ -89,11 +90,20 @@ describe('moveChanges', () => {
 })
 
 describe('moveError', () => {
+  const said = (err: unknown) => moveError(err, 'Ops', 'SEO-14')
   it('says what each refusal means', () => {
-    expect(moveError(httpError(403), 'Ops')).toBe('You need edit access on both boards to move this card to Ops.')
-    expect(moveError(httpError(404, 'Board not found.'), 'Ops')).toBe("Ops isn't available to you any more.")
-    expect(moveError(httpError(404, 'Stage not found.'), 'Ops')).toBe("That stage isn't on Ops any more. Pick another one.")
-    expect(moveError(httpError(409, 'This board is archived.'), 'Ops')).toBe('This board is archived.')
-    expect(moveError(httpError(422, 'Moving a card to Delivery is a handover.'), 'Ops')).toBe('Moving a card to Delivery is a handover.')
+    expect(said(httpError(403))).toBe('You need edit access on both boards to move this card to Ops.')
+    expect(said(httpError(404, 'Board not found.'))).toBe("Ops isn't available to you any more. Pick another board.")
+    expect(said(httpError(404, 'Stage not found.'))).toBe("That stage isn't on Ops any more. Pick another one.")
+    expect(said(httpError(409, 'This board is archived.'))).toBe('This board is archived.')
+    expect(said(httpError(422, 'Moving a card to Delivery is a handover.'))).toBe('Moving a card to Delivery is a handover.')
+  })
+
+  it('tells a card that went away from a board that did', () => {
+    expect(said(httpError(404, 'Card not found.'))).toBe("SEO-14 isn't on this board any more: it moved or was deleted meanwhile.")
+    expect(moveLost(httpError(404, 'Card not found.'))).toBe('card')
+    expect(moveLost(httpError(404, 'Board not found.'))).toBe('board')
+    expect(moveLost(httpError(404, 'Stage not found.'))).toBe('stage')
+    expect(moveLost(httpError(409))).toBeNull()
   })
 })

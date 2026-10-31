@@ -14,12 +14,15 @@
  * limitations under the License.
  -->
 
-<!-- "Move to another board": pick a board I edit (never Delivery, which
-     takes a handover), then a stage there (the one the server would pick
-     comes preselected), see what changes, and move. Refusals stay in the
-     dialog; a stage that needs fields the card lacks offers the way to
-     them (``fix``), and an open checklist asks first. The card on its new
-     board comes back through ``moved``. -->
+<!-- "Move to another board": pick a board I edit (Delivery takes a
+     handover instead, as the board picker's hint says), then a stage there
+     (the one the server would pick comes preselected, unless the card
+     can't enter it; locked stages say why), see what changes, and move.
+     Refusals stay in the dialog; a stage that needs fields the card lacks
+     offers the way to them (``fix``), one the move itself empties offers
+     another stage, and an open checklist asks first. The card on its new
+     board comes back through ``moved``. Anchored to the top, so it doesn't
+     jump as the preview fills in. -->
 <template>
   <AppConfirmDialog
     :model-value="modelValue"
@@ -27,6 +30,7 @@
     action="Move"
     :busy="move.busy.value"
     :disabled="!move.ready.value"
+    content-class="move-board-dialog"
     @update:model-value="open => !open && emit('update:modelValue', false)"
     @confirm="submit"
   >
@@ -38,7 +42,7 @@
       </template>
     </AppCallout>
     <p v-else-if="!move.listing.value && !move.boards.value.length" class="move-board__note">
-      There's no other board you can edit.
+      There's no other board you can edit. To send work to Delivery, use Hand over.
     </p>
     <v-select
       v-else
@@ -48,30 +52,29 @@
       item-value="key"
       label="Board"
       :loading="move.listing.value"
-      hide-details
+      hint="To send work to Delivery, use Hand over."
+      persistent-hint
     />
-    <p class="move-board__note">To send work to Delivery, use Hand over.</p>
     <AppCallout v-if="move.failed.value" variant="error" role="alert">
       Couldn't load that board's stages.
       <template #actions>
         <v-btn variant="outlined" size="small" @click="move.retry()">Try again</v-btn>
       </template>
     </AppCallout>
-    <v-select
+    <MoveStageSelect
       v-else-if="move.targetKey.value"
       v-model="move.stageId.value"
-      :items="move.target.value?.stages ?? []"
-      item-title="name"
-      item-value="id"
-      label="Stage"
+      v-model:menu="move.stageMenu.value"
+      :stages="move.stages.value"
       :loading="move.loading.value"
-      hide-details
+      :note="move.stageNote.value"
     />
     <MoveBoardPreview
       :changes="move.changes.value"
       :members-only="board.board.visibility === 'members'"
       :target-name="move.target.value?.name ?? null"
       :feedback="move.feedback"
+      :wait="move.waitNote.value"
     />
   </AppConfirmDialog>
   <ChecklistConfirmDialog :confirm="move.confirm" />
@@ -81,6 +84,7 @@
 import { watch } from 'vue'
 import ChecklistConfirmDialog from '@/components/boards/board/ChecklistConfirmDialog.vue'
 import MoveBoardPreview from '@/components/boards/card/MoveBoardPreview.vue'
+import MoveStageSelect from '@/components/boards/card/MoveStageSelect.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import { useCardBoardMove } from '@/composables/useCardBoardMove'
@@ -129,5 +133,12 @@ async function submit(): Promise<void> {
   margin: 0;
   font-size: 13px;
   color: rgb(var(--v-theme-ink-2));
+}
+</style>
+<style>
+/* The dialog's overlay content, outside this component's scope. */
+.move-board-dialog.v-overlay__content {
+  align-self: flex-start;
+  margin-top: 8vh;
 }
 </style>

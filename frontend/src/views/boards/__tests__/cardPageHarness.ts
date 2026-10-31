@@ -18,7 +18,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { h } from 'vue'
-import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
+import { createMemoryHistory, createRouter, RouterView, type Router } from 'vue-router'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
@@ -28,7 +28,11 @@ import BoardShell from '@/views/boards/BoardShell.vue'
 
 const blank = { render: () => null }
 
-export async function mountCardPage(path = '/boards/OPS/cards/3', { width = 1280 } = {}) {
+/** ``watch`` sees the router before the page opens (to spy on it). */
+export async function mountCardPage(
+  path = '/boards/OPS/cards/3',
+  { width = 1280, watch }: { width?: number; watch?: (router: Router) => void } = {},
+) {
   window.innerWidth = width
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -49,6 +53,7 @@ export async function mountCardPage(path = '/boards/OPS/cards/3', { width = 1280
       },
     ],
   })
+  watch?.(router)
   await router.push(path)
   const vuetify = createVuetify({ components, directives })
   const wrapper = mount({ render: () => h(RouterView) }, {

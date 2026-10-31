@@ -56,12 +56,15 @@ const props = defineProps<{
   activity: ReturnType<typeof useCardActivity>
   stages: StageRead[]
   nameFor: (id: string) => string
+  /** The board the card is read on. */
+  boardId: string
 }>()
 
 const renderers = computed(() =>
   cardTimelineRenderers({
     stage: id => props.stages.find(s => s.id === id)?.name ?? 'another stage',
     person: props.nameFor,
+    boardId: props.boardId,
   }),
 )
 const typeOf = (event: CardEventRead) => event.type

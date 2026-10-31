@@ -90,5 +90,11 @@ export function useCardFieldFocus(o: Options) {
     { immediate: true },
   )
 
-  return { wanted, want, show }
+  /** "Show me" on the note: the first field the wanted stage still needs. */
+  function showWanted(): void {
+    const w = wanted.value
+    if (w) void show(w.missing[0], w.stage.id)
+  }
+
+  return { wanted, want, show, showWanted }
 }

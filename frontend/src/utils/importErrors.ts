@@ -100,6 +100,11 @@ function header(err: HttpLike, name: string): unknown {
   return headers[name] ?? headers[name.toLowerCase()]
 }
 
+/** A failed request's Retry-After in seconds (see parseRetryAfter); null without one. */
+export function retryAfterOf(err: unknown): number | null {
+  return parseRetryAfter(header((err ?? {}) as HttpLike, 'retry-after'))
+}
+
 /**
  * Read an import request's failure. With no detail from the server, `texts`
  * (this call's own sentences) come first, then the general ones, then
@@ -112,7 +117,7 @@ export function importFailure(err: unknown, fallback: string, texts: FailureText
   const code = text(data.code)
   const own = (code && CODE_FALLBACK[code]) || (status === null ? undefined : texts[status] ?? FALLBACK[status])
   const message = extractApiError(err, own || fallback)
-  const retryAfter = status === 429 || status === 503 ? parseRetryAfter(header(err as HttpLike, 'retry-after')) : null
+  const retryAfter = status === 429 || status === 503 ? retryAfterOf(err) : null
   const scope = data.scope === 'user' || data.scope === 'org' ? data.scope : null
   const facts: FailureFacts = { field: text(data.field), groupId: text(data.group_id), stageName: text(data.stage_name), scope }
   return { message, status, code, facts, retryAfter }

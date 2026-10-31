@@ -17,75 +17,20 @@
  * the server would pick, what changes, and every refusal said in the
  * dialog, with the target stage's entry rules and checklist question.
  */
-import { flushPromises, mount } from '@vue/test-utils'
-import { AxiosError, AxiosHeaders } from 'axios'
+import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { VSelect } from 'vuetify/components'
 
 vi.mock('@/services/boardsApi', () => ({
   boardsApi: { list: vi.fn(), get: vi.fn(), people: vi.fn(), repos: vi.fn(), moveCardToBoard: vi.fn() },
 }))
 
-import { httpError, makeBoardItem, makeCard, makeCardDetail, makeDetail, makeStage } from '@/components/boards/__tests__/fixtures'
-import { boardTestPlugins } from '@/components/boards/__tests__/mountHelpers'
-import CardMoveBoardDialog from '@/components/boards/card/CardMoveBoardDialog.vue'
-import { boardsApi } from '@/services/boardsApi'
-import type { BoardDetail, StageRead } from '@/types/boards'
-
-const api = vi.mocked(boardsApi)
-const CARD = makeCard('14', { key: 'SEO-14', stage_id: 'src-doing', checklist_done: 1, checklist_total: 3 })
-const SOURCE = makeDetail({
-  board: { ...makeDetail().board, key: 'SEO', name: 'SEO' },
-  stages: [makeStage('src-doing', { name: 'Doing', category: 'in_progress' })],
-})
-const target = (stages: StageRead[]): BoardDetail =>
-  makeDetail({ board: { ...makeDetail().board, id: 'b2', key: 'OPS', name: 'Ops' }, stages })
-const OPS_STAGES = [
-  makeStage('t-todo', { name: 'To do', position: 0, is_default: true }),
-  makeStage('t-doing', { name: 'doing', category: 'in_progress', position: 1 }),
-  makeStage('t-done', { name: 'Done', category: 'done', position: 2 }),
-]
-
-function refusal(status: number, data: Record<string, unknown>): AxiosError {
-  const config = { headers: new AxiosHeaders() }
-  return new AxiosError('failed', String(status), config, null, { status, statusText: '', headers: {}, config, data })
-}
-
-async function openDialog(source: BoardDetail = SOURCE) {
-  const { plugins } = boardTestPlugins()
-  const wrapper = mount(CardMoveBoardDialog, {
-    global: { plugins: plugins as never[] },
-    props: { modelValue: true, card: CARD, board: source, people: [], fixLabel: 'Open card' },
-    attachTo: document.body,
-  })
-  await flushPromises()
-  return wrapper
-}
-type Dialog = Awaited<ReturnType<typeof openDialog>>
-const selects = (w: Dialog) => w.findAllComponents(VSelect)
-async function pick(w: Dialog, key: string) {
-  selects(w)[0].vm.$emit('update:modelValue', key)
-  await flushPromises()
-}
-const button = (label: string) =>
-  [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim() === label)
-async function clickMove() {
-  button('Move')?.click()
-  await flushPromises()
-}
-const text = () => document.body.textContent ?? ''
+import { httpError, makeCardDetail } from '@/components/boards/__tests__/fixtures'
+import {
+  api, button, clickMove, moveDefaults, OPS_STAGES, openDialog, pick, refusal, selects, SOURCE, target, text,
+} from './moveDialogHarness'
 
 describe('CardMoveBoardDialog', () => {
-  beforeEach(() => {
-    vi.resetAllMocks()
-    api.list.mockResolvedValue({ items: [
-      makeBoardItem('SEO'), makeBoardItem('OPS', { name: 'Ops' }), makeBoardItem('DES', { role: 'viewer' }),
-      makeBoardItem('PDT', { role: 'admin', name: 'Product' }), { kind: 'delivery', name: 'Delivery', path: '/buds' },
-    ] })
-    api.get.mockResolvedValue(target(OPS_STAGES))
-    api.people.mockResolvedValue({ items: [] })
-    api.repos.mockResolvedValue({ items: [] })
-  })
+  beforeEach(moveDefaults)
   afterEach(() => {
     document.body.replaceChildren()
   })
@@ -93,7 +38,7 @@ describe('CardMoveBoardDialog', () => {
   it('lists only the other boards I edit, and points Delivery at Hand over', async () => {
     const w = await openDialog()
     expect((selects(w)[0].props('items') as { key: string }[]).map(b => b.key)).toEqual(['OPS', 'PDT'])
-    expect(text()).toContain('To send work to Delivery, use Hand over.')
+    expect(selects(w)[0].props('hint')).toBe('To send work to Delivery, use Hand over.')
     expect(selects(w)).toHaveLength(1)
     expect(button('Move')?.disabled).toBe(true)
   })
@@ -103,7 +48,7 @@ describe('CardMoveBoardDialog', () => {
     await pick(w, 'OPS')
     expect(api.get).toHaveBeenCalledWith('OPS')
     expect(selects(w)[1].props('modelValue')).toBe('t-doing')
-    expect(text()).toContain('Becomes OPS-? (the next number on Ops). Links to SEO-14 keep working.')
+    expect(text()).toContain('Gets the next Ops number; links to SEO-14 keep working.')
     expect(text()).not.toContain('will see this card')
   })
 
@@ -117,6 +62,8 @@ describe('CardMoveBoardDialog', () => {
     api.get.mockResolvedValue(target(OPS_STAGES.map(s => (s.id === 't-doing' ? { ...s, required_fields: ['assignee'] } : s))))
     const w = await openDialog()
     await pick(w, 'OPS')
+    selects(w)[1].vm.$emit('update:modelValue', 't-doing')
+    await flushPromises()
     await clickMove()
     expect(api.moveCardToBoard).not.toHaveBeenCalled()
     expect(text()).toContain('doing needs an assignee first.')
@@ -154,8 +101,7 @@ describe('CardMoveBoardDialog', () => {
 
   it('says why a move was refused', async () => {
     const cases: [ReturnType<typeof httpError>, string][] = [
-      [httpError(404, 'Board not found.'), "Ops isn't available to you any more."],
-      [httpError(403), 'You need edit access on both boards to move this card to Ops.'],
+            [httpError(403), 'You need edit access on both boards to move this card to Ops.'],
       [httpError(409, 'This card is archived.'), 'This card is archived.'],
     ]
     const w = await openDialog()

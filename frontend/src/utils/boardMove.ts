@@ -21,7 +21,6 @@
 import type {
   BoardListItem, BoardPersonRead, BoardRepoRead, BoardRole, CardSummary, CustomBoardItem, LabelRead, StageRead,
 } from '@/types/boards'
-import { extractApiError } from '@/utils/errors'
 import { wordList } from '@/utils/format'
 
 /** Roles that may move cards onto a board (``move_card``). */
@@ -81,50 +80,39 @@ export function arriving(source: MoveSource, target: MoveTarget): CardSummary {
   }
 }
 
+/** What the card loses on the way: label names the target lacks, assignees who can't edit it, its repository. */
+export interface MoveLosses {
+  labels: string[]
+  assignees: string[]
+  repo: boolean
+}
+
+export function moveLosses(source: MoveSource, target: MoveTarget): MoveLosses {
+  const { card } = source
+  const targetNames = new Set(target.labels.map(l => lower(l.name)))
+  const keep = editors(target.people)
+  return {
+    labels: source.labels.filter(l => card.label_ids.includes(l.id) && !targetNames.has(lower(l.name))).map(l => l.name),
+    assignees: card.assignee_ids.filter(id => !keep.has(id)),
+    repo: !!card.repo_id && !target.repos.some(r => r.id === card.repo_id),
+  }
+}
+
 /** The preview's lines: the new key, then what's dropped, removed or cleared. */
 export function moveChanges(source: MoveSource, target: MoveTarget): string[] {
-  const { card } = source
-  const lines = [`Becomes ${target.key}-? (the next number on ${target.name}). Links to ${card.key} keep working.`]
-  const targetNames = new Set(target.labels.map(l => lower(l.name)))
-  const dropped = source.labels
-    .filter(l => card.label_ids.includes(l.id) && !targetNames.has(lower(l.name)))
-    .map(l => l.name)
-  if (dropped.length) lines.push(`Labels not on ${target.name} are dropped: ${dropped.join(', ')}`)
-  const keep = editors(target.people)
-  const removed = card.assignee_ids.filter(id => !keep.has(id))
-  if (removed.length) lines.push(`Removed: ${peopleWords(removed, source.people)}, who can't edit ${target.name}`)
-  if (card.repo_id && !target.repos.some(r => r.id === card.repo_id)) {
-    lines.push(`Repository cleared: not linked on ${target.name}`)
-  }
+  const lost = moveLosses(source, target)
+  const lines = [`Gets the next ${target.name} number; links to ${source.card.key} keep working.`]
+  if (lost.labels.length) lines.push(`Labels not on ${target.name} are dropped: ${lost.labels.join(', ')}`)
+  if (lost.assignees.length) lines.push(`Removed: ${peopleWords(lost.assignees, source.people)}, who can't edit ${target.name}`)
+  if (lost.repo) lines.push(`Repository cleared: not linked on ${target.name}`)
   return lines
 }
 
 /** "Pat and Sam", or "Pat and 1 other" for people this board doesn't name. */
-function peopleWords(ids: string[], people: BoardPersonRead[]): string {
+export function peopleWords(ids: string[], people: BoardPersonRead[]): string {
   const named = ids.map(id => people.find(p => p.id === id)?.name).filter((n): n is string => !!n)
   const others = ids.length - named.length
   if (!others) return wordList(named)
   if (!named.length) return `${others} ${others === 1 ? 'person' : 'people'}`
   return wordList([...named, `${others} ${others === 1 ? 'other' : 'others'}`])
-}
-
-interface Reply {
-  response?: { status?: number; data?: { detail?: unknown } }
-}
-
-const STAGE_GONE = 'Stage not found.'
-
-/** What a refused move says, for the refusals entry rules don't cover. */
-export function moveError(err: unknown, targetName: string): string {
-  const response = (err as Reply | null)?.response
-  switch (response?.status) {
-    case 403:
-      return `You need edit access on both boards to move this card to ${targetName}.`
-    case 404:
-      return response.data?.detail === STAGE_GONE
-        ? `That stage isn't on ${targetName} any more. Pick another one.`
-        : `${targetName} isn't available to you any more.`
-    default:
-      return extractApiError(err, "Couldn't move the card. Try again.")
-  }
 }

@@ -37,7 +37,7 @@
           :card="detail" :board="board.board" :stage="stage" :stages="stages" :labels="cardLabels" :people="people"
           :now="now" :can-edit="canEdit" :can-move="canMove" :can-archive="canArchive"
           :title-max="limits?.card_title_max ?? null" :save-title="actions.saveTitle"
-          @priority="actions.setPriority" @move="actions.move" @history="tab = 'activity'" @move-board="moveOpen = true"
+          @priority="actions.setPriority" @move="actions.move" @history="tab = 'activity'" @move-board="move.open.value = true"
           @archive="actions.archive()" @restore="actions.restore()" @copied="actions.copied"
         />
         <CardStateNotes
@@ -70,14 +70,16 @@
                 :closed="detail.archived_at ? CLOSED_COMMENTS : null" headless
               />
             </AppPanel>
-            <CardActivity v-else-if="tab === 'activity'" :activity="activity" :stages="stages" :name-for="nameFor" />
+            <CardActivity
+              v-else-if="tab === 'activity'" :activity="activity" :stages="stages" :name-for="nameFor" :board-id="board.board.id"
+            />
           </div>
           <aside class="bud-page__aside" aria-label="Card details">
             <CardDetailsPanel
               :card="detail" :stages="stages" :labels="board.labels" :people="page.people.people.value"
               :people-known="page.people.known.value" :repos="page.repos.repos.value" :name-for="nameFor"
               :photo-for="photoFor" :can-edit="canEdit" :can-move="canMove" :save-date="actions.saveDate"
-              :wanted="focus.wanted.value" @show-me="showWanted" @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels" @repo="actions.setRepo"
+              :wanted="focus.wanted.value" @show-me="focus.showWanted" @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels" @repo="actions.setRepo"
               @priority="actions.setPriority" @due-done="actions.setDueDone"
             />
           </aside>
@@ -86,8 +88,8 @@
       <BoardFeedback :feedback="feedback" />
       <ChecklistConfirmDialog :confirm="actions.confirm" />
       <CardMoveBoardDialog
-        v-if="detail && board" v-model="moveOpen" :card="detail" :board="board" :people="page.people.people.value"
-        fix-label="Show me" @moved="movedBoard" @fix="field => void focus.show(field)"
+        v-if="detail && board" v-model="move.open.value" :card="detail" :board="board" :people="page.people.people.value"
+        fix-label="Show me" @moved="move.moved" @fix="field => void focus.show(field)"
       />
       <AppConfirmDialog
         :model-value="drafts.guard.asking.value"
@@ -140,7 +142,7 @@ const route = useRoute()
 const number = computed(() => parseCardNumber(route.params.number))
 const {
   card, page, detail, boardKey, feedback, checklist, activity, thread, attachments, docs,
-  canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions, movedNote, movedBoard,
+  canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions, movedNote, move,
 } = useBoardCardPage(number, {
   show: (field, stageId) => void focus.show(field, stageId),
   want: stageId => focus.want(stageId),
@@ -152,16 +154,13 @@ const now = useNow()
 const board = computed(() => page.board.detail.value)
 const cardKey = computed(() => `${String(route.params.key ?? '').toUpperCase()}-${route.params.number}`)
 const cardLabels = computed(() => (board.value?.labels ?? []).filter(l => detail.value?.label_ids.includes(l.id)))
-const people = computed(() =>
-  (detail.value?.assignee_ids ?? []).map(id => ({ id, name: nameFor(id), photo: photoFor(id) })),
-)
+const people = computed(() => (detail.value?.assignee_ids ?? []).map(id => ({ id, name: nameFor(id), photo: photoFor(id) })))
 
 // The overview reloads its files and links when someone else changes them.
 function setOverview(el: unknown): void {
   attachments.value = (el as InstanceType<typeof CardOverview> | null) ?? null
 }
 
-const moveOpen = ref(false)
 const openTab = ref('overview')
 const docKind = ref<CardDocKind>(DOC_KINDS[0])
 /** Switching tab (or document) closes its editors, so an unsaved draft asks first. */
@@ -181,10 +180,6 @@ const focus = useCardFieldFocus({
   open: (field: StageRequiredField) => goTo(tabFor(field), field === 'prd' ? 'prd' : docKind.value),
   loaded: field => field !== 'prd' || !docs.loading,
 })
-function showWanted(): void {
-  const wanted = focus.wanted.value
-  if (wanted) void focus.show(wanted.missing[0], wanted.stage.id)
-}
 const tabs = computed<DetailTab[]>(() => [
   { value: 'overview', label: 'Overview' },
   { value: 'documents', label: 'Documents' },
