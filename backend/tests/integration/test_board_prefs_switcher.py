@@ -25,7 +25,15 @@ from sqlalchemy import select, update
 
 from app.config import settings
 from app.models.board_member import BoardUserPrefs
-from tests.integration.board_api_support import BOARDS, make_board, ok, person
+from app.services.boards.constants import ID_LIST_MAX_ITEMS
+from tests.integration.board_api_support import (
+    BOARDS,
+    link_repo,
+    make_board,
+    ok,
+    person,
+    tracked_repo,
+)
 from tests.integration.scan_features_bugs_support import Factory, new_org
 
 pytestmark = pytest.mark.integration
@@ -62,6 +70,7 @@ async def test_stars_and_filters_are_saved_per_person(
             "assignee_ids": [],
             "label_ids": [],
             "priorities": [],
+            "repo_ids": [],
             "archived": False,
         },
     }
@@ -77,6 +86,33 @@ async def test_saved_filters_are_capped(client: AsyncClient, pg_session_factory:
     assert resp.status_code == 422
     unknown = await client.put(url, json={"colour": "red"}, headers=pm.headers)
     assert unknown.status_code == 422
+
+
+async def test_the_repository_filter_keeps_only_repositories_the_board_links(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    factory = pg_session_factory
+    org = await new_org(factory)
+    pm = await person(factory, org, "pm")
+    key = (await make_board(client, pm))["board"]["key"]
+    url = f"{BOARDS}/{key}"
+    kept, unlinked = await tracked_repo(factory, org), await tracked_repo(factory, org)
+    foreign = await tracked_repo(factory, await new_org(factory))
+    await link_repo(client, pm, key, kept)
+    await link_repo(client, pm, key, unlinked)
+    body = {"repo_ids": [str(kept), str(unlinked), str(foreign)]}
+    saved = ok(await client.put(f"{url}/prefs", json=body, headers=pm.headers))
+    assert saved["filters"]["repo_ids"] == [str(kept), str(unlinked)]
+
+    ok(await client.delete(f"{url}/repos/{unlinked}", headers=pm.headers))
+    assert ok(await client.get(f"{url}/prefs", headers=pm.headers))["filters"]["repo_ids"] == [
+        str(kept)
+    ]
+    assert ok(await client.get(url, headers=pm.headers))["filters"]["repo_ids"] == [str(kept)]
+
+    many = [str(uuid.uuid4()) for _ in range(ID_LIST_MAX_ITEMS + 1)]
+    resp = await client.put(f"{url}/prefs", json={"repo_ids": many}, headers=pm.headers)
+    assert resp.status_code == 422
 
 
 async def test_opening_a_board_records_the_visit_at_most_once_per_interval(

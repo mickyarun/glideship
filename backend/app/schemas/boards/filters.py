@@ -36,6 +36,8 @@ class BoardFilters(BaseModel):
     assignee_ids: IdList = Field(default_factory=list)
     label_ids: IdList = Field(default_factory=list)
     priorities: list[BUDPriority] = Field(default_factory=list)
+    # Read back without any the board no longer links (see restored_filters).
+    repo_ids: IdList = Field(default_factory=list)
     archived: bool = False
 
     @model_validator(mode="after")

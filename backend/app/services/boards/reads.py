@@ -23,10 +23,11 @@ from app.models.board_card import BoardCard
 from app.repositories.board_card_summary import BoardCardSummaryRepository, CardSummaryRow
 from app.repositories.board_label import BoardLabelRepository
 from app.repositories.board_prefs import BoardPrefsRepository
+from app.repositories.board_repo import BoardRepoRepository
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.board import BoardDetail, BoardRead
 from app.schemas.boards.card import CardDetail, CardSummary
-from app.schemas.boards.filters import saved_filters
+from app.schemas.boards.filters import BoardFilters, saved_filters
 from app.schemas.boards.label import LabelRead
 from app.schemas.boards.stage import StageRead
 from app.services.boards.access import BoardAccess
@@ -56,8 +57,21 @@ async def board_detail(db: AsyncSession, access: BoardAccess) -> BoardDetail:
         role=access.role,
         capabilities=access.capabilities(),
         starred=bool(prefs and prefs.starred),
-        filters=saved_filters(prefs.filters if prefs else None),
+        filters=await restored_filters(db, access, prefs.filters if prefs else None),
     )
+
+
+async def restored_filters(db: AsyncSession, access: BoardAccess, raw: object) -> BoardFilters:
+    """My saved filters, without repositories the board no longer links.
+
+    A stale repository would otherwise filter the board to nothing.
+    """
+    filters = saved_filters(raw)
+    if not filters.repo_ids:
+        return filters
+    repos = BoardRepoRepository(db, org_id=access.org_id)
+    linked = await repos.linked_among(access.board.id, filters.repo_ids)
+    return filters.model_copy(update={"repo_ids": [r for r in filters.repo_ids if r in linked]})
 
 
 def card_summary(board: Board, row: CardSummaryRow) -> CardSummary:

@@ -58,6 +58,22 @@ class BoardRepoRepository:
         )
         return list((await self._db.execute(stmt)).scalars().all())
 
+    async def linked_among(self, board_id: uuid.UUID, repo_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+        """Which of ``repo_ids`` the board links to an active repository."""
+        if not repo_ids:
+            return set()
+        stmt = (
+            select(BoardRepo.repo_id)
+            .join(TrackedRepository, TrackedRepository.id == BoardRepo.repo_id)
+            .where(
+                BoardRepo.org_id == self._org_id,
+                BoardRepo.board_id == board_id,
+                BoardRepo.repo_id.in_(repo_ids),
+                TrackedRepository.status == RepoStatus.ACTIVE,
+            )
+        )
+        return set((await self._db.execute(stmt)).scalars().all())
+
     async def options(self, board_id: uuid.UUID) -> list[tuple[TrackedRepository, bool]]:
         """The org's active repositories by name, each with whether the board links it."""
         linked = (

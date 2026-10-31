@@ -101,6 +101,7 @@ async def test_a_board_opens_with_my_saved_filters(
         "assignee_ids": [],
         "label_ids": [],
         "priorities": [],
+        "repo_ids": [],
         "archived": False,
     }
     saved = {"q": "seo", "priorities": ["P1"], "archived": True}
