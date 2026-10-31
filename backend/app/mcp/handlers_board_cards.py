@@ -33,7 +33,7 @@ from app.mcp.board_tool_access import (
     board_tool,
     card_for,
     missing,
-    text_param,
+    stripped,
 )
 from app.mcp.board_tool_schemas import (
     COMMENT_CARD_TOOL,
@@ -105,7 +105,7 @@ async def handle_get_card(
     db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
     """The card a live or old key names, with what its page shows."""
-    key = text_param(params, "card_key")
+    key = stripped(params.get("card_key"))
     if not key:
         return missing("card_key")
     target = await card_for(db, caller, key, BoardAction.VIEW)
@@ -136,12 +136,13 @@ async def handle_create_card(
     db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
     """A new card at the bottom of the named or default stage."""
-    key = text_param(params, "board_key")
+    key = stripped(params.get("board_key"))
     if not key:
         return missing("board_key")
     access = await board_for(db, caller, key, BoardAction.CREATE_CARD)
     fields = _picked(params, (*_EDIT_FIELDS, "confirm_open_checklist"))
-    stage = text_param(params, "stage")
+    fields["title"] = params.get("title")
+    stage = stripped(params.get("stage"))
     if stage:
         fields["stage_id"] = await _stage_id(db, access, stage)
     return _card(await card_service.create_card(db, access, CardCreate.model_validate(fields)))
@@ -152,7 +153,7 @@ async def handle_update_card(
     db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
     """Edit the fields named; the rest stay."""
-    key = text_param(params, "card_key")
+    key = stripped(params.get("card_key"))
     if not key:
         return missing("card_key")
     target = await card_for(db, caller, key, BoardAction.EDIT_CARD)
@@ -165,7 +166,7 @@ async def handle_move_card(
     db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
     """Move the card to the bottom of a stage on its board."""
-    key, stage = text_param(params, "card_key"), text_param(params, "stage")
+    key, stage = stripped(params.get("card_key")), stripped(params.get("stage"))
     if not key or not stage:
         return missing("card_key" if not key else "stage")
     target = await card_for(db, caller, key, BoardAction.MOVE_CARD)
@@ -183,7 +184,7 @@ async def handle_comment_card(
     db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
     """Post a comment on the card."""
-    key = text_param(params, "card_key")
+    key = stripped(params.get("card_key"))
     if not key:
         return missing("card_key")
     target = await card_for(db, caller, key, BoardAction.COMMENT)

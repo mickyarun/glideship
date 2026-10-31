@@ -108,9 +108,13 @@ def _validation_message(exc: ValidationError) -> str:
     )
 
 
-def text_param(params: dict[str, Any], name: str) -> str:
-    """A string parameter, stripped; empty when it is missing or not a string."""
-    value = params.get(name)
+def stripped(value: Any) -> str:
+    """A string parameter's value, stripped; empty when it is missing or not a string.
+
+    Handlers read each parameter as a literal ``params.get("name")`` and pass
+    the value here, so the startup contract check (:mod:`app.mcp.contract_check`)
+    sees every key they read.
+    """
     return value.strip() if isinstance(value, str) else ""
 
 

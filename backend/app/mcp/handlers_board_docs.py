@@ -30,7 +30,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.auth import MCPAuthResult
-from app.mcp.board_tool_access import board_tool, card_for, missing, text_param
+from app.mcp.board_tool_access import board_tool, card_for, missing, stripped
 from app.models.board_enums import BoardCardDocKind
 from app.repositories.board_card_doc import BoardCardDocRepository
 from app.schemas.boards.doc import DocWrite
@@ -69,14 +69,13 @@ async def _granted(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
-def _doc_input(params: dict[str, Any]) -> tuple[BoardCardDocKind, str] | dict[str, Any]:
+def _doc_input(kind_value: Any, content: Any) -> tuple[BoardCardDocKind, str] | dict[str, Any]:
     """The document kind and text, or the error to return."""
     kinds = [k.value for k in BoardCardDocKind]
     try:
-        kind = BoardCardDocKind(str(params.get("kind")))
+        kind = BoardCardDocKind(str(kind_value))
     except ValueError:
         return {"success": False, "error": f"kind must be one of {kinds}"}
-    content = params.get("content_md")
     if not isinstance(content, str) or not content.strip():
         return {"success": False, "error": "content_md must be a non-empty string"}
     if len(content) > CARD_DOC_MAX_CHARS:
@@ -96,21 +95,22 @@ async def handle_write_card_doc(
     db: AsyncSession, auth: MCPAuthResult, params: dict[str, Any]
 ) -> dict[str, Any]:
     """A current version for a person's token; a ``pending_review`` draft for an agent run's."""
+    kind_value, content = params.get("kind"), params.get("content_md")
     if auth.grant is None and auth.user_id is not None:
         return await _write_as_person(db, auth, params)
     granted = await _granted(db, auth, params.get("card_id"), params.get("card_key"))
-    parsed = _doc_input(params)
+    parsed = _doc_input(kind_value, content)
     if isinstance(parsed, dict):
         return parsed
-    kind, content = parsed
-    result = await write_card_draft(db, granted, kind, content)
+    kind, text = parsed
+    result = await write_card_draft(db, granted, kind, text)
     logger.info(
         "mcp_write_card_doc",
         org_id=str(auth.org_id),
         card_id=str(granted.card.id),
         run_id=str(granted.run.id),
         kind=kind.value,
-        length=len(content),
+        length=len(text),
     )
     return result
 
@@ -119,10 +119,10 @@ async def handle_write_card_doc(
 async def _write_as_person(
     db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
-    key = text_param(params, "card_key")
+    key = stripped(params.get("card_key"))
     if not key:
         return missing("card_key")
-    parsed = _doc_input(params)
+    parsed = _doc_input(params.get("kind"), params.get("content_md"))
     if isinstance(parsed, dict):
         return parsed
     kind, content = parsed

@@ -24,7 +24,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.mcp.board_tool_access import board_for, board_tool, missing, text_param
+from app.mcp.board_tool_access import board_for, board_tool, missing, stripped
 from app.mcp.board_tool_schemas import GET_BOARD_TOOL, LIST_BOARDS_TOOL
 from app.repositories.board_card_filters import CardQuery
 from app.schemas.boards.card import CardSummary
@@ -62,7 +62,7 @@ async def handle_get_board(
     db: AsyncSession, caller: BoardCaller, params: dict[str, Any]
 ) -> dict[str, Any]:
     """The board's stages, each with its open cards, and its labels."""
-    key = text_param(params, "board_key")
+    key = stripped(params.get("board_key"))
     if not key:
         return missing("board_key")
     access = await board_for(db, caller, key, BoardAction.VIEW)
