@@ -1060,18 +1060,46 @@ These were decided on 2026-10-31 after a first hands-on test.
 
 - **People with access.** `GET /boards/{key}/people` (viewer+) lists everyone with a role on the
   board in one query, built from the same SQL as `users_with_access` (`repositories/board_role_rows.py`):
-  active members only, teams expanded, `boards:manage` as admin. Each row has `id`, `name`,
-  `avatar_url`, the highest `role` and `via` (`member`, `team` or `org`; own row wins a tie).
-  Card assignees are checked against exactly this set.
-- **Entry rules** live in `services/boards/move_rules.py` and run on a move to another stage
-  (`POST …/move`) and on a create (into the named or default stage). Required fields come first:
-  422 `{"detail", "code": "STAGE_REQUIREMENTS_MISSING", "stage_id", "missing": [...]}`, fields in
-  declaration order. Then, for a `done` stage: 409 `{"detail", "code": "CHECKLIST_OPEN", "open",
-  "total"}` unless the body has `confirm_open_checklist: true` (on `CardMove` and `CardCreate`; a
-  new card has no checklist, so the create flag is for symmetry). `description` and `prd` mean
-  "has non-whitespace text"; `prd` is the card's current PRD doc. Reordering inside a stage,
-  restoring an archived card, stage-delete `move_to`, imports and card PATCH edits don't check.
+  active members only, active teams expanded, `boards:manage` as admin. Each row has `id`,
+  `name`, `avatar_url`, the highest `role` and `via` (`member`, `team`, `permission` for
+  `boards:manage`, or `org` for an org-wide board). On a tie the order is own row, team,
+  permission, org. Card assignees are checked against exactly this set.
+- **Entry rules** live in `services/boards/move_rules.py`. Every path that puts a card in a stage
+  calls `enter_stage(stage, cause=EntryCause…, from_stage, facts, confirm_open_checklist)`, and
+  `ENTRY_RULES` maps each cause to the rules it applies:
+
+  | Cause | Required fields | Open checklist |
+  |---|---|---|
+  | `MOVE` (`POST …/move` to another stage) | yes | yes |
+  | `CREATE` (named or default stage) | yes | yes |
+  | `RESTORE` (archived card back to its stage) | no | no |
+  | `STAGE_DELETE` (cards moved off a deleted stage) | no | no |
+  | `IMPORT` | no | no |
+
+  Required fields come first: 422 `{"detail", "code": "STAGE_REQUIREMENTS_MISSING", "stage_id",
+  "missing": [...]}`, fields in declaration order. Then the checklist, only when the card
+  completes: the target is a `done` stage and the card comes from a stage that isn't `done` or
+  `canceled` (a create always counts). 409 `{"detail", "code": "CHECKLIST_OPEN", "open", "total"}`
+  ("1 of 3 checklist items is still open." / "2 of 3 … are still open.") unless the body has
+  `confirm_open_checklist: true` (on `CardMove` and `CardCreate`). Reordering inside a stage isn't
+  an entry, and card PATCH edits don't check, so a required field can be cleared after entry.
   New requirements apply to cards entering from then on.
+- **Required fields** are tested in `services/boards/card_facts.py`: `REQUIRED_FIELD_TESTS` maps
+  every `StageRequiredField` to one test over `CardFacts`, a protocol the card summary row and
+  `NewCardFacts.of(CardCreate)` both satisfy. A unit test checks the registry and the labels
+  cover the whole enum.
+- **Blank text, one rule.** A description of only whitespace (Python `str.strip()`, so Unicode
+  spaces too) is stored as NULL on every write path: the card schemas normalise it and a model
+  validator on `BoardCard.description_md` covers imports. A card document of only whitespace is
+  refused with 422 ("A document can't be empty…"). So `has_description` is `description_md IS
+  NOT NULL` and `has_prd` is "a current PRD version exists".
+- **Default stage.** The stage new cards land in can't require `prd` (a new card never has one):
+  changing its fields, making a stage that requires a PRD the default, or creating one as the
+  default is refused with 422.
+- **Later causes.** Moving a card to another board (`MOVE_BOARD`) will apply both rules in the
+  target stage, with the same `confirm_open_checklist` flag on its request. Handover's move to
+  `handover_stage_id` (a `done` stage) is an ordinary `MOVE` there, so the checklist rule applies
+  like any move into done.
 - **Error shape.** Board errors stay `{"detail": message}`; an error a client acts on adds a
   `code` and its facts beside `detail` (`BoardError.body()`, wired through
   `register_domain_errors(extra=...)`).
@@ -1119,10 +1147,27 @@ the board's linked repos.
   otherwise). `url` is the GitHub page when the repository has a full name.
 - Card create and PATCH take `repo_id` (null clears it); a repository the board doesn't link is
   422. The cards list filters on `?repo=`.
-- Unlinking clears `repo_id` on the board's cards in the same transaction and sends
-  `repos_changed` (`repo_id`, `linked`) plus `card_updated` for each card it cleared; linking
-  sends `repos_changed`. A card write holds the link row `FOR KEY SHARE` (taken before the card
-  lock) and unlinking takes it `FOR UPDATE`, so the two queue instead of failing.
+- Only an **active** repository counts as linked. `GET …/repos`, `GET …/repos/{repo_id}`, a card
+  naming it (create and PATCH, 422 "Pick one of the repositories this board links.", the same
+  message as a foreign or unlinked id) and `…/repos/options` skip repositories that are ignored or
+  removed. `DELETE …/repos/{repo_id}` works whatever the status, so an admin can always remove a
+  link.
+- Ignoring or removing a repository in settings (`PATCH /settings/repos/{id}/status`,
+  `DELETE /settings/repos`) unlinks it from every board in the same transaction, exactly as an
+  admin unlink does (`repo_service.unlink_retired_repo`). Re-activating it doesn't relink.
+- Socket events on `board:<id>`:
+  - link: `repos_changed {repo_id, linked: true, repo: {id, name, url}}`, so clients needn't
+    refetch;
+  - unlink (admin or settings): one `repos_changed {repo_id, linked: false, cleared: n}`, where
+    `n` counts every card it cleared, archived ones included. There is no `card_updated` per card:
+    the frontend clears `repo_id` locally on the cards it holds.
+- A card write holds the link row `FOR KEY SHARE` (the lock the card's foreign key takes, so card
+  writes never wait on each other), taken before the card lock; unlinking takes it `FOR UPDATE`,
+  so the two queue instead of failing. An integration test proves two holders don't block and an
+  unlink does.
+- `board_cards` has a partial index on `(board_id, repo_id) WHERE repo_id IS NOT NULL`, serving
+  the composite key, `?repo=` and clearing a repository's cards. `url` is built only when the
+  full name matches `owner/name` (`[\w.-]+/[\w.-]+`, ASCII).
 
 ## AI on every board
 
@@ -1477,6 +1522,25 @@ only. That avoids pulling arbitrary URLs from user-supplied JSON. API mode downl
   run.
 - The board hears one `board_imported` socket event when the run finishes; the frontend union
   gains it with the import UI.
+- **Review again.** `POST /boards/imports/{id}/review` moves a session that failed after its
+  board was read (a partial run, a stage deleted after review, a restart mid-run) back to
+  `ready`, keeping its saved mapping and clearing the error. The mapping can then be saved again
+  and the import started. Item maps are untouched, so the next run skips what earlier runs put
+  on the board, whatever the new mapping says. A session that never got read (no discovery) or
+  isn't `failed` is 409. A partial run onto a new board has already created that board
+  (`board_id` is set): saving the mapping again means targeting it as an existing board;
+  starting without saving resumes into it.
+- **Housekeeping.** `GET /boards/imports?status=open` lists the caller's own unfinished sessions
+  (`pending`, `parsing`, `ready`, `running`), newest first, at most `import_max_open_per_user`,
+  as `{items: [{id, source_kind, mode, status, board_id, total_cards, processed_count, error,
+  created_at, updated_at}]}`. `DELETE /boards/imports/{id}` (204) discards a `ready`, `failed`
+  or `completed` session and its uploaded file, for its creator or a `boards:manage` holder
+  (others get 404); 409 while it's pending, parsing or running, 502 if storage keeps the file.
+  Item maps stay with no session, like the sweep.
+- **Review data.** Each discovered list carries `archived_card_count` (its cards closed in
+  Trello) beside `card_count`. `GET /boards/limits` serves `import_max_upload_mb` from
+  `import_max_upload_bytes`. Card comments return `import_source` (`trello`, or null when
+  written here). `Retry-After` is in the CORS `expose_headers`.
 
 ## Notifications
 
