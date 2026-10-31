@@ -12,15 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The target board shaped for one Trello import: its stages, people and labels.
+
+"""The target board shaped for one import: its stages, people and labels.
 
 Everything here finds before it makes, so a resumed run reuses what the
 first run created. People mapped onto a new board become its editors, as
-they were members of the Trello board; on any board, someone who has
-since lost access is left unmapped rather than assigned.
+they were members of the source board; on any board, someone who has
+since lost access is left unmapped rather than assigned. Labels match the
+board's by name ignoring case, so source labels differing only in case
+share one board label, keeping the colour of the first.
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.core.permissions_boards import BOARDS_VIEW
@@ -32,14 +36,13 @@ from app.repositories.board_member import BoardMemberRepository
 from app.repositories.import_people import ImportPeopleRepository
 from app.schemas.boards.import_mapping import ImportMapping, NewBoardTarget
 from app.services.imports.context import ImportContext
+from app.services.imports.draft import LabelDraft
 from app.services.imports.stage_plan import ensure_stages, stage_key
-from app.services.imports.trello.mapper import label_name, nearest_label_color
-from app.services.imports.trello.parse import TrelloExport
 
 
 @dataclass(frozen=True)
-class TrelloPlan:
-    """Trello ids → what they became on the board."""
+class BoardPlan:
+    """Source ids → what they became on the board."""
 
     stages: dict[str, BoardStage]
     users: dict[str, uuid.UUID]
@@ -47,15 +50,15 @@ class TrelloPlan:
 
 
 async def build_plan(
-    ctx: ImportContext, export: TrelloExport, mapping: ImportMapping
-) -> TrelloPlan:
+    ctx: ImportContext, mapping: ImportMapping, labels: Sequence[LabelDraft]
+) -> BoardPlan:
     """Make the board ready for the cards; the caller commits."""
     new_board = isinstance(mapping.target, NewBoardTarget)
     stages = await ensure_stages(ctx.db, ctx.board, mapping, new_board=new_board)
-    return TrelloPlan(
+    return BoardPlan(
         stages=stages,
         users=await _users(ctx, mapping, new_board=new_board),
-        labels=await _labels(ctx, export),
+        labels=await _labels(ctx, labels),
     )
 
 
@@ -78,28 +81,24 @@ async def _users(
     return {m: u for m, u in mapped.items() if u in allowed}
 
 
-async def _labels(ctx: ImportContext, export: TrelloExport) -> dict[str, uuid.UUID]:
+async def _labels(ctx: ImportContext, labels: Sequence[LabelDraft]) -> dict[str, uuid.UUID]:
     repo = BoardLabelRepository(ctx.db, org_id=ctx.org_id)
     by_name = {
         stage_key(label.name): label.id for label in await repo.list_for_board(ctx.board.id)
     }
     resolved: dict[str, uuid.UUID] = {}
-    for trello_label in export.labels:
-        name = label_name(trello_label)
-        found = by_name.get(stage_key(name))
+    for draft in labels:
+        found = by_name.get(stage_key(draft.name))
         if found is None:
             label = BoardLabel(
-                org_id=ctx.org_id,
-                board_id=ctx.board.id,
-                name=name,
-                color=nearest_label_color(trello_label.color),
+                org_id=ctx.org_id, board_id=ctx.board.id, name=draft.name, color=draft.color
             )
             if not await repo.save(label):
                 # Someone added the same name a moment ago; use theirs.
                 again = {stage_key(x.name): x.id for x in await repo.list_for_board(ctx.board.id)}
-                found = again[stage_key(name)]
+                found = again[stage_key(draft.name)]
             else:
                 found = label.id
-            by_name[stage_key(name)] = found
-        resolved[trello_label.id] = found
+            by_name[stage_key(draft.name)] = found
+        resolved[draft.id] = found
     return resolved

@@ -12,158 +12,147 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """Trello as an :class:`~app.services.imports.source.ImportSource`.
 
-In API mode, discovery first fetches the board and every comment and
-stores them as the session's file; from then on both modes read the same
-stored JSON. Files are downloaded (API mode only) during prefetch, before
-the batch takes its locks.
+Both modes end in the same stored compact board: an upload is parsed when
+it's created, and in API mode discovery fetches the board and every
+comment, parses them once and stores the result. From then on discovery
+and the run read that file. Files are downloaded (API mode only) during
+prefetch, with no transaction open and before the batch takes its locks.
 """
 
 import asyncio
-import json
-import uuid
-from collections.abc import AsyncIterator
+from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager
+from types import TracebackType
+from typing import Any, Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.external_import import ExternalImportSession, ImportMode, ImportSourceKind
 from app.repositories.import_people import ImportPeopleRepository
-from app.schemas.boards.import_mapping import ArchivedChoice, StageChoice
-from app.services.attachment_upload import StoredFile
+from app.schemas.boards.trello_discovery import TrelloDiscovery
+from app.services.boards.access import BoardCaller
 from app.services.imports.context import ImportContext
-from app.services.imports.errors import ImportSourceDataError, ImportStateError
-from app.services.imports.source import ExternalItem, ImportDiscovery
+from app.services.imports.draft import AttachmentDraft, SourceBoard
+from app.services.imports.errors import ImportSourceDataError
+from app.services.imports.files import copy_files
+from app.services.imports.items import ExternalItem
+from app.services.imports.prefetch import FetchedItem, Prefetched, prefetched
+from app.services.imports.source import ImportDiscovery, MappingIds
 from app.services.imports.storage import load_source_file, store_source_file
-from app.services.imports.target import session_mapping
 from app.services.imports.trello import client as trello_client
-from app.services.imports.trello.cards import CardDraft, card_drafts
+from app.services.imports.trello.cards import source_board
 from app.services.imports.trello.client import TrelloClient
 from app.services.imports.trello.constants import SNAPSHOT_FILENAME
-from app.services.imports.trello.credentials import load_credentials
+from app.services.imports.trello.credentials import check_api_access, load_credentials
 from app.services.imports.trello.discovery import build_discovery
-from app.services.imports.trello.files import fetch_files, remove_files
-from app.services.imports.trello.parse import TrelloExport, parse_export
-from app.services.imports.trello.plan import TrelloPlan, build_plan
-from app.services.imports.trello.writer import write_card
+from app.services.imports.trello.models import TrelloExport
+from app.services.imports.trello.parse import compact_json, load_compact, parse_board
+from app.services.imports.trello.snapshot import fetch_snapshot
 
 NO_SOURCE_FILE = "This import has no board data yet."
 NO_BOARD_REF = "This import doesn't name a Trello board."
-NOT_PREPARED = "The import wasn't prepared before writing."
-
-SKIP_LIST = "list_skipped"
-SKIP_ARCHIVED = "archived"
-SKIP_NO_LIST = "list_missing"
 
 
 class TrelloSource:
-    """One run's view of one Trello board."""
+    """One job's view of one Trello board."""
 
     kind = ImportSourceKind.TRELLO
 
     def __init__(self) -> None:
         self._export: TrelloExport | None = None
-        self._drafts: list[CardDraft] | None = None
-        self._plan: TrelloPlan | None = None
         self._client: TrelloClient | None = None
-        self._files: dict[str, dict[str, StoredFile]] = {}
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self, kind: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
+    ) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+    async def check_startable(
+        self, db: AsyncSession, session: ExternalImportSession, caller: BoardCaller
+    ) -> None:
+        """API mode needs ``integrations:configure`` and the org's Trello credentials."""
+        if session.mode is ImportMode.API:
+            await check_api_access(db, caller)
+
+    def mapping_ids(self, discovery: dict[str, Any]) -> MappingIds:
+        """Every Trello list must be mapped; members may be."""
+        found = TrelloDiscovery.model_validate(discovery)
+        return MappingIds(
+            groups=frozenset(lst.id for lst in found.lists),
+            members=frozenset(m.id for m in found.members),
+        )
 
     async def discover(self, db: AsyncSession, session: ExternalImportSession) -> ImportDiscovery:
         """Summarise the board for review, fetching it from Trello first in API mode."""
         if session.mode is ImportMode.API:
             await self._snapshot(db, session)
-        export, drafts = await self._load(session)
+        export = await self._read(session)
+        board = source_board(export)
         people = await ImportPeopleRepository(db, org_id=session.org_id).active_names()
-        summary = build_discovery(export, drafts, people, session.mode)
-        return ImportDiscovery(total_items=len(drafts), summary=summary.model_dump(mode="json"))
-
-    async def prepare(self, ctx: ImportContext) -> None:
-        """Stages, people and labels on the board; a Trello client in API mode."""
-        export, _ = await self._load(ctx.session)
-        self._plan = await build_plan(ctx, export, session_mapping(ctx.session))
-        if ctx.session.mode is ImportMode.API and self._client is None:
-            creds = await load_credentials(ctx.db, ctx.org_id)
-            self._client = trello_client.new_client(creds)
-
-    async def iter_items(self, session: ExternalImportSession) -> AsyncIterator[ExternalItem]:
-        """Every card in import order, with why the mapping skips it, if it does."""
-        mapping = session_mapping(session)
-        actions = {entry.list_id: entry.action for entry in mapping.lists}
-        _, drafts = await self._load(session)
-        for index, draft in enumerate(drafts):
-            yield ExternalItem(
-                index=index,
-                external_id=draft.id,
-                payload=draft,
-                skip_reason=_skip_reason(
-                    draft, actions.get(draft.list_id), mapping.archived_cards
-                ),
-            )
-
-    async def prefetch(self, item: ExternalItem, ctx: ImportContext) -> None:
-        """Copy the card's uploaded files (API mode)."""
-        if self._client is None:
-            return
-        draft = _draft(item)
-        self._files[draft.id] = await fetch_files(self._client, ctx, draft.id, draft.attachments)
-
-    async def write_item(self, item: ExternalItem, ctx: ImportContext) -> uuid.UUID:
-        """Write the card; its copied files are handed over to it."""
-        if self._plan is None:
-            raise ImportStateError(NOT_PREPARED)
-        card_id = await write_card(
-            ctx, self._plan, _draft(item), self._files.get(item.external_id, {})
+        summary = build_discovery(export, board.cards, people, session.mode)
+        return ImportDiscovery(
+            total_items=len(board.cards), summary=summary.model_dump(mode="json")
         )
-        self._files.pop(item.external_id, None)
-        return card_id
 
-    async def discard(self, item: ExternalItem) -> None:
-        """Delete files copied for a card that wasn't written."""
-        await remove_files(self._files.pop(item.external_id, {}).values())
+    async def load(self, db: AsyncSession, session: ExternalImportSession) -> SourceBoard:
+        """The stored board as drafts; opens a Trello client for API mode's files."""
+        board = source_board(await self._read(session))
+        if session.mode is ImportMode.API and self._client is None:
+            creds = await load_credentials(db, session.org_id)
+            self._client = trello_client.new_client(creds)
+        return board
 
-    async def close(self) -> None:
-        """Close the Trello client, if one was opened."""
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+    def prefetch(
+        self, items: Sequence[ExternalItem], ctx: ImportContext
+    ) -> AbstractAsyncContextManager[Prefetched]:
+        """Copy the cards' uploaded files (API mode); nothing in upload mode."""
+        return prefetched(ctx, items, lambda item: self._fetch(item, ctx))
+
+    async def _fetch(self, item: ExternalItem, ctx: ImportContext) -> FetchedItem:
+        client = self._client
+        if client is None:
+            return FetchedItem()
+
+        async def download(attachment: AttachmentDraft, limit: int) -> bytes | None:
+            try:
+                card_id = item.external_id
+                return await client.download(card_id, attachment.id, attachment.name, limit)
+            except ImportSourceDataError:
+                # Ids not shaped like Trello's are never put in a URL; the link stays.
+                return None
+
+        return await copy_files(ctx, item.draft.attachments, download)
 
     async def _snapshot(self, db: AsyncSession, session: ExternalImportSession) -> None:
         if not session.source_ref:
             raise ImportSourceDataError(NO_BOARD_REF)
-        client = self._client or trello_client.new_client(
-            await load_credentials(db, session.org_id)
-        )
-        self._client = client
-        board = await client.board(session.source_ref)
-        board["actions"] = await client.comments(str(board.get("id", "")))
-        data = json.dumps(board).encode()
+        creds = await load_credentials(db, session.org_id)
+        # No transaction stays open while Trello answers.
+        await db.commit()
+        self._client = self._client or trello_client.new_client(creds)
+        raw = await fetch_snapshot(self._client, session.source_ref)
+        self._export = await asyncio.to_thread(parse_board, raw)
         session.storage_path = await store_source_file(
-            session.org_id, session.id, SNAPSHOT_FILENAME, data
+            session.org_id,
+            session.id,
+            SNAPSHOT_FILENAME,
+            compact_json(self._export),
+            max_bytes=settings.boards.import_max_snapshot_bytes,
         )
 
-    async def _load(self, session: ExternalImportSession) -> tuple[TrelloExport, list[CardDraft]]:
-        if self._export is None or self._drafts is None:
+    async def _read(self, session: ExternalImportSession) -> TrelloExport:
+        if self._export is None:
             if not session.storage_path:
                 raise ImportSourceDataError(NO_SOURCE_FILE)
             data = await load_source_file(session.storage_path)
-            self._export = await asyncio.to_thread(parse_export, data)
-            self._drafts = card_drafts(self._export)
-        return self._export, self._drafts
-
-
-def _draft(item: ExternalItem) -> CardDraft:
-    if not isinstance(item.payload, CardDraft):
-        raise TypeError("a Trello item carries a card draft")
-    return item.payload
-
-
-def _skip_reason(
-    draft: CardDraft, action: StageChoice | None, archived: ArchivedChoice
-) -> str | None:
-    if action is None:
-        return SKIP_NO_LIST
-    if action is StageChoice.SKIP:
-        return SKIP_LIST
-    if draft.closed and archived is ArchivedChoice.SKIP:
-        return SKIP_ARCHIVED
-    return None
+            self._export = await asyncio.to_thread(load_compact, data)
+        return self._export

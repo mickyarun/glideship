@@ -16,7 +16,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,23 +38,36 @@ class ImportAccepted(BaseModel):
     session_id: uuid.UUID = Field(alias="sessionId")
 
 
+# What a session's parse found, told apart by ``source_kind``; each new
+# source adds its discovery model to this union.
+ImportDiscoveryRead = Annotated[TrelloDiscovery, Field(discriminator="source_kind")]
+
+
 class TrelloApiImportCreate(BaseModel):
     """Start an import from the Trello API instead of an uploaded export."""
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["api"]
     trello_board_id: str = Field(pattern=TRELLO_BOARD_REF)
 
 
 class ImportResult(BaseModel):
-    """What a finished (or interrupted) run did."""
+    """What the session's runs did so far.
+
+    ``imported``, ``skipped`` and ``failed`` count this session's items;
+    ``already_imported`` counts items another session had already put on
+    the board. ``attachment_bytes`` is what the session copied, across
+    resumes. ``suppressed_events`` counts the per-card socket events the
+    silent import didn't send.
+    """
 
     imported: int = 0
     skipped: int = 0
     failed: int = 0
     already_imported: int = 0
     dropped: dict[str, int] = Field(default_factory=dict)
+    attachment_bytes: int = 0
+    suppressed_events: int = 0
 
 
 class ImportSessionRead(BaseModel):
@@ -71,7 +84,7 @@ class ImportSessionRead(BaseModel):
     last_processed_index: int | None
     job_id: str | None
     error: str | None
-    discovery: TrelloDiscovery | None
+    discovery: ImportDiscoveryRead | None
     mapping: ImportMapping | None
     result: ImportResult | None
     created_at: datetime
@@ -79,7 +92,7 @@ class ImportSessionRead(BaseModel):
 
 
 class TrelloBoardOption(BaseModel):
-    """One of the connected Trello member's open boards, for the picker."""
+    """One of the connected Trello member's open boards; ``url`` is a checked http(s) link."""
 
     id: str
     name: str

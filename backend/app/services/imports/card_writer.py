@@ -12,15 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Writing one Trello card draft onto the board, silently.
+
+"""Writing one card draft onto the board, silently.
 
 The card, its labels, assignees, checklist, comments (with their original
-dates and mapped authors) and attachments are written directly, and the
-card gets a single ``imported`` history entry carrying the Trello link.
-Priority is left empty: Trello has none.
+dates, mapped authors and the source they came from) and attachments are
+written directly, and the card gets a single ``imported`` history entry
+carrying the source's key and link. Priority is left empty. What the card
+drops is added to ``tally``, which the batch counts only once the card
+has landed, so a card that fails doesn't inflate the result.
 """
 
 import uuid
+from collections import Counter
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
@@ -41,20 +45,21 @@ from app.services.boards.card_timing import enter_category
 from app.services.boards.constants import LINKS_MAX_PER_CARD
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardSocketEvent
+from app.services.imports.board_plan import BoardPlan
 from app.services.imports.context import ImportContext
-from app.services.imports.trello.cards import AttachmentDraft, CardDraft
-from app.services.imports.trello.mapper import author_label
-from app.services.imports.trello.plan import TrelloPlan
-
-SOURCE_NAME = "trello"
+from app.services.imports.draft import AttachmentDraft, CardDraft
 
 
 async def write_card(
-    ctx: ImportContext, plan: TrelloPlan, draft: CardDraft, files: dict[str, StoredFile]
+    ctx: ImportContext,
+    plan: BoardPlan,
+    draft: CardDraft,
+    files: dict[str, StoredFile],
+    tally: Counter[str],
 ) -> uuid.UUID:
     """The draft as a card in its mapped stage, at the bottom; returns the card id."""
     now = datetime.now(UTC)
-    stage = plan.stages[draft.list_id]
+    stage = plan.stages[draft.group_id]
     card = BoardCard(
         org_id=ctx.org_id,
         board_id=ctx.board.id,
@@ -72,25 +77,31 @@ async def write_card(
     )
     enter_category(card, stage.category, now)
     await BoardCardRepository(ctx.db, org_id=ctx.org_id).create(card)
-    links = BoardCardLinkRepository(ctx.db, org_id=ctx.org_id)
-    await links.set_labels(card, {plan.labels[i] for i in draft.label_ids if i in plan.labels})
     assignees = {plan.users[m] for m in draft.member_ids if m in plan.users}
-    ctx.counters["unmapped_assignees"] += len(set(draft.member_ids) - plan.users.keys())
-    await links.set_assignees(card, assignees)
+    tally["unmapped_assignees"] += len(set(draft.member_ids) - plan.users.keys())
+    BoardCardLinkRepository(ctx.db, org_id=ctx.org_id).create_links(
+        card,
+        label_ids={plan.labels[i] for i in draft.label_ids if i in plan.labels},
+        user_ids=assignees,
+    )
     _add_checklist(ctx, card, draft)
     _add_comments(ctx, card, draft, plan, now)
-    _add_attachments(ctx, card, draft.attachments, files)
-    for kind, count in draft.dropped.items():
-        ctx.counters[kind] += count
+    _add_attachments(ctx, card, draft.attachments, files, tally)
+    tally.update(draft.dropped)
     await record_event(
         ctx.db,
         card,
         BoardCardEventType.IMPORTED,
         actor_id=ctx.actor_id,
         to_stage=stage,
-        detail={"source": SOURCE_NAME, "short_link": draft.short_link, "url": draft.url},
+        detail={
+            "source": ctx.session.source_kind.value,
+            "source_key": draft.source_key or None,
+            "url": draft.url,
+        },
     )
     ctx.announce(BoardSocketEvent.CARD_CREATED, card_id=str(card.id))
+    await ctx.db.flush()
     return card.id
 
 
@@ -109,7 +120,7 @@ def _add_checklist(ctx: ImportContext, card: BoardCard, draft: CardDraft) -> Non
 
 
 def _add_comments(
-    ctx: ImportContext, card: BoardCard, draft: CardDraft, plan: TrelloPlan, now: datetime
+    ctx: ImportContext, card: BoardCard, draft: CardDraft, plan: BoardPlan, now: datetime
 ) -> None:
     for comment in draft.comments:
         author = plan.users.get(comment.member_id)
@@ -120,7 +131,8 @@ def _add_comments(
                 card_id=card.id,
                 body=comment.text,
                 author_id=author,
-                author_label=None if author else author_label(comment.member_name),
+                author_label=None if author else comment.author_label,
+                import_source=ctx.session.source_kind,
                 created_at=at,
                 updated_at=at,
             )
@@ -132,6 +144,7 @@ def _add_attachments(
     card: BoardCard,
     attachments: list[AttachmentDraft],
     files: dict[str, StoredFile],
+    tally: Counter[str],
 ) -> None:
     link_count = 0
     for attachment in attachments:
@@ -152,7 +165,7 @@ def _add_attachments(
             continue
         link = _link(attachment) if link_count < LINKS_MAX_PER_CARD else None
         if link is None:
-            ctx.counters["links_dropped"] += 1
+            tally["links_dropped"] += 1
             continue
         link_count += 1
         ctx.db.add(

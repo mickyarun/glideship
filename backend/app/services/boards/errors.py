@@ -48,6 +48,22 @@ class BoardActionForbiddenError(BoardError):
     """The caller may use the board but not take this action."""
 
 
+class BoardRetryLaterError(BoardError):
+    """The request can't be served now; ``retry_after_seconds`` says when to try again."""
+
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+class BoardRateLimitedError(BoardRetryLaterError):
+    """The caller has made too many of these requests lately."""
+
+
+class BoardBusyError(BoardRetryLaterError):
+    """The server is too busy (or shutting down) to take the work now."""
+
+
 # One message for a taken key or name, whichever board holds it, so a
 # members-only board's key or name can't be discovered by trying it.
 BOARD_TAKEN = "That key or name is already used by another board."

@@ -26,14 +26,18 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import decrypt_secret, encrypt_secret
+from app.core.permissions_boards import INTEGRATIONS_CONFIGURE
 from app.repositories.organization import OrganizationRepository
 from app.schemas.boards.imports import TrelloCredentialsWrite, TrelloSettingsRead
+from app.services.boards.access import BoardCaller
+from app.services.boards.errors import BoardActionForbiddenError
 from app.services.imports.errors import ImportSourceDataError
 from app.services.imports.trello import client as trello_client
 from app.services.imports.trello.wire import TrelloCredentials
 
 CONFIG_KEY = "trello"
 NOT_CONFIGURED = "Trello isn't connected. An admin can add an API key and token in Settings."
+NO_API_RIGHTS = "Importing from the Trello API needs permission to configure integrations."
 
 
 def _section(config: dict[str, Any] | None) -> dict[str, Any]:
@@ -62,6 +66,18 @@ async def load_credentials(db: AsyncSession, org_id: uuid.UUID) -> TrelloCredent
     return creds
 
 
+async def check_api_access(db: AsyncSession, caller: BoardCaller) -> TrelloCredentials:
+    """The org's credentials, for a caller who may put them to work.
+
+    Raises:
+        BoardActionForbiddenError: The caller can't configure integrations.
+        ImportSourceDataError: Trello isn't connected.
+    """
+    if not caller.perms.has(INTEGRATIONS_CONFIGURE):
+        raise BoardActionForbiddenError(NO_API_RIGHTS)
+    return await load_credentials(db, caller.org_id)
+
+
 async def settings_read(db: AsyncSession, org_id: uuid.UUID) -> TrelloSettingsRead:
     """Whether Trello is connected, and as whom."""
     section = _section(await OrganizationRepository(db).get_config(org_id))
@@ -84,11 +100,8 @@ async def connect(
         ImportSourceDataError: Trello refused them.
     """
     creds = TrelloCredentials(api_key=body.api_key.strip(), token=body.token.strip())
-    client = trello_client.new_client(creds)
-    try:
+    async with trello_client.new_client(creds) as client:
         me = await client.me()
-    finally:
-        await client.aclose()
     username = me.get("username")
     await OrganizationRepository(db).set_config_section(
         org_id,

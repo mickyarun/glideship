@@ -12,16 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """The board an import writes to, and who may import at all.
 
 Importing into an existing board needs the board's ``import`` action
 (admin); importing into a new board needs ``boards:create``. Both are
-checked when the mapping is saved and again when the job runs, so a
-role lost in between stops the import.
+checked when the mapping is saved, when the import starts, when the job
+runs and again before every batch commits, so a role lost (or the board
+archived) part-way stops the import cleanly.
 """
+
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permission_deps import member_permission_set
 from app.core.permissions_boards import BOARDS_CREATE
 from app.models.external_import import ExternalImportSession
 from app.repositories.board import BoardRepository
@@ -33,7 +38,7 @@ from app.services.boards.access import (
     BoardNotFoundError,
     resolve_board_access,
 )
-from app.services.boards.board_service import insert_board
+from app.services.boards.board_create import insert_board
 from app.services.boards.constants import BOARD_ACTION_MIN_ROLE, BoardAction
 from app.services.boards.errors import BoardActionForbiddenError
 from app.services.imports.errors import ImportStateError
@@ -41,6 +46,7 @@ from app.services.imports.errors import ImportStateError
 NO_IMPORT_RIGHTS = "Importing needs permission to create boards, or admin on a board."
 NO_CREATE_RIGHTS = "Importing into a new board needs permission to create boards."
 NOT_MAPPED = "Review the import and save its mapping first."
+NOT_A_MEMBER = "The person who started this import is no longer in the organisation."
 
 
 async def check_may_import(db: AsyncSession, caller: BoardCaller) -> None:
@@ -71,6 +77,14 @@ async def importer_access(db: AsyncSession, caller: BoardCaller, key: str) -> Bo
     )
 
 
+async def current_caller(db: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID) -> BoardCaller:
+    """The importer as they are now, with their current permissions."""
+    perms = await member_permission_set(db, user_id, org_id)
+    if perms is None:
+        raise BoardActionForbiddenError(NOT_A_MEMBER)
+    return BoardCaller(user_id=user_id, org_id=org_id, perms=perms)
+
+
 def session_mapping(session: ExternalImportSession) -> ImportMapping:
     """The saved mapping; refused when there is none yet."""
     if session.config is None:
@@ -78,10 +92,27 @@ def session_mapping(session: ExternalImportSession) -> ImportMapping:
     return ImportMapping.model_validate(session.config)
 
 
+async def target_board_access(
+    db: AsyncSession, session: ExternalImportSession, caller: BoardCaller
+) -> BoardAccess:
+    """The caller's import access to the session's existing board (re-read from the database)."""
+    if session.board_id is None:
+        raise ImportStateError(NOT_MAPPED)
+    board = await BoardRepository(db, org_id=caller.org_id).get_by_id(session.board_id)
+    if board is None:
+        raise BoardNotFoundError()
+    await db.refresh(board)
+    return await importer_access(db, caller, board.key)
+
+
 async def target_access(
     db: AsyncSession, session: ExternalImportSession, caller: BoardCaller
 ) -> BoardAccess:
-    """The board the session writes to, creating it (committed) the first time if it's new."""
+    """The board the session writes to, inserting it the first time if it's new.
+
+    Nothing is committed here: a new board, the session's ``board_id`` and
+    the board's stages commit together once the board is prepared.
+    """
     if session.board_id is None:
         target = session_mapping(session).target
         if not isinstance(target, NewBoardTarget):
@@ -96,8 +127,12 @@ async def target_access(
             visibility=target.visibility,
         )
         session.board_id = created.id
-        await db.commit()
-    board = await BoardRepository(db, org_id=caller.org_id).get_by_id(session.board_id)
-    if board is None:
-        raise BoardNotFoundError()
-    return await importer_access(db, caller, board.key)
+    return await target_board_access(db, session, caller)
+
+
+async def recheck_access(
+    db: AsyncSession, session: ExternalImportSession, user_id: uuid.UUID
+) -> None:
+    """Refuse to commit a batch the importer may no longer write (role lost, board archived)."""
+    caller = await current_caller(db, session.org_id, user_id)
+    await target_board_access(db, session, caller)

@@ -12,18 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """A client-side limit on calls per time window, so Trello rarely answers 429.
 
 Trello allows 100 requests per 10 seconds per token; the importer stays
-under ``BoardsConfig.trello_requests_per_10s``. The clock and sleep are
-injectable so tests run without waiting.
+under ``BoardsConfig.trello_requests_per_10s``. One limiter per token is
+shared by every call in the process (parse, run, settings and the board
+picker), keyed by a hash of the token so the token itself is never held
+here. The clock and sleep are injectable so tests run without waiting.
 """
 
 import asyncio
+import hashlib
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable
 
+from app.config import settings
 from app.services.imports.trello.constants import TRELLO_WINDOW_SECONDS
 
 Sleep = Callable[[float], Awaitable[None]]
@@ -65,3 +70,24 @@ class RateLimiter:
     def _forget(self, now: float) -> None:
         while self._stamps and self._stamps[0] <= now - self._period:
             self._stamps.popleft()
+
+
+# Token hash → its limiter, least recently used first.
+_LIMITERS: OrderedDict[str, RateLimiter] = OrderedDict()
+
+
+def limiter_for(token: str) -> RateLimiter:
+    """The process-wide limiter for ``token``.
+
+    Only the ``BoardsConfig.trello_limiter_tokens`` most recently used
+    tokens are remembered; an older one starts a fresh window.
+    """
+    key = hashlib.sha256(token.encode()).hexdigest()
+    limiter = _LIMITERS.get(key)
+    if limiter is None:
+        limiter = RateLimiter(settings.boards.trello_requests_per_10s)
+        _LIMITERS[key] = limiter
+    _LIMITERS.move_to_end(key)
+    while len(_LIMITERS) > settings.boards.trello_limiter_tokens:
+        _LIMITERS.popitem(last=False)
+    return limiter

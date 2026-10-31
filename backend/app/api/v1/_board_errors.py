@@ -20,9 +20,12 @@ from app.api.v1._domain_errors import ErrorTable, register_domain_errors
 from app.api.v1._domain_errors import status_for as _status_for
 from app.services.boards.errors import (
     BoardActionForbiddenError,
+    BoardBusyError,
     BoardConflictError,
     BoardError,
     BoardItemNotFoundError,
+    BoardRateLimitedError,
+    BoardRetryLaterError,
     BoardRuleError,
     BoardStorageError,
     BoardTooLargeError,
@@ -35,6 +38,8 @@ _STATUS: ErrorTable = (
     (BoardRuleError, status.HTTP_422_UNPROCESSABLE_ENTITY),
     (BoardTooLargeError, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE),
     (BoardStorageError, status.HTTP_502_BAD_GATEWAY),
+    (BoardRateLimitedError, status.HTTP_429_TOO_MANY_REQUESTS),
+    (BoardBusyError, status.HTTP_503_SERVICE_UNAVAILABLE),
 )
 
 
@@ -43,6 +48,12 @@ def status_for(exc: BoardError) -> int:
     return _status_for(exc, _STATUS)
 
 
+def _headers(exc: Exception) -> dict[str, str] | None:
+    if isinstance(exc, BoardRetryLaterError):
+        return {"Retry-After": str(exc.retry_after_seconds)}
+    return None
+
+
 def register_board_errors(app: FastAPI) -> None:
     """Install the handler; call once wherever the API router is mounted."""
-    register_domain_errors(app, BoardError, _STATUS)
+    register_domain_errors(app, BoardError, _STATUS, headers=_headers)

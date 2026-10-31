@@ -27,6 +27,8 @@ from app.models.user import User
 from tests.integration.board_api_support import make_board, ok, person, put_role
 from tests.integration.board_import_support import (
     IMPORTS,
+    TRELLO_API,
+    TRELLO_UPLOAD,
     Jobs,
     capture_jobs,
     mapping,
@@ -51,13 +53,13 @@ def jobs(pg_session_factory: Factory, monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 def _existing(key: str) -> dict[str, object]:
     lists = [
-        {"list_id": list_id, "action": "new", "name": f"Trello {n}", "category": category}
+        {"group_id": list_id, "action": "new", "name": f"Trello {n}", "category": category}
         for n, (list_id, category) in enumerate(
             [(BACKLOG, "todo"), (DOING, "in_progress"), (DONE, "done")]
         )
     ]
     return mapping(
-        {"kind": "existing", "key": key}, lists=[*lists, {"list_id": OLD, "action": "skip"}]
+        {"kind": "existing", "key": key}, groups=[*lists, {"group_id": OLD, "action": "skip"}]
     )
 
 
@@ -117,15 +119,15 @@ async def test_the_mapping_is_checked_against_the_board_and_the_people(
         return (await client.put(url, json=body, headers=pm.headers)).status_code
 
     key = board_key()
-    lists = [{"list_id": BACKLOG, "action": "new", "name": "Backlog", "category": "todo"}]
-    assert await status_of(mapping(new_board(key), lists=lists)) == 422  # not every list
+    lists = [{"group_id": BACKLOG, "action": "new", "name": "Backlog", "category": "todo"}]
+    assert await status_of(mapping(new_board(key), groups=lists)) == 422  # not every list
     two_categories = [
-        {"list_id": BACKLOG, "action": "new", "name": "Work", "category": "todo"},
-        {"list_id": DOING, "action": "new", "name": "work", "category": "in_progress"},
-        {"list_id": DONE, "action": "new", "name": "Done", "category": "done"},
+        {"group_id": BACKLOG, "action": "new", "name": "Work", "category": "todo"},
+        {"group_id": DOING, "action": "new", "name": "work", "category": "in_progress"},
+        {"group_id": DONE, "action": "new", "name": "Done", "category": "done"},
     ]
     body = mapping(new_board(key))
-    body["lists"] = [*two_categories, body["lists"][-1]]
+    body["groups"] = [*two_categories, body["groups"][-1]]
     assert await status_of(body) == 422
     assert await status_of(mapping(new_board("BUD"))) == 422  # reserved key
     taken = await make_board(client, pm)
@@ -150,17 +152,24 @@ async def test_uploads_are_capped_and_must_be_a_board_export(
     assert (await upload(client, pm, name="board.csv")).status_code == 422
     assert (await upload(client, pm, data=b"{not json")).status_code == 422
     assert (await upload(client, pm, data=b'{"hello": "world"}')).status_code == 422
+    # In production the cap is IMPORT_UPLOAD_CEILING_BYTES, 1 MB under the
+    # request body limit, so an upload just over the cap still reaches the
+    # route and gets this clear 413; anything past the body limit is refused
+    # by BodySizeLimitMiddleware before it's read (pinned in
+    # tests/core/test_board_import_settings.py). Lowered here to test cheaply.
     monkeypatch.setattr(settings.boards, "import_max_upload_bytes", len(fixture_bytes()) - 1)
-    assert (await upload(client, pm)).status_code == 413
+    too_big = await upload(client, pm)
+    assert too_big.status_code == 413 and "Trello API" in too_big.json()["detail"]
     assert jobs.queued == []
-    no_file = await client.post(IMPORTS, files={"other": ("a.json", b"{}")}, headers=pm.headers)
+    no_file = await client.post(
+        TRELLO_UPLOAD, files={"other": ("a.json", b"{}")}, headers=pm.headers
+    )
     assert no_file.status_code == 422
-    # API mode needs the org's Trello credentials.
-    api = await client.post(
-        IMPORTS, json={"mode": "api", "trello_board_id": "AbCdEf12"}, headers=pm.headers
-    )
+    # API mode needs integrations:configure, then the org's Trello credentials.
+    body = {"trello_board_id": "AbCdEf12"}
+    assert (await client.post(TRELLO_API, json=body, headers=pm.headers)).status_code == 403
+    admin = await person(pg_session_factory, org, "admin")
+    api = await client.post(TRELLO_API, json=body, headers=admin.headers)
     assert api.status_code == 422 and "Trello isn't connected" in api.text
-    bad = await client.post(
-        IMPORTS, json={"mode": "api", "trello_board_id": "../x"}, headers=pm.headers
-    )
+    bad = await client.post(TRELLO_API, json={"trello_board_id": "../x"}, headers=admin.headers)
     assert bad.status_code == 422

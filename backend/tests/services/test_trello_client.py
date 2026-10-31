@@ -23,7 +23,7 @@ from app.config import settings
 from app.services.imports.errors import ImportSourceDataError, ImportSourceUnavailableError
 from app.services.imports.trello.client import TrelloClient
 from app.services.imports.trello.constants import TRELLO_ACTIONS_PAGE_LIMIT, TRELLO_API_HOST
-from app.services.imports.trello.throttle import RateLimiter
+from app.services.imports.trello.throttle import RateLimiter, limiter_for
 from app.services.imports.trello.wire import TrelloCredentials
 
 CREDS = TrelloCredentials(api_key="key-123", token="token-456")
@@ -65,7 +65,7 @@ async def test_comments_page_back_with_before_and_drop_repeats() -> None:
 
     rec = Recorder()
     client = rec.client(handler)
-    found = await client.comments(BOARD)
+    found = await client.comments(BOARD, 10_000_000, 5000)
     await client.aclose()
     assert len(found) == TRELLO_ACTIONS_PAGE_LIMIT + 1
     assert len({a["id"] for a in found}) == len(found)
@@ -95,7 +95,53 @@ async def test_a_429_waits_retry_after_then_backs_off_and_gives_up(
     client = rec.client(lambda _: httpx.Response(429))
     with pytest.raises(ImportSourceUnavailableError):
         await client.me()
-    assert rec.sleeps == [1.5, 3.0, 6.0] and len(rec.requests) == 3
+    # No pointless wait after the last try.
+    assert rec.sleeps == [1.5, 3.0] and len(rec.requests) == 3
+
+
+async def test_a_huge_retry_after_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings.boards, "trello_max_wait_seconds", 7.0)
+    answers = [
+        httpx.Response(429, headers={"Retry-After": "999999"}),
+        httpx.Response(200, json={}),
+    ]
+    rec = Recorder()
+    assert await rec.client(lambda _: answers.pop(0)).me() == {}
+    assert rec.sleeps == [7.0]
+
+
+async def test_server_errors_and_dropped_connections_back_off_and_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings.boards, "trello_backoff_seconds", 1.0)
+    calls = {"n": 0}
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ConnectError("reset", request=request)
+        if calls["n"] == 2:
+            return httpx.Response(502)
+        return httpx.Response(200, json={"username": "priya"})
+
+    rec = Recorder()
+    assert await rec.client(flaky).me() == {"username": "priya"}
+    assert rec.sleeps == [1.0, 2.0]
+
+
+async def test_reads_stop_at_the_byte_limit_and_comments_at_the_count() -> None:
+    rec = Recorder()
+    big = rec.client(lambda _: httpx.Response(200, json={"id": BOARD, "name": "x" * 500}))
+    with pytest.raises(ImportSourceDataError, match="larger than the import limit"):
+        await big.board(BOARD, limit=100)
+    many = rec.client(lambda _: httpx.Response(200, json=[_action(n) for n in range(5)]))
+    with pytest.raises(ImportSourceDataError):
+        await many.comments(BOARD, 10_000_000, max_items=4)
+
+
+def test_one_limiter_per_token_is_shared() -> None:
+    assert limiter_for("token-a") is limiter_for("token-a")
+    assert limiter_for("token-a") is not limiter_for("token-b")
 
 
 async def test_refused_credentials_and_missing_boards_read_as_bad_data() -> None:
@@ -103,11 +149,11 @@ async def test_refused_credentials_and_missing_boards_read_as_bad_data() -> None
     with pytest.raises(ImportSourceDataError):
         await rec.client(lambda _: httpx.Response(401)).me()
     with pytest.raises(ImportSourceDataError):
-        await rec.client(lambda _: httpx.Response(404)).board(BOARD)
+        await rec.client(lambda _: httpx.Response(404)).board(BOARD, 10_000)
     with pytest.raises(ImportSourceUnavailableError):
         await rec.client(lambda _: httpx.Response(500)).boards()
     with pytest.raises(ImportSourceDataError):
-        await rec.client(lambda _: httpx.Response(200, json=[])).comments("../../evil")
+        await rec.client(lambda _: httpx.Response(200, json=[])).comments("../../evil", 1, 1)
     assert all(r.url.host == TRELLO_API_HOST for r in rec.requests)
 
 

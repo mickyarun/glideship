@@ -34,7 +34,7 @@ from app.models.board_card_detail import (
 )
 from app.models.board_enums import BoardCardEventType, BoardMemberRole
 from app.models.board_member import BoardMember
-from app.models.external_import import ExternalItemMap, ExternalItemStatus
+from app.models.external_import import ExternalItemMap, ExternalItemStatus, ImportSourceKind
 from app.models.notification import Notification
 from app.services import event_bus, slack_dm
 from tests.integration.board_api_support import ok
@@ -51,7 +51,15 @@ from tests.integration.board_import_support import (
 )
 from tests.integration.board_support import board_key
 from tests.integration.scan_features_bugs_support import Factory, new_org
-from tests.services.trello_fixture import ANCIENT, ARCHIVED, FIRST, IN_FLIGHT, PRIYA, SPEC
+from tests.services.trello_fixture import (
+    ANCIENT,
+    ARCHIVED,
+    FIRST,
+    IN_FLIGHT,
+    PRIYA,
+    SPEC,
+    fixture_json,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -133,6 +141,7 @@ async def test_a_new_board_gets_every_card_silently(
         assert (cards[FIRST].number, cards[SPEC].number) == (1, 2)
         assert cards[FIRST].position < cards[SPEC].position
         spec, flight, archived = cards[SPEC], cards[IN_FLIGHT], cards[ARCHIVED]
+        spec_json = next(c for c in fixture_json()["cards"] if c.get("id") == SPEC)
         assert spec.priority is None and spec.description_md and "<script>" in spec.description_md
         assert spec.due_at == datetime(2026, 11, 5, 17, tzinfo=UTC) and not spec.due_done
         assert spec.start_at == datetime(2026, 11, 1, 9, tzinfo=UTC)
@@ -185,6 +194,8 @@ async def test_a_new_board_gets_every_card_silently(
             ("Looks good", priya.id, None),
             ("From someone not in the org", None, "Sam Outsider (Trello)"),
         ]
+        # Mapped or not, every imported comment says where it came from.
+        assert {c.import_source for c in comments} == {ImportSourceKind.TRELLO}
         assert comments[0].created_at == datetime(2026, 10, 1, 10, tzinfo=UTC)
         attachments = list(
             await db.scalars(
@@ -192,16 +203,18 @@ async def test_a_new_board_gets_every_card_silently(
             )
         )
         # Upload mode never fetches: the uploaded file stays a link to Trello.
+        uploaded = next(a for a in spec_json["attachments"] if a["isUpload"])
         assert sorted((a.kind.value, a.url) for a in attachments) == [
             ("link", "https://example.com/brief"),
-            ("link", next(a.url for a in attachments if a.url and "trello.com" in a.url)),
+            ("link", uploaded["url"]),
         ]
         events = list(
             await db.scalars(select(BoardCardEvent).where(BoardCardEvent.board_id == board.id))
         )
         assert {e.type for e in events} == {BoardCardEventType.IMPORTED}
         assert len(events) == 5
-        assert {e.detail["short_link"] for e in events if e.card_id == spec.id} == {"Card0001"}
+        assert {e.detail["source_key"] for e in events if e.card_id == spec.id} == {"Card0001"}
+        assert {e.detail["source"] for e in events} == {"trello"}
         notices = await db.scalar(
             select(func.count()).select_from(Notification).where(Notification.org_id == org)
         )
@@ -209,7 +222,8 @@ async def test_a_new_board_gets_every_card_silently(
 
     # One summary on the board's topic, and no DMs.
     assert [(t, d["event"]) for t, d in heard] == [(f"board:{board.id}", "board_imported")]
-    assert heard[0][1]["imported"] == 5
+    assert heard[0][1]["imported"] == 5 and heard[0][1]["status"] == "completed"
+    assert done["result"]["suppressed_events"] == 5
 
 
 async def test_archived_cards_can_be_skipped(

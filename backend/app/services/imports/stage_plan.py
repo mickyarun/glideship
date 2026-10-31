@@ -14,12 +14,13 @@
 
 """The stages a mapping adds, and finding or making them on the board.
 
-Several source lists may name the same new stage (compared ignoring case);
-they then share it, and must agree on its category. On a new board the
-first ``todo`` stage is where new cards land.
+Several source groups may name the same new stage (compared ignoring
+case); they then share it, and must agree on its category. On a new board
+the first ``todo`` stage is where new cards land.
 """
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,10 +29,11 @@ from app.models.board import Board, BoardStage
 from app.models.board_enums import BoardStageCategory
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.import_mapping import ImportMapping, StageChoice
-from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
+from app.services.boards.errors import BoardRuleError
 from app.services.boards.stage_rules import check_stage_count, check_stages
+from app.services.imports.errors import ImportStateError
 
-STAGE_GONE = "A stage this import maps lists into is no longer on the board."
+STAGE_GONE = "A stage this import maps cards into is no longer on the board. Review it again."
 
 
 @dataclass(frozen=True)
@@ -53,10 +55,10 @@ def planned_stages(mapping: ImportMapping, *, new_board: bool) -> list[PlannedSt
     """The distinct new stages, in list order.
 
     Raises:
-        BoardRuleError: Two lists name one stage with different categories.
+        BoardRuleError: Two groups name one stage with different categories.
     """
     by_key: dict[str, PlannedStage] = {}
-    for entry in mapping.lists:
+    for entry in mapping.groups:
         if entry.action is not StageChoice.NEW:
             continue
         assert entry.name is not None and entry.category is not None
@@ -64,7 +66,7 @@ def planned_stages(mapping: ImportMapping, *, new_board: bool) -> list[PlannedSt
         if found is None:
             by_key[stage_key(entry.name)] = PlannedStage(entry.name, entry.category)
         elif found.category is not entry.category:
-            raise BoardRuleError(f"Lists going into {entry.name!r} must share one category.")
+            raise BoardRuleError(f"Everything going into {entry.name!r} must share one category.")
     stages = list(by_key.values())
     if new_board:
         first_todo = next((s for s in stages if s.category is BoardStageCategory.TODO), None)
@@ -78,19 +80,20 @@ def planned_stages(mapping: ImportMapping, *, new_board: bool) -> list[PlannedSt
 async def ensure_stages(
     db: AsyncSession, board: Board, mapping: ImportMapping, *, new_board: bool
 ) -> dict[str, BoardStage]:
-    """Source list id → its stage, making missing new stages; lists skipped are absent.
+    """Source group id → its stage, making missing new stages; groups skipped are absent.
 
     Idempotent: a stage that already exists by name is reused, so a resumed
     import doesn't add it twice.
 
     Raises:
-        BoardItemNotFoundError: A mapped existing stage was deleted since.
+        ImportStateError: A mapped existing stage was deleted since.
         BoardRuleError: The board would break a stage rule.
     """
     repo = BoardStageRepository(db, org_id=board.org_id)
     stages = await repo.lock_board_stages(board.id)
     by_name = {stage_key(s.name): s for s in stages}
     by_id = {s.id: s for s in stages}
+    check_mapped_stages(mapping, by_id.keys())
     planned = planned_stages(mapping, new_board=new_board)
     missing = [p for p in planned if stage_key(p.name) not in by_name]
     check_stage_count(len(stages) + len(missing))
@@ -110,14 +113,22 @@ async def ensure_stages(
         by_name[stage_key(plan.name)] = stage
     await repo.flush()
     resolved: dict[str, BoardStage] = {}
-    for entry in mapping.lists:
+    for entry in mapping.groups:
         if entry.action is StageChoice.NEW:
             assert entry.name is not None
-            resolved[entry.list_id] = by_name[stage_key(entry.name)]
+            resolved[entry.group_id] = by_name[stage_key(entry.name)]
         elif entry.action is StageChoice.EXISTING:
             assert entry.stage_id is not None
-            existing = by_id.get(entry.stage_id)
-            if existing is None:
-                raise BoardItemNotFoundError(STAGE_GONE)
-            resolved[entry.list_id] = existing
+            resolved[entry.group_id] = by_id[entry.stage_id]
     return resolved
+
+
+def check_mapped_stages(mapping: ImportMapping, stage_ids: Iterable[uuid.UUID]) -> None:
+    """Refuse a mapping whose existing stages aren't all still on the board.
+
+    Raises:
+        ImportStateError: One was deleted since the review.
+    """
+    present = set(stage_ids)
+    if any(e.action is StageChoice.EXISTING and e.stage_id not in present for e in mapping.groups):
+        raise ImportStateError(STAGE_GONE)

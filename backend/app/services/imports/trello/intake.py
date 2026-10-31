@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """Starting a Trello import: from an uploaded export, or a board picked over the API.
 
-Either way a session is created and the parse job queued (202). An upload
-is checked before it's stored: size, a ``.json`` name, and JSON shaped
-like a Trello board. Nothing in it is fetched.
+Either way the caller is admitted first (rights, open-import caps, rate
+limit), a session is created and the parse job queued (202). An upload is
+checked before it's stored: size, a ``.json`` name, and JSON shaped like a
+Trello board within the count caps; it's parsed here, once, and stored in
+its compact form. Nothing in it is fetched. API mode also needs
+``integrations:configure``, as it puts the org's Trello token to work.
 """
 
 import asyncio
@@ -34,23 +38,26 @@ from app.repositories.external_import import ExternalImportSessionRepository
 from app.schemas.boards.imports import ImportAccepted, TrelloApiImportCreate, TrelloBoardOption
 from app.services.boards.access import BoardCaller
 from app.services.boards.errors import BoardRuleError, BoardTooLargeError
-from app.services.imports.sessions import queue_discovery
+from app.services.imports.admission import Admitted, admit
+from app.services.imports.queueing import queue_discovery
 from app.services.imports.storage import store_source_file
-from app.services.imports.target import check_may_import
+from app.services.imports.text import clean_text, http_url
 from app.services.imports.trello import client as trello_client
 from app.services.imports.trello.constants import SNAPSHOT_FILENAME
-from app.services.imports.trello.credentials import load_credentials
-from app.services.imports.trello.parse import parse_export
+from app.services.imports.trello.credentials import check_api_access
+from app.services.imports.trello.parse import compact_json, parse_export
 from app.services.upload_policy import UploadPolicyError, import_file_policy
 
-TOO_LARGE = "The export is larger than the {mb} MB import limit."
+TOO_LARGE = (
+    "The export is larger than the {mb} MB upload limit. Import bigger boards over the Trello API."
+)
 
 
 async def create_from_upload(
-    db: AsyncSession, caller: BoardCaller, filename: str | None, data: bytes
+    db: AsyncSession, admitted: Admitted, filename: str | None, data: bytes
 ) -> ImportAccepted:
     """A session for an uploaded board export (read one byte past the cap)."""
-    await check_may_import(db, caller)
+    caller = admitted.caller
     rules = import_file_policy(max_bytes=settings.boards.import_max_upload_bytes)
     if len(data) > rules.max_bytes:
         raise BoardTooLargeError(TOO_LARGE.format(mb=rules.max_mb))
@@ -58,37 +65,45 @@ async def create_from_upload(
         rules.resolve_mime(filename or "")
     except UploadPolicyError as exc:
         raise BoardRuleError(str(exc)) from exc
-    await asyncio.to_thread(parse_export, data)
+    export = await asyncio.to_thread(parse_export, data)
     session = await _new_session(db, caller, ImportMode.UPLOAD)
     session.storage_path = await store_source_file(
-        caller.org_id, session.id, SNAPSHOT_FILENAME, data
+        caller.org_id,
+        session.id,
+        SNAPSHOT_FILENAME,
+        compact_json(export),
+        max_bytes=settings.boards.import_max_snapshot_bytes,
     )
     return await queue_discovery(db, caller, session)
 
 
+async def admit_api(db: AsyncSession, caller: BoardCaller) -> Admitted:
+    """Admit an API-mode import: the usual checks, plus the right to use the token."""
+    await check_api_access(db, caller)
+    return await admit(db, caller)
+
+
 async def create_from_api(
-    db: AsyncSession, caller: BoardCaller, body: TrelloApiImportCreate
+    db: AsyncSession, admitted: Admitted, body: TrelloApiImportCreate
 ) -> ImportAccepted:
     """A session that fetches the board from the Trello API in its parse job."""
-    await check_may_import(db, caller)
-    await load_credentials(db, caller.org_id)
-    session = await _new_session(db, caller, ImportMode.API, source_ref=body.trello_board_id)
-    return await queue_discovery(db, caller, session)
+    session = await _new_session(
+        db, admitted.caller, ImportMode.API, source_ref=body.trello_board_id
+    )
+    return await queue_discovery(db, admitted.caller, session)
 
 
 async def list_trello_boards(db: AsyncSession, caller: BoardCaller) -> list[TrelloBoardOption]:
     """The connected Trello member's open boards, for API mode's picker."""
-    await check_may_import(db, caller)
-    client = trello_client.new_client(await load_credentials(db, caller.org_id))
-    try:
+    creds = await check_api_access(db, caller)
+    await db.commit()  # no transaction stays open while Trello answers
+    async with trello_client.new_client(creds) as client:
         boards = await client.boards()
-    finally:
-        await client.aclose()
     return [
         TrelloBoardOption(
             id=b["id"],
-            name=b["name"] if isinstance(b.get("name"), str) else "",
-            url=b["url"] if isinstance(b.get("url"), str) else None,
+            name=clean_text(b["name"]) if isinstance(b.get("name"), str) else "",
+            url=http_url(b["url"]) if isinstance(b.get("url"), str) else None,
         )
         for b in boards
         if isinstance(b.get("id"), str)

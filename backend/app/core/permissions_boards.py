@@ -27,6 +27,9 @@ from app.core.permission_types import CategoryDef, PermissionDef
 BOARDS_VIEW = "boards:view"
 BOARDS_CREATE = "boards:create"
 BOARDS_MANAGE = "boards:manage"
+# Not a boards permission: importing over a source's API uses the org's
+# stored credentials, which only integration admins may put to work.
+INTEGRATIONS_CONFIGURE = "integrations:configure"
 
 BOARD_PERMISSION_CATEGORIES: list[CategoryDef] = [
     CategoryDef(

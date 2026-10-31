@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board import Board
 from app.models.board_card import BoardCard
-from app.repositories.base import BaseRepository
+from app.repositories.base import BaseRepository, rowcount
 
 
 class BoardCardRepository(BaseRepository[BoardCard]):
@@ -55,6 +55,24 @@ class BoardCardRepository(BaseRepository[BoardCard]):
         if end is None:
             raise LookupError(f"board {board_id} not found")
         return range(end - n, end)
+
+    async def release_card_numbers(self, board_id: uuid.UUID, numbers: range) -> bool:
+        """Give back the last numbers claimed, when nobody claimed after them.
+
+        Only safe while this transaction still holds the board row from its
+        own :meth:`allocate_card_numbers`; then the counter still ends at
+        ``numbers.stop`` and it moves back to ``numbers.start``.
+        """
+        stmt = (
+            update(Board)
+            .where(
+                Board.id == board_id,
+                Board.org_id == self._org_id,
+                Board.next_card_number == numbers.stop,
+            )
+            .values(next_card_number=numbers.start, updated_at=Board.updated_at)
+        )
+        return rowcount(await self._db.execute(stmt)) == 1
 
     async def get_by_number(self, board_id: uuid.UUID, number: int) -> BoardCard | None:
         """The board's card with this number."""

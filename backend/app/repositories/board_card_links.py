@@ -44,6 +44,25 @@ class BoardCardLinkRepository:
         )
         return set((await self._db.execute(stmt)).scalars().all())
 
+    def create_links(
+        self, card: BoardCard, *, label_ids: Iterable[uuid.UUID], user_ids: Iterable[uuid.UUID]
+    ) -> None:
+        """Add labels and assignees to a card created in this transaction.
+
+        A new card has none yet, so nothing is read first; the rows go out
+        with the next flush.
+        """
+        self._db.add_all(
+            BoardCardLabel(
+                card_id=card.id, label_id=label, board_id=card.board_id, org_id=self._org_id
+            )
+            for label in set(label_ids)
+        )
+        self._db.add_all(
+            BoardCardAssignee(card_id=card.id, user_id=u, org_id=self._org_id)
+            for u in set(user_ids)
+        )
+
     async def set_assignees(
         self, card: BoardCard, user_ids: Iterable[uuid.UUID]
     ) -> tuple[set[uuid.UUID], set[uuid.UUID]]:

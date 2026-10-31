@@ -12,17 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The pieces of a Trello call: credentials, id checks, 429 waits, capped reads."""
+
+"""The pieces of a Trello call: credentials, id checks, waits between tries, capped reads."""
 
 from dataclasses import dataclass
 
 import httpx
 
 from app.config import settings
-from app.services.imports.errors import ImportSourceDataError
+from app.services.imports.errors import ImportSourceDataError, ImportSourceUnavailableError
 from app.services.imports.trello.constants import TRELLO_ID_PATTERN
 
 NOT_FOUND = "Trello has no such board, or the token can't read it."
+REFUSED = "Trello refused the API key or token. Check them in Settings → Trello."
+UNAVAILABLE = "Trello didn't answer. Try again in a minute."
 _CHUNK = 64 * 1024
 
 
@@ -44,12 +47,41 @@ def check_id(value: str) -> None:
         raise ImportSourceDataError(NOT_FOUND)
 
 
+def backoff(attempt: int) -> float:
+    """Seconds before retry ``attempt`` (0-based): doubling, never past the cap."""
+    cfg = settings.boards
+    return float(min(cfg.trello_backoff_seconds * 2**attempt, cfg.trello_max_wait_seconds))
+
+
 def retry_after(resp: httpx.Response, attempt: int) -> float:
-    """Seconds to wait after a 429: ``Retry-After`` when sent, else doubling backoff."""
+    """Seconds to wait after a 429: ``Retry-After`` when sent (capped), else :func:`backoff`."""
     header = resp.headers.get("Retry-After", "")
     if header.isdigit():
-        return float(header)
-    return float(settings.boards.trello_backoff_seconds * 2**attempt)
+        return float(min(int(header), settings.boards.trello_max_wait_seconds))
+    return backoff(attempt)
+
+
+def wait_before_retry(resp: httpx.Response, attempt: int) -> float | None:
+    """How long to wait before trying again, or None when the answer is final.
+
+    A 429 waits as Trello asks; a 5xx is Trello having a bad moment and
+    backs off. Anything else (success, refusal, not found) is final.
+    """
+    if resp.status_code == httpx.codes.TOO_MANY_REQUESTS:
+        return retry_after(resp, attempt)
+    if resp.status_code >= httpx.codes.INTERNAL_SERVER_ERROR:
+        return backoff(attempt)
+    return None
+
+
+def check_status(resp: httpx.Response) -> None:
+    """Refuse a final answer that isn't a 200, with a message for the importer."""
+    if resp.status_code in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
+        raise ImportSourceDataError(REFUSED)
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise ImportSourceDataError(NOT_FOUND)
+    if resp.status_code != httpx.codes.OK:
+        raise ImportSourceUnavailableError(UNAVAILABLE)
 
 
 async def read_capped(resp: httpx.Response, limit: int) -> bytes | None:

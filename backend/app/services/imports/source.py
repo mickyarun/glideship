@@ -12,40 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """What every import source provides to the shared pipeline.
 
-The pipeline calls, in order: :meth:`ImportSource.discover` (the parse
-job), then for the import job :meth:`~ImportSource.prepare` once,
-:meth:`~ImportSource.iter_items` for the items in a stable order, and per
-batch :meth:`~ImportSource.prefetch` (network work, no locks held) and
-:meth:`~ImportSource.write_item` (database work inside the batch).
-A source instance serves one job, so it may cache what it loaded.
+A source turns its data into card drafts and labels
+(:mod:`app.services.imports.draft`); everything after that (the board
+plan, the batches, the card writer, the item maps) is shared. The pipeline
+uses a source as an async context manager, one per job, so it can hold a
+network client and cache what it loaded. It calls, in order:
+
+- :meth:`ImportSource.check_startable` before any job is queued or run;
+- :meth:`~ImportSource.discover` in the parse job;
+- :meth:`~ImportSource.load` once per import run, then per batch
+  :meth:`~ImportSource.prefetch` (network work, with no transaction open
+  and no locks held) around the batch's writes and commit.
+
+This framework imports *cards into one board*. Imports that land somewhere
+else (Jira issues becoming BUDs, say) don't fit it and keep their own
+pipeline.
 """
 
-import uuid
-from collections.abc import AsyncIterator
+from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import Any, Protocol
+from types import TracebackType
+from typing import Any, Protocol, Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.external_import import ExternalImportSession, ImportSourceKind
+from app.services.boards.access import BoardCaller
 from app.services.imports.context import ImportContext
-
-
-@dataclass(frozen=True)
-class ExternalItem:
-    """One source item, in source order.
-
-    ``index`` is stable across runs of the same session, which is what
-    ``last_processed_index`` resumes from. ``skip_reason`` is set when the
-    mapping leaves the item out. ``payload`` is the source's own draft.
-    """
-
-    index: int
-    external_id: str
-    payload: Any
-    skip_reason: str | None = None
+from app.services.imports.draft import SourceBoard
+from app.services.imports.items import ExternalItem
+from app.services.imports.prefetch import Prefetched
 
 
 @dataclass(frozen=True)
@@ -56,35 +56,49 @@ class ImportDiscovery:
     summary: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class MappingIds:
+    """The source ids a reviewed mapping may name: every group exactly once, members at most."""
+
+    groups: frozenset[str]
+    members: frozenset[str]
+
+
 class ImportSource(Protocol):
     """One kind of source, such as a Trello board."""
 
     kind: ImportSourceKind
 
+    async def __aenter__(self) -> Self:
+        """Ready the source for one job."""
+        ...
+
+    async def __aexit__(
+        self, kind: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
+    ) -> None:
+        """Release network clients."""
+        ...
+
+    async def check_startable(
+        self, db: AsyncSession, session: ExternalImportSession, caller: BoardCaller
+    ) -> None:
+        """Refuse a parse or a run this caller can't start (rights, credentials)."""
+        ...
+
+    def mapping_ids(self, discovery: dict[str, Any]) -> MappingIds:
+        """The ids in a stored discovery that a mapping is checked against."""
+        ...
+
     async def discover(self, db: AsyncSession, session: ExternalImportSession) -> ImportDiscovery:
         """Read the source data (fetching it first in API mode) and summarise it."""
         ...
 
-    async def prepare(self, ctx: ImportContext) -> None:
-        """Shape the target board for the mapping (stages, labels, members), idempotently."""
+    async def load(self, db: AsyncSession, session: ExternalImportSession) -> SourceBoard:
+        """The stored source as card drafts in a stable order, and its labels."""
         ...
 
-    def iter_items(self, session: ExternalImportSession) -> AsyncIterator[ExternalItem]:
-        """Every item in a stable source order."""
-        ...
-
-    async def prefetch(self, item: ExternalItem, ctx: ImportContext) -> None:
-        """Fetch what the item needs from outside (files) before the batch takes locks."""
-        ...
-
-    async def write_item(self, item: ExternalItem, ctx: ImportContext) -> uuid.UUID:
-        """Write the item as a card; returns the card id."""
-        ...
-
-    async def discard(self, item: ExternalItem) -> None:
-        """Remove what :meth:`prefetch` stored for an item that failed to write."""
-        ...
-
-    async def close(self) -> None:
-        """Release network clients."""
+    def prefetch(
+        self, items: Sequence[ExternalItem], ctx: ImportContext
+    ) -> AbstractAsyncContextManager[Prefetched]:
+        """Fetch what ``items`` need from outside; see :func:`app.services.imports.prefetch`."""
         ...

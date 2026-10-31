@@ -14,8 +14,9 @@
 
 """Imports from other tools into boards.
 
-A source (Trello first) implements :class:`app.services.imports.source.ImportSource`;
-the shared pipeline runs discovery, then writes items in batches under a
+A source (Trello first) implements :class:`app.services.imports.source.ImportSource`
+and turns its data into card drafts and labels; the shared pipeline runs
+discovery, plans the board, then writes the drafts in batches under a
 silent :class:`app.services.imports.context.ImportContext`, recording each
 item in ``external_item_maps`` so a re-import skips what's already there.
 """

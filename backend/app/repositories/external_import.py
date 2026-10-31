@@ -12,17 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 """Data access for import sessions and their item maps, scoped to an organization."""
 
 import uuid
 from collections.abc import Iterable
+from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.external_import import (
-    IN_FLIGHT_IMPORT_STATUSES,
+    OPEN_IMPORT_STATUSES,
     ExternalImportSession,
     ExternalImportStatus,
     ExternalItemMap,
@@ -30,22 +32,6 @@ from app.models.external_import import (
     ImportSourceKind,
 )
 from app.repositories.base import BaseRepository, rowcount
-
-INTERRUPTED = "The server restarted while this import was running. Start it again to resume."
-
-
-async def recover_stuck_external_imports(db: AsyncSession) -> int:
-    """Mark sessions left parsing or running by a restart as failed; returns how many.
-
-    Deliberately cross-org: it runs once at startup, before any request.
-    A failed import keeps its progress, so starting it again resumes.
-    """
-    stmt = (
-        update(ExternalImportSession)
-        .where(ExternalImportSession.status.in_(IN_FLIGHT_IMPORT_STATUSES))
-        .values(status=ExternalImportStatus.FAILED, error=INTERRUPTED)
-    )
-    return rowcount(await db.execute(stmt))
 
 
 class ExternalImportSessionRepository(BaseRepository[ExternalImportSession]):
@@ -65,6 +51,27 @@ class ExternalImportSessionRepository(BaseRepository[ExternalImportSession]):
             stmt = stmt.where(ExternalImportSession.created_by == user_id)
         return (await self._db.execute(stmt)).scalar_one_or_none()
 
+    async def count_open(self, *, created_by: uuid.UUID | None = None) -> int:
+        """Unfinished sessions in the org, or only those ``created_by`` started."""
+        stmt = self._scoped(
+            select(func.count())
+            .select_from(ExternalImportSession)
+            .where(ExternalImportSession.status.in_(OPEN_IMPORT_STATUSES))
+        )
+        if created_by is not None:
+            stmt = stmt.where(ExternalImportSession.created_by == created_by)
+        return int((await self._db.execute(stmt)).scalar_one())
+
+    async def attachment_bytes_since(self, since: datetime, *, other_than: uuid.UUID) -> int:
+        """Attachment bytes copied by the org's other sessions active since ``since``."""
+        stmt = self._scoped(
+            select(func.coalesce(func.sum(ExternalImportSession.attachment_bytes), 0)).where(
+                ExternalImportSession.updated_at >= since,
+                ExternalImportSession.id != other_than,
+            )
+        )
+        return int((await self._db.execute(stmt)).scalar_one())
+
     async def claim(
         self,
         session_id: uuid.UUID,
@@ -72,6 +79,7 @@ class ExternalImportSessionRepository(BaseRepository[ExternalImportSession]):
         from_statuses: Iterable[ExternalImportStatus],
         to_status: ExternalImportStatus,
         job_id: str | None,
+        error: str | None = None,
     ) -> bool:
         """Move the session to ``to_status`` only if it's in one of ``from_statuses``.
 
@@ -84,7 +92,7 @@ class ExternalImportSessionRepository(BaseRepository[ExternalImportSession]):
                 ExternalImportSession.id == session_id,
                 ExternalImportSession.status.in_(list(from_statuses)),
             )
-            .values(status=to_status, job_id=job_id, error=None)
+            .values(status=to_status, job_id=job_id, error=error)
         )
         return rowcount(await self._db.execute(stmt)) == 1
 
@@ -97,20 +105,24 @@ class ExternalItemMapRepository(BaseRepository[ExternalItemMap]):
 
     async def imported_ids(
         self, kind: ImportSourceKind, board_id: uuid.UUID, external_ids: Iterable[str]
-    ) -> set[str]:
-        """Which of ``external_ids`` are already cards on the board."""
+    ) -> dict[str, uuid.UUID | None]:
+        """Which of ``external_ids`` are cards on the board, and the session that wrote each.
+
+        An item whose card was deleted since isn't here, so it imports again.
+        """
         wanted = set(external_ids)
         if not wanted:
-            return set()
+            return {}
         stmt = self._scoped(
-            select(ExternalItemMap.external_id).where(
+            select(ExternalItemMap.external_id, ExternalItemMap.session_id).where(
                 ExternalItemMap.source_kind == kind,
                 ExternalItemMap.target_board_id == board_id,
                 ExternalItemMap.status == ExternalItemStatus.IMPORTED,
+                ExternalItemMap.card_id.is_not(None),
                 ExternalItemMap.external_id.in_(wanted),
             )
         )
-        return set((await self._db.execute(stmt)).scalars().all())
+        return {row[0]: row[1] for row in (await self._db.execute(stmt)).all()}
 
     async def record(
         self,
@@ -123,7 +135,7 @@ class ExternalItemMapRepository(BaseRepository[ExternalItemMap]):
         card_id: uuid.UUID | None = None,
         error: str | None = None,
     ) -> None:
-        """Write what happened to one item, replacing an earlier skip or failure."""
+        """Write what happened to one item, replacing a skip, a failure or a deleted card."""
         values = {
             "session_id": session_id,
             "card_id": card_id,
@@ -141,7 +153,10 @@ class ExternalItemMapRepository(BaseRepository[ExternalItemMap]):
         stmt = stmt.on_conflict_do_update(
             constraint="uq_external_item_maps_org_kind_item_board",
             set_={**values, "updated_at": func.now()},
-            where=ExternalItemMap.status != ExternalItemStatus.IMPORTED,
+            where=or_(
+                ExternalItemMap.status != ExternalItemStatus.IMPORTED,
+                ExternalItemMap.card_id.is_(None),
+            ),
         )
         await self._db.execute(stmt)
 

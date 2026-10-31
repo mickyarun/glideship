@@ -28,8 +28,11 @@ from sqlalchemy import func, select
 from app.config import settings
 from app.models.board_card import BoardCard
 from app.models.external_import import ExternalImportSession, ExternalImportStatus
-from app.repositories.external_import import recover_stuck_external_imports
-from app.services.imports.trello.source import TrelloSource
+from app.repositories.external_import_sweep import (
+    INTERRUPTED_RUNNING,
+    recover_stuck_external_imports,
+)
+from app.services.imports import card_writer
 from tests.integration.board_api_support import (
     BOARDS,
     Person,
@@ -68,13 +71,13 @@ def _into(board: dict[str, Any], *, priya: uuid.UUID) -> dict[str, Any]:
     if any(s["name"] == "Shipped" for s in board["stages"]):
         shipped = {"action": "existing", "stage_id": stage_id(board, "Shipped")}
     lists = [
-        {"list_id": BACKLOG, "action": "existing", "stage_id": stage_id(board, "Backlog")},
-        {"list_id": DOING, "action": "existing", "stage_id": stage_id(board, "In progress")},
-        {"list_id": DONE, **shipped},
-        {"list_id": OLD, "action": "skip"},
+        {"group_id": BACKLOG, "action": "existing", "stage_id": stage_id(board, "Backlog")},
+        {"group_id": DOING, "action": "existing", "stage_id": stage_id(board, "In progress")},
+        {"group_id": DONE, **shipped},
+        {"group_id": OLD, "action": "skip"},
     ]
     target = {"kind": "existing", "key": board["board"]["key"]}
-    return mapping(target, lists=lists, priya=priya, archived="skip")
+    return mapping(target, groups=lists, priya=priya, archived="skip")
 
 
 async def _cards(factory: Factory, board_id: str) -> list[BoardCard]:
@@ -158,28 +161,29 @@ async def test_a_crash_resumes_after_the_last_committed_batch(
     key = board_key()
     await save_and_start(client, pm, session_id, mapping(new_board(key)))
 
-    write = TrelloSource.write_item
+    write = card_writer.write_card
     calls = {"n": 0}
 
-    async def crash_on_third(self: TrelloSource, item: Any, ctx: Any) -> uuid.UUID:
+    async def crash_on_third(*args: Any) -> uuid.UUID:
         calls["n"] += 1
         if calls["n"] == 3:
             raise asyncio.CancelledError  # the process dies mid-batch
-        return await write(self, item, ctx)
+        return await write(*args)
 
-    monkeypatch.setattr(TrelloSource, "write_item", crash_on_third)
+    monkeypatch.setattr(card_writer, "write_card", crash_on_third)
     with pytest.raises(asyncio.CancelledError):
         await jobs.run_all()
     async with pg_session_factory() as db:
         stuck = await db.get(ExternalImportSession, uuid.UUID(session_id))
         assert stuck is not None and stuck.status is ExternalImportStatus.RUNNING
         assert stuck.last_processed_index == 1 and stuck.processed_count == 2
-        assert await recover_stuck_external_imports(db) >= 1
+        await recover_stuck_external_imports(db)
         await db.commit()
+    # This session, whatever else the shared database holds, is now failed.
     failed = ok(await client.get(f"{IMPORTS}/{session_id}", headers=pm.headers))
-    assert failed["status"] == "failed" and "Start it again" in failed["error"]
+    assert failed["status"] == "failed" and failed["error"] == INTERRUPTED_RUNNING
 
-    monkeypatch.setattr(TrelloSource, "write_item", write)
+    monkeypatch.setattr(card_writer, "write_card", write)
     ok(await client.post(f"{IMPORTS}/{session_id}/start", headers=pm.headers), 202)
     await jobs.run_all()
     done = ok(await client.get(f"{IMPORTS}/{session_id}", headers=pm.headers))

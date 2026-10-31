@@ -14,6 +14,8 @@
 
 """The reviewed shape of an import: where it goes and how source groups become stages.
 
+The vocabulary is the source's neutral one: a *group* is whatever the
+source sorts cards into (a Trello list), a *member* is a source person.
 The same model is stored on the session as ``config``, so the import job
 reads exactly what the review screen saved.
 """
@@ -24,19 +26,20 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.config_board_imports import IMPORT_MAPPING_MAX_ENTRIES
 from app.models.board_enums import BoardStageCategory, BoardVisibility
 from app.models.external_import import EXTERNAL_ID_LENGTH
 from app.schemas.boards.text import BoardDescription, BoardName, StageName
 from app.services.boards.constants import BOARD_KEY_MAX_LENGTH
 
-# Lists and members one mapping may name; far above a real board.
-MAPPING_MAX_ENTRIES = 2000
+# Groups and members one mapping may name; far above a real board.
+MAPPING_MAX_ENTRIES = IMPORT_MAPPING_MAX_ENTRIES
 
 ExternalId = Annotated[str, Field(min_length=1, max_length=EXTERNAL_ID_LENGTH)]
 
 
 class StageChoice(StrEnum):
-    """What a source list becomes."""
+    """What a source group becomes."""
 
     NEW = "new"
     EXISTING = "existing"
@@ -74,10 +77,10 @@ class ExistingBoardTarget(_Strict):
 ImportTarget = Annotated[NewBoardTarget | ExistingBoardTarget, Field(discriminator="kind")]
 
 
-class ListMapping(_Strict):
-    """One source list: a new stage (lists may share one), an existing stage, or skipped."""
+class GroupMapping(_Strict):
+    """One source group: a new stage (groups may share one), an existing stage, or skipped."""
 
-    list_id: ExternalId
+    group_id: ExternalId
     action: StageChoice
     name: StageName | None = None
     category: BoardStageCategory | None = None
@@ -88,7 +91,7 @@ class ListMapping(_Strict):
         if self.action is StageChoice.NEW and (self.name is None or self.category is None):
             raise ValueError("A new stage needs a name and a category.")
         if self.action is StageChoice.EXISTING and self.stage_id is None:
-            raise ValueError("Pick the existing stage this list goes into.")
+            raise ValueError("Pick the existing stage this group goes into.")
         return self
 
 
@@ -103,7 +106,7 @@ class ImportMapping(_Strict):
     """Everything the reviewer decided before starting the import."""
 
     target: ImportTarget
-    lists: list[ListMapping] = Field(max_length=MAPPING_MAX_ENTRIES)
+    groups: list[GroupMapping] = Field(max_length=MAPPING_MAX_ENTRIES)
     members: list[MemberMapping] = Field(default_factory=list, max_length=MAPPING_MAX_ENTRIES)
     archived_cards: ArchivedChoice = ArchivedChoice.SKIP
 
