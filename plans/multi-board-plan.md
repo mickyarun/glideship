@@ -1043,6 +1043,9 @@ These were decided on 2026-10-31 after a first hands-on test.
     "Open card".
   - **Exceptions.** Moving cards out of a deleted stage (`move_to`) and imports
     (`ImportContext`) don't check requirements. Admins set requirements in Stages settings.
+- **Due date from the board.** The card's date chip, or a calendar "+" when the card has no due
+  date, opens a date picker for anyone who can edit. It can set, change or clear the due date and
+  saves through the card PATCH, optimistically with rollback.
 - **Assign from the board.** A card's avatars, or a "+" when no one is assigned, open a people
   picker for anyone who can edit. It lists people with access to the board and saves through
   the card PATCH, optimistically with rollback.
