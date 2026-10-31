@@ -40,3 +40,12 @@ class BoardAgentSettings(BaseSettings):
     agent_busy_retry_after_seconds: int = Field(
         default=30, gt=0, description="Retry-After when the agent queue is full."
     )
+    agent_tokens_max: int = Field(
+        default=200, gt=0, description="Live card-run MCP tokens at once; more are refused."
+    )
+    agent_runs_per_org_max: int = Field(
+        default=20, gt=0, description="Pending plus running card runs one org may have."
+    )
+    agent_runs_per_user_max: int = Field(
+        default=5, gt=0, description="Pending plus running card runs one person may start."
+    )

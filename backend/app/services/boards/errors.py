@@ -52,6 +52,7 @@ class BoardErrorCode(StrEnum):
     AI_DISABLED = "AI_DISABLED"
     AGENT_RUN_ACTIVE = "AGENT_RUN_ACTIVE"
     SKILL_NOT_IN_LIBRARY = "SKILL_NOT_IN_LIBRARY"
+    AGENT_RUN_LIMIT = "AGENT_RUN_LIMIT"
 
 
 class BoardError(Exception):

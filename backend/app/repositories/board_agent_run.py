@@ -33,6 +33,7 @@ from app.models.board_agent import (
     BoardAgentRunStatus,
     BoardCardAgentRun,
 )
+from app.models.board_card import BoardCard
 from app.repositories.base import BaseRepository, rowcount
 
 INTERRUPTED = "The server restarted while this run was going. Run it again."
@@ -97,6 +98,31 @@ class BoardCardAgentRunRepository(BaseRepository[BoardCardAgentRun]):
             )
         )
         return (await self._db.execute(stmt)).scalar_one_or_none()
+
+    async def count_active(self, *, triggered_by: uuid.UUID | None = None) -> int:
+        """Pending and running runs in the org, or only those ``triggered_by`` started."""
+        stmt = (
+            select(func.count())
+            .select_from(BoardCardAgentRun)
+            .where(BoardCardAgentRun.status.in_(ACTIVE_RUN_STATUSES))
+        )
+        if triggered_by is not None:
+            stmt = stmt.where(BoardCardAgentRun.triggered_by == triggered_by)
+        return int((await self._db.execute(self._scoped(stmt))).scalar_one())
+
+    async def active_on_board(self, board_id: uuid.UUID) -> list[BoardCardAgentRun]:
+        """The board's cards' pending and running runs, locked for the transaction."""
+        stmt = self._scoped(
+            select(BoardCardAgentRun)
+            .join(BoardCard, BoardCard.id == BoardCardAgentRun.card_id)
+            .where(
+                BoardCard.board_id == board_id,
+                BoardCardAgentRun.status.in_(ACTIVE_RUN_STATUSES),
+            )
+            .order_by(BoardCardAgentRun.id)
+            .with_for_update(of=BoardCardAgentRun)
+        )
+        return list((await self._db.execute(stmt)).scalars().all())
 
     async def recent_for_card(self, card_id: uuid.UUID, limit: int) -> list[BoardCardAgentRun]:
         """The card's latest runs, newest first."""

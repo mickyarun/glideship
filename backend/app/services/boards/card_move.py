@@ -105,7 +105,12 @@ async def move_card(db: AsyncSession, target: CardAccess, body: CardMove) -> Car
             to_stage=to_stage,
         )
         await queue_entry_agents(
-            db, board=access.board, card=card, stage=to_stage, cause=EntryCause.MOVE
+            db,
+            board=access.board,
+            card=card,
+            stage=to_stage,
+            cause=EntryCause.MOVE,
+            actor_id=access.user_id,
         )
     detail = await card_detail(
         db, access.board, card, known=known, opens_buds=opens_buds(access.perms)

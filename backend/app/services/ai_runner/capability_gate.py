@@ -73,6 +73,12 @@ def unsupported_reason(
             f"This feature needs MCP tools, which the {name} provider cannot use. "
             f"Switch the organisation to a provider that supports them."
         )
+    if not caps.scopes_builtin_tools and config.builtin_tools is not None:
+        return (
+            f"This feature must run with only its own tools, and the {name} provider "
+            f"cannot turn off its file and shell tools. Switch the organisation to "
+            f"another provider (Settings → AI Config) to use it."
+        )
     if not caps.supports_resume and config.is_resume:
         return (
             f"This feature resumes an earlier agent session, which the {name} "

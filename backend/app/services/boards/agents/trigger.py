@@ -20,24 +20,37 @@ row is written with the request and its job is enqueued only after the
 commit, so the job always finds its row. An ``on_enter`` start never fails
 the move that caused it: with AI off, no agent, or a run already going, the
 move goes ahead and nothing starts. ``ENTRY_RULES`` says which entries start
-agents at all.
+agents at all. A run records who started it (``triggered_by``: the clicker,
+or the person whose move or create caused the entry), which decides the
+read tools it gets; the per-org and per-person caps live in :mod:`.limits`.
 """
 
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.board import Board, BoardStage
-from app.models.board_agent import BoardAgentTrigger, BoardCardAgentRun, BoardStageAgent
+from app.models.board_agent import (
+    BoardAgentRunStatus,
+    BoardAgentTrigger,
+    BoardCardAgentRun,
+    BoardStageAgent,
+)
 from app.models.board_card import BoardCard
 from app.repositories.board_agent import BoardStageAgentRepository
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
 from app.schemas.boards.agent import AgentRunAccepted
 from app.services.after_commit import call_after_commit
 from app.services.boards.access import CardAccess
-from app.services.boards.agents.errors import AgentRunActiveError, BoardAiDisabledError
+from app.services.boards.agents.errors import (
+    AgentRunActiveError,
+    AgentRunLimitError,
+    BoardAiDisabledError,
+)
+from app.services.boards.agents.limits import run_limit_reached
 from app.services.boards.agents.queue import enqueue_after_commit, enqueue_now
-from app.services.boards.agents.runs import queue_run_event
+from app.services.boards.agents.runs import queue_run_event, settle
 from app.services.boards.card_checks import check_open
 from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
 from app.services.boards.move_rules import ENTRY_RULES, EntryCause
@@ -71,11 +84,14 @@ async def queue_entry_agents(
     card: BoardCard,
     stage: BoardStage,
     cause: EntryCause,
+    actor_id: uuid.UUID | None = None,
 ) -> BoardCardAgentRun | None:
     """Start the stage's ``on_enter`` agent for a card entering it, when everything allows.
 
     Call after the card's ``stage_id`` is set, inside the request that moves
-    it; the caller commits. Returns the run, or None when nothing started.
+    it; the caller commits. ``actor_id`` is whoever moved or created the card
+    (None leaves the run without the engineering read tools). Returns the run,
+    or None when nothing started; over a run cap the run is recorded failed.
     """
     if not ENTRY_RULES[cause].on_enter_agents or not board.ai_enabled:
         return None
@@ -85,12 +101,17 @@ async def queue_entry_agents(
     if found is None:
         return None
     agent, _skill = found
+    over = await run_limit_reached(db, card.org_id, actor_id)
     runs = BoardCardAgentRunRepository(db, org_id=card.org_id)
-    run = await runs.claim(_values(card, agent, BoardAgentTrigger.ON_ENTER, None))
+    run = await runs.claim(_values(card, agent, BoardAgentTrigger.ON_ENTER, actor_id))
     if run is None:
         return None
+    if over is not None:
+        settle(run, BoardAgentRunStatus.FAILED, error=over)
+        await db.flush()
     queue_run_event(db, board.id, run)
-    call_after_commit(db, enqueue_after_commit(run))
+    if over is None:
+        call_after_commit(db, enqueue_after_commit(run))
     return run
 
 
@@ -122,9 +143,14 @@ async def run_agent(db: AsyncSession, target: CardAccess, agent_id: uuid.UUID) -
         BoardItemNotFoundError: No such agent on the board (404).
         BoardRuleError: The agent is off, or on another stage (422).
         BoardBusyError: The agent queue is full (503); the run is marked failed.
+        AgentRunLimitError: Too many runs going in the org or for this person (429).
     """
     agent = await _agent_for(target, db, agent_id)
     access, card = target.access, target.card
+    over = await run_limit_reached(db, access.org_id, access.user_id)
+    if over is not None:
+        wait = settings.boards.agent_busy_retry_after_seconds
+        raise AgentRunLimitError(over, retry_after_seconds=wait)
     runs = BoardCardAgentRunRepository(db, org_id=access.org_id)
     run = await runs.claim(_values(card, agent, BoardAgentTrigger.MANUAL, access.user_id))
     if run is None:

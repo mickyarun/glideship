@@ -18,7 +18,12 @@ import uuid
 from collections.abc import Mapping
 from typing import Any
 
-from app.services.boards.errors import BoardConflictError, BoardErrorCode, BoardRuleError
+from app.services.boards.errors import (
+    BoardConflictError,
+    BoardErrorCode,
+    BoardRateLimitedError,
+    BoardRuleError,
+)
 
 
 class BoardAiDisabledError(BoardConflictError):
@@ -60,3 +65,11 @@ class SkillNotInLibraryError(BoardRuleError):
             "code": BoardErrorCode.SKILL_NOT_IN_LIBRARY,
             "skill_ids": [str(s) for s in self.skill_ids],
         }
+
+
+class AgentRunLimitError(BoardRateLimitedError):
+    """Too many runs going in the org or for this person (429 ``AGENT_RUN_LIMIT``)."""
+
+    def body(self) -> Mapping[str, Any]:
+        """The code."""
+        return {"code": BoardErrorCode.AGENT_RUN_LIMIT}

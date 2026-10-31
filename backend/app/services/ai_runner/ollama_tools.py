@@ -26,17 +26,25 @@ Deliberately ignores ``REMOTE_TOOLS``: that allowlist exists to narrow what
 *untrusted external* clients may call over ``/mcp/sse``. This loop is a trusted
 in-process caller, like the scan pipeline, and honouring it would cut off
 ``search_bugs`` and ``check_feature_exists`` — the tools the intake sites need.
-The caller's ``tool_names`` is the allowlist that applies here.
+The caller's ``tool_names`` is the allowlist that applies here: a name outside
+it is refused even when a handler exists. A scoped run (a board card run)
+also keeps its grant: every call re-checks that the run's token is still
+live and that the grant allows the call (tool and repository). Every call
+writes an ``mcp_audit_log`` row, as the HTTP transports do.
 """
 
 import json
+from collections.abc import Collection
 from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.mcp.audit import emit_audit
 from app.mcp.auth import MCPAuthResult
+from app.mcp.grant_tools import scoped_input_schema
 from app.mcp.server import AUTH_TOOL_HANDLERS, MCP_TOOLS, TOOL_HANDLERS
+from app.mcp.token_grants import InternalTokenGrant, scoped_grant
 
 logger = structlog.get_logger(__name__)
 
@@ -45,7 +53,9 @@ class NoToolsRequestedError(ValueError):
     """A tool-using run named no tools."""
 
 
-def build_tool_schemas(tool_names: list[str]) -> list[dict[str, Any]]:
+def build_tool_schemas(
+    tool_names: list[str], grant: InternalTokenGrant | None = None
+) -> list[dict[str, Any]]:
     """Our MCP tool definitions in the shape Ollama's ``tools`` param expects.
 
     ``MCP_TOOLS`` already carries real JSON Schema with no root combinators, so
@@ -71,7 +81,7 @@ def build_tool_schemas(tool_names: list[str]) -> list[dict[str, Any]]:
             "function": {
                 "name": t.name,
                 "description": t.description,
-                "parameters": t.input_schema,
+                "parameters": scoped_input_schema(t.name, t.input_schema, grant),
             },
         }
         for t in MCP_TOOLS
@@ -133,10 +143,49 @@ async def _reload_org_after_rollback(db: AsyncSession, auth: MCPAuthResult) -> N
         logger.exception("ollama_org_reload_failed", org_id=str(auth.org.id))
 
 
+def _audit(auth: MCPAuthResult, name: str, arguments: dict[str, Any], status_code: int) -> None:
+    emit_audit(
+        request=None,
+        auth=auth,
+        org_id=auth.org_id,
+        token_id=None,
+        tool_name=name,
+        transport="ollama",
+        params=arguments,
+        status_code=status_code,
+    )
+
+
+def _refused(
+    auth: MCPAuthResult,
+    name: str,
+    arguments: dict[str, Any],
+    allowed: Collection[str],
+    token: str | None,
+) -> str | None:
+    """Why the call may not run: not offered, the run's token ended, or outside its grant."""
+    if name not in allowed:
+        return f"This run was not given {name}"
+    if auth.grant is None:
+        return None
+    if token is None or scoped_grant(token) is not auth.grant:
+        return "This run's tool access has ended"
+    return auth.grant.refusal(name, arguments)
+
+
 async def dispatch_tool(
-    db: AsyncSession, auth: MCPAuthResult, name: str, arguments: dict[str, Any]
+    db: AsyncSession,
+    auth: MCPAuthResult,
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    allowed: Collection[str],
+    token: str | None = None,
 ) -> str:
     """Run one tool call and return its result as text for the model.
+
+    ``allowed`` is the run's tool list: anything else is refused. With a
+    scoped grant, ``token`` must still resolve to it.
 
     Errors come back as text rather than raising: handlers already signal
     failure by returning ``{"error": ...}``, and the model needs to read the
@@ -151,10 +200,13 @@ async def dispatch_tool(
     if auth_handler is None and handler is None:
         # The model invented a tool. Tell it so, rather than failing the run.
         logger.warning("ollama_tool_not_found", tool=name)
+        _audit(auth, name, arguments, 404)
         return json.dumps({"error": f"No such tool: {name}"})
-    if auth.grant is not None and not auth.grant.allows(name):
-        logger.warning("ollama_tool_outside_grant", tool=name)
-        return json.dumps({"error": f"This run may not call {name}"})
+    refused = _refused(auth, name, arguments, allowed, token)
+    if refused is not None:
+        logger.warning("ollama_tool_refused", tool=name)
+        _audit(auth, name, arguments, 403)
+        return json.dumps({"error": refused})
 
     try:
         if auth_handler is not None:
@@ -174,8 +226,10 @@ async def dispatch_tool(
         await db.rollback()
         await _reload_org_after_rollback(db, auth)
         logger.exception("ollama_tool_failed", tool=name, error=str(exc))
+        _audit(auth, name, arguments, 500)
         return json.dumps({"error": f"{name} failed: {exc}"})
 
     is_error = isinstance(result, dict) and "error" in result
+    _audit(auth, name, arguments, 200)
     logger.info("ollama_tool_called", tool=name, ok=not is_error)
     return json.dumps(result, default=str)

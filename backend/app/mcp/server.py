@@ -23,13 +23,14 @@ Mounted at /mcp/ on the main FastAPI app.
 from typing import Any, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.mcp.audit import emit_audit
 from app.mcp.auth import MCPAuthResult, verify_mcp_token
+from app.mcp.grant_tools import scoped_input_schema, visible
 from app.mcp.handlers_agent_activity import handle_agent_activity
 from app.mcp.handlers_board_cards import CARD_TOOL_DEFINITIONS, CARD_TOOL_HANDLERS
 from app.mcp.handlers_bud import (
@@ -83,7 +84,7 @@ from app.mcp.synthesis_queue import (  # noqa: F401
     remove_from_queue,
     set_synthesis_queue,
 )
-from app.mcp.token_grants import require_tool_grant
+from app.mcp.token_grants import require_tool_grant, require_unscoped, scoped_grant
 from app.schemas.agent_activity import (
     AgentActivityHookRequest,
     AgentActivityHookResponse,
@@ -1016,15 +1017,27 @@ MCP_TOOLS += [MCPToolDefinition(**tool) for tool in CARD_TOOL_DEFINITIONS]
 
 
 @router.get("/tools")
-async def list_tools() -> list[MCPToolDefinition]:
+async def list_tools(authorization: str | None = Header(default=None)) -> list[MCPToolDefinition]:
     """List all available MCP tools.
 
-    This endpoint is called by Claude Code during MCP discovery.
+    This endpoint is called by Claude Code during MCP discovery. A scoped
+    token (a board card run) sees only the tools its grant allows, with each
+    code tool's ``repo_id`` narrowed to its repositories.
 
     Returns:
         List of tool definitions with names, descriptions, and input schemas.
     """
-    return MCP_TOOLS
+    token = (authorization or "").removeprefix("Bearer ").strip()
+    grant = scoped_grant(token) if token else None
+    if grant is None:
+        return MCP_TOOLS
+    return [
+        tool.model_copy(
+            update={"input_schema": scoped_input_schema(tool.name, tool.input_schema, grant)}
+        )
+        for tool in MCP_TOOLS
+        if visible(tool.name, grant)
+    ]
 
 
 @router.post("/tools/{tool_name}")
@@ -1052,12 +1065,14 @@ async def call_tool(
     Returns:
         Tool execution result.
     """
+    # Parameter names only: values can carry document bodies and card text.
     logger.info(
         "mcp_tool_call",
         tool=tool_name,
         org_id=str(auth.org.id),
         user_id=str(auth.user.id) if auth.user else None,
-        params=body.params,
+        param_keys=sorted(body.params),
+        params_chars=len(str(body.params)),
     )
 
     # Rate limit BEFORE dispatch so a spammed unknown tool also gets
@@ -1079,7 +1094,7 @@ async def call_tool(
 
     # A scoped token (a board card run) may call only the tools it was granted.
     try:
-        require_tool_grant(auth, tool_name)
+        require_tool_grant(auth, tool_name, body.params)
     except HTTPException as exc:
         emit_audit(
             request=request,
@@ -1218,6 +1233,8 @@ async def report_dev_activity(
     Called by hook scripts: session-start.sh, post-commit-track.sh,
     activity-report.sh. All calls are fire-and-forget from the hook side.
     """
+    # Scoped tokens (a board card run) carry no developer or agent session.
+    require_unscoped(auth)
     raw = await request.body()
     logger.info("dev_activity_raw_body", body=raw.decode("utf-8", errors="replace")[:2000])
     try:
@@ -1241,6 +1258,8 @@ async def report_agent_activity(
     env var is set (agent session), and by backend directly for skill
     lifecycle events. All calls are fire-and-forget from the hook side.
     """
+    # Scoped tokens (a board card run) carry no developer or agent session.
+    require_unscoped(auth)
     raw = await request.body()
     logger.info("agent_activity_raw_body", body=raw.decode("utf-8", errors="replace")[:2000])
     try:

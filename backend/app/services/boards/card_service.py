@@ -131,7 +131,9 @@ async def create_card(db: AsyncSession, access: BoardAccess, body: CardCreate) -
             actor_id=access.user_id,
             detail={"user_ids": sorted(str(u) for u in added)},
         )
-    await queue_entry_agents(db, board=board, card=card, stage=stage, cause=EntryCause.CREATE)
+    await queue_entry_agents(
+        db, board=board, card=card, stage=stage, cause=EntryCause.CREATE, actor_id=access.user_id
+    )
     notice = await card_notify.stage_assigned(db, access, card, added)
     detail = await card_detail(db, board, card)
     changes = BoardChanges.of(access)

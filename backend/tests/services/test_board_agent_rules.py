@@ -32,7 +32,8 @@ from app.mcp.token_grants import (
     revoke_scoped_mcp_token,
     scoped_grant,
 )
-from app.services.boards.constants import CARD_RUN_READ_TOOLS, CARD_RUN_TOOLS
+from app.services.boards.agents.tools import BOARD_RUN_ALLOWLIST
+from app.services.boards.constants import CARD_RUN_TOOLS
 from app.services.boards.move_rules import ENTRY_RULES, EntryCause
 
 
@@ -54,7 +55,8 @@ def test_a_handover_checks_entry_rules_but_starts_no_agent() -> None:
 def test_the_run_tools_never_include_a_write_outside_the_card() -> None:
     assert {"write_card_doc", "get_card_context"} == CARD_RUN_TOOLS
     assert not any(
-        tool.startswith(("write_", "update_", "create_")) for tool in CARD_RUN_READ_TOOLS
+        tool.startswith(("write_", "update_", "create_"))
+        for tool in BOARD_RUN_ALLOWLIST - CARD_RUN_TOOLS
     )
 
 
@@ -81,10 +83,12 @@ def test_scoped_tokens_expire_and_can_be_revoked(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(token_grants, "_scoped_tokens", {})
     org = uuid.uuid4()
     live = create_scoped_mcp_token(
-        InternalTokenGrant(org_id=org, expires_at=datetime.now(UTC) + timedelta(minutes=5))
+        InternalTokenGrant(org_id=org, expires_at=datetime.now(UTC) + timedelta(minutes=5)),
+        limit=10,
     )
     stale = create_scoped_mcp_token(
-        InternalTokenGrant(org_id=org, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+        InternalTokenGrant(org_id=org, expires_at=datetime.now(UTC) - timedelta(seconds=1)),
+        limit=10,
     )
     assert scoped_grant(live) is not None
     assert scoped_grant(stale) is None

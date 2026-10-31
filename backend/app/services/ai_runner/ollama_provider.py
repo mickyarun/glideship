@@ -176,8 +176,16 @@ class OllamaProvider:
                     "This feature's MCP config carries no organisation, so its tools cannot run."
                 ),
             )
+        # A scoped run (a board card run) carries its grant; its token must
+        # still resolve to that grant, or the run doesn't start (never falls
+        # back to an org-wide, unscoped run).
+        grant = config.mcp.grant
+        if grant is not None and scoped_grant(config.mcp.mcp_token) is not grant:
+            return ClaudeRunResult(
+                success=False, output="", error="This run's tool access ended before it started."
+            )
         try:
-            tools = build_tool_schemas(config.mcp.tool_names)
+            tools = build_tool_schemas(config.mcp.tool_names, grant)
         except NoToolsRequestedError as exc:
             return ClaudeRunResult(success=False, output="", error=str(exc))
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
@@ -191,8 +199,7 @@ class OllamaProvider:
                 )
             # Handlers read their org from this, never from a token — so there
             # is nothing to mint, and no cross-process token to go stale.
-            # A scoped run token (a board card run) keeps its grant in-process.
-            auth = MCPAuthResult(org=org, user=None, grant=scoped_grant(config.mcp.mcp_token))
+            auth = MCPAuthResult(org=org, user=None, grant=grant)
 
             for _turn in range(turns):
                 message = await chat(
@@ -233,7 +240,14 @@ class OllamaProvider:
                     name, args = parsed
                     if progress_callback is not None:
                         progress_callback(name, {})
-                    result = await dispatch_tool(db, auth, name, args)
+                    result = await dispatch_tool(
+                        db,
+                        auth,
+                        name,
+                        args,
+                        allowed=config.mcp.tool_names,
+                        token=config.mcp.mcp_token,
+                    )
                     # ``tool_name`` is what lets the model attribute results when
                     # a turn emits several calls; without it they arrive as
                     # indistinguishable blobs matched only by position.

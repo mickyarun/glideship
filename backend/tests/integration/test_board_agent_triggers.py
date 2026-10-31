@@ -65,7 +65,8 @@ async def test_creating_a_card_in_an_on_enter_stage_starts_its_agent(
         BoardAgentRunStatus.PENDING,
         skill,
     )
-    assert run.triggered_by is None
+    # The person whose create started it: their access decides the run's read tools.
+    assert run.triggered_by == admin.id
     assert [job_id for job_id, _ in agent_env.jobs.queued] == [run.job_id]
 
 

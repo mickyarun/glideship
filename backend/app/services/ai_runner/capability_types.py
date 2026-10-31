@@ -91,6 +91,9 @@ class ProviderCapabilities:
     supports_mcp: bool = True
     supports_files: bool = True
     supports_resume: bool = True
+    # Whether the adapter can take the built-in file, shell and web tools away
+    # so only the run's MCP tools remain (``ClaudeRunnerConfig.builtin_tools``).
+    scopes_builtin_tools: bool = True
     # Reasoning as a boolean (Ollama's `think`) rather than a level. Providers
     # with graded reasoning use ``supports_effort``/``effort_values``.
     supports_thinking: bool = False

@@ -102,18 +102,6 @@ DEFAULT_AGENT_OUTPUT_KIND: Final = BoardCardDocKind.NOTES
 WRITE_CARD_DOC_TOOL: Final = "write_card_doc"
 GET_CARD_CONTEXT_TOOL: Final = "get_card_context"
 CARD_RUN_TOOLS: Final = frozenset({WRITE_CARD_DOC_TOOL, GET_CARD_CONTEXT_TOOL})
-# Org-wide read tools a card run's skill may also use when it declares them.
-# Nothing here writes, so a BUD skill picked for a stage can't change BUDs.
-CARD_RUN_READ_TOOLS: Final = frozenset(
-    {
-        "get_features",
-        "check_feature_exists",
-        "search_bugs",
-        "get_team_context",
-        "list_design_systems",
-        "get_design_system",
-    }
-)
 
 
 class BoardAction(StrEnum):

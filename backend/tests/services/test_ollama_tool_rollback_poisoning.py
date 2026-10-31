@@ -31,12 +31,20 @@ import pytest
 from app.services.ai_runner import ollama_tools
 
 _MOD = "app.services.ai_runner.ollama_tools"
+_ALLOWED = {"get_features", "no_such_tool"}
 
 
 def _auth() -> MagicMock:
     auth = MagicMock()
     auth.org = MagicMock()
+    auth.grant = None
     return auth
+
+
+@pytest.fixture(autouse=True)
+def _no_audit_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Audit rows go to a real database; these tests have none."""
+    monkeypatch.setattr(ollama_tools, "emit_audit", MagicMock())
 
 
 @pytest.mark.asyncio
@@ -52,7 +60,9 @@ async def test_failing_handler_rolls_back_and_reloads_the_org() -> None:
         {"get_features": AsyncMock(side_effect=RuntimeError("boom"))},
         clear=False,
     ):
-        out = await ollama_tools.dispatch_tool(db, auth, "get_features", {})
+        out = await ollama_tools.dispatch_tool(
+            db, auth, "get_features", {}, allowed={"get_features"}
+        )
 
     assert "boom" in json.loads(out)["error"]
     db.rollback.assert_awaited_once()
@@ -74,7 +84,9 @@ async def test_reload_failure_does_not_escape_and_kill_the_run() -> None:
         {"get_features": AsyncMock(side_effect=RuntimeError("boom"))},
         clear=False,
     ):
-        out = await ollama_tools.dispatch_tool(db, auth, "get_features", {})
+        out = await ollama_tools.dispatch_tool(
+            db, auth, "get_features", {}, allowed={"get_features"}
+        )
 
     assert "boom" in json.loads(out)["error"]
 
@@ -92,7 +104,9 @@ async def test_successful_call_neither_rolls_back_nor_reloads() -> None:
         {"get_features": AsyncMock(return_value={"features": []})},
         clear=False,
     ):
-        out = await ollama_tools.dispatch_tool(db, auth, "get_features", {})
+        out = await ollama_tools.dispatch_tool(
+            db, auth, "get_features", {}, allowed={"get_features"}
+        )
 
     assert json.loads(out) == {"features": []}
     db.rollback.assert_not_awaited()
@@ -106,7 +120,9 @@ async def test_unknown_tool_needs_no_rollback() -> None:
     db.rollback = AsyncMock()
     db.refresh = AsyncMock()
 
-    out = await ollama_tools.dispatch_tool(db, _auth(), "no_such_tool", {})
+    out = await ollama_tools.dispatch_tool(
+        db, _auth(), "no_such_tool", {}, allowed={"no_such_tool"}
+    )
 
     assert "No such tool" in json.loads(out)["error"]
     db.rollback.assert_not_awaited()

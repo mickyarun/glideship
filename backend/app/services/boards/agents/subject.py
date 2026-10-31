@@ -14,26 +14,26 @@
 
 """A stage agent's run on a board card, as an :class:`AgentSubject`.
 
-The run's MCP token covers one card and one run, and only the card tools
-plus the read tools its skill declares (``CARD_RUN_READ_TOOLS``); it expires
-with the run's deadline and is revoked when the run ends. The output is a
-``pending_review`` draft: written through ``write_card_doc``, or, when the
-tool wasn't called, saved from the agent's reply as the skill's kind of
-document. The agent runs with no repository checkout.
+The run's reach (:mod:`.grant`) is decided when it loads: the tools its
+skill declares that the board-run allowlist keeps (:mod:`.tools`), cut back
+when the person behind the run lacks ``workspace:engineering`` or the board
+links no repository. Its MCP token covers one card and one run and expires
+with the deadline; it is revoked when the run ends. The CLI gets no built-in
+tools at all (``builtin_tools=[]``): no shell, files or web, only the MCP
+tools. The output is a ``pending_review`` draft: written through
+``write_card_doc``, or, when the tool wasn't called, saved from the agent's
+reply as the skill's kind of document (a reply over ``CARD_DOC_MAX_CHARS``
+fails the run). The agent runs with no repository checkout.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.mcp.token_grants import (
-    InternalTokenGrant,
-    create_scoped_mcp_token,
-    revoke_scoped_mcp_token,
-)
+from app.mcp.token_grants import revoke_scoped_mcp_token
 from app.models.board_agent import BoardAgentRunStatus
 from app.models.board_enums import BoardCardDocKind
 from app.repositories.board_agent_run import BoardCardAgentRunRepository
@@ -44,13 +44,13 @@ from app.services.boards.agents import apply
 from app.services.boards.agents.apply import RunRefs
 from app.services.boards.agents.context import card_context
 from app.services.boards.agents.drafts import write_draft
+from app.services.boards.agents.grant import RunReach, mint_run_token, run_reach
 from app.services.boards.agents.loading import load_refs, on_fresh_session
 from app.services.boards.agents.prompt import build_card_prompt
 from app.services.boards.agents.runs import queue_run_event
 from app.services.boards.constants import (
     AGENT_OUTPUT_KINDS,
-    CARD_RUN_READ_TOOLS,
-    CARD_RUN_TOOLS,
+    CARD_DOC_MAX_CHARS,
     DEFAULT_AGENT_OUTPUT_KIND,
 )
 from app.services.claude_runner import (
@@ -64,10 +64,11 @@ from app.services.claude_runner import (
 logger = structlog.get_logger(__name__)
 
 NO_OUTPUT = "The agent finished without writing a draft."
+TOO_LONG = f"The agent's reply was over {CARD_DOC_MAX_CHARS} characters, so no draft was saved."
 
 
 class EmptyOutputError(Exception):
-    """The agent wrote no draft and replied with nothing to save."""
+    """The agent wrote no draft and replied with nothing to save (or too much)."""
 
 
 class CardAgentSubject:
@@ -78,6 +79,7 @@ class CardAgentSubject:
         self.org_id = payload.org_id
         self.run_id = payload.run_id
         self._refs: RunRefs | None = None
+        self._reach: RunReach | None = None
         self._token: str | None = None
         self._completed = False
 
@@ -86,6 +88,12 @@ class CardAgentSubject:
         """The loaded run, card, board and skill."""
         assert self._refs is not None  # set by load()
         return self._refs
+
+    @property
+    def reach(self) -> RunReach:
+        """What the run may read, decided at load."""
+        assert self._reach is not None  # set by load()
+        return self._reach
 
     @property
     def kind(self) -> BoardCardDocKind:
@@ -107,35 +115,30 @@ class CardAgentSubject:
         if isinstance(loaded, str):
             return loaded
         self._refs = loaded
-        self.log_phase("run_loaded", skill_slug=loaded.skill.skill_slug)
+        self._reach = await run_reach(db, loaded)
+        self.log_phase(
+            "run_loaded", skill_slug=loaded.skill.skill_slug, tools=sorted(self._reach.tools)
+        )
         return None
 
     async def build_prompt(self, db: AsyncSession) -> AgentPrompt:
         """The skill's prompt and the card's context."""
         context = await card_context(db, self.refs.board, self.refs.card)
-        text = build_card_prompt(self.refs.skill.prompt, context, self.kind)
+        repos = self.reach.repos if self.reach.code_tools else ()
+        text = build_card_prompt(self.refs.skill.prompt, context, self.kind, code_repos=repos)
         return AgentPrompt(text=text, working_dir=None)
 
     def mcp_grant(self) -> MCPServerConfig | None:
-        """A token for this card and run only, with the card tools and allowed read tools."""
+        """A token for this card and run only, with the tools its reach allows.
+
+        Raises:
+            ScopedTokenLimitError: Too many live run tokens; the run fails.
+        """
         if not settings.mcp_backend_url:
             return None
-        tools = CARD_RUN_TOOLS | (frozenset(self.refs.skill.mcp_tools) & CARD_RUN_READ_TOOLS)
         lifetime = self.timeout_seconds + settings.boards.agent_token_grace_seconds
-        grant = InternalTokenGrant(
-            org_id=self.org_id,
-            tools=tools,
-            card_id=self.refs.card.id,
-            run_id=self.run_id,
-            expires_at=datetime.now(UTC) + timedelta(seconds=lifetime),
-        )
-        self._token = create_scoped_mcp_token(grant)
-        return MCPServerConfig(
-            backend_url=settings.mcp_backend_url,
-            mcp_token=self._token,
-            tool_names=sorted(tools),
-            org_id=str(self.org_id),
-        )
+        self._token, config = mint_run_token(self.refs, self.reach, lifetime)
+        return config
 
     def _revoke(self) -> None:
         if self._token is not None:
@@ -153,6 +156,8 @@ class CardAgentSubject:
             mcp=mcp,
             model=skill.model or None,
             effort=skill.effort or None,
+            # No shell, files or web: only the run's MCP tools.
+            builtin_tools=[],
         )
         run.status = BoardAgentRunStatus.RUNNING
         run.started_at = datetime.now(UTC)
@@ -189,6 +194,8 @@ class CardAgentSubject:
             return {"kind": drafted.kind.value, "version": drafted.version, "via": "tool"}
         if not output.strip():
             raise EmptyOutputError(NO_OUTPUT)
+        if len(output) > CARD_DOC_MAX_CHARS:
+            raise EmptyOutputError(TOO_LONG)
         doc = await write_draft(db, refs.board, refs.card, self.kind, output, run_id=self.run_id)
         return {"kind": doc.kind.value, "version": doc.version, "via": "reply"}
 

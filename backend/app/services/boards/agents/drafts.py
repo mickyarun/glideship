@@ -38,12 +38,18 @@ from app.schemas.boards.agent import DraftAccept
 from app.schemas.boards.doc import DocRead
 from app.services.boards.access import CardAccess
 from app.services.boards.card_checks import check_open
+from app.services.boards.constants import CARD_DOC_MAX_CHARS
 from app.services.boards.doc_service import DOC_BLANK, NewVersion, save_current
-from app.services.boards.errors import BoardItemNotFoundError, BoardRuleError
+from app.services.boards.errors import (
+    BoardItemNotFoundError,
+    BoardRuleError,
+    BoardTooLargeError,
+)
 from app.services.boards.events import record_event
 from app.services.boards.live import BoardChanges, BoardSocketEvent
 
 DRAFT_NOT_FOUND = "That draft isn't waiting for review any more."
+DRAFT_TOO_LONG = f"A draft can be at most {CARD_DOC_MAX_CHARS} characters."
 
 
 def doc_event(changes: BoardChanges, doc: BoardCardDoc) -> None:
@@ -73,9 +79,12 @@ async def write_draft(
 
     Raises:
         BoardRuleError: The text is blank.
+        BoardTooLargeError: The text is over ``CARD_DOC_MAX_CHARS``.
     """
     if not body_md.strip():
         raise BoardRuleError(DOC_BLANK)
+    if len(body_md) > CARD_DOC_MAX_CHARS:
+        raise BoardTooLargeError(DRAFT_TOO_LONG)
     await BoardCardRepository(db, org_id=card.org_id).lock(card)
     repo = BoardCardDocRepository(db, org_id=card.org_id)
     version = await repo.next_version(card.id, kind)

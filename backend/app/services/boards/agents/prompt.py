@@ -15,21 +15,33 @@
 """A card run's prompt: the skill's own prompt, then the card it works on.
 
 The card's context goes in as JSON, followed by the board's linked
-repositories by name. The agent is told to save its result with
+repositories by name; when the run may read code, each with the ``repo_id``
+its code tools take (the only ids they accept). The agent is told to save its result with
 ``write_card_doc`` (a draft for review); a provider without tools replies
 with the document, which the run then saves the same way.
 """
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
+from app.mcp.token_grants import GrantRepo
 from app.models.board_enums import BoardCardDocKind
 from app.services.boards.constants import WRITE_CARD_DOC_TOOL
 
 NO_REPOS = "None are linked to this board."
 
 
-def _repo_lines(context: dict[str, Any]) -> str:
+CODE_HINT = (
+    "You can read their code with the code tools (`code_query`, `code_context`, "
+    "`code_impact`, `code_community`), passing one of these `repo_id` values:"
+)
+
+
+def _repo_lines(context: dict[str, Any], code_repos: Sequence[GrantRepo]) -> str:
+    if code_repos:
+        lines = "\n".join(f"- {r.name}: `repo_id` {r.id}" for r in code_repos)
+        return f"{CODE_HINT}\n\n{lines}"
     repos = context.get("linked_repos") or []
     if not repos:
         return NO_REPOS
@@ -38,8 +50,14 @@ def _repo_lines(context: dict[str, Any]) -> str:
     )
 
 
-def build_card_prompt(skill_prompt: str, context: dict[str, Any], kind: BoardCardDocKind) -> str:
-    """The full prompt for one run on one card."""
+def build_card_prompt(
+    skill_prompt: str,
+    context: dict[str, Any],
+    kind: BoardCardDocKind,
+    *,
+    code_repos: Sequence[GrantRepo] = (),
+) -> str:
+    """The full prompt for one run on one card (``code_repos`` when it may read code)."""
     card = context["card"]
     board = context["board"]
     return f"""{skill_prompt.strip()}
@@ -64,5 +82,5 @@ and nothing else.
 
 ## Linked repositories
 
-{_repo_lines(context)}
+{_repo_lines(context, code_repos)}
 """

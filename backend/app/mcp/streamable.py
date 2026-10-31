@@ -51,6 +51,7 @@ from app.core.deps import get_db
 from app.database import AsyncSessionLocal
 from app.mcp.audit import emit_audit
 from app.mcp.auth import MCPAuthResult, token_owner_still_allowed, verify_mcp_token
+from app.mcp.grant_tools import visible
 from app.mcp.handlers_prompts import CANONICAL_TASK_TYPES
 from app.mcp.rate_limit import enforce_rate_limit
 from app.repositories.user_mcp_token import UserMCPTokenRepository
@@ -330,7 +331,9 @@ async def _dispatch(
         }
 
     if method == "tools/list":
-        return {"tools": _REMOTE_TOOL_SCHEMAS}
+        # A scoped token (a board card run) is shown only what its grant allows.
+        shown = [t for t in _REMOTE_TOOL_SCHEMAS if visible(str(t["name"]), auth.grant)]
+        return {"tools": shown}
 
     if method == "tools/call":
         tool_name = params.get("name")
@@ -338,8 +341,9 @@ async def _dispatch(
         if not isinstance(tool_name, str) or tool_name not in REMOTE_TOOLS:
             raise _RPCError(_METHOD_NOT_FOUND, f"Tool not available remotely: {tool_name!r}")
         # A scoped server-minted token (a board card run) keeps its grant here too.
-        if auth.grant is not None and not auth.grant.allows(tool_name):
-            raise _RPCError(_METHOD_NOT_FOUND, f"Tool not in this token's grant: {tool_name!r}")
+        refused = None if auth.grant is None else auth.grant.refusal(tool_name, tool_args)
+        if refused is not None:
+            raise _RPCError(_METHOD_NOT_FOUND, f"Tool not in this token's grant: {refused}")
         # Import locally to avoid a circular import with server.py's
         # TOOL_HANDLERS dict (server.py imports this module to mount it).
         from app.mcp.server import AUTH_TOOL_HANDLERS, TOOL_HANDLERS

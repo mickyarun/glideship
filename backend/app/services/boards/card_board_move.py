@@ -112,7 +112,12 @@ async def move_to_board(db: AsyncSession, source: CardAccess, body: CardMoveBoar
     move = Relocation(access.board, target.board, from_stage, to_stage, carry)
     placed = await relocate_card(db, card, move, actor_id=access.user_id)
     await queue_entry_agents(
-        db, board=target.board, card=card, stage=to_stage, cause=EntryCause.MOVE_BOARD
+        db,
+        board=target.board,
+        card=card,
+        stage=to_stage,
+        cause=EntryCause.MOVE_BOARD,
+        actor_id=access.user_id,
     )
     detail = await card_detail(db, target.board, card, opens_buds=opens_buds(target.perms))
     left = BoardChanges.of(access)

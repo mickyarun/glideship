@@ -15,9 +15,11 @@
 """The card tools a run's MCP token may call: read its card, write a draft on it.
 
 The token's grant names one card and one run. A call naming any other card
-(by id or key), from a token with no card grant, or after the run stopped
-being active, is refused with :class:`CardGrantError`. Everything is read
-inside the grant's org.
+(by id or key), from a token with no card grant, on an archived card, or
+after the run stopped being active, is refused with :class:`CardGrantError`.
+The run's row is locked for the rest of the call, so a cancel (a move to
+another board, AI switched off) can't land between the check and the write.
+Everything is read inside the grant's org.
 """
 
 import uuid
@@ -41,6 +43,7 @@ from app.services.boards.reads import card_key
 NOT_A_CARD_RUN = "This tool only works inside a board card's agent run."
 OTHER_CARD = "This run may only touch its own card."
 RUN_OVER = "This agent run has ended; nothing more can be written."
+CARD_ARCHIVED = "This card is archived; nothing can be written on it."
 
 
 class CardGrantError(Exception):
@@ -66,7 +69,8 @@ async def granted_card(
     """The grant's card, checked against what the call names.
 
     Raises:
-        CardGrantError: No card grant, another card named, or the run is over.
+        CardGrantError: No card grant, another card named, an archived card, or the
+            run is over.
     """
     if grant is None or grant.card_id is None or grant.run_id is None:
         raise CardGrantError(NOT_A_CARD_RUN)
@@ -82,8 +86,12 @@ async def granted_card(
         board.key, card.number
     ):
         raise CardGrantError(OTHER_CARD)
+    if card.archived_at is not None:
+        raise CardGrantError(CARD_ARCHIVED)
     runs = BoardCardAgentRunRepository(db, org_id=grant.org_id)
     run = await runs.get_for_card(card.id, grant.run_id)
+    if run is not None:
+        await runs.lock(run)
     if run is None or run.status is not BoardAgentRunStatus.RUNNING:
         raise CardGrantError(RUN_OVER)
     return GrantedCard(board=board, card=card, run=run)

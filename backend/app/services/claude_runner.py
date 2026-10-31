@@ -35,6 +35,7 @@ import structlog
 
 from app.config import settings
 from app.mcp.bridge_env import BACKEND_URL_ENV, MCP_TOKEN_ENV, MCP_TOKEN_FILE_ENV, MCP_TOOLS_ENV
+from app.mcp.token_grants import InternalTokenGrant
 from app.services import claude_errors
 from app.services.claude_errors import ClaudeErrorCode
 from app.services.claude_guard import (
@@ -43,6 +44,7 @@ from app.services.claude_guard import (
     build_inline_settings_json,
     maybe_wrap_with_sandbox,
 )
+from app.services.claude_guard.tool_scope import claude_tool_scope_args
 
 logger = structlog.get_logger(__name__)
 
@@ -109,6 +111,10 @@ class MCPServerConfig:
     # the far side. A provider running tools in-process has no far side, so it
     # needs the org itself. Optional because the CLI path predates it.
     org_id: str | None = None
+    # A scoped token's grant (a board card run). A provider running tools
+    # in-process enforces it on every call and refuses to start when the
+    # token no longer resolves to it.
+    grant: InternalTokenGrant | None = None
 
 
 @dataclass
@@ -142,6 +148,10 @@ class ClaudeRunnerConfig:
     # Edit, ToolSearch, ...) is denied. Use for narrowly-scoped phases
     # like the global merge that should only emit one MCP tool.
     allowed_tools: list[str] = field(default_factory=list)
+    # The built-in tools (Bash, Read, WebFetch, ...) the run may use. None
+    # leaves the CLI's defaults; a list (``[]`` for none) takes every other
+    # built-in away and leaves only the MCP tools (``claude_guard.tool_scope``).
+    builtin_tools: list[str] | None = None
 
 
 def _find_tool_uses(obj: Any, callback: ProgressCallback) -> None:
@@ -721,6 +731,11 @@ async def run_claude_code(
         # ToolSearch and force Claude to emit ``apply_feature_merge_plan``
         # ops instead of exploring the codebase.
         cmd.extend(["--allowedTools", ",".join(config.allowed_tools)])
+
+    # guard: a run scoped to its MCP tools gets no built-in tools at all.
+    cmd.extend(
+        claude_tool_scope_args(config.builtin_tools, config.mcp.tool_names if config.mcp else [])
+    )
 
     # guard: pin Claude's filesystem allowlist to the working
     # directory. Without this, a successful prompt-injection can
