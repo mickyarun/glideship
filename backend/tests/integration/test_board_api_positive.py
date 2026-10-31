@@ -126,6 +126,8 @@ HANDOVER_EDITS = {
 # the test_board_agent_* suites cover them.
 AGENT_EDITS = {
     ("POST", f"{CARD}/agents/{{agent_id}}/run"),
+    # Editors cancel a run too; test_board_agent_cancel covers it.
+    ("POST", f"{CARD}/agents/runs/{{run_id}}/cancel"),
     ("POST", f"{CARD}/docs/{{kind}}/drafts/{{version_id}}/accept"),
     ("POST", f"{CARD}/docs/{{kind}}/drafts/{{version_id}}/reject"),
 }

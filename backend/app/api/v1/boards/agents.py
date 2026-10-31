@@ -24,13 +24,14 @@ from app.config import settings
 from app.core.deps import get_db
 from app.schemas.boards.agent import (
     AgentRunAccepted,
+    AgentRunRead,
     CardAgents,
     StageAgentRead,
     StageAgentWrite,
     StageSkillRead,
 )
 from app.services.boards.access import BoardAccess, CardAccess
-from app.services.boards.agents import config, library, trigger
+from app.services.boards.agents import cancel, config, library, trigger
 
 router = APIRouter(tags=["boards"])
 
@@ -92,3 +93,13 @@ async def run_card_agent(
     when the card already has a run going.
     """
     return await trigger.run_agent(db, target, agent_id)
+
+
+@router.post(f"{CARD_AGENTS}/runs/{{run_id}}/cancel", response_model=AgentRunRead)
+async def cancel_card_agent_run(
+    run_id: uuid.UUID,
+    target: CardAccess = Depends(can.run_agent),
+    db: AsyncSession = Depends(get_db),
+) -> AgentRunRead:
+    """Cancel a pending or running run on the card (editors); 409 once it has finished."""
+    return await cancel.cancel_run(db, target, run_id)

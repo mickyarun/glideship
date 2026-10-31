@@ -18,6 +18,7 @@ import uuid
 from collections.abc import Mapping
 from typing import Any
 
+from app.models.board_agent import BoardAgentRunStatus
 from app.services.boards.errors import (
     BoardConflictError,
     BoardErrorCode,
@@ -50,6 +51,18 @@ class AgentRunActiveError(BoardConflictError):
             "code": BoardErrorCode.AGENT_RUN_ACTIVE,
             "run_id": None if self.run_id is None else str(self.run_id),
         }
+
+
+class AgentRunFinishedError(BoardConflictError):
+    """The run already ended, so it can't be canceled (409 ``AGENT_RUN_FINISHED``)."""
+
+    def __init__(self, status: BoardAgentRunStatus) -> None:
+        super().__init__("This agent run has already finished.")
+        self.status = status
+
+    def body(self) -> Mapping[str, Any]:
+        """The code and how the run ended."""
+        return {"code": BoardErrorCode.AGENT_RUN_FINISHED, "status": self.status.value}
 
 
 class SkillNotInLibraryError(BoardRuleError):
