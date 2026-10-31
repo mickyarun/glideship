@@ -16,7 +16,7 @@
 // description) and Handover. Each is a draft of the open board's values;
 // saving sends only what the form owns and puts the reply on the board.
 
-import { computed, type Ref } from 'vue'
+import { computed, watch, type Ref } from 'vue'
 import type { BoardPage } from '@/composables/useBoardPage'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
 import { useSettingsDraft } from '@/composables/useSettingsDraft'
@@ -84,6 +84,18 @@ export function useHandoverForm(page: BoardPage, status: BoardSettingsStatus) {
   /** Handed-over cards sit in a Done stage; sent-back cards return to a To do one. */
   const doneStages = computed(() => stages.value.filter(s => s.category === 'done'))
   const todoStages = computed(() => stages.value.filter(s => s.category === 'todo'))
+
+  // Turning handover on with a single Done stage picks it, so the form
+  // doesn't open on an error for a choice there's only one answer to.
+  watch(
+    () => form.draft.value?.enabled,
+    on => {
+      const draft = form.draft.value
+      if (on && draft && !draft.stageId && doneStages.value.length === 1) {
+        draft.stageId = doneStages.value[0].id
+      }
+    },
+  )
 
   const stageError = computed(() =>
     form.draft.value?.enabled && !form.draft.value.stageId

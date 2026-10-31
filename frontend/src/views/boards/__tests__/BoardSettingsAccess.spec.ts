@@ -138,6 +138,9 @@ describe('BoardSettingsView: access and status', () => {
     await flushPromises()
     expect(wrapper.findAllComponents(VSelect).some(s => s.props('disabled'))).toBe(false)
     expect(status()).toBe('Unsaved changes')
+    // The board's only Done stage is picked for me, so there's no error to clear.
+    expect(wrapper.findAllComponents(VSelect)[0].props('modelValue')).toBe('s3')
+    expect(wrapper.text()).not.toContain('Pick the Done stage')
 
     const noDone = adminDetail({ stages: [makeStage('s1', { category: 'todo', is_default: true })] })
     api.get.mockResolvedValue(noDone)
