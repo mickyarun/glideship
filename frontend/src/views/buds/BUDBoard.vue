@@ -57,7 +57,7 @@
       <p>A BUD captures what to build and why. It moves across this board as it heads to production.</p>
     </div>
 
-    <div v-else class="board-page__scroller">
+    <div v-else class="board-scroller">
       <div class="board-page__columns">
         <BoardColumn
           v-for="status in columns"
@@ -116,15 +116,6 @@ const now = useNow()
   display: flex;
   justify-content: center;
   padding: 48px 0;
-}
-/* The columns scroll sideways to the page edge, so the scroller bleeds
-   through the page padding and puts it back inside. */
-.board-page__scroller {
-  position: relative;
-  overflow-x: auto;
-  margin-inline: calc(-1 * var(--board-gutter));
-  padding: 0 var(--board-gutter) 8px;
-  scroll-padding-inline: var(--board-gutter);
 }
 .board-page__columns {
   display: flex;

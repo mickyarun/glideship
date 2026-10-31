@@ -60,7 +60,7 @@
 
     <template v-if="detail.stages.length && !noMatch">
       <BoardStageTabs v-if="xs" v-model="phoneStage" :stages="detail.stages" :counts="cards.counts" />
-      <div class="board-page__columns">
+      <div class="board-page__columns board-scroller">
         <BoardStageColumn
           v-for="stage in shownStages"
           :key="stage.id"
@@ -172,21 +172,13 @@ onMounted(() => void boardsStore.ensureLimits())
   padding: var(--board-page-padding);
   background: rgb(var(--v-theme-background));
 }
-/* The columns scroll sideways at the board level, bleeding through the
-   page padding like the BUD board; each column scrolls its own cards.
-   Positioned, so screen-reader-only text inside stays inside the scroller
-   instead of widening the page. */
+/* The columns scroll sideways in the shared board scroller
+   (board-layout.css); each column scrolls its own cards. */
 .board-page__columns {
-  position: relative;
-  flex: 1 1 auto;
   min-height: 320px;
   display: flex;
   align-items: stretch;
   gap: var(--board-column-gap);
-  overflow-x: auto;
-  margin-inline: calc(-1 * var(--board-gutter));
-  padding: 0 var(--board-gutter) 8px;
-  scroll-padding-inline: var(--board-gutter);
 }
 .board-page__hint {
   margin: 0;

@@ -36,3 +36,19 @@
     --board-page-padding: 20px var(--board-gutter) 32px;
   }
 }
+
+/*
+ * The sideways scroller under a board's header and filters. It takes the
+ * rest of the page's height, so its scrollbar sits at the bottom of the
+ * page however short the columns are, and bleeds through the page padding
+ * (putting it back inside) so columns scroll to the window edge.
+ * Positioned, so screen-reader-only text inside stays inside it.
+ */
+.board-scroller {
+  position: relative;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  margin-inline: calc(-1 * var(--board-gutter));
+  padding: 0 var(--board-gutter) 8px;
+  scroll-padding-inline: var(--board-gutter);
+}

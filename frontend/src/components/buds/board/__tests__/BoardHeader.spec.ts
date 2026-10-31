@@ -54,21 +54,24 @@ describe('BUD board header', () => {
     expect(useBoardSwitcher().open.value).toBe(true)
   })
 
-  it('keeps New BUD, the settings gear, the sort and Discarded', async () => {
+  it('keeps New BUD, Settings, the sort and Discarded', async () => {
     const wrapper = mountHeader()
     const newBud = wrapper.findAll('button').find(b => b.text() === 'New BUD')
     await newBud!.trigger('click')
     expect(wrapper.emitted('new-bud')).toHaveLength(1)
-    expect(wrapper.find('a[aria-label="Customize QA framework and lifecycle stages"]').exists()).toBe(true)
+    // The same outlined Settings button as a team board, opening the BUD board's settings.
+    const settings = wrapper.findAll('a').find(a => a.text() === 'Settings')!
+    expect(settings.classes()).toContain('v-btn--variant-outlined')
+    expect(settings.attributes('href')).toBe('/settings/qa-automation')
     await wrapper.find('button[aria-label="Sort cards by priority, P0 first"]').trigger('click')
     expect(wrapper.emitted('update:sortByPriority')?.[0]).toEqual([true])
     await wrapper.findAll('button').find(b => b.text() === 'Discarded')!.trigger('click')
     expect(wrapper.emitted('update:showDiscarded')?.[0]).toEqual([true])
   })
 
-  it('leaves New BUD and the gear out without the permissions', () => {
+  it('leaves New BUD and Settings out without the permissions', () => {
     const wrapper = mountHeader({ canCreate: false, canConfigure: false })
     expect(wrapper.text()).not.toContain('New BUD')
-    expect(wrapper.find('[aria-label="Customize QA framework and lifecycle stages"]').exists()).toBe(false)
+    expect(wrapper.findAll('a').some(a => a.text() === 'Settings')).toBe(false)
   })
 })

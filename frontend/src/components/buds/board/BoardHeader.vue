@@ -16,8 +16,8 @@
 
 <!-- The Delivery board's header, in the same chrome as a team board: the
      breadcrumb, "Delivery" with its BUD key as the switcher's button (B
-     opens it too), what kind of board it is, and on the right the BUD
-     settings gear and New BUD. Under it, the filter bar: search, the
+     opens it too), what kind of board it is, and on the right Settings
+     (the BUD board's settings) and New BUD. Under it, the filter bar: search, the
      dropdown filters, the count, then the priority sort and Discarded. -->
 <template>
   <div class="bud-board-head">
@@ -30,14 +30,16 @@
         </template>
       </BoardHeadIntro>
       <div class="bud-board-head__actions bo-header-actions">
+        <!-- The same Settings button as a team board; it opens the BUD board's settings. -->
         <v-btn
           v-if="canConfigure"
-          icon="mdi-cog-outline"
-          variant="text"
-          aria-label="Customize QA framework and lifecycle stages"
+          variant="outlined"
+          :prepend-icon="xs ? undefined : 'mdi-cog-outline'"
           title="Customize QA framework and lifecycle stages"
           :to="{ name: 'settings-qa-automation' }"
-        />
+        >
+          Settings
+        </v-btn>
         <v-btn v-if="canCreate" color="primary" prepend-icon="mdi-plus" @click="emit('new-bud')">
           New BUD
         </v-btn>
@@ -89,6 +91,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useDisplay } from 'vuetify'
 import BoardFilterMenu from './BoardFilterMenu.vue'
 import BoardHeadIntro from '@/components/boards/BoardHeadIntro.vue'
 import { DELIVERY_BOARD } from '@/constants/boards'
@@ -108,6 +111,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ 'new-bud': [] }>()
+const { xs } = useDisplay()
 
 const query = defineModel<string>('query', { required: true })
 const assignee = defineModel<string | null>('assignee', { required: true })
