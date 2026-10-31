@@ -97,8 +97,10 @@ const stageName = computed(() => {
   text-decoration: underline;
 }
 .handover-row__key {
+  flex-shrink: 0;
   font: 500 12px var(--font-mono);
   color: inherit;
+  white-space: nowrap;
 }
 span.handover-row__key {
   color: rgb(var(--v-theme-on-surface-variant));
