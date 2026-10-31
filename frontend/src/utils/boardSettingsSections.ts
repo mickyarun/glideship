@@ -16,11 +16,12 @@
 // ``?section=`` so a link opens the right one and the unsaved-changes
 // guard can ask before a section with edits closes.
 
-export type BoardSettingsSection = 'general' | 'stages' | 'members' | 'labels' | 'repos' | 'handover' | 'archive'
+export type BoardSettingsSection = 'general' | 'stages' | 'ai' | 'members' | 'labels' | 'repos' | 'handover' | 'archive'
 
 export const BOARD_SETTINGS_SECTIONS: { value: BoardSettingsSection; title: string }[] = [
   { value: 'general', title: 'General' },
   { value: 'stages', title: 'Stages' },
+  { value: 'ai', title: 'AI' },
   { value: 'handover', title: 'Handover' },
   { value: 'members', title: 'Members and visibility' },
   { value: 'labels', title: 'Labels' },
@@ -29,7 +30,7 @@ export const BOARD_SETTINGS_SECTIONS: { value: BoardSettingsSection; title: stri
 ]
 
 /** Sections whose changes save as they're made (the others use Save). */
-export const SAVES_AS_YOU_GO: ReadonlySet<BoardSettingsSection> = new Set(['stages', 'members', 'labels', 'repos', 'archive'])
+export const SAVES_AS_YOU_GO: ReadonlySet<BoardSettingsSection> = new Set(['stages', 'ai', 'members', 'labels', 'repos', 'archive'])
 
 /** The query key holding the open section. */
 export const SECTION_QUERY_KEY = 'section'

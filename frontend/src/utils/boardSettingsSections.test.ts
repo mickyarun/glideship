@@ -21,7 +21,8 @@ import { sectionFrom, sectionPath } from '@/utils/boardSettingsSections'
 describe('board settings sections', () => {
   it('reads the section from the URL, General for anything else', () => {
     expect(sectionFrom('stages')).toBe('stages')
-    expect(sectionFrom('ai')).toBe('general')
+    expect(sectionFrom('ai')).toBe('ai')
+    expect(sectionFrom('automation')).toBe('general')
     expect(sectionFrom(undefined)).toBe('general')
   })
 

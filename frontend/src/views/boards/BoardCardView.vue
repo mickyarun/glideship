@@ -18,6 +18,7 @@
      stages, tabs (overview, documents, comments, activity) and its details
      beside them. The board, my role and capabilities come from the route
      shell; a viewer reads everything as plain text and can still comment.
+     The card's AI sits with its details, and beside the Documents tab.
      Unsaved drafts ask before anything drops them. -->
 <template>
   <BoardNoAccess v-if="card.notFound.value" what="card" />
@@ -50,10 +51,12 @@
         <CardDocs
           v-if="tab === 'documents'"
           v-model:kind="docKind"
-          :card-key="detail.key" :can-edit="canEdit" :max-length="limits?.doc_max ?? null" :name-for="nameFor"
-          :confirm-discard="drafts.confirmDiscard"
+          :card-key="detail.key" :can-edit="canEdit" :can-review="canReview" :max-length="limits?.doc_max ?? null"
+          :name-for="nameFor" :confirm-discard="drafts.confirmDiscard"
           @result="actions.docResult" @dirty="what => drafts.report('document', what)"
-        />
+        >
+          <template #aside><CardAiPanel v-bind="ai" /></template>
+        </CardDocs>
         <div v-else class="bud-page__grid">
           <div class="bud-page__main">
             <CardOverview
@@ -83,6 +86,7 @@
               @priority="actions.setPriority" @due-done="actions.setDueDone"
             />
             <CardHandoverPanel :card="card" :board="board" :feedback="feedback" :doc-max="limits?.doc_max ?? null" />
+            <CardAiPanel v-bind="ai" />
           </aside>
         </div>
       </div>
@@ -106,6 +110,7 @@ import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import BoardNoAccess from '@/components/boards/BoardNoAccess.vue'
+import CardAiPanel from '@/components/boards/ai/CardAiPanel.vue'
 import BoardFeedback from '@/components/boards/board/BoardFeedback.vue'
 import ChecklistConfirmDialog from '@/components/boards/board/ChecklistConfirmDialog.vue'
 import CardActivity from '@/components/boards/card/CardActivity.vue'
@@ -140,7 +145,7 @@ const route = useRoute()
 const number = computed(() => parseCardNumber(route.params.number))
 const {
   card, page, detail, boardKey, feedback, checklist, activity, thread, attachments, docs,
-  canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions, movedNote, move,
+  canEdit, canMove, canComment, canArchive, canReview, ai, stages, stage, limits, nameFor, photoFor, actions, movedNote, move,
 } = useBoardCardPage(number, {
   show: (field, stageId) => void focus.show(field, stageId),
   want: stageId => focus.want(stageId),

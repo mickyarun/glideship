@@ -13,13 +13,13 @@
 // limitations under the License.
 
 // Typed calls behind a board's settings page: the board, its stages,
-// members, teams, labels and linked repositories. Every write is admin-only on the server; the
+// members, teams, labels, linked repositories and stage agents. Every write is admin-only on the server; the
 // page refreshes the open board after each one.
 
 import api from '@/services/api'
 import { boardUrl } from '@/services/boardsApi'
 import type {
-  BoardDetail, BoardReposRead, BoardRole, LabelRead, MembersRead, RepoOptions, StageRead, TeamOptions,
+  BoardDetail, BoardReposRead, BoardSkillOption, StageAgentRead, StageAgentWrite, BoardRole, LabelRead, MembersRead, RepoOptions, StageRead, TeamOptions,
 } from '@/types/boards'
 import type {
   BoardUpdate, LabelCreate, LabelUpdate, StageCreate, StageUpdate,
@@ -28,6 +28,7 @@ import type {
 const stagesUrl = (key: string) => `${boardUrl(key)}/stages`
 const labelsUrl = (key: string) => `${boardUrl(key)}/labels`
 const reposUrl = (key: string) => `${boardUrl(key)}/repos`
+const stageAgentsUrl = (key: string, stageId: string) => `${stagesUrl(key)}/${stageId}/agents`
 
 export const boardSettingsApi = {
   update: async (key: string, body: BoardUpdate) =>
@@ -73,4 +74,13 @@ export const boardSettingsApi = {
   /** Unlink a repository; cards naming it lose it. The reply is the linked list. */
   unlinkRepo: async (key: string, repoId: string) =>
     (await api.delete<BoardReposRead>(`${reposUrl(key)}/${repoId}`)).data,
+
+  /** A stage's agents in run order. */
+  stageAgents: async (key: string, stageId: string) =>
+    (await api.get<StageAgentRead[]>(stageAgentsUrl(key, stageId))).data,
+  /** Replace a stage's agents; the reply is the saved list in order. */
+  putStageAgents: async (key: string, stageId: string, body: StageAgentWrite[]) =>
+    (await api.put<StageAgentRead[]>(stageAgentsUrl(key, stageId), body)).data,
+  /** Skills from the org's library a stage can use, the board skills marked suggested. */
+  skills: async (key: string) => (await api.get<BoardSkillOption[]>(`${boardUrl(key)}/skills`)).data,
 }

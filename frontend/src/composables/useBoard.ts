@@ -19,6 +19,7 @@
 import { isAxiosError } from 'axios'
 import { computed, ref } from 'vue'
 import { boardsApi } from '@/services/boardsApi'
+import { useBoardsStore } from '@/stores/boards'
 import type { BoardAction, BoardDetail } from '@/types/boards'
 import { extractApiError } from '@/utils/errors'
 
@@ -76,5 +77,16 @@ export function useBoard() {
 
   const archived = computed(() => detail.value?.board.status === 'archived')
 
-  return { detail, loading, error, notFound, archived, load, replace, can }
+  /** Star or unstar the board; resolves to the error, if the save failed (the star goes back). */
+  async function toggleStar(): Promise<string | null> {
+    const held = detail.value
+    if (!held) return null
+    const starred = !held.starred
+    held.starred = starred
+    const error = await useBoardsStore().setStar(held.board.key, starred)
+    if (error) held.starred = !starred
+    return error
+  }
+
+  return { detail, loading, error, notFound, archived, load, replace, can, toggleStar }
 }

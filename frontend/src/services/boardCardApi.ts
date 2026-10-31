@@ -20,6 +20,8 @@
 import api from '@/services/api'
 import { cardUrl } from '@/services/boardsApi'
 import type {
+  AgentRunAccepted,
+  CardAgents,
   CardDetail,
   CardDocKind,
   CardEventPage,
@@ -32,6 +34,8 @@ import type {
 
 const checklist = (key: string, n: number) => `${cardUrl(key, n)}/checklist`
 const docs = (key: string, n: number) => `${cardUrl(key, n)}/docs`
+const agents = (key: string, n: number) => `${cardUrl(key, n)}/agents`
+const draft = (key: string, n: number, kind: CardDocKind, id: string) => `${docs(key, n)}/${kind}/drafts/${id}`
 
 export const boardCardApi = {
   get: async (key: string, n: number) => (await api.get<CardDetail>(cardUrl(key, n))).data,
@@ -61,4 +65,15 @@ export const boardCardApi = {
     (await api.put<DocRead>(`${docs(key, n)}/${kind}`, { body_md, base_version })).data,
   restoreDoc: async (key: string, n: number, kind: CardDocKind, version: number, base_version: number | null) =>
     (await api.post<DocRead>(`${docs(key, n)}/${kind}/restore/${version}`, { base_version })).data,
+
+  /** The card's AI panel: its stage's agents, latest runs and the active one. */
+  agents: async (key: string, n: number) => (await api.get<CardAgents>(agents(key, n))).data,
+  /** Start (or retry) one of the stage's agents; 202 with the run to follow. */
+  runAgent: async (key: string, n: number, agentId: string) =>
+    (await api.post<AgentRunAccepted>(`${agents(key, n)}/${agentId}/run`)).data,
+  /** Make an AI draft (or ``body_md``, my edit of it) the current version, on top of ``base_version``. */
+  acceptDraft: async (key: string, n: number, kind: CardDocKind, id: string, base_version: number | null, body_md?: string) =>
+    (await api.post<DocRead>(`${draft(key, n, kind, id)}/accept`, body_md === undefined ? { base_version } : { base_version, body_md })).data,
+  rejectDraft: async (key: string, n: number, kind: CardDocKind, id: string) =>
+    (await api.post<DocRead>(`${draft(key, n, kind, id)}/reject`)).data,
 }

@@ -18,8 +18,8 @@
 // ``board:<id>`` for other tabs' and people's changes. This tab's own echoes
 // are dropped by origin. A reconnect, a stage, label or member change
 // reloads the board; a change to who can open it reloads its people; a PRD
-// saved elsewhere lets its card into stages that need one. Losing access
-// lands on the no-access state.
+// saved elsewhere lets its card into stages that need one, and a stage
+// agent's run marks its card's tile. Losing access lands on the no-access state.
 
 import { computed, ref, watch, type Ref } from 'vue'
 import { useBoard } from '@/composables/useBoard'
@@ -29,6 +29,7 @@ import { useBoardPeople } from '@/composables/useBoardPeople'
 import { useBoardRepos } from '@/composables/useBoardRepos'
 import { useTopicChannel } from '@/composables/useTopicChannel'
 import { boardsApi } from '@/services/boardsApi'
+import { useBoardAgentRunsStore } from '@/stores/boardAgentRuns'
 import { useBoardCardsStore } from '@/stores/boardCards'
 import { useBoardsStore } from '@/stores/boards'
 import { boardTopic, type BoardSocketMessage, type CardEvent, type MemberRead } from '@/types/boards'
@@ -39,6 +40,7 @@ export function useBoardPage(key: Ref<string>) {
   const board = useBoard()
   const cards = useBoardCardsStore()
   const boards = useBoardsStore()
+  const agentRuns = useBoardAgentRunsStore()
   const filters = useBoardFilters(next => void cards.setFilters(next))
   const members = ref<MemberRead[]>([])
   const people = useBoardPeople()
@@ -71,6 +73,7 @@ export function useBoardPage(key: Ref<string>) {
       }
       const saved = filters.restore(detail.board.key, detail.filters)
       cards.reset(detail.board.key, detail.board.id, detail.stages, saved)
+      agentRuns.reset(detail.board.id)
       void cards.loadAll()
       void loadMembers(k)
       void people.load(k, () => k === key.value)
@@ -101,6 +104,8 @@ export function useBoardPage(key: Ref<string>) {
   // An import's end and a reconnect can land together: one resync runs (and
   // at most one more after it); while a board opens, its own load is enough.
   const resyncOnce = coalesced(async () => {
+    // Runs that ended while the socket was down never say so: forget them all.
+    agentRuns.reset(board.detail.value?.board.id ?? null)
     void repos.load(key.value, () => cards.boardKey === key.value)
     void people.load(key.value, () => cards.boardKey === key.value)
     await refreshBoard()
@@ -165,9 +170,13 @@ export function useBoardPage(key: Ref<string>) {
       people_changed: () => {
         if (forOpenBoard()) void people.load(key.value, () => cards.boardKey === key.value)
       },
-      // card_updated follows with the card's facts; this covers the moment between.
+      // card_updated follows with the card's facts; this covers the moment between. An AI draft isn't a PRD yet.
       doc_updated: message => {
-        if (forOpenBoard() && message.kind === 'prd') cards.patchCard(message.card_id, { has_prd: true })
+        const current = (message.state ?? 'current') === 'current'
+        if (forOpenBoard() && message.kind === 'prd' && current) cards.patchCard(message.card_id, { has_prd: true })
+      },
+      agent_run_updated: message => {
+        if (forOpenBoard()) agentRuns.apply(message.card_id, message.run)
       },
       repos_changed: message => {
         if (!forOpenBoard()) return
@@ -184,17 +193,7 @@ export function useBoardPage(key: Ref<string>) {
     if (k) void open(k)
   }, { immediate: true })
 
-  async function toggleStar(): Promise<string | null> {
-    const detail = board.detail.value
-    if (!detail) return null
-    const starred = !detail.starred
-    detail.starred = starred
-    const error = await boards.setStar(detail.board.key, starred)
-    if (error) detail.starred = !starred
-    return error
-  }
-
-  return { board, cards, filters, members, people, repos, open, toggleStar, resync, forgetRepo }
+  return { board, cards, filters, members, people, repos, open, toggleStar: board.toggleStar, resync, forgetRepo }
 }
 
 export type BoardPage = ReturnType<typeof useBoardPage>

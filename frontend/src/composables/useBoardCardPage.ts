@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Everything a card's page runs: the card (useBoardCard) with its edits,
-// checklist, history, comment thread and documents, and what the page
+// checklist, history, comment thread, documents and AI, and what the page
 // says back after each action: a live-region announcement on success,
 // the snackbar on failure, and "Archived OPS-3" with Undo. A card reached
 // by a key it had before a move says so once ("SEO-14 is now OPS-3"); the
@@ -23,6 +23,7 @@ import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { useBoardCard } from '@/composables/useBoardCard'
 import { useBoardFeedback } from '@/composables/useBoardFeedback'
 import { useCardActivity } from '@/composables/useCardActivity'
+import { useCardAgentsLive } from '@/composables/useCardAgentsLive'
 import { useCardChecklist } from '@/composables/useCardChecklist'
 import { useCardEdits } from '@/composables/useCardEdits'
 import { useCardPageActions, type FieldGuide } from '@/composables/useCardPageActions'
@@ -49,11 +50,11 @@ export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) 
       attachments.value?.reload()
       activity.refresh()
     },
-    onDoc: kind => {
+    onDoc: (kind, state) => {
       void docs.refresh(kind)
       // A PRD saved elsewhere: the card has one now (card_updated follows
-      // with the rest), so stages that need one let it in.
-      if (kind !== 'prd' || !detail.value) return
+      // with the rest), so stages that need one let it in. A draft isn't one yet.
+      if (kind !== 'prd' || state !== 'current' || !detail.value) return
       detail.value = { ...detail.value, has_prd: true }
       void edits.refresh()
     },
@@ -64,6 +65,7 @@ export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) 
   const cardRef = computed(() => (detail.value ? { key: boardKey.value, number: detail.value.number } : null))
   const checklist = useCardChecklist(cardRef, edits.setChecklistCount)
   const activity = useCardActivity(cardRef)
+  useCardAgentsLive(card)
 
   // One path per card, so edits to the card don't remake its thread.
   const path = computed(() => (cardRef.value ? cardUrl(cardRef.value.key, cardRef.value.number) : null))
@@ -87,8 +89,14 @@ export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) 
   const canMove = computed(() => open.value && can('move_card'))
   const canComment = computed(() => open.value && can('comment'))
   const canArchive = computed(() => !page.board.archived.value && can('archive_card'))
+  const canReview = computed(() => open.value && can('review_draft'))
   const stages = computed(() => page.board.detail.value?.stages ?? [])
   const stage = computed(() => stages.value.find(s => s.id === detail.value?.stage_id) ?? null)
+  /** The card's AI panel: editors run agents on an open card, admins set them up. */
+  const ai = computed(() => ({
+    boardKey: boardKey.value, stageName: stage.value?.name ?? 'this stage',
+    canRun: open.value && can('run_agent'), canConfigure: can('configure_agents'),
+  }))
   const limits = computed(() => boardsStore.limits)
 
   const nameFor = (id: string) => page.people.find(id)?.name ?? directory.nameFor(id)
@@ -112,6 +120,7 @@ export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) 
 
   return {
     card, page, detail, boardKey, feedback, checklist, activity, thread, attachments, docs,
-    canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions, movedNote, move,
+    canEdit, canMove, canComment, canArchive, canReview, ai, stages, stage, limits, nameFor, photoFor, actions,
+    movedNote, move,
   }
 }

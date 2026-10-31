@@ -19,7 +19,8 @@
 
 import type { BoardRead, LabelRead } from '@/types/boards/board'
 import type { CardSummary } from '@/types/boards/card'
-import type { CardDocKind } from '@/types/boards/doc'
+import type { AgentRunRead } from '@/types/boards/agent'
+import type { CardDocKind, CardDocState } from '@/types/boards/doc'
 import type { HandoverSocketSummary } from '@/types/boards/handover'
 import type { ImportResult, ImportStatus } from '@/types/boards/imports'
 import type { BoardRepoRead } from '@/types/boards/repo'
@@ -52,7 +53,13 @@ export type BoardSocketMessage =
   | (Base<'card_handover_returned'> & { card_id: string; handover: HandoverSocketSummary })
   // A BUD the card holds changed status (may arrive twice): refetch the card.
   | (Base<'card_handovers_changed'> & { card_id: string })
-  | (Base<'doc_updated'> & { card_id: string; kind: CardDocKind; version: number })
+  // ``state`` says whether it's the current version or an AI draft
+  // (pending_review, or rejected); older servers send none (current).
+  | (Base<'doc_updated'> & { card_id: string; kind: CardDocKind; version: number; state?: CardDocState })
+  // A stage agent's run on a card was queued, started, or ended.
+  | (Base<'agent_run_updated'> & { card_id: string; run: AgentRunRead })
+  // An admin replaced a stage's agents.
+  | (Base<'stage_agents_changed'> & { stage_id: string })
   | (Base<'board_updated'> & { board: BoardRead })
   | Base<'stage_changed'>
   | (Base<'stage_reordered'> & { stage_id: string })

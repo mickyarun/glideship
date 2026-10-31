@@ -57,7 +57,8 @@ export function cardDefaults(capabilities: BoardAction[], card: CardDetail = CAR
   boards.list.mockResolvedValue({ items: [] })
   cardApi.checklist.mockResolvedValue([])
   cardApi.events.mockResolvedValue({ items: [], next_before: null })
-  cardApi.docs.mockResolvedValue({ items: [] })
+  cardApi.docs.mockResolvedValue({ items: [], drafts: [] })
+  cardApi.agents.mockResolvedValue({ ai_enabled: true, agents: [], runs: [], active: null })
   cardApi.versions.mockResolvedValue({ items: [], next_before: null })
   http.get.mockResolvedValue({ data: { items: [], next_cursor: null, limits: ATTACHMENT_LIMITS } })
 }

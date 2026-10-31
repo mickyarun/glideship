@@ -19,12 +19,14 @@
      separately clickable without nesting interactive elements (editors
      change the last two right here). The card's repository, when it names
      one the board links, shows as a small chip, and the BUDs it was handed
-     over to as quiet chips. Same rhythm as the BUD board card. -->
+     over to as quiet chips, and an AI chip while an agent works on it.
+     Same rhythm as the BUD board card. -->
 <template>
   <article class="card-tile" :class="{ 'card-tile--archived': card.archived_at }" :data-card-id="card.id">
     <div class="card-tile__top">
       <span class="card-tile__key">{{ card.key }}</span>
       <BudPriorityChip v-if="card.priority" :priority="card.priority" />
+      <CardAiChip :card-id="card.id" />
       <span class="card-tile__menu">
         <BoardCardMenu
           :card="card"
@@ -73,6 +75,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import CardAiChip from '@/components/boards/ai/CardAiChip.vue'
 import BoardCardMenu from '@/components/boards/board/BoardCardMenu.vue'
 import CardAssigneePicker from '@/components/boards/board/CardAssigneePicker.vue'
 import CardBudChips from '@/components/boards/board/CardBudChips.vue'

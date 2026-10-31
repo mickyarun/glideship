@@ -14,8 +14,8 @@
 
 /**
  * The open card's documents (PRD, design brief, notes): each one's
- * current version, its version history a page at a time, and old
- * versions' text for comparing. Saving writes a new version on top of
+ * current version, the AI draft waiting for review (the newest per kind),
+ * its version history a page at a time, and old versions' text for comparing. Saving writes a new version on top of
  * the one the edit started from; if someone saved in between, the server
  * refuses (409), and the documents reload so the person can redo it on
  * the newer text. Replies for a card no longer open are dropped. The store
@@ -49,11 +49,14 @@ export interface WriteResult {
 export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
   const card = ref<CardRef | null>(null)
   const current = ref<Partial<Record<CardDocKind, DocRead>>>({})
+  const drafts = ref<Partial<Record<CardDocKind, DocRead>>>({})
   const history = ref<Partial<Record<CardDocKind, History>>>({})
   const loading = ref(false)
   const error = ref('')
   const texts = new Map<string, string>()
   let seq = 0
+  /** The open card's documents came back once; later reloads keep what's shown (and any editor) up. */
+  let loaded = false
 
   const same = (c: CardRef, mine: number) => mine === seq && card.value?.key === c.key && card.value.number === c.number
 
@@ -61,12 +64,15 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
     const c = card.value
     if (!c) return
     const mine = seq
-    loading.value = !Object.keys(current.value).length
+    loading.value = !loaded
     try {
       const list = await boardCardApi.docs(c.key, c.number)
       if (!same(c, mine)) return
       current.value = Object.fromEntries(list.items.map(d => [d.kind, d]))
+      // Newest first, so the first of each kind is the one waiting (a newer one retires the rest).
+      drafts.value = Object.fromEntries([...(list.drafts ?? [])].reverse().map(d => [d.kind, d]))
       for (const d of list.items) texts.set(`${d.kind}:${d.version}`, d.body_md)
+      loaded = true
       error.value = ''
     } catch (err) {
       if (same(c, mine)) error.value = extractApiError(err, "Couldn't load the card's documents.")
@@ -78,8 +84,10 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
   /** Forget the open card's documents. */
   function reset(): void {
     seq++
+    loaded = false
     card.value = null
     current.value = {}
+    drafts.value = {}
     history.value = {}
     loading.value = false
     error.value = ''
@@ -92,8 +100,10 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
   /** Start on a card: nothing loaded, then its current documents. */
   function open(next: CardRef): Promise<void> {
     seq++
+    loaded = false
     card.value = next
     current.value = {}
+    drafts.value = {}
     history.value = {}
     error.value = ''
     texts.clear()
@@ -142,6 +152,7 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
     if (history.value[kind]?.loaded) await loadVersions(kind)
   }
 
+  /** Send a write that returns the document's new current version (a 409 reloads the documents). */
   async function write(kind: CardDocKind, send: (c: CardRef) => Promise<DocRead>, fallback: string): Promise<WriteResult> {
     const c = card.value
     if (!c) return { error: null, conflict: false }
@@ -180,7 +191,7 @@ export const useBoardCardDocsStore = defineStore('boardCardDocs', () => {
   }
 
   return {
-    card, current, history, loading, error,
-    open, reset, loadDocs, loadVersions, versionText, refresh, save, restore,
+    card, current, drafts, history, loading, error,
+    open, reset, loadDocs, loadVersions, versionText, refresh, write, save, restore,
   }
 })

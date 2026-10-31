@@ -55,6 +55,7 @@
         <AppCallout v-if="status.error.value" variant="error" role="alert">{{ status.error.value }}</AppCallout>
         <GeneralSection v-if="section === 'general'" :form="general" :board="detail.board" :limits="limits" :disabled="!board.can('edit_settings')" />
         <StagesSection v-else-if="section === 'stages'" :board="detail.board" :limits="limits" :status="status" :disabled="!board.can('manage_stages')" />
+        <AiSection v-else-if="section === 'ai'" :board="detail.board" :status="status" :disabled="!board.can('configure_agents')" />
         <MembersSection
           v-else-if="section === 'members'"
           :visibility="detail.board.visibility"
@@ -89,6 +90,7 @@
 import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import BoardCrumbs from '@/components/boards/BoardCrumbs.vue'
+import AiSection from '@/components/boards/settings/AiSection.vue'
 import ArchiveSection from '@/components/boards/settings/ArchiveSection.vue'
 import BoardSettingsNav from '@/components/boards/settings/BoardSettingsNav.vue'
 import GeneralSection from '@/components/boards/settings/GeneralSection.vue'

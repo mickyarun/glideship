@@ -28,7 +28,7 @@ import { useBoardContext } from '@/composables/useBoardContext'
 import { useMovedCard } from '@/composables/useMovedCard'
 import { useTopicChannel } from '@/composables/useTopicChannel'
 import { boardCardApi } from '@/services/boardCardApi'
-import { boardTopic, type BoardSocketMessage, type CardDetail, type CardDocKind, type CardEvent } from '@/types/boards'
+import { boardTopic, type BoardSocketMessage, type CardDetail, type CardDocKind, type CardDocState, type CardEvent } from '@/types/boards'
 import { isOlder } from '@/utils/boardColumns'
 import { keepBudAccess } from '@/utils/handoverChips'
 import { extractApiError } from '@/utils/errors'
@@ -38,8 +38,8 @@ export interface CardLiveHooks {
   onUpdated: () => void
   /** Comments, attachments or the history changed elsewhere. */
   onActivity: () => void
-  /** A document got a new version elsewhere. */
-  onDoc: (kind: CardDocKind) => void
+  /** A document got a new version, or an AI draft, elsewhere. */
+  onDoc: (kind: CardDocKind, state: CardDocState) => void
   /** Anything about the card changed elsewhere, so its history has a new entry. */
   onHistory: () => void
 }
@@ -152,7 +152,7 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
       },
       doc_updated: message => {
         if (!isMine(message.card_id)) return
-        hooks.onDoc(message.kind)
+        hooks.onDoc(message.kind, message.state ?? 'current')
         hooks.onHistory()
       },
     },

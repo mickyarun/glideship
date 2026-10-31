@@ -33,6 +33,8 @@ export interface BoardUpdate {
   /** ``null`` clears it. */
   return_stage_id?: string | null
   handover_target_status?: HandoverTarget
+  /** The board's AI switch: off pauses every stage agent. */
+  ai_enabled?: boolean
 }
 
 export interface StageCreate {

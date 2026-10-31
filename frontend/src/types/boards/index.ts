@@ -14,6 +14,7 @@
 
 // Team board types, one module per area; import from here.
 
+export type * from '@/types/boards/agent'
 export type * from '@/types/boards/board'
 export type * from '@/types/boards/card'
 export type * from '@/types/boards/cardDetail'

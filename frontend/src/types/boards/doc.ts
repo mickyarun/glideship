@@ -28,7 +28,11 @@ export interface DocVersionRead {
   state: CardDocState
   version: number
   source: CardDocSource
+  /** The stage-agent run that wrote it, and who accepted or rejected a draft. */
+  agent_run_id?: string | null
   created_by: string | null
+  reviewed_by?: string | null
+  reviewed_at?: string | null
   created_at: string
 }
 
@@ -42,7 +46,12 @@ export interface DocVersionPage {
   next_before: number | null
 }
 
-/** The current version of each document a card has. */
+/**
+ * The current version of each document a card has, and the AI drafts
+ * waiting for review (newest first; none is part of the card until accepted).
+ */
 export interface DocList {
   items: DocRead[]
+  /** Absent from a server that predates stage agents. */
+  drafts?: DocRead[]
 }
