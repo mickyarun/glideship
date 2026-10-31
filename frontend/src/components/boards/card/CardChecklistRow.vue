@@ -133,6 +133,10 @@ function save(): void {
 .check-row__field {
   flex: 1 1 auto;
 }
+/* A selection control grows by default, which pushed the text to mid-row. */
+.check-row__box {
+  flex: 0 0 auto;
+}
 .check-row__icon {
   color: rgb(var(--v-theme-on-surface-variant));
 }

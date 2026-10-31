@@ -84,9 +84,19 @@ export function useCardChecklist(card: Ref<CardRef | null>, onCount: (done: numb
   const swap = (id: string, next: (i: ChecklistItem) => ChecklistItem) =>
     (items.value = items.value.map(i => (i.id === id ? next(i) : i)))
 
-  async function add(text: string, group: string | null = null): Promise<string | null> {
+  // Adds reach the server one at a time, in the order they were asked for,
+  // so lines typed in quick succession land in that order.
+  let adds: Promise<unknown> = Promise.resolve()
+
+  function add(text: string, group: string | null = null): Promise<string | null> {
     const c = card.value
-    if (!c) return null
+    if (!c) return Promise.resolve(null)
+    const next = adds.then(() => addTo(c, text, group))
+    adds = next
+    return next
+  }
+
+  async function addTo(c: CardRef, text: string, group: string | null): Promise<string | null> {
     try {
       const item = await boardCardApi.addItem(c.key, c.number, text, group)
       if (idOf(card.value) !== idOf(c)) return null

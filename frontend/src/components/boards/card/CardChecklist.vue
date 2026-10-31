@@ -19,7 +19,7 @@
      result is reported to the page (``result``) for its live region or
      snackbar; a moved line keeps keyboard focus on its arrow, and after a
      delete (which the page offers to undo) focus goes to the next line or
-     the add field. -->
+     the add field. Adds queue, so quick entries are never lost. -->
 <template>
   <AppPanel title="Checklist" :note="total ? `${list.done.value} of ${total} done` : undefined">
     <p v-if="list.error.value" class="check-list__note" role="alert">{{ list.error.value }}</p>
@@ -54,7 +54,7 @@
         hide-details
         :maxlength="maxText ?? undefined"
       />
-      <v-btn type="submit" variant="outlined" height="40" :loading="adding" :disabled="!draft.trim()">Add</v-btn>
+      <v-btn type="submit" variant="outlined" height="40" :disabled="!draft.trim()">Add</v-btn>
     </form>
   </AppPanel>
 </template>
@@ -78,7 +78,6 @@ const props = defineProps<{
 const emit = defineEmits<{ result: [error: string | null, success: string] }>()
 
 const draft = ref('')
-const adding = ref(false)
 const addForm = ref<HTMLFormElement | null>(null)
 const total = computed(() => props.list.items.value.length)
 const full = computed(() => props.maxItems !== null && total.value >= props.maxItems)
@@ -95,13 +94,17 @@ async function report(pending: Promise<string | null>, success: string): Promise
   emit('result', await pending, success)
 }
 
+/**
+ * The field clears at once so the next line can be typed while this one
+ * saves; adds queue in order. A refused line comes back to the field to
+ * try again, unless something new is already being typed there.
+ */
 async function add(): Promise<void> {
   const text = draft.value.trim()
-  if (!text || adding.value) return
-  adding.value = true
+  if (!text) return
+  draft.value = ''
   const error = await props.list.add(text)
-  adding.value = false
-  if (!error) draft.value = ''
+  if (error && !draft.value.trim()) draft.value = text
   emit('result', error, `Added ${text}`)
 }
 
