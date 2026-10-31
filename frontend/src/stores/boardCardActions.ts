@@ -16,9 +16,11 @@
 // neighbours, or from the menu, to the bottom of a stage), add, archive and
 // restore. Each shows at once and is undone if the server refuses it. A
 // stage's entry rules refusing (utils/entryRefusal) come back as ``refusal``
-// so the page can say what's missing or ask about the checklist. Only
-// a card's latest move may undo or settle it, so an older reply can't
-// overwrite a newer move. Any other 409 or 404 means the board changed under us,
+// so the page can say what's missing or ask about the checklist; the move
+// sent again after that question keeps its first neighbours, and isn't sent
+// if the card left its stage meanwhile. Only a card's latest move may undo
+// or settle it, so an older reply can't overwrite a newer move, and an
+// undo puts back only where the card was, keeping live changes since. Any other 409 or 404 means the board changed under us,
 // so the stages involved are reloaded. Used by stores/boardCards.ts.
 
 import { isAxiosError } from 'axios'
@@ -46,14 +48,27 @@ export interface ActionResult {
   shown: boolean
   /** The stage's entry rules refused it (the error says how, too). */
   refusal?: EntryRefusal | null
+  /** The neighbours the move was sent with, to send it again the same way. */
+  neighbours?: Neighbours
 }
 
 export interface MoveOptions {
   /** Enter a Done stage although checklist items are open. */
   confirmOpenChecklist?: boolean
+  /** The stage the card must still be in; otherwise it changed meanwhile and isn't moved. */
+  fromStageId?: string
+  /** Send these neighbours rather than working them out again (a resend). */
+  neighbours?: Neighbours
 }
 
+const CHANGED_MEANWHILE = "The card changed meanwhile, so it wasn't moved. Try again."
+
 const OWN = { ignoreFilters: true }
+
+/** Whether a move expecting the card in ``opts.fromStageId`` finds it gone or elsewhere. */
+function changedMeanwhile(found: Located | null, opts: MoveOptions): boolean {
+  return !!opts.fromStageId && (found?.stageId !== opts.fromStageId || !!found.card.archived_at)
+}
 
 function boardChanged(err: unknown): boolean {
   return isAxiosError(err) && (err.response?.status === 409 || err.response?.status === 404)
@@ -81,11 +96,13 @@ export function cardActions(ctx: CardActionContext) {
       const confirm = opts.confirmOpenChecklist ? { confirm_open_checklist: true } : {}
       const detail = await boardsApi.moveCard(key, found.card.number, { stage_id: toStageId, ...n, ...confirm })
       if (latest()) shown = place(detail) === 'shown'
-      return { error: null, shown }
+      return { error: null, shown, neighbours: n }
     } catch (err) {
       const refusal = entryRefusal(err)
       if (latest()) {
-        place(found.card)
+        // Back where it was, as it is now: a live edit that landed meanwhile stays.
+        const now = locate(ctx.columns.value, id)?.card
+        if (now) place({ ...now, stage_id: found.stageId, position: found.card.position })
         if (changesStage) {
           ctx.bump(toStageId, -1)
           ctx.bump(found.stageId, 1)
@@ -95,7 +112,7 @@ export function cardActions(ctx: CardActionContext) {
           if (changesStage) void ctx.reload(found.stageId)
         }
       }
-      return { error: extractApiError(err, "Couldn't move the card. Try again."), shown: false, refusal }
+      return { error: extractApiError(err, "Couldn't move the card. Try again."), shown: false, refusal, neighbours: n }
     }
   }
 
@@ -103,8 +120,9 @@ export function cardActions(ctx: CardActionContext) {
   async function moveCard(cardId: string, toStageId: string, index: number, opts: MoveOptions = {}): Promise<ActionResult> {
     const found = locate(ctx.columns.value, cardId)
     const target = ctx.columns.value[toStageId]
+    if (changedMeanwhile(found, opts)) return { error: CHANGED_MEANWHILE, shown: false }
     if (!found || !target) return { error: null, shown: true }
-    const n = neighboursAt(target.items, index, cardId)
+    const n = opts.neighbours ?? neighboursAt(target.items, index, cardId)
     if (found.stageId === toStageId) {
       const now = neighboursAt(target.items, target.items.indexOf(found.card), cardId)
       if (now.after_id === n.after_id && now.before_id === n.before_id) return { error: null, shown: true }
@@ -119,6 +137,7 @@ export function cardActions(ctx: CardActionContext) {
   async function moveToStage(cardId: string, toStageId: string, opts: MoveOptions = {}): Promise<ActionResult> {
     const found = locate(ctx.columns.value, cardId)
     const target = ctx.columns.value[toStageId]
+    if (changedMeanwhile(found, opts)) return { error: CHANGED_MEANWHILE, shown: false }
     if (!found || !target || found.stageId === toStageId) return { error: null, shown: true }
     const bottom = bottomPosition(target.items.filter(c => c.id !== cardId))
     const none = { after_id: null, before_id: null }

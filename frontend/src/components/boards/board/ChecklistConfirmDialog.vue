@@ -16,6 +16,7 @@
 
 <!-- Asks before a card with open checklist items completes in a Done stage
      ("2 of 3 checklist items are still open. Move SEO-4 to Done anyway?").
+     On the board it also offers Open card, to tick the items off first.
      The question and its answer live in useChecklistConfirm. -->
 <template>
   <AppConfirmDialog
@@ -23,6 +24,8 @@
     title="Checklist still open"
     :body="confirm.question.value"
     action="Move anyway"
+    :secondary="confirm.opener.value ? 'Open card' : ''"
+    @secondary="confirm.openCard()"
     @update:model-value="open => !open && confirm.answer(false)"
     @confirm="confirm.answer(true)"
   />

@@ -53,6 +53,7 @@
         <BUDDetailTabBar v-model="tab" :tabs="tabs" label="Card sections" />
         <CardDocs
           v-if="tab === 'documents'"
+          v-model:kind="docKind"
           :card-key="detail.key" :can-edit="canEdit" :max-length="limits?.doc_max ?? null" :name-for="nameFor"
           :confirm-discard="drafts.confirmDiscard"
           @result="actions.docResult" @dirty="what => drafts.report('document', what)"
@@ -78,9 +79,9 @@
           <aside class="bud-page__aside" aria-label="Card details">
             <CardDetailsPanel
               :card="detail" :stages="stages" :labels="board.labels" :people="page.people.people.value"
-              :repos="page.repos.repos.value" :name-for="nameFor"
-              :can-edit="canEdit" :can-move="canMove" :save-date="actions.saveDate"
-              @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels" @repo="actions.setRepo"
+              :people-known="page.people.known.value" :repos="page.repos.repos.value" :name-for="nameFor"
+              :photo-for="photoFor" :can-edit="canEdit" :can-move="canMove" :save-date="actions.saveDate"
+              :wanted="focus.wanted.value" @show-me="showWanted" @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels" @repo="actions.setRepo"
               @priority="actions.setPriority" @due-done="actions.setDueDone"
             />
           </aside>
@@ -125,17 +126,24 @@ import { useBoardCardPage } from '@/composables/useBoardCardPage'
 import { useCardDrafts } from '@/composables/useCardDrafts'
 import { useCardFieldFocus } from '@/composables/useCardFieldFocus'
 import { useNow } from '@/composables/useNow'
+import { DOC_KINDS } from '@/constants/boards'
+import type { CardDocKind, StageRequiredField } from '@/types/boards'
 import type { DetailTab } from '@/utils/budDetail'
 import { parseCardNumber } from '@/utils/boardRoutes'
+import { tabFor } from '@/utils/cardFocus'
+import '@/components/boards/card/card-focus.css'
 
 const CLOSED_COMMENTS = 'Comments are closed while this card is archived. Restore it to reply.'
 
 const route = useRoute()
 const number = computed(() => parseCardNumber(route.params.number))
 const {
-  card, page, detail, boardKey, feedback, checklist, activity, thread, attachments,
+  card, page, detail, boardKey, feedback, checklist, activity, thread, attachments, docs,
   canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions,
-} = useBoardCardPage(number, field => void focus.show(field))
+} = useBoardCardPage(number, {
+  show: (field, stageId) => void focus.show(field, stageId),
+  want: stageId => focus.want(stageId),
+})
 const drafts = useCardDrafts()
 const { xs } = useDisplay()
 const now = useNow()
@@ -153,17 +161,28 @@ function setOverview(el: unknown): void {
 }
 
 const openTab = ref('overview')
-/** Switching tab closes its editors, so an unsaved draft asks first. */
-const tab = computed({
-  get: () => openTab.value,
-  set: next => {
-    void drafts.confirmDiscard().then(go => {
-      if (go) openTab.value = next
-    })
-  },
+const docKind = ref<CardDocKind>(DOC_KINDS[0])
+/** Switching tab (or document) closes its editors, so an unsaved draft asks first. */
+async function goTo(next: string, kind: CardDocKind = docKind.value): Promise<boolean> {
+  if (next === openTab.value && kind === docKind.value) return true
+  if (!(await drafts.confirmDiscard())) return false
+  openTab.value = next
+  docKind.value = kind
+  return true
+}
+const tab = computed({ get: () => openTab.value, set: next => void goTo(next) })
+// "Open card" from a refused move, or "Show me" here: the fields the stage needs.
+const focus = useCardFieldFocus({
+  ready: computed(() => !!detail.value && !!board.value),
+  card: detail,
+  stages,
+  open: (field: StageRequiredField) => goTo(tabFor(field), field === 'prd' ? 'prd' : docKind.value),
+  loaded: field => field !== 'prd' || !docs.loading,
 })
-// "Open card" from a refused move, or "Show me" here: the field the stage needs.
-const focus = useCardFieldFocus(computed(() => !!detail.value && !!board.value), next => (openTab.value = next))
+function showWanted(): void {
+  const wanted = focus.wanted.value
+  if (wanted) void focus.show(wanted.missing[0], wanted.stage.id)
+}
 const tabs = computed<DetailTab[]>(() => [
   { value: 'overview', label: 'Overview' },
   { value: 'documents', label: 'Documents' },

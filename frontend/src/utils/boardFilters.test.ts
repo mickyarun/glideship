@@ -57,13 +57,13 @@ describe('matchesCard', () => {
 describe('saved filters', () => {
   it('round-trips through the prefs shape, keeping the archived view', () => {
     const f = { query: ' seo ', assignee: 'u1', label: null, priority: 'P2' as const, repo: null, archived: true }
-    expect(toSaved(f)).toEqual({ q: 'seo', assignee_ids: ['u1'], label_ids: [], priorities: ['P2'], archived: true })
+    expect(toSaved(f)).toEqual({ q: 'seo', assignee_ids: ['u1'], label_ids: [], priorities: ['P2'], repo_ids: [], archived: true })
     expect(fromSaved(toSaved(f))).toEqual({ ...f, query: 'seo' })
     expect(fromSaved(null)).toEqual(NO_FILTERS)
   })
 
-  it('never sends the repository (the server does not save it yet) but reads one it gets back', () => {
-    expect(toSaved({ ...NO_FILTERS, repo: 'r1' })).not.toHaveProperty('repo_ids')
+  it('saves the repository filter and reads it back', () => {
+    expect(toSaved({ ...NO_FILTERS, repo: 'r1' }).repo_ids).toEqual(['r1'])
     expect(fromSaved({ q: null, assignee_ids: [], label_ids: [], priorities: [], archived: false, repo_ids: ['r1'] }).repo).toBe('r1')
   })
 
@@ -87,8 +87,8 @@ describe('saved filters', () => {
 
 describe('the filter bar options and summary', () => {
   const members: BoardPersonRead[] = [
-    { id: 'u1', name: 'Zoe', avatar_url: null, role: 'editor', via: 'team' },
-    { id: 'u2', name: 'Asha', avatar_url: null, role: 'admin', via: 'member' },
+    { id: 'u1', name: 'Zoe', avatar_url: null, role: 'editor', via: 'team', team_name: 'Writers' },
+    { id: 'u2', name: 'Asha', avatar_url: null, role: 'admin', via: 'member', team_name: null },
   ]
 
   it('lists the board\'s people by name, not just those on loaded cards', () => {

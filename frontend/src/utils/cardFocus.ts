@@ -13,15 +13,21 @@
 // limitations under the License.
 
 // Taking someone to a field on a card's page: the board's "Open card" after
-// a refused move links to the page with ``?focus=<field>``, and the page
-// (or its own refused move) brings that field into view and focuses its
-// first control. Each field's place on the page carries
+// a refused move links to the page with ``?focus=<field>&enter=<stage>``,
+// and the page (or its own refused move) brings that field into view,
+// focuses its first control and briefly highlights every field the stage
+// still needs. Each field's place on the page carries
 // ``data-card-field="<field>"``; the PRD lives on the Documents tab.
 
+import { FIELD_FOCUS_RETRY_MS, FIELD_FOCUS_TRIES, FIELD_HIGHLIGHT_MS } from '@/constants/boards'
 import type { StageRequiredField } from '@/types/boards'
 import { REQUIRED_FIELDS } from '@/utils/stageRules'
 
 export const FOCUS_QUERY_KEY = 'focus'
+/** The stage the card was on its way into, so the page can say all it needs. */
+export const ENTER_QUERY_KEY = 'enter'
+/** The class a field wears while it's highlighted (styled in card-focus.css). */
+export const WANTED_CLASS = 'card-field--wanted'
 
 /** The card page tab each field is on. */
 export function tabFor(field: StageRequiredField): 'overview' | 'documents' {
@@ -41,6 +47,30 @@ export function focusField(field: StageRequiredField, root: ParentNode = documen
   if (!place) return false
   place.scrollIntoView?.({ block: 'center' })
   const control = place.matches(CONTROLS) ? place : place.querySelector<HTMLElement>(CONTROLS)
-  control?.focus({ preventScroll: true })
+  // focusVisible: draw the focus ring although the page, not a key, moved focus.
+  control?.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
   return true
+}
+
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * Focus a field once it's ready (``ready``: its content has loaded) and on
+ * the page, trying again while it draws; false when it never turned up.
+ */
+export async function focusWhenReady(
+  field: StageRequiredField, ready: () => boolean, root: ParentNode = document,
+): Promise<boolean> {
+  for (let i = 0; i < FIELD_FOCUS_TRIES; i++) {
+    if (ready() && focusField(field, root)) return true
+    await wait(FIELD_FOCUS_RETRY_MS)
+  }
+  return false
+}
+
+/** Highlight each field's place for a moment (a class, so it survives no re-render it doesn't need). */
+export function highlightFields(fields: readonly StageRequiredField[], root: ParentNode = document): void {
+  const places = fields.flatMap(f => [...root.querySelectorAll<HTMLElement>(`[data-card-field="${f}"]`)])
+  for (const place of places) place.classList.add(WANTED_CLASS)
+  setTimeout(() => places.forEach(place => place.classList.remove(WANTED_CLASS)), FIELD_HIGHLIGHT_MS)
 }

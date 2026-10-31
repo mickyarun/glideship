@@ -16,7 +16,7 @@
 
 <!-- A card's stage in its details: the name and, for anyone who may move
      it, a Change menu of the other stages. A stage the card can't enter
-     yet says what it needs. -->
+     yet wears a lock and says what it needs. -->
 <template>
   <span>{{ stage?.name ?? 'Unknown stage' }}</span>
   <v-menu v-if="canMove && stages.length > 1" location="bottom end">
@@ -28,10 +28,14 @@
         v-for="s in stages"
         :key="s.id"
         :title="s.id === card.stage_id ? `${s.name} (current)` : s.name"
-        :subtitle="s.id === card.stage_id ? undefined : needs(s)"
+        :subtitle="s.id === card.stage_id ? undefined : blockReason(card, s)"
         :disabled="s.id === card.stage_id"
         @click="emit('move', s.id)"
-      />
+      >
+        <template v-if="s.id !== card.stage_id && blockReason(card, s)" #append>
+          <v-icon icon="mdi-lock-outline" size="16" aria-hidden="true" />
+        </template>
+      </v-list-item>
     </v-list>
   </v-menu>
 </template>
@@ -39,17 +43,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CardSummary, StageRead } from '@/types/boards'
-import { missingFor, needsShort } from '@/utils/stageRules'
+import { blockReason } from '@/utils/stageRules'
 
 const props = defineProps<{ card: CardSummary; stages: StageRead[]; canMove: boolean }>()
 const emit = defineEmits<{ move: [stageId: string] }>()
 
 const stage = computed(() => props.stages.find(s => s.id === props.card.stage_id) ?? null)
-
-function needs(s: StageRead): string | undefined {
-  const missing = missingFor(props.card, s)
-  return missing.length ? needsShort(missing) : undefined
-}
 </script>
 
 <style scoped>

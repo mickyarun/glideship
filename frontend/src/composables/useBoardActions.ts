@@ -17,16 +17,21 @@
 // heading when it lands past the loaded cards), archive with Undo, and
 // restore. Errors go to the snackbar. Moves keep to the stages' entry rules
 // (useStageEntry): a refused one stays put and offers "Open card", which
-// opens the card's page on the first missing field (``?focus=``).
+// opens the card's page on the first missing field (``?focus=``) and names
+// the stage (``?enter=``) so the page can say everything it needs. A drag
+// over a stage the card can't enter never drops there; letting go over it
+// says why the same way.
 
 import { useRouter } from 'vue-router'
 import type { BoardPage } from '@/composables/useBoardPage'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
 import type { CardDrop } from '@/composables/useCardDrag'
 import { useStageEntry } from '@/composables/useStageEntry'
-import type { CardSummary, StageRequiredField } from '@/types/boards'
+import type { CardSummary, StageRead, StageRequiredField } from '@/types/boards'
 import { locate } from '@/utils/boardColumns'
-import { FOCUS_QUERY_KEY } from '@/utils/cardFocus'
+import type { Neighbours } from '@/utils/boardPositions'
+import { ENTER_QUERY_KEY, FOCUS_QUERY_KEY } from '@/utils/cardFocus'
+import { missingFor } from '@/utils/stageRules'
 
 type Feedback = ReturnType<typeof useBoardFeedback>
 
@@ -35,10 +40,13 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
   const stageName = (id: string) => page.board.detail.value?.stages.find(s => s.id === id)?.name ?? 'the stage'
   const router = useRouter()
 
-  function openAt(card: CardSummary, field: StageRequiredField): void {
+  function openCard(card: CardSummary, query: Record<string, string> = {}): void {
     const key = page.board.detail.value?.board.key
-    if (!key) return
-    void router.push({ name: 'board-card', params: { key, number: card.number }, query: { [FOCUS_QUERY_KEY]: field } })
+    if (key) void router.push({ name: 'board-card', params: { key, number: card.number }, query })
+  }
+
+  function openAt(card: CardSummary, stage: StageRead, missing: StageRequiredField[]): void {
+    if (missing.length) openCard(card, { [FOCUS_QUERY_KEY]: missing[0], [ENTER_QUERY_KEY]: stage.id })
   }
 
   const entry = useStageEntry({
@@ -46,15 +54,21 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
     feedback,
     fixLabel: 'Open card',
     fix: openAt,
+    openCard: card => openCard(card),
   })
 
   async function drop(d: CardDrop): Promise<void> {
     const card = locate(cards.columns, d.cardId)?.card
     if (!card) return
     const key = card.key
-    const result = await entry.enter(card, d.stageId, confirm =>
-      cards.moveCard(d.cardId, d.stageId, d.index, { confirmOpenChecklist: confirm }),
-    )
+    // A resend (after the checklist question) goes between the same two cards.
+    let neighbours: Neighbours | undefined
+    const result = await entry.enter(card, d.stageId, async confirm => {
+      const opts = { confirmOpenChecklist: confirm, fromStageId: card.stage_id, neighbours }
+      const sent = await cards.moveCard(d.cardId, d.stageId, d.index, opts)
+      neighbours ??= sent.neighbours
+      return sent
+    })
     if (!result) return
     feedback.announce(
       result.shown
@@ -66,7 +80,7 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
   async function menuMove(card: CardSummary, stageId: string): Promise<void> {
     const held = locate(cards.columns, card.id)?.card ?? card
     const result = await entry.enter(held, stageId, confirm =>
-      cards.moveToStage(card.id, stageId, { confirmOpenChecklist: confirm }),
+      cards.moveToStage(card.id, stageId, { confirmOpenChecklist: confirm, fromStageId: held.stage_id }),
     )
     if (!result) return
     if (result.shown && (await feedback.focusCard(card.id))) {
@@ -75,6 +89,14 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
     }
     feedback.focusStage(stageId)
     feedback.announce(`Moved ${card.key} to the bottom of ${stageName(stageId)}`)
+  }
+
+  /** A drag let go over a stage the card can't enter: say why, as a refused drop would. */
+  function blockedDrop(cardId: string, stageId: string): void {
+    const card = locate(cards.columns, cardId)?.card
+    const stage = page.board.detail.value?.stages.find(s => s.id === stageId)
+    const missing = card && stage ? missingFor(card, stage) : []
+    if (card && stage && missing.length) entry.refuse(card, stage, missing)
   }
 
   async function restore(card: CardSummary): Promise<void> {
@@ -89,5 +111,5 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
     feedback.show({ text: `Archived ${card.key}`, action: { label: 'Undo', run: () => void restore(archived) } })
   }
 
-  return { drop, menuMove, archive, restore, confirm: entry.confirm }
+  return { drop, blockedDrop, menuMove, archive, restore, confirm: entry.confirm }
 }

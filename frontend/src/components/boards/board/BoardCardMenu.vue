@@ -18,7 +18,8 @@
      anything drag does; it lands at the bottom), copy its link, and
      archive or restore it. Items the board's capabilities don't allow are
      left out, so a viewer sees only Copy link. A stage the card can't enter
-     yet says what it needs; picking it explains and offers Open card. -->
+     yet wears a lock and says what it needs; picking it explains and
+     offers Open card. -->
 <template>
   <v-menu location="bottom end">
     <template #activator="{ props: menuProps }">
@@ -39,7 +40,7 @@
           v-for="stage in stages"
           :key="stage.id"
           :title="stage.id === card.stage_id ? `${stage.name} (current)` : stage.name"
-          :subtitle="stage.id === card.stage_id ? undefined : needs(stage)"
+          :subtitle="stage.id === card.stage_id ? undefined : blockReason(card, stage)"
           :disabled="stage.id === card.stage_id"
           @click="emit('move', stage.id)"
         >
@@ -47,6 +48,9 @@
                text starts at the same edge as Copy link and Archive. -->
           <template #prepend>
             <v-icon icon="mdi-circle-medium" :color="CATEGORY_COLORS[stage.category]" aria-hidden="true" />
+          </template>
+          <template v-if="stage.id !== card.stage_id && blockReason(card, stage)" #append>
+            <v-icon icon="mdi-lock-outline" size="16" aria-hidden="true" />
           </template>
         </v-list-item>
         <v-divider class="my-1" />
@@ -70,7 +74,7 @@ import { useRouter } from 'vue-router'
 import { CATEGORY_COLORS } from '@/constants/boards'
 import type { CardSummary, StageRead } from '@/types/boards'
 import { copyText } from '@/utils/clipboard'
-import { missingFor, needsShort } from '@/utils/stageRules'
+import { blockReason } from '@/utils/stageRules'
 
 const props = defineProps<{
   card: CardSummary
@@ -83,11 +87,6 @@ const props = defineProps<{
 const emit = defineEmits<{ move: [stageId: string]; archive: []; restore: []; copied: [] }>()
 
 const router = useRouter()
-
-function needs(stage: StageRead): string | undefined {
-  const missing = missingFor(props.card, stage)
-  return missing.length ? needsShort(missing) : undefined
-}
 
 async function copy(): Promise<void> {
   const { href } = router.resolve({

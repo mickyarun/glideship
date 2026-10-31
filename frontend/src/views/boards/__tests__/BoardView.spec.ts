@@ -140,7 +140,7 @@ describe('BoardView', () => {
 
   it('shows one panel when the filters match nothing', async () => {
     const detail = makeDetail()
-    detail.filters = { q: 'zzz', assignee_ids: ['u9'], label_ids: [], priorities: ['P0'], archived: false }
+    detail.filters = { q: 'zzz', assignee_ids: ['u9'], label_ids: [], priorities: ['P0'], repo_ids: [], archived: false }
     api.get.mockResolvedValue(detail)
     s1Cards = []
     const { wrapper } = await mountBoardPage()

@@ -21,7 +21,9 @@
      reaches the window. Cards aren't windowed: SortableJS needs
      them all in the DOM. A drag heading in past the WIP limit says so,
      and the drop still goes through; a stage the dragged card can't enter
-     yet (``dropBlock``) is muted with its reason, and refuses the drop. -->
+     yet (``dropBlock``) is muted with its reason and opens no slot; letting
+     go over it reports ``blocked``. The board announces the blocked stages
+     once when the drag starts, so this note isn't a live region. -->
 <template>
   <section
     class="stage-col"
@@ -33,7 +35,7 @@
     <p v-if="goesOver && !dropBlock" class="stage-col__over" role="status">
       {{ stage.name }} goes over its limit of {{ limit }}. You can still drop here.
     </p>
-    <p v-if="dropBlock" class="stage-col__blocked" role="status">
+    <p v-if="dropBlock" class="stage-col__blocked">
       <v-icon icon="mdi-lock-outline" size="14" aria-hidden="true" />{{ dropBlock }}
     </p>
 
@@ -106,7 +108,8 @@ import BoardCardTile from '@/components/boards/board/BoardCardTile.vue'
 import BoardQuickAdd from '@/components/boards/board/BoardQuickAdd.vue'
 import StageColumnHeader from '@/components/boards/board/StageColumnHeader.vue'
 import {
-  dragEnded, dragGoesOver, dragMoved, dragOptions, dragStarted, dropFromDragEnd, isDropTarget, type CardDrop,
+  blockedLanding, dragEnded, dragGoesOver, dragMoved, dragOptions, dragStarted, dropFromDragEnd, isDropTarget,
+  type CardDrop,
 } from '@/composables/useCardDrag'
 import { useLoadMoreSentinel } from '@/composables/useLoadMoreSentinel'
 import type { ActionResult } from '@/stores/boardCardActions'
@@ -136,6 +139,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   drop: [drop: CardDrop]
+  blocked: [cardId: string, stageId: string]
   move: [card: CardSummary, stageId: string]
   archive: [card: CardSummary]
   restore: [card: CardSummary]
@@ -161,9 +165,13 @@ useLoadMoreSentinel(sentinel, sentinelRoot, () => {
 })
 
 function onEnd(event: Parameters<typeof dropFromDragEnd>[0]): void {
+  // Let go over a stage it can't enter: SortableJS would drop it in the last
+  // column it passed through, so that drop is cancelled and the reason given.
+  const blocked = blockedLanding()
   dragEnded()
   const drop = dropFromDragEnd(event)
-  if (drop) emit('drop', drop)
+  if (blocked) emit('blocked', blocked.cardId, blocked.stageId)
+  else if (drop) emit('drop', drop)
 }
 </script>
 

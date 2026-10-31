@@ -64,8 +64,40 @@ describe('card actions', () => {
     expect(store.counts).toEqual({ s1: 1, s2: 2 })
     expect(api.moveCard).toHaveBeenCalledWith('OPS', 2, { stage_id: 's2', after_id: null, before_id: '3' })
     resolve(detail({ ...B, stage_id: 's2', position: 0.5, updated_at: later(B.updated_at) }))
-    expect(await pending).toEqual({ error: null, shown: true })
+    expect(await pending).toMatchObject({ error: null, shown: true })
     expect(store.columns.s2.items[0].position).toBe(0.5)
+  })
+
+  it("undoes a refused move where the card is now, keeping a live edit that landed meanwhile", async () => {
+    const store = await loaded()
+    let reject!: (e: unknown) => void
+    api.moveCard.mockReturnValue(new Promise((_r, j) => (reject = j)))
+    const pending = store.moveCard('1', 's2', 1)
+    // Someone assigns the card while the move is in flight.
+    store.applyCardEvent({
+      event: 'card_updated', actor_id: 'u2', origin: null,
+      card: { ...A, stage_id: 's2', assignee_ids: ['u9'], updated_at: later(A.updated_at) },
+    })
+    reject(httpError(403, 'No.'))
+    await pending
+    const back = store.columns.s1.items.find(c => c.id === '1')!
+    expect(back.assignee_ids).toEqual(['u9'])
+    expect(back.position).toBe(A.position)
+    expect(ids(store.columns.s2.items)).toEqual(['3'])
+  })
+
+  it("won't resend a move for a card that left its stage meanwhile", async () => {
+    const store = await loaded()
+    const result = await store.moveCard('1', 's2', 0, { fromStageId: 's2' })
+    expect(result.error).toContain("wasn't moved")
+    expect(api.moveCard).not.toHaveBeenCalled()
+  })
+
+  it('resends with the neighbours it was first sent with', async () => {
+    const store = await loaded()
+    api.moveCard.mockResolvedValue(detail({ ...A, stage_id: 's2', updated_at: later(A.updated_at) }))
+    await store.moveCard('1', 's2', 1, { neighbours: { after_id: 'x', before_id: 'y' }, fromStageId: 's1' })
+    expect(api.moveCard).toHaveBeenCalledWith('OPS', 1, { stage_id: 's2', after_id: 'x', before_id: 'y' })
   })
 
   it('undoes a refused move and keeps the counts', async () => {
@@ -112,7 +144,7 @@ describe('card actions', () => {
   it('moves from the menu with no neighbours, to the bottom', async () => {
     const store = await loaded()
     api.moveCard.mockResolvedValue(detail({ ...A, stage_id: 's2', position: 5, updated_at: later(A.updated_at) }))
-    expect(await store.moveToStage('1', 's2')).toEqual({ error: null, shown: true })
+    expect(await store.moveToStage('1', 's2')).toMatchObject({ error: null, shown: true })
     expect(api.moveCard).toHaveBeenCalledWith('OPS', 1, { stage_id: 's2', after_id: null, before_id: null })
     expect(ids(store.columns.s2.items)).toEqual(['3', '1'])
   })
@@ -120,7 +152,7 @@ describe('card actions', () => {
   it('leaves a menu move into a partly loaded stage for its page', async () => {
     const store = await loaded({ s2Done: false })
     api.moveCard.mockResolvedValue(detail({ ...A, stage_id: 's2', position: 50, updated_at: later(A.updated_at) }))
-    expect(await store.moveToStage('1', 's2')).toEqual({ error: null, shown: false })
+    expect(await store.moveToStage('1', 's2')).toMatchObject({ error: null, shown: false })
     expect(ids(store.columns.s2.items)).toEqual(['3'])
     expect(ids(store.columns.s1.items)).toEqual(['2'])
     expect(store.counts).toEqual({ s1: 1, s2: 2 })

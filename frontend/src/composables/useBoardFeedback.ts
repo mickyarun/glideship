@@ -24,6 +24,8 @@ export interface Toast {
   /** An Undo-style action on the snackbar. */
   action?: { label: string; run: () => void }
   error?: boolean
+  /** Stays until dismissed or acted on (a refusal whose action I may want). */
+  persist?: boolean
 }
 
 export function useBoardFeedback() {

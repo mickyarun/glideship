@@ -39,7 +39,7 @@ export const MEMBERS: MemberRead[] = [
 
 /** GET /boards/{key}/people for the same board: the members, as their own rows. */
 export const PEOPLE: BoardPersonRead[] = MEMBERS.map(m => ({
-  id: m.user_id, name: m.name, avatar_url: m.avatar_url, role: m.role, via: 'member',
+  id: m.user_id, name: m.name, avatar_url: m.avatar_url, role: m.role, via: 'member', team_name: null,
 }))
 
 interface TileOptions {

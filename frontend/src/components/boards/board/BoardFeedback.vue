@@ -16,18 +16,36 @@
 
 <!-- What the board says back: a polite live region for announcements
      (always in the page, so screen readers hear each one) and the snackbar,
-     with its Undo-style action when there is one. -->
+     with its Undo-style action when there is one. A refusal's snackbar
+     waits to be dismissed, since its action ("Open card") is the way on.
+     It sits at the bottom end, clear of the board's footer hint. -->
 <template>
   <p class="d-sr-only" role="status" aria-live="polite">{{ feedback.announcement.value }}</p>
-  <v-snackbar v-model="feedback.toastOpen.value" :timeout="6000" :color="feedback.toast.value?.error ? 'error' : undefined">
+  <v-snackbar
+    v-model="feedback.toastOpen.value"
+    :timeout="feedback.toast.value?.persist ? -1 : TOAST_MS"
+    :color="feedback.toast.value?.error ? 'error' : undefined"
+    location="bottom end"
+  >
     {{ feedback.toast.value?.text }}
-    <template v-if="feedback.toast.value?.action" #actions>
-      <v-btn variant="text" @click="run">{{ feedback.toast.value.action.label }}</v-btn>
+    <template v-if="feedback.toast.value?.action || feedback.toast.value?.persist" #actions>
+      <v-btn v-if="feedback.toast.value?.action" variant="text" color="primary" @click="run">
+        {{ feedback.toast.value.action.label }}
+      </v-btn>
+      <v-btn
+        v-if="feedback.toast.value?.persist"
+        icon="mdi-close"
+        variant="text"
+        size="small"
+        aria-label="Dismiss"
+        @click="feedback.toastOpen.value = false"
+      />
     </template>
   </v-snackbar>
 </template>
 
 <script setup lang="ts">
+import { TOAST_MS } from '@/constants/boards'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
 
 const props = defineProps<{ feedback: ReturnType<typeof useBoardFeedback> }>()

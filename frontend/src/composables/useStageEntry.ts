@@ -14,19 +14,22 @@
 
 // Moving a card into a stage under the stage's entry rules, the same from a
 // drag, the card's menu and its page: a stage that needs fields the card
-// lacks refuses at once (no request) and says what's missing, with an
-// action to go and fill in the first one; completing a card with checklist
+// lacks refuses at once (no request) and says what's missing (on the
+// snackbar, which waits for me, and to screen readers), with an action to
+// go and fill it in; completing a card with checklist
 // items open asks first and then sends the move with the confirmation. The
 // server checks both too: its 422 is reported the same way, and its 409
 // (the board's copy of the checklist was stale) asks and resends.
 
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
 import type { CardSummary, StageRead, StageRequiredField } from '@/types/boards'
 import type { EntryRefusal } from '@/utils/entryRefusal'
 import { checklistQuestion, completes, missingFor, needsSentence, openItems } from '@/utils/stageRules'
 
 type Feedback = ReturnType<typeof useBoardFeedback>
+
+const UNKNOWN_STAGE = 'that stage'
 
 export interface EntryResult {
   error: string | null
@@ -36,20 +39,27 @@ export interface EntryResult {
 interface Options {
   stages: () => StageRead[]
   feedback: Feedback
-  /** The snackbar action that takes me to a missing field ("Open card"). */
+  /** The snackbar action that takes me to the missing fields ("Open card"). */
   fixLabel: string
-  fix: (card: CardSummary, field: StageRequiredField) => void
+  fix: (card: CardSummary, stage: StageRead, missing: StageRequiredField[]) => void
+  /** Open the card's page (offered beside the checklist question); left out on the page itself. */
+  openCard?: (card: CardSummary) => void
+  /** Told of every refusal, to show it beside the stage too. */
+  onRefuse?: (card: CardSummary, stage: StageRead, missing: StageRequiredField[]) => void
 }
 
 /** A yes/no question about an open checklist, answered by ChecklistConfirmDialog. */
 export function useChecklistConfirm() {
   const asking = ref(false)
   const question = ref('')
+  /** Opens the card instead, when the dialog offers that. */
+  const opener = shallowRef<(() => void) | null>(null)
   let settle: ((yes: boolean) => void) | null = null
 
-  function ask(text: string): Promise<boolean> {
+  function ask(text: string, open: (() => void) | null = null): Promise<boolean> {
     settle?.(false)
     question.value = text
+    opener.value = open
     asking.value = true
     return new Promise(resolve => (settle = resolve))
   }
@@ -61,7 +71,14 @@ export function useChecklistConfirm() {
     done?.(yes)
   }
 
-  return { asking, question, ask, answer }
+  /** "Open card": no move, and the card's page instead. */
+  function openCard(): void {
+    const open = opener.value
+    answer(false)
+    open?.()
+  }
+
+  return { asking, question, opener, ask, answer, openCard }
 }
 
 export type ChecklistConfirm = ReturnType<typeof useChecklistConfirm>
@@ -71,15 +88,18 @@ export function useStageEntry(o: Options) {
   const stageOf = (id: string) => o.stages().find(s => s.id === id) ?? null
 
   function refuse(card: CardSummary, stage: StageRead, missing: StageRequiredField[]): void {
-    const first = missing[0]
+    const text = needsSentence(stage.name, missing)
     o.feedback.show({
-      text: needsSentence(stage.name, missing),
-      action: first ? { label: o.fixLabel, run: () => o.fix(card, first) } : undefined,
+      text,
+      action: missing.length ? { label: o.fixLabel, run: () => o.fix(card, stage, missing) } : undefined,
+      persist: true,
     })
+    o.feedback.announce(text)
+    o.onRefuse?.(card, stage, missing)
   }
 
-  const askAbout = (card: CardSummary, stage: StageRead, open: number, total: number) =>
-    confirm.ask(checklistQuestion(open, total, card.key, stage.name))
+  const askAbout = (card: CardSummary, stageName: string, open: number, total: number) =>
+    confirm.ask(checklistQuestion(open, total, card.key, stageName), o.openCard ? () => o.openCard?.(card) : null)
 
   /**
    * Move card to stageId through send (true: confirm the open
@@ -92,34 +112,32 @@ export function useStageEntry(o: Options) {
     send: (confirmOpenChecklist: boolean) => Promise<R>,
   ): Promise<R | null> {
     const stage = stageOf(stageId)
-    // Reordering inside a stage isn't entering it.
-    if (!stage || card.stage_id === stageId) {
-      const result = await send(false)
-      return o.feedback.fail(result.error) ? null : result
-    }
-    const missing = missingFor(card, stage)
-    if (missing.length) {
-      refuse(card, stage, missing)
+    // Reordering inside a stage isn't entering it; a stage this tab doesn't
+    // know yet is left to the server, whose refusals are handled the same.
+    const entering = stage && card.stage_id !== stageId ? stage : null
+    const missing = entering ? missingFor(card, entering) : []
+    if (entering && missing.length) {
+      refuse(card, entering, missing)
       return null
     }
     let confirmed = false
     const open = openItems(card)
-    if (open && completes(stage, stageOf(card.stage_id))) {
-      if (!(await askAbout(card, stage, open, card.checklist_total))) return null
+    if (entering && open && completes(entering, stageOf(card.stage_id))) {
+      if (!(await askAbout(card, entering.name, open, card.checklist_total))) return null
       confirmed = true
     }
     let result = await send(confirmed)
     const refusal = result.refusal
     if (refusal?.code === 'CHECKLIST_OPEN' && !confirmed) {
-      if (!(await askAbout(card, stage, refusal.open, refusal.total))) return null
+      if (!(await askAbout(card, stage?.name ?? UNKNOWN_STAGE, refusal.open, refusal.total))) return null
       result = await send(true)
     }
-    if (result.refusal?.code === 'STAGE_REQUIREMENTS_MISSING') {
+    if (result.refusal?.code === 'STAGE_REQUIREMENTS_MISSING' && stage) {
       refuse(card, stage, result.refusal.missing)
       return null
     }
     return o.feedback.fail(result.error) ? null : result
   }
 
-  return { confirm, enter }
+  return { confirm, enter, refuse }
 }

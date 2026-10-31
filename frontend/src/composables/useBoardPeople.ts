@@ -16,26 +16,19 @@
 // own role, a team's, boards:manage, or an org-wide board. Exactly the set
 // a card can be assigned to, so every assignee picker and the assignee
 // filter read it from here. Loaded once per board by useBoardPage and
-// shared through the board context; a member change reloads it.
+// shared through the board context; a member change, people_changed and a
+// resync reload it.
 
 import { computed, ref } from 'vue'
 import { boardsApi } from '@/services/boardsApi'
-import type { BoardAccessVia, BoardPersonRead } from '@/types/boards'
-
-/**
- * How a person's access reads beside their name. Their own role, and an
- * org-wide board (where that's almost everyone), say nothing.
- */
-export const VIA_NOTES: Record<BoardAccessVia, string | null> = {
-  member: null,
-  team: 'via a team',
-  permission: 'admin by permission',
-  org: null,
-}
+import type { BoardPersonRead } from '@/types/boards'
+import { logFailure } from '@/utils/logFailure'
 
 export function useBoardPeople() {
   const people = ref<BoardPersonRead[]>([])
   const loaded = ref(false)
+  /** The last fetch failed, so the list may be stale (or empty). */
+  const failed = ref(false)
   let seq = 0
 
   const byId = computed(() => new Map(people.value.map(p => [p.id, p])))
@@ -48,8 +41,10 @@ export function useBoardPeople() {
       if (mine !== seq || !current()) return
       people.value = [...reply.items].sort((a, b) => a.name.localeCompare(b.name))
       loaded.value = true
+      failed.value = false
     } catch (err) {
-      console.error('[boards] people fetch failed:', err)
+      if (mine === seq) failed.value = true
+      logFailure('boards', 'people fetch', err)
     }
   }
 
@@ -57,11 +52,14 @@ export function useBoardPeople() {
     seq++
     people.value = []
     loaded.value = false
+    failed.value = false
   }
 
   const find = (id: string) => byId.value.get(id) ?? null
+  /** Loaded, and the last fetch worked: someone missing from it really has no access. */
+  const known = computed(() => loaded.value && !failed.value)
 
-  return { people, loaded, byId, load, reset, find }
+  return { people, loaded, failed, known, byId, load, reset, find }
 }
 
 export type BoardPeople = ReturnType<typeof useBoardPeople>

@@ -23,16 +23,15 @@ import { useBoardFeedback } from '@/composables/useBoardFeedback'
 import { useCardActivity } from '@/composables/useCardActivity'
 import { useCardChecklist } from '@/composables/useCardChecklist'
 import { useCardEdits } from '@/composables/useCardEdits'
-import { useCardPageActions } from '@/composables/useCardPageActions'
+import { useCardPageActions, type FieldGuide } from '@/composables/useCardPageActions'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
-import type { StageRequiredField } from '@/types/boards'
 import { cardUrl } from '@/services/boardsApi'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
 import { useBoardsStore } from '@/stores/boards'
 import { createCommentThread } from '@/stores/commentThread'
 import { CARD_COMMENT_WIRE } from '@/utils/boardCardWire'
 
-export function useBoardCardPage(number: Ref<number | null>, showField: (field: StageRequiredField) => void) {
+export function useBoardCardPage(number: Ref<number | null>, guide: FieldGuide) {
   const feedback = useBoardFeedback()
   const docs = useBoardCardDocsStore()
   const boardsStore = useBoardsStore()
@@ -46,7 +45,14 @@ export function useBoardCardPage(number: Ref<number | null>, showField: (field: 
       attachments.value?.reload()
       activity.refresh()
     },
-    onDoc: kind => void docs.refresh(kind),
+    onDoc: kind => {
+      void docs.refresh(kind)
+      // A PRD saved elsewhere: the card has one now (card_updated follows
+      // with the rest), so stages that need one let it in.
+      if (kind !== 'prd' || !detail.value) return
+      detail.value = { ...detail.value, has_prd: true }
+      void edits.refresh()
+    },
     onHistory: () => activity.refresh(),
   })
   const { page, detail, boardKey } = card
@@ -87,7 +93,7 @@ export function useBoardCardPage(number: Ref<number | null>, showField: (field: 
     return person ? person.avatar_url : directory.photoFor(id)
   }
 
-  const actions = useCardPageActions({ card, edits, checklist, activity, feedback, stages, showField })
+  const actions = useCardPageActions({ card, edits, checklist, activity, feedback, stages, guide })
 
   onMounted(() => {
     void directory.ensureLoaded()
@@ -97,7 +103,7 @@ export function useBoardCardPage(number: Ref<number | null>, showField: (field: 
   onUnmounted(() => docs.reset())
 
   return {
-    card, page, detail, boardKey, feedback, checklist, activity, thread, attachments,
+    card, page, detail, boardKey, feedback, checklist, activity, thread, attachments, docs,
     canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions,
   }
 }

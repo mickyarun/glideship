@@ -36,12 +36,13 @@ vi.mock('@/services/wsReconnect', () => ({
   },
 }))
 vi.mock('@/services/boardsApi', () => ({
-  boardsApi: { get: vi.fn(), cards: vi.fn(), members: vi.fn(), people: vi.fn(async () => ({ items: [] })), repos: vi.fn(async () => ({ items: [] })), switcher: vi.fn(), prefs: vi.fn() },
+  boardsApi: { get: vi.fn(), cards: vi.fn(), members: vi.fn(), people: vi.fn(async () => ({ items: [] })), repos: vi.fn(async () => ({ items: [] })), switcher: vi.fn(), prefs: vi.fn(), savePrefs: vi.fn(async () => ({})) },
 }))
 
 import { httpError, later, makeCard, makeDetail, makeStage } from '@/components/boards/__tests__/fixtures'
 import { boardsApi } from '@/services/boardsApi'
 import { clientId } from '@/services/clientId'
+import { missingFor } from '@/utils/stageRules'
 import { useBoardPage } from './useBoardPage'
 
 const api = vi.mocked(boardsApi)
@@ -63,7 +64,7 @@ describe('useBoardPage', () => {
     reconnects.clear()
     vi.resetAllMocks()
     const detail = makeDetail({ stages: [makeStage('s1', { open_cards: 1 }), makeStage('s2')] })
-    detail.filters = { q: 'seo', assignee_ids: [], label_ids: [], priorities: [], archived: false }
+    detail.filters = { q: 'seo', assignee_ids: [], label_ids: [], priorities: [], repo_ids: [], archived: false }
     api.get.mockResolvedValue(detail)
     api.cards.mockImplementation(async (_k, p) => ({ items: p.stage_id === 's1' ? [A] : [], next_cursor: null }))
     api.members.mockResolvedValue({ members: [], teams: [] })
@@ -139,6 +140,48 @@ describe('useBoardPage', () => {
     await flush()
     // One in flight, one more after it for what arrived meanwhile; never three.
     expect(api.get).toHaveBeenCalledTimes(2)
+    scope.stop()
+  })
+
+  it('reloads who can be assigned when people_changed arrives, and on a resync', async () => {
+    const { page, scope } = await openBoard()
+    const person = { id: 'u5', name: 'Ravi', avatar_url: null, role: 'editor' as const, via: 'team' as const, team_name: 'Writers' }
+    api.people.mockResolvedValue({ items: [person] })
+    send({ event: 'people_changed' })
+    await flush()
+    expect(page.people.people.value.map(p => p.id)).toEqual(['u5'])
+    api.people.mockClear()
+    reconnects.forEach(cb => cb())
+    await flush()
+    expect(api.people).toHaveBeenCalledOnce()
+    scope.stop()
+  })
+
+  it('lets a card into a PRD stage once its PRD is saved elsewhere, before card_updated lands', async () => {
+    const { page, scope } = await openBoard()
+    const needsPrd = makeStage('s2', { required_fields: ['prd'] })
+    expect(missingFor(page.cards.columns.s1.items[0], needsPrd)).toEqual(['prd'])
+    send({ event: 'doc_updated', card_id: '1', kind: 'prd', version: 1 })
+    expect(missingFor(page.cards.columns.s1.items[0], needsPrd)).toEqual([])
+    // A design brief isn't a PRD.
+    send({ event: 'doc_updated', card_id: '1', kind: 'notes', version: 1 })
+    send({ event: 'card_updated', card: { ...A, has_prd: true, updated_at: later(A.updated_at) } })
+    expect(page.cards.columns.s1.items[0].has_prd).toBe(true)
+    scope.stop()
+  })
+
+  it('reloads from the first page without the repository when a filtered repository is unlinked', async () => {
+    api.cards.mockImplementation(async (_k, p) => ({ items: p.stage_id === 's1' ? [A] : [], next_cursor: 'next' }))
+    const { page, scope } = await openBoard()
+    page.filters.filters.value = { ...page.filters.filters.value, repo: 'r1' }
+    await flush()
+    await page.cards.loadStage('s1', { more: true })
+    api.cards.mockClear()
+    page.forgetRepo('r1')
+    await flush()
+    expect(page.filters.filters.value.repo).toBeNull()
+    expect(api.cards).toHaveBeenCalledWith('OPS', expect.objectContaining({ stage_id: 's1', cursor: null, repo: null }))
+    expect(api.cards).not.toHaveBeenCalledWith('OPS', expect.objectContaining({ cursor: 'next' }))
     scope.stop()
   })
 })

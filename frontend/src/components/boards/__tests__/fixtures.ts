@@ -101,7 +101,7 @@ export function makeDetail(over: Partial<BoardDetail> = {}): BoardDetail {
     role: 'editor',
     capabilities: EDITOR_CAPS,
     starred: false,
-    filters: { q: null, assignee_ids: [], label_ids: [], priorities: [], archived: false },
+    filters: { q: null, assignee_ids: [], label_ids: [], priorities: [], repo_ids: [], archived: false },
     ...over,
   }
 }

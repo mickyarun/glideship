@@ -18,24 +18,16 @@
 // newer pick. The people offered are those who can open the board (GET
 // /boards/{key}/people: members, teams expanded, admins by permission, or
 // the whole org for an org-wide board), plus anyone already assigned so
-// they can be taken off.
+// they can be taken off (utils/boardPeople).
 
 import { computed } from 'vue'
 import { useBoardContext } from '@/composables/useBoardContext'
-import { VIA_NOTES } from '@/composables/useBoardPeople'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { boardCardApi } from '@/services/boardCardApi'
 import type { CardSummary, CardUpdate } from '@/types/boards'
 import { locate, upsertCard } from '@/utils/boardColumns'
+import { pickPeople, type PickPerson } from '@/utils/boardPeople'
 import { extractApiError } from '@/utils/errors'
-
-export interface QuickPerson {
-  id: string
-  name: string
-  photo: string | null
-  /** How their access reads ("via a team"), when it isn't their own role. */
-  note: string | null
-}
 
 const OWN = { ignoreFilters: true }
 const editSeq = new Map<string, number>()
@@ -47,15 +39,8 @@ export function useCardQuickEdit() {
   const canEdit = computed(() => board.can('edit_card'))
 
   /** Everyone who can be assigned, by name, with ``assigned`` kept in even if they lost access. */
-  function people(assigned: string[]): QuickPerson[] {
-    const list: QuickPerson[] = boardPeople.people.value.map(p => ({
-      id: p.id, name: p.name, photo: p.avatar_url, note: VIA_NOTES[p.via],
-    }))
-    const known = new Set(list.map(p => p.id))
-    const extra = assigned
-      .filter(id => !known.has(id))
-      .map(id => ({ id, name: directory.nameFor(id), photo: directory.photoFor(id), note: 'no access now' }))
-    return [...list, ...extra].sort((a, b) => a.name.localeCompare(b.name))
+  function people(assigned: string[]): PickPerson[] {
+    return pickPeople(boardPeople.people.value, assigned, boardPeople.known.value, directory)
   }
 
   /** Save ``body``, showing ``guess`` meanwhile; resolves to the error, or null. */

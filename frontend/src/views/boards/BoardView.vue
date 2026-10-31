@@ -45,26 +45,15 @@
       :search-max="limits?.search_max ?? null"
       @clear="filters.clear()"
     />
-    <BoardStatePanel v-if="noMatch" title="No cards match these filters" :body="summary">
-      <v-btn variant="outlined" @click="filters.clear()">Clear filters</v-btn>
-    </BoardStatePanel>
-    <BoardStatePanel
-      v-else-if="emptyBoard"
-      :compact="detail.stages.length > 0"
-      :title="`${detail.board.name} is ready`"
-      :body="detail.stages.length ? `${plural(detail.stages.length, 'stage')}, no cards yet.` : 'An admin can add stages in the board settings.'"
-    >
-      <v-btn v-if="canCreate && defaultStageId" color="primary" @click="composeIn = defaultStageId">
-        Add your first card
-      </v-btn>
-      <v-btn v-if="board.can('import')" variant="text" :to="{ name: 'board-import', params: { key: detail.board.key } }">
-        Import from Trello
-      </v-btn>
-    </BoardStatePanel>
+    <BoardViewStates
+      :no-match="noMatch" :empty="emptyBoard" :summary="summary" :board-name="detail.board.name"
+      :board-key="detail.board.key" :stage-count="detail.stages.length" :can-create="canCreate && !!defaultStageId"
+      :can-import="board.can('import')" @clear="filters.clear()" @compose="composeIn = defaultStageId"
+    />
 
     <template v-if="detail.stages.length && !noMatch">
       <BoardStageTabs v-if="xs" v-model="phoneStage" :stages="detail.stages" :counts="cards.counts" />
-      <div class="board-page__columns board-scroller">
+      <div class="board-page__columns board-scroller" :class="{ 'board-page__columns--blocked': overBlocked() }">
         <BoardStageColumn
           v-for="stage in shownStages"
           :key="stage.id"
@@ -86,6 +75,7 @@
           :submit-card="cards.createCard"
           @update:composing="open => (composeIn = open ? stage.id : null)"
           @drop="act.drop"
+          @blocked="act.blockedDrop"
           @move="act.menuMove"
           @archive="act.archive"
           @restore="act.restore"
@@ -112,20 +102,19 @@ import BoardFilterBar from '@/components/boards/board/BoardFilterBar.vue'
 import BoardReadOnlyNote from '@/components/boards/board/BoardReadOnlyNote.vue'
 import BoardStageColumn from '@/components/boards/board/BoardStageColumn.vue'
 import BoardStageTabs from '@/components/boards/board/BoardStageTabs.vue'
-import BoardStatePanel from '@/components/boards/board/BoardStatePanel.vue'
 import BoardViewHeader from '@/components/boards/board/BoardViewHeader.vue'
+import BoardViewStates from '@/components/boards/board/BoardViewStates.vue'
 import ChecklistConfirmDialog from '@/components/boards/board/ChecklistConfirmDialog.vue'
 import { useBoardActions } from '@/composables/useBoardActions'
 import { useBoardContext } from '@/composables/useBoardContext'
 import { useBoardFeedback } from '@/composables/useBoardFeedback'
 import { useBoardStats } from '@/composables/useBoardStats'
-import { dropBlocks } from '@/composables/useCardDrag'
+import { dragBlocks, dragging, dropBlocks, overBlocked } from '@/composables/useCardDrag'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { useNow } from '@/composables/useNow'
 import { useBoardsStore } from '@/stores/boards'
 import '@/assets/styles/board-layout.css'
-import { emptyColumn } from '@/utils/boardColumns'
-import { plural } from '@/utils/format'
+import { emptyColumn, locate } from '@/utils/boardColumns'
 
 const page = useBoardContext()
 const { board, cards, filters } = page
@@ -140,8 +129,16 @@ const detail = computed(() => board.detail.value)
 const limits = computed(() => boardsStore.limits)
 const canMove = computed(() => board.can('move_card'))
 const canCreate = computed(() => board.can('create_card'))
-// While a card is dragged, the stages it can't enter yet, and why.
+// While a card is dragged, the stages it can't enter yet, and why: the
+// columns take no drop there, and screen readers hear it once per drag.
 const blocks = computed(() => dropBlocks(cards.columns, detail.value?.stages ?? []))
+watch(blocks, next => (dragBlocks.value = next), { flush: 'sync', immediate: true })
+watch(() => dragging.value?.cardId, cardId => {
+  const card = cardId ? locate(cards.columns, cardId)?.card : null
+  const blocked = (detail.value?.stages ?? []).filter(s => blocks.value[s.id])
+  if (!card || !blocked.length) return
+  feedback.announce(`${card.key} can't go to ${blocked.map(s => `${s.name} (${blocks.value[s.id]})`).join(', ')} yet.`)
+})
 const labelsById = computed(() => new Map((detail.value?.labels ?? []).map(l => [l.id, l])))
 const { shownCount, totalOpen, hasMore, noMatch, emptyBoard, summary } = useBoardStats(page, nameFor)
 const defaultStageId = computed(
@@ -172,39 +169,4 @@ function star(): void {
 onMounted(() => void boardsStore.ensureLimits())
 </script>
 
-<style scoped>
-.board-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--board-section-gap);
-  height: 100%;
-  min-width: 0;
-  padding: var(--board-page-padding);
-  background: rgb(var(--v-theme-background));
-}
-/* The columns scroll sideways in the shared board scroller
-   (board-layout.css); each column scrolls its own cards. */
-.board-page__columns {
-  min-height: 320px;
-  display: flex;
-  align-items: stretch;
-  gap: var(--board-column-gap);
-}
-.board-page__hint {
-  margin: 0;
-  font-size: 12px;
-  color: rgb(var(--v-theme-on-surface-variant));
-}
-/* Phones: the page scrolls and the one shown column takes its own height. */
-@media (max-width: 600px) {
-  .board-page {
-    height: auto;
-    min-height: 100%;
-  }
-  .board-page__columns {
-    flex: 0 0 auto;
-    min-height: 0;
-    overflow-x: visible;
-  }
-}
-</style>
+<style scoped src="./board-page.css"></style>

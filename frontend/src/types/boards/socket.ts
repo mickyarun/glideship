@@ -49,6 +49,9 @@ export type BoardSocketMessage =
   | (Base<'stage_reordered'> & { stage_id: string })
   | (Base<'label_changed'> & { label?: LabelRead; label_id?: string; deleted?: boolean })
   | Base<'member_changed'>
+  // Who can open the board changed (a member, a team's role or a team's
+  // people): reload the board's people.
+  | Base<'people_changed'>
   // A link carries the repository; an unlink says how many cards it cleared
   // (no card_updated follows for them: clear repo_id on the loaded cards).
   | (Base<'repos_changed'> & { repo_id: string } & (

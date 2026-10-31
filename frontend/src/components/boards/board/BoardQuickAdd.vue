@@ -18,13 +18,17 @@
      open for the next one, even while the last is still saving (titles
      queue up in order); Esc (or Cancel) closes it and puts focus back on
      "Add a card". Shift+Enter is a line break the title will trim. A stage
-     with "Required to enter" fields asks for them under the title (and
+     with "Required to enter" fields says so above the title, asks for
+     them under it (and
      keeps them for the next card, all but the description); one that
      needs a PRD says new cards start elsewhere. -->
 <template>
   <div class="quick-add">
     <p v-if="createBlock" class="quick-add__note">{{ createBlock }}</p>
     <form v-else-if="open" class="quick-add__form" @submit.prevent="submit">
+      <AppCallout v-if="missing.length" variant="info" :icon="null" class="quick-add__needs">
+        Fill what {{ stageName }} needs, then Enter adds.
+      </AppCallout>
       <v-textarea
         ref="field"
         v-model="title"
@@ -65,6 +69,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import QuickAddRequired from '@/components/boards/board/QuickAddRequired.vue'
+import AppCallout from '@/components/common/AppCallout.vue'
 import type { ActionResult } from '@/stores/boardCardActions'
 import type { CardCreateExtras, StageRequiredField } from '@/types/boards'
 import { inOrder, missingFor, needsList, newCardFacts, NOT_ON_CREATE } from '@/utils/stageRules'
@@ -149,6 +154,9 @@ function submit(): void {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.quick-add__needs {
+  font-size: 12px;
 }
 .quick-add__status {
   margin: 0;

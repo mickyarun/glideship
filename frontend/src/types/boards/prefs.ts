@@ -27,8 +27,8 @@ export interface SavedFilters {
   label_ids: string[]
   priorities: BUDPriority[]
   archived: boolean
-  /** Not saved by the server yet; read when it is. */
-  repo_ids?: string[]
+  /** Linked repositories; the server drops ones no longer linked when it reads them. */
+  repo_ids: string[]
 }
 
 export interface PrefsRead {
@@ -65,6 +65,8 @@ export interface BoardPersonRead {
   avatar_url: string | null
   role: BoardRole
   via: BoardAccessVia
+  /** The team granting the role when ``via`` is team (the first by name), else null. */
+  team_name: string | null
 }
 
 export interface BoardPeopleRead {

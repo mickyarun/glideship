@@ -24,7 +24,7 @@ import { boardsApi } from '@/services/boardsApi'
 import { useBoardFilters } from './useBoardFilters'
 
 const save = vi.mocked(boardsApi.savePrefs)
-const SAVED = { q: 'seo', assignee_ids: [], label_ids: [], priorities: [], archived: false }
+const SAVED = { q: 'seo', assignee_ids: [], label_ids: [], priorities: [], repo_ids: [], archived: false }
 
 function setup() {
   const apply = vi.fn()
@@ -87,6 +87,16 @@ describe('useBoardFilters', () => {
     scope.stop()
   })
 
+  it('saves the repository filter with the rest, and restores it', () => {
+    const { f, scope } = setup()
+    f.restore('OPS', null)
+    f.filters.value = { ...f.filters.value, repo: 'r1' }
+    vi.advanceTimersByTime(PREFS_SAVE_DELAY_MS)
+    expect(save).toHaveBeenCalledWith('OPS', expect.objectContaining({ repo_ids: ['r1'] }))
+    expect(f.restore('OPS', { ...SAVED, repo_ids: ['r2'] }).repo).toBe('r2')
+    scope.stop()
+  })
+
   it('sends a pending save when the page goes away', () => {
     const { f, scope } = setup()
     f.restore('OPS', null)
@@ -102,7 +112,8 @@ describe('useBoardFilters', () => {
     f.restore('OPS', null)
     f.filters.value = { ...f.filters.value, query: 'x' }
     vi.advanceTimersByTime(PREFS_SAVE_DELAY_MS)
-    await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[boards] prefs save failed:', expect.any(Error)))
+    // The message only, never the error object (its request can carry a token).
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith('[boards] prefs save failed:', 'offline'))
     error.mockRestore()
     scope.stop()
   })

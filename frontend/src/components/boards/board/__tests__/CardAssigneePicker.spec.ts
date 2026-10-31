@@ -57,14 +57,14 @@ describe('CardAssigneePicker on a board tile', () => {
     expect(checked.map(el => el.textContent?.trim())).toEqual(['Ben Lim'])
   })
 
-  it("offers a team's members too, saying how they have access, and assigns one", async () => {
+  it("offers a team's members too, naming the team that gives them access, and assigns one", async () => {
     update.mockResolvedValue(makeCardDetail('3', { key: 'SEO-3', number: 3, assignee_ids: ['u7'], updated_at: '2026-10-02T00:00:00Z' }))
-    const team = { id: 'u7', name: 'Chen Wu', avatar_url: null, role: 'editor' as const, via: 'team' as const }
+    const team = { id: 'u7', name: 'Chen Wu', avatar_url: null, role: 'editor' as const, via: 'team' as const, team_name: 'Writers' }
     const { held } = await mountTile({ people: [...PEOPLE, team] })
     await openBy('Assignees for SEO-3')
     expect(options()).toEqual(['Asha Rao', 'Ben Lim', 'Chen Wu'])
     const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(o => o.textContent?.includes('Chen Wu'))!
-    expect(row.textContent).toContain('via a team')
+    expect(row.textContent).toContain('via Writers')
     row.click()
     await flushPromises()
     expect(update).toHaveBeenCalledWith('SEO', 3, { assignee_ids: ['u7'] })
@@ -74,7 +74,7 @@ describe('CardAssigneePicker on a board tile', () => {
   it('narrows the list as I search', async () => {
     await mountTile()
     await openBy('Assignees for SEO-3')
-    const search = document.querySelector<HTMLInputElement>('.assignees__menu input')!
+    const search = document.querySelector<HTMLInputElement>('.people-pick input')!
     search.value = 'ben'
     search.dispatchEvent(new Event('input'))
     await flushPromises()

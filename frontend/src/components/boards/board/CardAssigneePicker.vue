@@ -44,50 +44,13 @@
         <v-icon v-if="!assigned.length" icon="mdi-account-plus-outline" size="18" aria-hidden="true" />
       </button>
     </template>
-    <v-card min-width="260" max-width="320" elevation="8" class="assignees__menu">
-      <v-text-field
-        v-model="query"
-        label="Search people"
-        prepend-inner-icon="mdi-magnify"
-        density="compact"
-        hide-details
-        autofocus
-        class="ma-2"
-      />
-      <v-list
-        density="compact"
-        max-height="280"
-        role="listbox"
-        aria-multiselectable="true"
-        :aria-label="`Assignees for ${card.key}`"
-      >
-        <v-list-item v-if="!shown.length" :title="query ? 'No one matches' : 'No one else can open this board'" disabled />
-        <v-list-item
-          v-for="p in shown"
-          :key="p.id"
-          role="option"
-          :aria-selected="card.assignee_ids.includes(p.id)"
-          @click="toggle(p.id)"
-        >
-          <template #prepend>
-            <v-icon
-              :icon="card.assignee_ids.includes(p.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
-              size="18"
-              class="mr-2"
-              aria-hidden="true"
-            />
-            <AppMonogram :name="p.name" :src="p.photo" :size="22" class="mr-2" />
-          </template>
-          <v-list-item-title>{{ p.name }}</v-list-item-title>
-          <v-list-item-subtitle v-if="p.note" class="assignees__note">{{ p.note }}</v-list-item-subtitle>
-        </v-list-item>
-      </v-list>
-    </v-card>
+    <PeoplePickList :people="everyone" :selected="card.assignee_ids" :label="`Assignees for ${card.key}`" @toggle="toggle" />
   </v-menu>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import PeoplePickList from '@/components/boards/board/PeoplePickList.vue'
 import AppMonogram from '@/components/common/AppMonogram.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
 import { useCardQuickEdit } from '@/composables/useCardQuickEdit'
@@ -102,7 +65,6 @@ const quick = useCardQuickEdit()
 const { nameFor, photoFor } = useMemberDirectory()
 const { people } = useBoardContext()
 const open = ref(false)
-const query = ref('')
 
 const assigned = computed(() =>
   props.card.assignee_ids.map(id => {
@@ -112,12 +74,7 @@ const assigned = computed(() =>
 )
 const names = computed(() => `Assigned to ${wordList(assigned.value.map(p => p.name))}`)
 // Worked out only while the list is open, so tiles don't each walk the directory.
-const shown = computed(() => {
-  if (!open.value) return []
-  const q = query.value.trim().toLowerCase()
-  const everyone = quick.people(props.card.assignee_ids)
-  return q ? everyone.filter(p => p.name.toLowerCase().includes(q)) : everyone
-})
+const everyone = computed(() => (open.value ? quick.people(props.card.assignee_ids) : []))
 
 async function toggle(id: string): Promise<void> {
   const ids = props.card.assignee_ids
@@ -145,9 +102,6 @@ async function toggle(id: string): Promise<void> {
   background: transparent;
   color: rgb(var(--v-theme-on-surface-variant));
   cursor: pointer;
-}
-.assignees__note {
-  font-size: 12px;
 }
 .assignees__trigger:hover {
   background: rgb(var(--v-theme-surface-bright));

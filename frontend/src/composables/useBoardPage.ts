@@ -17,7 +17,9 @@
 // who can be assigned and its linked repositories, and follow
 // ``board:<id>`` for other tabs' and people's changes. This tab's own echoes
 // are dropped by origin. A reconnect, a stage, label or member change
-// reloads the board; losing access lands on the no-access state.
+// reloads the board; a change to who can open it reloads its people; a PRD
+// saved elsewhere lets its card into stages that need one. Losing access
+// lands on the no-access state.
 
 import { computed, ref, watch, type Ref } from 'vue'
 import { useBoard } from '@/composables/useBoard'
@@ -30,6 +32,7 @@ import { useBoardCardsStore } from '@/stores/boardCards'
 import { useBoardsStore } from '@/stores/boards'
 import { boardTopic, type BoardSocketMessage, type CardEvent, type MemberRead } from '@/types/boards'
 import { coalesced } from '@/utils/coalesce'
+import { logFailure } from '@/utils/logFailure'
 
 export function useBoardPage(key: Ref<string>) {
   const board = useBoard()
@@ -48,7 +51,7 @@ export function useBoardPage(key: Ref<string>) {
       const reply = await boardsApi.members(k)
       if (mine === membersSeq && k === key.value) members.value = reply.members
     } catch (err) {
-      console.error('[boards] members fetch failed:', err)
+      logFailure('boards', 'members fetch', err)
     }
   }
 
@@ -98,6 +101,7 @@ export function useBoardPage(key: Ref<string>) {
   // at most one more after it); while a board opens, its own load is enough.
   const resyncOnce = coalesced(async () => {
     void repos.load(key.value, () => cards.boardKey === key.value)
+    void people.load(key.value, () => cards.boardKey === key.value)
     await refreshBoard()
     await cards.loadAll({ keep: true })
   })
@@ -149,6 +153,13 @@ export function useBoardPage(key: Ref<string>) {
         refresh()
         void loadMembers(key.value)
         void people.load(key.value)
+      },
+      people_changed: () => {
+        if (forOpenBoard()) void people.load(key.value, () => cards.boardKey === key.value)
+      },
+      // card_updated follows with the card's facts; this covers the moment between.
+      doc_updated: message => {
+        if (forOpenBoard() && message.kind === 'prd') cards.patchCard(message.card_id, { has_prd: true })
       },
       repos_changed: message => {
         if (!forOpenBoard()) return

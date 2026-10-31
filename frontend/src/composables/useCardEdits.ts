@@ -27,6 +27,7 @@ import type { CardDetail, CardEvent, CardUpdate } from '@/types/boards'
 import { isOlder } from '@/utils/boardColumns'
 import { entryRefusal } from '@/utils/entryRefusal'
 import { extractApiError } from '@/utils/errors'
+import { logFailure } from '@/utils/logFailure'
 
 type Mirrored = CardEvent['event']
 
@@ -78,9 +79,17 @@ export function useCardEdits(card: BoardCard) {
     return run(patch, (key, n) => boardCardApi.update(key, n, patch), 'card_updated', "Couldn't save the change. Try again.")
   }
 
-  /** Move to the bottom of a stage; ``confirm`` enters a Done stage with checklist items open. */
-  function moveTo(stageId: string, confirm = false): Promise<EntryResult> {
-    if (detail.value?.stage_id === stageId) return Promise.resolve({ error: null })
+  /**
+   * Move to the bottom of a stage; ``confirm`` enters a Done stage with
+   * checklist items open. ``from``: the stage the card must still be in (a
+   * resend after a question), else it changed meanwhile and isn't moved.
+   */
+  function moveTo(stageId: string, confirm = false, from?: string): Promise<EntryResult> {
+    const held = detail.value
+    if (from && (!held || held.stage_id !== from || held.archived_at)) {
+      return Promise.resolve({ error: "The card changed meanwhile, so it wasn't moved. Try again." })
+    }
+    if (held?.stage_id === stageId) return Promise.resolve({ error: null })
     const body = { stage_id: stageId, ...(confirm ? { confirm_open_checklist: true } : {}) }
     return attempt(
       { stage_id: stageId },
@@ -118,7 +127,7 @@ export function useCardEdits(card: BoardCard) {
       detail.value = next
       mirror('card_updated', next)
     } catch (err) {
-      console.error('[boards] card refresh failed:', err)
+      logFailure('boards', 'card refresh', err)
     }
   }
 

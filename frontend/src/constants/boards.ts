@@ -101,6 +101,16 @@ export const DRAG_ANIMATION_MS = 150
 /** How far a press must travel before it drags, so a slightly shaky click still opens the card. */
 export const DRAG_START_TOLERANCE_PX = 4
 
+/** How long the board's snackbar stays (one with a refusal waits to be dismissed). */
+export const TOAST_MS = 6000
+/** How long the fields a stage needs stay highlighted after "Open card" or "Show me". */
+export const FIELD_HIGHLIGHT_MS = 2500
+/** How often, and how many times, the card page looks for a field still drawing (a document loading). */
+export const FIELD_FOCUS_RETRY_MS = 100
+export const FIELD_FOCUS_TRIES = 30
+/** A stage's "Required to enter" saves once picking settles, so quick picks send one change. */
+export const REQUIRED_SAVE_DELAY_MS = 600
+
 /** A card's documents, in the order its Documents tab lists them. */
 export const DOC_LABELS: Record<CardDocKind, string> = {
   prd: 'PRD',

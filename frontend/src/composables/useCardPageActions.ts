@@ -16,8 +16,10 @@
 // announcement on success (and a fresh history, since the live channel
 // skips this tab's own changes), the snackbar on failure, and Undo after a
 // stage move, an archive or a deleted checklist line. Stage moves keep to
-// the stage's entry rules (useStageEntry); a refused one offers "Show me",
-// which brings the first missing field into view here.
+// the stage's entry rules (useStageEntry); a refused one keeps what the
+// stage needs on the page and offers "Show me", which brings the first
+// missing field into view here. A move resent after the checklist question
+// isn't sent if the card was archived or moved meanwhile.
 
 import type { ComputedRef } from 'vue'
 import type { BoardCard } from '@/composables/useBoardCard'
@@ -36,11 +38,18 @@ interface Parts {
   activity: ReturnType<typeof useCardActivity>
   feedback: ReturnType<typeof useBoardFeedback>
   stages: ComputedRef<StageRead[]>
-  /** Bring a field the stage needs into view on this page. */
-  showField: (field: StageRequiredField) => void
+  guide: FieldGuide
 }
 
-export function useCardPageActions({ card, edits, checklist, activity, feedback, stages, showField }: Parts) {
+/** How the page takes me to the fields a stage needs (useCardFieldFocus). */
+export interface FieldGuide {
+  /** Bring a field into view, keeping the stage's needs on the page. */
+  show: (field: StageRequiredField, stageId: string) => void
+  /** A stage refused the card: keep what it needs on the page. */
+  want: (stageId: string) => void
+}
+
+export function useCardPageActions({ card, edits, checklist, activity, feedback, stages, guide }: Parts) {
   const key = () => card.detail.value?.key ?? ''
   const stageName = (id: string) => stages.value.find(s => s.id === id)?.name ?? 'the stage'
 
@@ -54,14 +63,20 @@ export function useCardPageActions({ card, edits, checklist, activity, feedback,
   }
 
   const save = (patch: CardUpdate, success: string) => act(edits.update(patch), success)
-  const entry = useStageEntry({ stages: () => stages.value, feedback, fixLabel: 'Show me', fix: (_, f) => showField(f) })
+  const entry = useStageEntry({
+    stages: () => stages.value,
+    feedback,
+    fixLabel: 'Show me',
+    fix: (_, stage, missing) => guide.show(missing[0], stage.id),
+    onRefuse: (_, stage) => guide.want(stage.id),
+  })
 
   async function move(stageId: string, { undoable = true } = {}): Promise<boolean> {
     const held = card.detail.value
     const from = held?.stage_id
     const movedKey = key()
     if (!held || !from || from === stageId) return true
-    if (!(await entry.enter(held, stageId, confirm => edits.moveTo(stageId, confirm)))) return false
+    if (!(await entry.enter(held, stageId, confirm => edits.moveTo(stageId, confirm, from)))) return false
     feedback.announce(`Moved ${movedKey} to ${stageName(stageId)}`)
     activity.refresh()
     if (undoable) {

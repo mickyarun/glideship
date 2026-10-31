@@ -33,16 +33,18 @@ interface FieldRule {
   phrase: string
   /** On its own, for a picker chip. */
   name: string
+  /** In a list after a colon: "Writing needs: assignee, description". */
+  word: string
   met: (card: EntryFacts) => boolean
 }
 
 const FIELD_RULES: Record<StageRequiredField, FieldRule> = {
-  assignee: { phrase: 'an assignee', name: 'Assignee', met: c => c.assignee_ids.length > 0 },
-  due_date: { phrase: 'a due date', name: 'Due date', met: c => c.due_at !== null },
-  priority: { phrase: 'a priority', name: 'Priority', met: c => c.priority !== null },
-  label: { phrase: 'a label', name: 'Label', met: c => c.label_ids.length > 0 },
-  description: { phrase: 'a description', name: 'Description', met: c => c.has_description },
-  prd: { phrase: 'a PRD', name: 'PRD', met: c => c.has_prd },
+  assignee: { phrase: 'an assignee', name: 'Assignee', word: 'assignee', met: c => c.assignee_ids.length > 0 },
+  due_date: { phrase: 'a due date', name: 'Due date', word: 'due date', met: c => c.due_at !== null },
+  priority: { phrase: 'a priority', name: 'Priority', word: 'priority', met: c => c.priority !== null },
+  label: { phrase: 'a label', name: 'Label', word: 'label', met: c => c.label_ids.length > 0 },
+  description: { phrase: 'a description', name: 'Description', word: 'description', met: c => c.has_description },
+  prd: { phrase: 'a PRD', name: 'PRD', word: 'PRD', met: c => c.has_prd },
 }
 
 /** Every required field, in the server's declaration order. */
@@ -93,6 +95,17 @@ export function needsShort(fields: readonly StageRequiredField[]): string {
 /** "In progress needs an assignee and a PRD first.", the server's own wording. */
 export function needsSentence(stageName: string, fields: readonly StageRequiredField[]): string {
   return `${stageName} needs ${needsList(fields)} first.`
+}
+
+/** "Writing needs: assignee, description", for the card page's note. */
+export function needsWords(stageName: string, fields: readonly StageRequiredField[]): string {
+  return `${stageName} needs: ${fields.map(f => FIELD_RULES[f].word).join(', ')}`
+}
+
+/** Why ``card`` can't enter ``stage`` yet ("Needs an assignee"), or undefined when it can. */
+export function blockReason(card: EntryFacts, stage: Pick<StageRead, 'required_fields'>): string | undefined {
+  const missing = missingFor(card, stage)
+  return missing.length ? needsShort(missing) : undefined
 }
 
 /** Whether entering ``to`` from ``from`` completes the card (null ``from``: a new card). */

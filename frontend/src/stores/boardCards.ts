@@ -25,7 +25,7 @@ import { ref } from 'vue'
 import { boardsApi } from '@/services/boardsApi'
 import { cardActions } from '@/stores/boardCardActions'
 import type { CardEvent, CardSummary, StageRead } from '@/types/boards'
-import { emptyColumn, mergePage, type Columns } from '@/utils/boardColumns'
+import { emptyColumn, locate, mergePage, type Columns } from '@/utils/boardColumns'
 import { applyCardEvent as applyEvent, bumpCount } from '@/utils/boardEvents'
 import { NO_FILTERS, toListParams, type CardFilters } from '@/utils/boardFilters'
 import { extractApiError } from '@/utils/errors'
@@ -119,6 +119,12 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
     }
   }
 
+  /** A loaded card's fact changed with no card event to say so (a PRD saved elsewhere). */
+  function patchCard(cardId: string, patch: Partial<CardSummary>): void {
+    const found = locate(columns.value, cardId)
+    if (found) Object.assign(found.card, patch)
+  }
+
   /** Apply someone else's card change. */
   function applyCardEvent(message: CardEvent): void {
     applyEvent({ columns: columns.value, counts: counts.value, filters: filters.value }, message)
@@ -135,7 +141,7 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
 
   return {
     boardKey, boardId, columns, counts, filters,
-    reset, clear, syncStages, loadStage, loadAll, setFilters, applyCardEvent, clearRepo,
+    reset, clear, syncStages, loadStage, loadAll, setFilters, applyCardEvent, clearRepo, patchCard,
     ...actions,
   }
 })

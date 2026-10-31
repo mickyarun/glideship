@@ -110,7 +110,8 @@ const props = defineProps<{
 const emit = defineEmits<{ result: [error: string | null, success: string]; dirty: [what: string | null] }>()
 
 const docs = useBoardCardDocsStore()
-const kind = ref<CardDocKind>(DOC_KINDS[0])
+/** The document shown; the page sets it too (to the PRD, for a stage that needs one). */
+const kind = defineModel<CardDocKind>('kind', { default: DOC_KINDS[0] })
 const compareId = ref<string | null>(null)
 /** What the editor has unsaved, if anything. */
 const draft = ref<string | null>(null)

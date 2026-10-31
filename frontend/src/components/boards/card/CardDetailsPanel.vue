@@ -19,13 +19,23 @@
      repository, start and due dates, and when it was made and changed.
      Editors get a Change control on each; viewers read plain text. Each
      field a stage can require is marked (data-card-field) so a refused
-     move can bring it into view. -->
+     move can bring it into view; while a stage still needs some, a note
+     under Stage says which, with Show me. Anyone assigned who lost access
+     stays in the picker so they can be taken off. -->
 <template>
   <AppPanel title="Details">
     <dl class="bud-facts">
       <dt>Stage</dt>
       <dd class="bud-facts__split">
         <CardStageField :card="card" :stages="stages" :can-move="canMove" @move="emit('move', $event)" />
+      </dd>
+      <dd v-if="wanted" class="bud-facts__wanted">
+        <AppCallout variant="warning" role="status">
+          {{ needsWords(wanted.stage.name, wanted.missing) }}
+          <template #actions>
+            <v-btn variant="text" size="small" color="primary" @click="emit('show-me')">Show me</v-btn>
+          </template>
+        </AppCallout>
       </dd>
 
       <dt>Assignees</dt>
@@ -102,22 +112,30 @@ import CardPickMenu, { type PickItem } from '@/components/boards/card/CardPickMe
 import CardPriorityField from '@/components/boards/card/CardPriorityField.vue'
 import CardRepoField from '@/components/boards/card/CardRepoField.vue'
 import CardStageField from '@/components/boards/card/CardStageField.vue'
+import AppCallout from '@/components/common/AppCallout.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import AppTag from '@/components/common/AppTag.vue'
+import type { WantedFields } from '@/composables/useCardFieldFocus'
 import { labelColor } from '@/constants/boards'
 import type { BUDPriority } from '@/types'
-import { VIA_NOTES } from '@/composables/useBoardPeople'
 import type { BoardPersonRead, BoardRepoRead, CardDetail, LabelRead, StageRead } from '@/types/boards'
+import { pickPeople } from '@/utils/boardPeople'
 import { formatDate } from '@/utils/date'
 import { wordList } from '@/utils/format'
+import { needsWords } from '@/utils/stageRules'
 
 const props = defineProps<{
   card: CardDetail
   stages: StageRead[]
   labels: LabelRead[]
   people: BoardPersonRead[]
+  /** The people list loaded and is current, so someone missing from it has no access now. */
+  peopleKnown: boolean
   repos: BoardRepoRead[]
   nameFor: (id: string) => string
+  photoFor: (id: string) => string | null
+  /** A stage the card was refused, and what it still needs. */
+  wanted?: WantedFields | null
   canEdit: boolean
   canMove: boolean
   saveDate: (field: 'start_at' | 'due_at', iso: string | null) => Promise<boolean>
@@ -130,12 +148,14 @@ const emit = defineEmits<{
   priority: [priority: BUDPriority | null]
   repo: [repoId: string | null]
   'due-done': [done: boolean]
+  'show-me': []
 }>()
 
 const assigneeNames = computed(() => wordList(props.card.assignee_ids.map(props.nameFor)))
 const cardLabels = computed(() => props.labels.filter(l => props.card.label_ids.includes(l.id)))
 const memberItems = computed<PickItem[]>(() =>
-  props.people.map(p => ({ id: p.id, title: p.name, person: true, photo: p.avatar_url, note: VIA_NOTES[p.via] })),
+  pickPeople(props.people, props.card.assignee_ids, props.peopleKnown, { nameFor: props.nameFor, photoFor: props.photoFor })
+    .map(p => ({ id: p.id, title: p.name, person: true, photo: p.photo, note: p.note })),
 )
 const labelItems = computed<PickItem[]>(() => props.labels.map(l => ({ id: l.id, title: l.name, color: labelColor(l.color) })))
 </script>
@@ -154,6 +174,9 @@ const labelItems = computed<PickItem[]>(() => props.labels.map(l => ({ id: l.id,
 .bud-facts dd {
   margin: 0;
   min-width: 0;
+}
+.bud-facts__wanted {
+  grid-column: 1 / -1;
 }
 .bud-facts__split {
   display: flex;

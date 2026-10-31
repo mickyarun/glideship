@@ -18,7 +18,9 @@
 // Columns carry ``data-stage-id`` and cards ``data-card-id``. While a
 // drag is on, ``dragging`` says which card and which column it's over,
 // so a column can warn before a drop takes it past its WIP limit and
-// light up as the drop target.
+// light up as the drop target. A stage the card can't enter yet
+// (``dragBlocks``, kept by the board) refuses the card outright: no slot
+// opens there, and letting go over it is reported as a blocked landing.
 
 import { ref } from 'vue'
 import { DRAG_ANIMATION_MS, DRAG_START_TOLERANCE_PX, DRAG_TOUCH_DELAY_MS } from '@/constants/boards'
@@ -50,6 +52,9 @@ export interface DragState {
 /** The drag in progress on the board, if any. */
 export const dragging = ref<DragState | null>(null)
 
+/** While a card is dragged, each stage it can't enter yet with why (the board keeps it from dropBlocks). */
+export const dragBlocks = ref<Record<string, string>>({})
+
 /** The move a drag ended in, or null when the card went back where it was. */
 export function dropFromDragEnd(event: DragEndLike): CardDrop | null {
   const cardId = event.item.dataset.cardId
@@ -66,11 +71,23 @@ export function dragStarted(event: { item: HTMLElement; from: HTMLElement }): vo
   if (cardId && stageId) dragging.value = { cardId, fromStageId: stageId, overStageId: stageId }
 }
 
-/** SortableJS's onMove: note the column the card is over. Never cancels the move. */
+/** SortableJS's onMove: note the column the card is over; false (no slot) for one it can't enter. */
 export function dragMoved(event: { to: HTMLElement }): boolean {
   const over = event.to.dataset.stageId
   if (dragging.value && over) dragging.value = { ...dragging.value, overStageId: over }
-  return true
+  return !(over && dragBlocks.value[over])
+}
+
+/** Whether the drag in progress is over a stage it can't enter (no slot should show anywhere). */
+export function overBlocked(): boolean {
+  const drag = dragging.value
+  return !!drag && drag.overStageId !== drag.fromStageId && !!dragBlocks.value[drag.overStageId]
+}
+
+/** Where the drag in progress would land if let go now, when that's a stage it can't enter. */
+export function blockedLanding(): { cardId: string; stageId: string } | null {
+  const drag = dragging.value
+  return drag && overBlocked() ? { cardId: drag.cardId, stageId: drag.overStageId } : null
 }
 
 /** Whether the drag in progress, dropped here, would take this stage past its WIP limit. */

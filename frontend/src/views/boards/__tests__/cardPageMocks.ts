@@ -48,7 +48,7 @@ export function cardDefaults(capabilities: BoardAction[], card: CardDetail = CAR
   boardWith(capabilities, card)
   const { boards, cardApi, http } = mocked
   boards.members.mockResolvedValue({ members: [{ user_id: 'u9', name: 'Meera Iyer', avatar_url: null, role: 'admin' }], teams: [] })
-  boards.people.mockResolvedValue({ items: [{ id: 'u9', name: 'Meera Iyer', avatar_url: null, role: 'admin', via: 'member' }] })
+  boards.people.mockResolvedValue({ items: [{ id: 'u9', name: 'Meera Iyer', avatar_url: null, role: 'admin', via: 'member', team_name: null }] })
   boards.switcher.mockResolvedValue({ starred: [], recent: [], other: [], delivery: null })
   boards.limits.mockRejectedValue(new Error('offline'))
   boards.cards.mockResolvedValue({ items: [], next_cursor: null })

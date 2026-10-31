@@ -15,13 +15,13 @@
 // Cards: a column's summaries and one card's detail. Mirrors
 // backend/app/schemas/boards/card.py.
 
-import type { BUDPriority, BUDStatus } from '@/types'
+import type { BUDPriority } from '@/types'
 import type { StageRequiredField } from '@/types/boards/board'
 
-/** A BUD a card was handed over to, with that BUD's status. */
+/** A BUD a card was handed over to, with that BUD's status (the server sends it as text). */
 export interface HandoverChip {
   bud_id: string
-  status: BUDStatus
+  status: string
 }
 
 export interface CardSummary {
@@ -70,6 +70,7 @@ export interface CardCreate {
   stage_id?: string | null
   description_md?: string | null
   priority?: BUDPriority | null
+  start_at?: string | null
   due_at?: string | null
   assignee_ids?: string[]
   label_ids?: string[]

@@ -14,10 +14,11 @@
  * limitations under the License.
  -->
 
-<!-- A board's filters: search, assignee (everyone who can open the board),
-     label, priority and repository (once the board links one), how many cards match ("11 of 13 cards", in a live region
-     that's always there), Clear filters, and Show archived. Every board
-     keeps my last filters (useBoardFilters saves them). -->
+<!-- A board's filters: search, the filter menus (BoardFilterMenus), how
+     many cards match ("11 of 13 cards", in a live region that's always
+     there), Clear filters, and Show archived. On phones the search stays
+     and the rest folds into one Filters button that opens a sheet. Every
+     board keeps my last filters (useBoardFilters saves them). -->
 <template>
   <div class="filter-bar" role="search" aria-label="Filter cards">
     <v-text-field
@@ -30,35 +31,53 @@
       clearable
       :maxlength="searchMax ?? undefined"
     />
-    <BoardFilterMenu v-model="assignee" label="Assignee" all-label="Anyone" :options="assigneeOptions(people)" />
-    <BoardFilterMenu v-if="labels.length" v-model="label" label="Label" all-label="Any label" :options="labelOptions(labels)" />
-    <BoardFilterMenu v-model="priority" label="Priority" all-label="Any priority" :options="priorityOptions()" />
-    <BoardFilterMenu v-if="repos.length" v-model="repo" label="Repository" all-label="Any repository" :options="repoOptions(repos)" />
-    <span class="filter-bar__count" role="status">{{ countText }}</span>
-    <v-btn v-if="hasFilters(model)" variant="text" size="small" prepend-icon="mdi-close" @click="emit('clear')">
-      Clear filters
-    </v-btn>
-    <!-- A text toggle, the same as Delivery's "Discarded". -->
-    <v-btn
-      variant="text"
-      prepend-icon="mdi-archive-outline"
-      :aria-pressed="archived"
-      :color="archived ? 'primary' : undefined"
-      class="filter-bar__archived"
-      @click="archived = !archived"
-    >
-      Archived
-    </v-btn>
+    <template v-if="xs">
+      <v-btn variant="outlined" prepend-icon="mdi-filter-variant" class="filter-bar__sheet-btn" @click="sheet = true">
+        {{ setCount ? `Filters (${setCount})` : 'Filters' }}
+      </v-btn>
+      <v-bottom-sheet v-model="sheet">
+        <v-card title="Filters" class="filter-bar__sheet">
+          <v-card-text class="filter-bar__sheet-body">
+            <BoardFilterMenus v-model="model" :labels="labels" :people="people" :repos="repos" stacked />
+            <v-btn variant="text" prepend-icon="mdi-archive-outline" :aria-pressed="archived" :color="archived ? 'primary' : undefined" @click="archived = !archived">
+              Archived
+            </v-btn>
+          </v-card-text>
+          <v-card-actions>
+            <v-btn v-if="hasFilters(model)" variant="text" @click="emit('clear')">Clear filters</v-btn>
+            <v-spacer />
+            <v-btn color="primary" variant="flat" @click="sheet = false">Done</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-bottom-sheet>
+    </template>
+    <BoardFilterMenus v-else v-model="model" :labels="labels" :people="people" :repos="repos" />
+    <div class="filter-bar__tail">
+      <span class="filter-bar__count" role="status">{{ countText }}</span>
+      <v-btn v-if="hasFilters(model) && !xs" variant="text" size="small" prepend-icon="mdi-close" @click="emit('clear')">
+        Clear filters
+      </v-btn>
+      <!-- A text toggle, the same as Delivery's "Discarded". -->
+      <v-btn
+        v-if="!xs"
+        variant="text"
+        prepend-icon="mdi-archive-outline"
+        :aria-pressed="archived"
+        :color="archived ? 'primary' : undefined"
+        @click="archived = !archived"
+      >
+        Archived
+      </v-btn>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import BoardFilterMenu from '@/components/buds/board/BoardFilterMenu.vue'
+import { computed, ref } from 'vue'
+import { useDisplay } from 'vuetify'
+import BoardFilterMenus from '@/components/boards/board/BoardFilterMenus.vue'
 import type { BoardPersonRead, BoardRepoRead, LabelRead } from '@/types/boards'
-import {
-  assigneeOptions, hasFilters, labelOptions, priorityOptions, repoOptions, type CardFilters,
-} from '@/utils/boardFilters'
+import { filterCount, hasFilters, type CardFilters } from '@/utils/boardFilters'
 import { plural } from '@/utils/format'
 
 const props = defineProps<{
@@ -76,20 +95,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{ clear: [] }>()
 const model = defineModel<CardFilters>({ required: true })
+const { xs } = useDisplay()
+const sheet = ref(false)
 
-// Each control writes a whole new filters object, so the parent sees one change.
-function field<K extends keyof CardFilters>(key: K) {
-  return computed<CardFilters[K]>({
-    get: () => model.value[key],
-    set: value => {
-      model.value = { ...model.value, [key]: value }
-    },
-  })
-}
-const assignee = field('assignee')
-const label = field('label')
-const priority = field('priority')
-const repo = field('repo')
 const archived = computed<boolean>({
   get: () => model.value.archived,
   set: value => {
@@ -103,6 +111,8 @@ const query = computed<string | null>({
     model.value = { ...model.value, query: value ?? '' }
   },
 })
+// The search box shows its own; the button counts the rest.
+const setCount = computed(() => filterCount({ ...model.value, query: '' }))
 
 const countText = computed(() => {
   const shown = `${props.shown}${props.more ? '+' : ''}`
@@ -117,28 +127,32 @@ const countText = computed(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .filter-bar__search {
-  flex: 0 1 260px;
-  min-width: 180px;
+  flex: 0 1 220px;
+  min-width: 160px;
+}
+/* Count, Clear and Archived travel together: when the row is full they
+   wrap as one, to the end of the next line, rather than a lone filter. */
+.filter-bar__tail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 .filter-bar__count {
   font-size: 13px;
   color: rgb(var(--v-theme-on-surface-variant));
 }
-.filter-bar__archived {
-  flex: 0 0 auto;
+.filter-bar__sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 @media (max-width: 600px) {
   .filter-bar__search {
     flex-basis: 100%;
-  }
-  /* The filters wrap; the count then closes the last row, at its end,
-     rather than leaving Archived alone on a row of its own. */
-  .filter-bar__count {
-    order: 1;
-    margin-left: auto;
   }
 }
 </style>

@@ -81,11 +81,7 @@ export function toListParams(f: CardFilters) {
   }
 }
 
-/**
- * Saved prefs hold lists; the bar picks one of each. The server doesn't
- * save a repository yet (its saved filters refuse unknown fields), so the
- * Repository filter is read when a save brings one and never sent.
- */
+/** Saved prefs hold lists; the bar picks one of each. */
 export function fromSaved(saved: SavedFilters | null | undefined): CardFilters {
   if (!saved) return { ...NO_FILTERS }
   return {
@@ -104,6 +100,7 @@ export function toSaved(f: CardFilters): SavedFilters {
     assignee_ids: f.assignee ? [f.assignee] : [],
     label_ids: f.label ? [f.label] : [],
     priorities: f.priority ? [f.priority] : [],
+    repo_ids: f.repo ? [f.repo] : [],
     archived: f.archived,
   }
 }
@@ -113,8 +110,22 @@ export function assigneeOptions(people: BoardPersonRead[]): FilterOption[] {
   return people.map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))
 }
 
-export function repoOptions(repos: BoardRepoRead[]): FilterOption[] {
-  return repos.map(r => ({ value: r.id, label: r.name }))
+export const UNKNOWN_REPO = 'Unknown repository'
+
+/**
+ * The board's linked repositories; a filter set on one the list doesn't
+ * have (still loading, failed, or just unlinked) shows as Unknown repository
+ * so it can still be seen and cleared.
+ */
+export function repoOptions(repos: BoardRepoRead[], selected: string | null = null): FilterOption[] {
+  const options = repos.map(r => ({ value: r.id, label: r.name }))
+  if (selected && !repos.some(r => r.id === selected)) options.push({ value: selected, label: UNKNOWN_REPO })
+  return options
+}
+
+/** How many filters are set (the archived view isn't one), for a collapsed Filters button. */
+export function filterCount(f: CardFilters): number {
+  return [f.query.trim() !== '', f.assignee, f.label, f.priority, f.repo].filter(Boolean).length
 }
 
 export function labelOptions(labels: LabelRead[]): FilterOption[] {
