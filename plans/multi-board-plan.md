@@ -612,11 +612,12 @@ All endpoints are under `/api/v1/boards`, with thin handlers, Pydantic schemas i
 - `GET /api/v1/buds/{id}` gains an `origin_card` block when one exists.
 
 **Import**
-- `POST /imports/trello`: JSON upload, or `{source: "api", trello_board_id}`. Returns `202` with
+- `POST /imports/trello/upload` (multipart `file`) and `POST /imports/trello/api`
+  (`{trello_board_id}`): create a session per source. Both return `202` with
   `{jobId, sessionId}`.
-- `GET /imports/trello/{id}`
-- `PUT /imports/trello/{id}/mapping`
-- `POST /imports/trello/{id}/start`: returns `202`.
+- `GET /imports/trello/boards`: the connected Trello member's boards, for API mode.
+- `GET /imports/{id}`, `PUT /imports/{id}/mapping`, and `POST /imports/{id}/start` (`202`):
+  generic across sources.
 - `PUT` and `DELETE /api/v1/settings/trello` (engineering router, `integrations:configure`):
   stores or removes the API key and token.
 
@@ -1301,7 +1302,9 @@ Only the extract step differs.
 ### Upload mode (JSON)
 
 1. A board admin, or anyone with `boards:create` for a new board, uploads the board's JSON
-   export. The size cap is `BoardsConfig.import_max_upload_bytes` (default 50 MB).
+   export. The size cap is `BoardsConfig.import_max_upload_bytes`, which defaults to (and can't
+   exceed) the global request body limit less its framing room, 25 MB today. Bigger boards come
+   in over API mode.
 2. The parse job (`JOB_IMPORT_DISCOVER`, generic across sources, registered in `services/job_handlers.py`) reads the file
    and fills `discovery`: lists, labels, members, card and comment counts, and a warning flag
    when the action count hits 1,000, since older comments are then missing. The warning
@@ -1366,18 +1369,69 @@ only. That avoids pulling arbitrary URLs from user-supplied JSON. API mode downl
 
 ### As built (backend)
 
-- `ImportSource` also has `prepare(ctx)` (stages, labels and people on the target, find-or-make
-  so a resume is safe), `prefetch(item, ctx)` (file downloads before the batch takes its stage
-  and numbering locks), `discard(item)` and `close()`. `iter_items` takes the session.
-- API mode stores the fetched board and comments as the session's file, so both modes parse
-  the same JSON. Sessions gain `source_ref` (the Trello board id) and `result` (per-status
-  counts and what was dropped).
+- **A source supplies drafts; the rest is shared.** `ImportSource` is an async context manager
+  with `check_startable`, `mapping_ids`, `discover`, `load` (card drafts in a stable order, plus
+  labels) and `prefetch(items, ctx)`. The board plan (`board_plan.py`), the card writer
+  (`card_writer.py`), the drafts (`draft.py`), the batches and the item maps are generic. Mapping
+  vocabulary is neutral: `groups` / `group_id` (a Trello list) and `members`. The session's
+  `discovery` is a union keyed on `source_kind`. `external_id` namespacing is each source's job,
+  since the maps are keyed by source kind.
+- **Jira doesn't fit this framework.** It imports cards into one board; Jira issues become BUDs,
+  so the Jira import keeps its own pipeline.
+- **Parsed once.** An upload is parsed when it's created (and an API snapshot when it's
+  fetched): array sizes are counted against `import_max_cards`, `_actions`, `_lists`,
+  `_members`, `_labels`, `_checklists` and `_check_items` before any model is built, then the
+  board is validated and stored in a compact form (comments only, dropped data as counts).
+  Discovery and the run read that file. Hostile JSON (too deep, huge numbers) reads as "not a
+  board". API snapshots have their own byte cap, `import_max_snapshot_bytes`, read in chunks.
+- **Clean data.** Control characters, NUL and bidi overrides are stripped from every imported
+  text. Links (the card's Trello URL, the board URL, the board picker's URLs) are kept only as
+  http(s); short links only when they look like one. An unmapped author's label is cut to fit
+  its column. A comment cut at the length cap counts as dropped. Every imported comment carries
+  `import_source` (a nullable enum on `board_card_comments`), mapped author or not, so the UI can
+  say "via Trello import". The `imported` event carries `source`, `source_key` and `url`.
+- **Order and archive rules.** A position that isn't a number sorts last. A card in an archived
+  Trello list follows the archived-cards choice exactly like a closed card. Labels match by name
+  ignoring case, so two Trello labels differing only in case become one board label with the
+  first one's colour.
+- **Batches.** Each batch reads the item maps, ends its transaction, prefetches files (API mode)
+  with no locks, then locks the stages and reads the maps again, so two sessions importing one
+  Trello board into one board can't duplicate cards. Card numbers are claimed in one call; a
+  failed card hands its number to the next and unused numbers are released, so numbering stays
+  contiguous. The importer's role and the board's state are checked again before each commit.
+  Prefetched files no committed card holds are deleted, also when the commit fails. A card's
+  dropped counts are added only once it lands.
+- **Runs and resumes.** A new board, its stages, labels and people commit together after
+  `prepare`. Every run walks all items from the first and the maps skip what's on the board, so
+  a resume retries cards that failed. A run that ends with failed cards ends `failed`, saying how
+  many, so it can be started again; one that ends clean completes and its source file is
+  deleted. A map whose card was deleted can be imported again. `board_imported` carries the
+  run's status, failures included. The result reports `attachment_bytes` and
+  `suppressed_events` (the per-card socket events the silent run didn't send).
+- **Byte caps.** `import_max_attachment_bytes` per session counts across resumes
+  (`attachment_bytes` on the session); `import_org_attachment_bytes_per_day` caps the org's
+  sessions active in the last day.
+- **Abuse limits.** Creating a session needs the import rights, fewer than
+  `import_max_open_per_user` / `_per_org` unfinished sessions (409), and passes a per-person
+  rate limit (`import_creates_per_window` per `import_create_window_seconds`, 429 with
+  Retry-After; fails open without Redis), all before an upload is read. A full or closing job
+  queue answers 503 with `Retry-After: import_busy_retry_after_seconds`; the session is marked
+  failed and starting it again retries.
+- **API mode needs `integrations:configure`**, for the board picker, creating, re-reading and
+  starting; upload mode keeps `boards:create` / board admin. Trello calls share one limiter per
+  token across the process (keyed by a hash of the token, default 80 calls per 10 s), retry
+  429s, 5xx and dropped connections with backoff, and cap any `Retry-After` at
+  `trello_max_wait_seconds`. The Jira client keeps its own retry loop for now.
+- **Lifecycle.** A restart marks sessions that were parsing or running as failed, each with a
+  message saying what starting again does; a failed session with no discovery reads its board
+  again on start. An hourly sweep deletes pending, ready and failed sessions untouched for
+  `import_session_retention_days`, with their files; their item maps stay (`session_id` goes
+  null), so what they imported stays imported.
 - People mapped onto a **new** board become its editors, as they were members of the Trello
   board. On an existing board they must already have access.
 - A new stage name the target board already has is refused at review; the list maps onto the
-  existing stage instead.
-- Uploads are also bound by the global request body limit (`MAX_REQUEST_BODY_MB`, and nginx's
-  `client_max_body_size`), which sits below the 50 MB import default.
+  existing stage instead. An existing stage deleted after review stops the start (409) or the
+  run.
 - The board hears one `board_imported` socket event when the run finishes; the frontend union
   gains it with the import UI.
 
