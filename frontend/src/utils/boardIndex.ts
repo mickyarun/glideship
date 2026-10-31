@@ -24,8 +24,11 @@ import type { CustomBoardItem } from '@/types/boards'
  */
 export type BoardSort = 'recent' | 'name' | 'active'
 
-/** Boards whose name or key contains the search text. */
-export function searchBoards(boards: CustomBoardItem[], query: string): CustomBoardItem[] {
+/** The index lists active boards, or (``?archived=1``) the archived ones. */
+export type BoardScope = 'active' | 'archived'
+
+/** Boards (or rows about them) whose name or key contains the search text. */
+export function searchBoards<T extends { name: string; key: string }>(boards: T[], query: string): T[] {
   const q = query.trim().toLowerCase()
   if (!q) return boards
   return boards.filter(b => b.name.toLowerCase().includes(q) || b.key.toLowerCase().includes(q))

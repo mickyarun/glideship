@@ -14,13 +14,15 @@
  * limitations under the License.
  -->
 
-<!-- The switcher's footer: All boards (with the count once known), New
-     board for people who may create one, and the keyboard hint. -->
+<!-- The switcher's footer: All boards (with the count once known), the
+     archived boards, New board for people who may create one, and the
+     keyboard hint. -->
 <template>
   <footer class="switcher-foot">
     <router-link :to="{ name: 'boards' }" @click="emit('navigate')">
       All boards<template v-if="count !== null"> ({{ count }})</template>
     </router-link>
+    <router-link :to="{ name: 'boards', query: { archived: '1' } }" @click="emit('navigate')">Archived boards</router-link>
     <button v-if="canCreateBoards" type="button" class="switcher-foot__new" @click="emit('new-board')">New board</button>
     <span class="switcher-foot__keys" aria-hidden="true">↑↓ move · Enter open · ⌘Enter new tab · Esc close</span>
   </footer>

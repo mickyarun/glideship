@@ -31,7 +31,7 @@
     :aria-labelledby="headingId"
     :data-stage-col="stage.id"
   >
-    <StageColumnHeader :id="headingId" :stage="stage" :count="count" />
+    <StageColumnHeader :id="headingId" :stage="stage" :count="count" :archived="archived" :more="column.cursor !== null" />
     <p v-if="goesOver && !dropBlock" class="stage-col__over" role="status">
       {{ stage.name }} goes over its limit of {{ limit }}. You can still drop here.
     </p>
@@ -121,7 +121,9 @@ import { wipLimit } from '@/utils/wip'
 const props = defineProps<{
   stage: StageRead
   column: Column
+  /** Open cards in the stage; in the archived view, the archived cards loaded. */
   count: number
+  archived?: boolean
   boardId: string
   boardKey: string
   stages: StageRead[]

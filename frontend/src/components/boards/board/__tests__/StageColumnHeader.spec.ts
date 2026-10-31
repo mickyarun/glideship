@@ -20,11 +20,11 @@ import { makeStage } from '@/components/boards/__tests__/fixtures'
 import { boardTestPlugins } from '@/components/boards/__tests__/mountHelpers'
 import StageColumnHeader from '@/components/boards/board/StageColumnHeader.vue'
 
-function header(count: number, wip_limit: number | null) {
+function header(count: number, wip_limit: number | null, extra: { archived?: boolean; more?: boolean } = {}) {
   const { plugins } = boardTestPlugins()
   return mount(StageColumnHeader, {
     global: { plugins: plugins as never[] },
-    props: { id: 'h', count, stage: makeStage('s1', { name: 'Writing', category: 'in_progress', wip_limit }) },
+    props: { id: 'h', count, stage: makeStage('s1', { name: 'Writing', category: 'in_progress', wip_limit }), ...extra },
   })
 }
 
@@ -48,6 +48,14 @@ describe('StageColumnHeader', () => {
       expect(w.find('.stage-head__count [aria-hidden="true"]').text()).toBe('12')
       expect(w.text()).not.toContain('Over')
     }
+  })
+
+  it('counts archived cards loaded in the archived view, with no limit, "+" while more wait', () => {
+    const w = header(5, 3, { archived: true, more: true })
+    expect(w.find('.stage-head__count [aria-hidden="true"]').text()).toBe('5+')
+    expect(w.find('.stage-head__count .d-sr-only').text()).toBe('5+ archived cards')
+    expect(w.text()).not.toContain('Over the WIP limit')
+    expect(header(1, null, { archived: true }).find('.stage-head__count .d-sr-only').text()).toBe('1 archived card')
   })
 
   it('names the category for screen readers', () => {

@@ -149,6 +149,18 @@ describe('BoardView', () => {
     expect(wrapper.findAllComponents(BoardStageColumn)).toHaveLength(0)
   })
 
+  it('counts the archived cards in each column of the archived view, not the open ones', async () => {
+    const detail = makeDetail({ stages: [makeStage('s1', { is_default: true, open_cards: 9, wip_limit: 3 }), makeStage('s2', { open_cards: 4 })] })
+    detail.filters = { q: '', assignee_ids: [], label_ids: [], priorities: [], repo_ids: [], archived: true }
+    api.get.mockResolvedValue(detail)
+    s1Cards = [makeCard('1'), makeCard('2')]
+    const { wrapper } = await mountBoardPage()
+    const columns = wrapper.findAllComponents(BoardStageColumn)
+    expect(columns.map(c => c.props('count'))).toEqual([2, 0])
+    expect(columns[0].find('.stage-head__count [aria-hidden="true"]').text()).toBe('2')
+    expect(wrapper.text()).not.toContain('Over the WIP limit')
+  })
+
   it('archives with an Undo that restores the card', async () => {
     api.archiveCard.mockResolvedValue({ ...makeCard('1'), board_key: 'OPS' } as never)
     api.restoreCard.mockResolvedValue({ ...makeCard('1', { updated_at: '2026-10-02T00:00:00Z' }), board_key: 'OPS' } as never)

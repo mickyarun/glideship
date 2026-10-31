@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What the board page counts: cards shown and open, whether more pages
+// What the board page counts: cards shown and open (and each column's
+// count, of archived cards in that view), whether more pages
 // wait, and the two board-wide states (a new board with no cards, and
 // filters that match nothing, with a summary of what's set).
 
@@ -25,6 +26,12 @@ export function useBoardStats(page: BoardPage, nameFor: (userId: string) => stri
   const columns = computed(() => Object.values(cards.columns))
   const shownCount = computed(() => columns.value.reduce((n, c) => n + c.items.length, 0))
   const totalOpen = computed(() => Object.values(cards.counts).reduce((n, c) => n + c, 0))
+  // The stage counts are of open cards; the archived view counts what it loaded.
+  const columnCounts = computed<Record<string, number>>(() =>
+    cards.filters.archived
+      ? Object.fromEntries(Object.entries(cards.columns).map(([id, c]) => [id, c.items.length]))
+      : cards.counts,
+  )
   const hasMore = computed(() => columns.value.some(c => c.cursor !== null))
   const allLoaded = computed(() => columns.value.length > 0 && columns.value.every(c => c.loaded))
   const noMatch = computed(() => allLoaded.value && hasFilters(cards.filters) && shownCount.value === 0)
@@ -38,5 +45,5 @@ export function useBoardStats(page: BoardPage, nameFor: (userId: string) => stri
   )
   const repoName = (id: string) => page.repos.find(id)?.name ?? null
   const summary = computed(() => filterSummary(cards.filters, nameFor, board.detail.value?.labels ?? [], repoName))
-  return { shownCount, totalOpen, hasMore, noMatch, emptyBoard, summary }
+  return { shownCount, totalOpen, columnCounts, hasMore, noMatch, emptyBoard, summary }
 }

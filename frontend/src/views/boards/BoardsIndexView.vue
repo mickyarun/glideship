@@ -16,9 +16,11 @@
 
 <!-- Every board I can open, with Delivery pinned full width for engineering
      members, a search and a sort, and "New board" and "Import from Trello"
-     for people who may create one (?new=1 opens New board, from the switcher). Lists nothing it can't open:
-     members-only boards I'm not on never reach this page. Under the grid,
-     the flow numbers for the same boards, sortable. -->
+     for people who may create one (?new=1 opens New board, from the
+     switcher). Lists nothing it can't open: members-only boards I'm not on
+     never reach this page. Under the grid, the flow numbers for the same
+     boards, narrowed by the same search. "Archived" (?archived=1) lists the
+     archived boards instead, which board admins can restore. -->
 <template>
   <AppPage title="Boards" :subtitle="subtitle">
     <template v-if="canCreateBoards" #actions>
@@ -37,57 +39,45 @@
       <v-skeleton-loader v-for="i in 6" :key="i" type="article" class="boards-grid__bone" />
     </div>
 
+    <template v-else-if="scope === 'archived' || store.customBoards.length || store.delivery">
+      <BoardsIndexTools v-model:scope="scope" v-model:query="query" v-model:sort="sort" />
+      <ArchivedBoardsList v-if="scope === 'archived'" :query="query ?? ''" />
+      <template v-else>
+        <div class="boards-grid">
+          <DeliveryTile v-if="store.delivery && deliveryMatches(store.delivery.name, query ?? '')" :item="store.delivery" />
+          <BoardTile v-for="board in shown" :key="board.id" :board="board" :done-label="done" @star="star" />
+        </div>
+        <p v-if="query && !shown.length" class="boards-none" role="status">No boards match "{{ query }}".</p>
+        <AppCallout v-if="summary.error.value" variant="error" title="The numbers across boards didn't load" role="alert">
+          {{ summary.error.value }}
+          <template #actions>
+            <v-btn variant="outlined" size="small" @click="summary.load()">Try again</v-btn>
+          </template>
+        </AppCallout>
+        <BoardsMetricsSummary
+          v-else-if="summary.data.value && summaryRows.length"
+          :rows="summaryRows"
+          :window="summary.data.value.window"
+        />
+      </template>
+    </template>
+
     <AppEmptyState
-      v-else-if="!store.customBoards.length && !store.delivery"
+      v-else
       icon="mdi-view-column-outline"
       title="Give your team a board"
       :body="canCreateBoards
         ? 'Pick a template with stages that fit how your team works.'
         : 'No permission to create boards? Ask an admin to make one and add you.'"
     >
-      <template v-if="canCreateBoards" #actions>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="creating = true">New board</v-btn>
-        <v-btn variant="outlined" prepend-icon="mdi-import" :to="{ name: 'board-import-new' }">Import from Trello</v-btn>
+      <template #actions>
+        <template v-if="canCreateBoards">
+          <v-btn color="primary" prepend-icon="mdi-plus" @click="creating = true">New board</v-btn>
+          <v-btn variant="outlined" prepend-icon="mdi-import" :to="{ name: 'board-import-new' }">Import from Trello</v-btn>
+        </template>
+        <v-btn variant="text" @click="scope = 'archived'">See archived boards</v-btn>
       </template>
     </AppEmptyState>
-
-    <template v-else>
-      <div class="boards-tools" role="search">
-        <v-text-field
-          v-model="query"
-          class="boards-tools__search"
-          label="Find a board"
-          prepend-inner-icon="mdi-magnify"
-          density="compact"
-          hide-details
-          clearable
-        />
-        <v-select
-          v-model="sort"
-          :items="SORT_OPTIONS"
-          label="Sort"
-          density="compact"
-          hide-details
-          class="boards-tools__sort"
-        />
-      </div>
-      <div class="boards-grid">
-        <DeliveryTile v-if="store.delivery && deliveryMatches(store.delivery.name, query ?? '')" :item="store.delivery" />
-        <BoardTile v-for="board in shown" :key="board.id" :board="board" :done-label="done" @star="star" />
-      </div>
-      <p v-if="query && !shown.length" class="boards-none" role="status">No boards match "{{ query }}".</p>
-      <AppCallout v-if="summary.error.value" variant="error" title="The numbers across boards didn't load" role="alert">
-        {{ summary.error.value }}
-        <template #actions>
-          <v-btn variant="outlined" size="small" @click="summary.load()">Try again</v-btn>
-        </template>
-      </AppCallout>
-      <BoardsMetricsSummary
-        v-else-if="summary.data.value?.boards.length"
-        :rows="summary.data.value.boards"
-        :window="summary.data.value.window"
-      />
-    </template>
 
     <NewBoardDialog v-model="creating" />
     <v-snackbar v-model="toastOpen" :timeout="5000" color="error">{{ toast }}</v-snackbar>
@@ -97,6 +87,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import ArchivedBoardsList from '@/components/boards/index/ArchivedBoardsList.vue'
+import BoardsIndexTools from '@/components/boards/index/BoardsIndexTools.vue'
 import BoardTile from '@/components/boards/index/BoardTile.vue'
 import BoardsMetricsSummary from '@/components/boards/index/BoardsMetricsSummary.vue'
 import DeliveryTile from '@/components/boards/index/DeliveryTile.vue'
@@ -108,14 +100,8 @@ import { useBoardMetricsSummary } from '@/composables/useBoardMetrics'
 import { usePermissions } from '@/composables/usePermissions'
 import { useBoardsStore } from '@/stores/boards'
 import type { CustomBoardItem } from '@/types/boards'
-import { deliveryMatches, doneLabel, searchBoards, sortBoards, type BoardSort } from '@/utils/boardIndex'
+import { deliveryMatches, doneLabel, searchBoards, sortBoards, type BoardScope, type BoardSort } from '@/utils/boardIndex'
 import { plural } from '@/utils/format'
-
-const SORT_OPTIONS: { title: string; value: BoardSort }[] = [
-  { title: 'Recently opened', value: 'recent' },
-  { title: 'A to Z', value: 'name' },
-  { title: 'Most active', value: 'active' },
-]
 
 const store = useBoardsStore()
 const route = useRoute()
@@ -128,13 +114,19 @@ const toast = ref('')
 const toastOpen = ref(false)
 const summary = useBoardMetricsSummary()
 
+// In the address, so the switcher (and Back) can land on the archived list.
+const scope = computed<BoardScope>({
+  get: () => (route.query.archived === '1' ? 'archived' : 'active'),
+  set: next => void router.replace({ query: { ...route.query, archived: next === 'archived' ? '1' : undefined } }),
+})
 const shown = computed(() => sortBoards(searchBoards(store.customBoards, query.value ?? ''), sort.value))
+const summaryRows = computed(() => searchBoards(summary.data.value?.boards ?? [], query.value ?? ''))
 const done = computed(() => doneLabel(store.limits?.recent_done_days))
-const subtitle = computed(() =>
-  store.loaded
-    ? `${plural(store.customBoards.length, 'board')} you can open. Star the ones you use most to keep them in the sidebar.`
-    : undefined,
-)
+const subtitle = computed(() => {
+  if (!store.loaded) return undefined
+  if (scope.value === 'archived') return 'Archived boards open read-only. A board admin can restore one.'
+  return `${plural(store.customBoards.length, 'board')} you can open. Star the ones you use most to keep them in the sidebar.`
+})
 
 // "New board" from the switcher lands here with ?new=1.
 watch(() => route.query.new, flag => {
@@ -159,25 +151,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.boards-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-.boards-tools__search {
-  flex: 0 1 320px;
-  min-width: 200px;
-}
-.boards-tools__sort {
-  flex: 0 0 200px;
-}
-@media (max-width: 600px) {
-  .boards-tools__search,
-  .boards-tools__sort {
-    flex-basis: 100%;
-  }
-}
 .boards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

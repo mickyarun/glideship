@@ -16,7 +16,9 @@
 
 <!-- A stage column's heading: a category-coloured dot (named for screen
      readers), the stage name and a plain count ("4 / 3" with a WIP limit),
-     then, once the count passes the limit, a warning row under it. -->
+     then, once the count passes the limit, a warning row under it. In the
+     archived view the count is of the archived cards loaded ("12+" while
+     more wait), with no limit. -->
 <template>
   <header class="stage-head">
     <div class="stage-head__row">
@@ -25,7 +27,7 @@
         {{ stage.name }}<span class="d-sr-only">, {{ CATEGORY_LABELS[stage.category] }}</span>
       </h2>
       <span class="stage-head__count" :class="{ 'stage-head__count--over': over }">
-        <span aria-hidden="true">{{ limit ? `${count} / ${limit}` : count }}</span>
+        <span aria-hidden="true">{{ limit ? `${count} / ${limit}` : shown }}</span>
         <span class="d-sr-only">{{ countLabel }}</span>
       </span>
     </div>
@@ -43,11 +45,20 @@ import type { StageRead } from '@/types/boards'
 import { plural } from '@/utils/format'
 import { overWip, wipLimit } from '@/utils/wip'
 
-const props = defineProps<{ id: string; stage: StageRead; count: number }>()
+const props = defineProps<{
+  id: string
+  stage: StageRead
+  count: number
+  /** The archived view: ``count`` is the archived cards loaded, ``more`` says others wait. */
+  archived?: boolean
+  more?: boolean
+}>()
 
-const limit = computed(() => wipLimit(props.stage.wip_limit))
-const over = computed(() => overWip(props.count, props.stage.wip_limit))
+const limit = computed(() => (props.archived ? null : wipLimit(props.stage.wip_limit)))
+const over = computed(() => !props.archived && overWip(props.count, props.stage.wip_limit))
+const shown = computed(() => `${props.count}${props.archived && props.more ? '+' : ''}`)
 const countLabel = computed(() => {
+  if (props.archived) return `${shown.value} archived ${props.count === 1 && !props.more ? 'card' : 'cards'}`
   const cards = plural(props.count, 'card')
   return limit.value ? `${cards}, limit ${limit.value}` : cards
 })

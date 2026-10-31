@@ -52,7 +52,7 @@
     />
 
     <template v-if="detail.stages.length && !noMatch">
-      <BoardStageTabs v-if="xs" v-model="phoneStage" :stages="detail.stages" :counts="cards.counts" />
+      <BoardStageTabs v-if="xs" v-model="phoneStage" :stages="detail.stages" :counts="columnCounts" />
       <div class="board-page__columns board-scroller" :class="{ 'board-page__columns--blocked': overBlocked() }">
         <BoardStageColumn
           v-for="stage in shownStages"
@@ -60,7 +60,8 @@
           :composing="composeIn === stage.id"
           :stage="stage"
           :column="cards.columns[stage.id] ?? emptyColumn()"
-          :count="cards.counts[stage.id] ?? 0"
+          :count="columnCounts[stage.id] ?? 0"
+          :archived="cards.filters.archived"
           :board-id="detail.board.id"
           :board-key="detail.board.key"
           :stages="detail.stages"
@@ -150,7 +151,7 @@ watch(() => dragging.value?.cardId, cardId => {
   feedback.announce(`${card.key} can't go to ${blocked.map(s => `${s.name} (${blocks.value[s.id]})`).join(', ')} yet.`)
 })
 const labelsById = computed(() => new Map((detail.value?.labels ?? []).map(l => [l.id, l])))
-const { shownCount, totalOpen, hasMore, noMatch, emptyBoard, summary } = useBoardStats(page, nameFor)
+const { shownCount, totalOpen, columnCounts, hasMore, noMatch, emptyBoard, summary } = useBoardStats(page, nameFor)
 const defaultStageId = computed(
   () => detail.value?.stages.find(s => s.is_default)?.id ?? detail.value?.stages[0]?.id ?? null,
 )

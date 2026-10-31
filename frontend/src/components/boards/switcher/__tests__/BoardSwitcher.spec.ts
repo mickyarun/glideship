@@ -144,4 +144,13 @@ describe('BoardSwitcher', () => {
     await input().trigger('keydown', { key: 'Escape' })
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it('links to the archived boards from its footer, closing as it goes', async () => {
+    const { wrapper } = setup()
+    await flushPromises()
+    const link = wrapper.findAll('.switcher-foot a').find(a => a.text() === 'Archived boards')!
+    expect(link.attributes('href')).toBe('/boards?archived=1')
+    await link.trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
 })

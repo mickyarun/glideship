@@ -70,7 +70,9 @@ function compact(params: object): Record<string, string> {
 }
 
 export const boardsApi = {
-  list: async () => (await api.get<BoardList>(BASE)).data,
+  /** My boards; ``archived`` lists the archived ones I hold a role on instead. */
+  list: async (archived = false) =>
+    (await api.get<BoardList>(BASE, archived ? { params: { archived: true } } : undefined)).data,
   templates: async () => (await api.get<BoardTemplate[]>(`${BASE}/templates`)).data,
   limits: async () => (await api.get<BoardLimits>(`${BASE}/limits`)).data,
   switcher: async (q?: string) =>
