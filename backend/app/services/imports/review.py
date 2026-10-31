@@ -34,9 +34,9 @@ from app.repositories.import_people import ImportPeopleRepository
 from app.schemas.boards.import_mapping import ImportMapping, NewBoardTarget, StageChoice
 from app.services.boards.access import BoardCaller
 from app.services.boards.board_create import check_new_board
-from app.services.boards.errors import BoardConflictError, BoardRuleError
+from app.services.boards.errors import BoardRuleError
 from app.services.boards.stage_rules import check_stage_count
-from app.services.imports.errors import ImportStateError
+from app.services.imports.errors import ImportStateError, StageNameTakenError
 from app.services.imports.registry import source_for
 from app.services.imports.source import MappingIds
 from app.services.imports.stage_plan import planned_stages, stage_key
@@ -47,7 +47,6 @@ EVERY_GROUP = "Map every list exactly once: to a new stage, an existing stage, o
 UNKNOWN_MEMBER = "The mapping names a member the imported board doesn't have."
 NO_ACCESS = "Some of the people you mapped can't open the target board."
 STAGE_NOT_ON_BOARD = "An existing stage in the mapping isn't on the target board."
-STAGE_NAME_TAKEN = "The target board already has a stage called {name!r}; map the list to it."
 NEW_BOARD_EXISTING = "A new board has no existing stages to map lists into."
 
 
@@ -99,7 +98,7 @@ async def _check_existing_stages(db: AsyncSession, board: Board, body: ImportMap
         raise BoardRuleError(STAGE_NOT_ON_BOARD)
     names = {stage_key(s.name) for s in stages}
     planned = planned_stages(body, new_board=False)
-    for plan in planned:
-        if stage_key(plan.name) in names:
-            raise BoardConflictError(STAGE_NAME_TAKEN.format(name=plan.name))
+    for entry in body.groups:
+        if entry.action is StageChoice.NEW and entry.name and stage_key(entry.name) in names:
+            raise StageNameTakenError(group_id=entry.group_id, stage_name=entry.name)
     check_stage_count(len(stages) + len(planned))

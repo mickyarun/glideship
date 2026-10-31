@@ -38,7 +38,7 @@ from app.services.boards.access import (
     BoardNotFoundError,
     resolve_board_access,
 )
-from app.services.boards.board_create import insert_board
+from app.services.boards.board_create import check_new_board, insert_board
 from app.services.boards.constants import BOARD_ACTION_MIN_ROLE, BoardAction
 from app.services.boards.errors import BoardActionForbiddenError
 from app.services.imports.errors import ImportStateError
@@ -92,6 +92,24 @@ def session_mapping(session: ExternalImportSession) -> ImportMapping:
     return ImportMapping.model_validate(session.config)
 
 
+def new_target(mapping: ImportMapping) -> NewBoardTarget:
+    """The new board a mapping asks for; refused when it names an existing one."""
+    if not isinstance(mapping.target, NewBoardTarget):
+        raise ImportStateError(NOT_MAPPED)
+    return mapping.target
+
+
+async def check_new_target(db: AsyncSession, caller: BoardCaller, mapping: ImportMapping) -> None:
+    """Refuse starting into a new board the caller can't create, or whose key was taken since.
+
+    Raises:
+        BoardTakenError: Another board has the key or name now.
+    """
+    target = new_target(mapping)
+    check_may_create(caller)
+    await check_new_board(db, caller, key=target.key, name=target.name)
+
+
 async def target_board_access(
     db: AsyncSession, session: ExternalImportSession, caller: BoardCaller
 ) -> BoardAccess:
@@ -114,9 +132,7 @@ async def target_access(
     the board's stages commit together once the board is prepared.
     """
     if session.board_id is None:
-        target = session_mapping(session).target
-        if not isinstance(target, NewBoardTarget):
-            raise ImportStateError(NOT_MAPPED)
+        target = new_target(session_mapping(session))
         check_may_create(caller)
         created = await insert_board(
             db,

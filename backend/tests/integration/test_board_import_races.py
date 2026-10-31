@@ -184,7 +184,10 @@ async def test_a_stage_deleted_after_review_stops_the_import(
     ok(await client.put(url, json=onto(gone), headers=pm.headers))
     await remove(gone)
     refused = await client.post(start_url(session_id), headers=pm.headers)
-    assert refused.status_code == 409 and refused.json()["detail"] == STAGE_GONE
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {"detail": STAGE_GONE, "code": "STAGE_GONE"},
+    )
 
     later = await extra("Triage")
     ok(await client.put(url, json=onto(later), headers=pm.headers))

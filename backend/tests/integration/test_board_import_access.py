@@ -24,6 +24,7 @@ from sqlalchemy import update
 
 from app.config import settings
 from app.models.user import User
+from app.services.boards.errors import BOARD_TAKEN
 from tests.integration.board_api_support import make_board, ok, person, put_role
 from tests.integration.board_import_support import (
     IMPORTS,
@@ -35,6 +36,7 @@ from tests.integration.board_import_support import (
     named,
     new_board,
     parsed,
+    start_url,
     upload,
     use_import_storage,
 )
@@ -131,7 +133,12 @@ async def test_the_mapping_is_checked_against_the_board_and_the_people(
     assert await status_of(body) == 422
     assert await status_of(mapping(new_board("BUD"))) == 422  # reserved key
     taken = await make_board(client, pm)
-    assert await status_of(mapping(new_board(taken["board"]["key"]))) == 409
+    body = mapping(new_board(taken["board"]["key"]))
+    clash = await client.put(url, json=body, headers=pm.headers)
+    assert (clash.status_code, clash.json()) == (
+        409,
+        {"detail": BOARD_TAKEN, "code": "BOARD_KEY_TAKEN", "field": "key"},
+    )
     # Someone who can't open boards (here, deactivated) can't be mapped.
     assert await status_of(mapping(new_board(key), priya=gone.id)) == 422
     unknown = mapping(new_board(key))
@@ -139,6 +146,14 @@ async def test_the_mapping_is_checked_against_the_board_and_the_people(
     assert await status_of(unknown) == 422
     saved = ok(await client.put(url, json=mapping(new_board(key.lower())), headers=pm.headers))
     assert saved["mapping"]["target"]["key"] == key
+    # Someone takes the key after the review: the start refuses before any job runs.
+    await make_board(client, pm, key=key)
+    late = await client.post(start_url(session), headers=pm.headers)
+    assert (late.status_code, late.json()) == (
+        409,
+        {"detail": BOARD_TAKEN, "code": "BOARD_KEY_TAKEN", "field": "key"},
+    )
+    assert jobs.queued == []
 
 
 async def test_uploads_are_capped_and_must_be_a_board_export(

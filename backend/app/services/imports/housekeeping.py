@@ -35,7 +35,7 @@ from app.schemas.boards.imports import (
     ImportSessionSummary,
 )
 from app.services.boards.access import BoardCaller
-from app.services.boards.errors import BoardStorageError
+from app.services.boards.errors import BoardErrorCode, BoardStorageError
 from app.services.imports.errors import ImportStateError
 from app.services.imports.session_read import session_read
 from app.services.imports.sessions import get_session
@@ -76,7 +76,7 @@ async def discard(db: AsyncSession, caller: BoardCaller, session_id: uuid.UUID) 
     repo = ExternalImportSessionRepository(db, org_id=caller.org_id)
     # Deleted before the file goes, so a start racing this one finds no session.
     if not await repo.delete_in(session.id, DISCARDABLE):
-        raise ImportStateError(STILL_WORKING)
+        raise ImportStateError(STILL_WORKING, code=BoardErrorCode.IMPORT_STILL_WORKING)
     if path and not await delete_source_file(path):
         await db.rollback()
         raise BoardStorageError(FILE_NOT_REMOVED)

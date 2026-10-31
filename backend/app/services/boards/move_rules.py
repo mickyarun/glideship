@@ -31,7 +31,7 @@ from app.models.board import BoardStage
 from app.models.board_enums import COMPLETED_CATEGORIES, BoardStageCategory, StageRequiredField
 from app.services.boards.card_facts import CardFacts, missing_fields
 from app.services.boards.constants import STAGE_REQUIRED_FIELD_LABELS
-from app.services.boards.errors import BoardConflictError, BoardRuleError
+from app.services.boards.errors import BoardConflictError, BoardErrorCode, BoardRuleError
 
 
 class StageRequirementsMissingError(BoardRuleError):
@@ -47,7 +47,7 @@ class StageRequirementsMissingError(BoardRuleError):
     def body(self) -> Mapping[str, Any]:
         """The stage and every missing field, in declaration order."""
         return {
-            "code": "STAGE_REQUIREMENTS_MISSING",
+            "code": BoardErrorCode.STAGE_REQUIREMENTS_MISSING,
             "stage_id": str(self.stage_id),
             "missing": [field.value for field in self.missing],
         }
@@ -64,7 +64,11 @@ class ChecklistOpenError(BoardConflictError):
 
     def body(self) -> Mapping[str, Any]:
         """How many items are open, out of how many."""
-        return {"code": "CHECKLIST_OPEN", "open": self.open_items, "total": self.total}
+        return {
+            "code": BoardErrorCode.CHECKLIST_OPEN,
+            "open": self.open_items,
+            "total": self.total,
+        }
 
 
 class EntryCause(StrEnum):

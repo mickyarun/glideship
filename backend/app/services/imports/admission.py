@@ -32,7 +32,7 @@ from app.repositories.external_import import ExternalImportSessionRepository
 from app.services.boards.access import BoardCaller
 from app.services.boards.errors import BoardRateLimitedError
 from app.services.fixed_window import seconds_until_allowed
-from app.services.imports.errors import ImportStateError
+from app.services.imports.errors import OpenImportScope, TooManyOpenImportsError
 from app.services.imports.target import check_may_import
 
 TOO_MANY_OPEN = "You have {n} imports still open. Finish or wait for one before starting another."
@@ -56,9 +56,13 @@ async def admit(db: AsyncSession, caller: BoardCaller) -> Admitted:
     await check_may_import(db, caller)
     repo = ExternalImportSessionRepository(db, org_id=caller.org_id)
     if await repo.count_open(created_by=caller.user_id) >= cfg.import_max_open_per_user:
-        raise ImportStateError(TOO_MANY_OPEN.format(n=cfg.import_max_open_per_user))
+        raise TooManyOpenImportsError(
+            TOO_MANY_OPEN.format(n=cfg.import_max_open_per_user), scope=OpenImportScope.USER
+        )
     if await repo.count_open() >= cfg.import_max_open_per_org:
-        raise ImportStateError(ORG_TOO_MANY_OPEN.format(n=cfg.import_max_open_per_org))
+        raise TooManyOpenImportsError(
+            ORG_TOO_MANY_OPEN.format(n=cfg.import_max_open_per_org), scope=OpenImportScope.ORG
+        )
     wait = await seconds_until_allowed(
         f"board_import_create:{caller.org_id}:{caller.user_id}",
         limit=cfg.import_creates_per_window,

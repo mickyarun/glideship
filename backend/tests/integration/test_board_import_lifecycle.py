@@ -40,6 +40,7 @@ from app.repositories.external_import_sweep import (
 )
 from app.services.file_storage import FileStorage
 from app.services.imports import admission, queueing, sweeper
+from app.services.imports.admission import ORG_TOO_MANY_OPEN, TOO_MANY_OPEN
 from app.services.imports.queueing import QUEUE_FULL
 from app.services.imports.trello import intake
 from tests.integration.board_api_support import ok, person
@@ -139,9 +140,17 @@ async def test_open_import_caps_and_the_start_rate_limit_refuse_before_reading(
 
     monkeypatch.setattr(intake, "create_from_upload", never)
     monkeypatch.setattr(settings.boards, "import_max_open_per_user", 1)
-    assert (await upload(client, pm)).status_code == 409
+    mine = await upload(client, pm)
+    assert (mine.status_code, mine.json()) == (
+        409,
+        {"detail": TOO_MANY_OPEN.format(n=1), "code": "TOO_MANY_OPEN_IMPORTS", "scope": "user"},
+    )
     monkeypatch.setattr(settings.boards, "import_max_open_per_org", 1)
-    assert (await upload(client, colleague)).status_code == 409
+    org_wide = await upload(client, colleague)
+    assert (org_wide.status_code, org_wide.json()) == (
+        409,
+        {"detail": ORG_TOO_MANY_OPEN.format(n=1), "code": "TOO_MANY_OPEN_IMPORTS", "scope": "org"},
+    )
     monkeypatch.setattr(settings.boards, "import_max_open_per_org", 10)
 
     async def throttled(key: str, *, limit: int, window_seconds: int) -> int:

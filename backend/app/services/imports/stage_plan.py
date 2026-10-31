@@ -29,7 +29,7 @@ from app.models.board import Board, BoardStage
 from app.models.board_enums import BoardStageCategory
 from app.repositories.board_stage import BoardStageRepository
 from app.schemas.boards.import_mapping import ImportMapping, StageChoice
-from app.services.boards.errors import BoardRuleError
+from app.services.boards.errors import BoardErrorCode, BoardRuleError
 from app.services.boards.stage_rules import check_stage_count, check_stages
 from app.services.imports.errors import ImportStateError
 
@@ -131,4 +131,4 @@ def check_mapped_stages(mapping: ImportMapping, stage_ids: Iterable[uuid.UUID]) 
     """
     present = set(stage_ids)
     if any(e.action is StageChoice.EXISTING and e.stage_id not in present for e in mapping.groups):
-        raise ImportStateError(STAGE_GONE)
+        raise ImportStateError(STAGE_GONE, code=BoardErrorCode.STAGE_GONE)

@@ -27,7 +27,7 @@ from app.repositories.board import BoardRepository
 from app.repositories.board_member import BoardMemberRepository
 from app.services.boards.access import BoardCaller
 from app.services.boards.constants import BOARD_KEY_PATTERN, RESERVED_BOARD_KEYS
-from app.services.boards.errors import BOARD_TAKEN, BoardConflictError, BoardRuleError
+from app.services.boards.errors import BoardRuleError, BoardTakenError
 
 
 def normalise_key(raw: str) -> str:
@@ -45,7 +45,7 @@ async def check_new_board(db: AsyncSession, caller: BoardCaller, *, key: str, na
     normal = normalise_key(key)
     repo = BoardRepository(db, org_id=caller.org_id)
     if await repo.key_or_name_taken(key=normal, name=name):
-        raise BoardConflictError(BOARD_TAKEN)
+        raise BoardTakenError()
     return normal
 
 
@@ -68,7 +68,7 @@ async def insert_board(
         created_by=caller.user_id,
     )
     if not await BoardRepository(db, org_id=caller.org_id).insert(board):
-        raise BoardConflictError(BOARD_TAKEN)
+        raise BoardTakenError()
     await BoardMemberRepository(db, org_id=caller.org_id).put_member(
         board.id, caller.user_id, BoardMemberRole.ADMIN
     )

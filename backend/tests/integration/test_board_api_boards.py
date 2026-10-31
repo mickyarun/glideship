@@ -106,7 +106,8 @@ async def test_a_taken_key_or_name_gets_one_message_whoever_can_see_the_board(
             body = {"name": f"New {board_key()}", "key": board_key(), "template": "blank", **clash}
             resp = await client.post(BOARDS, json=body, headers=other.headers)
             answers.append((resp.status_code, resp.json()))
-    assert answers == [(409, {"detail": BOARD_TAKEN})] * 4
+    taken_body = {"detail": BOARD_TAKEN, "code": "BOARD_KEY_TAKEN", "field": "key"}
+    assert answers == [(409, taken_body)] * 4
     rename = await client.patch(
         f"{BOARDS}/{shown['key']}", json={"name": hidden["name"]}, headers=owner.headers
     )

@@ -28,6 +28,7 @@ from app.config import settings
 from app.models.external_import import ExternalItemMap
 from app.services.boards.errors import BoardRuleError
 from app.services.imports import card_writer
+from app.services.imports.housekeeping import STILL_WORKING
 from tests.integration.board_api_support import BOARDS, Person, make_board, ok, person
 from tests.integration.board_import_support import (
     IMPORTS,
@@ -140,7 +141,11 @@ async def test_discarding_needs_an_idle_session_and_its_owner_and_keeps_item_map
     session_id = await parsed(client, pm, jobs)
     await save_and_start(client, pm, session_id, mapping(new_board(board_key())))
     url = f"{IMPORTS}/{session_id}"
-    assert (await client.delete(url, headers=pm.headers)).status_code == 409  # running
+    running = await client.delete(url, headers=pm.headers)
+    assert (running.status_code, running.json()) == (
+        409,
+        {"detail": STILL_WORKING, "code": "IMPORT_STILL_WORKING"},
+    )
     await jobs.run_all()
     assert (await client.delete(url, headers=colleague.headers)).status_code == 404
     assert (await client.delete(url, headers=manager.headers)).status_code == 204

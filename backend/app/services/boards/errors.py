@@ -21,7 +21,24 @@ too low a role, archived board) live in :mod:`app.services.boards.access`.
 """
 
 from collections.abc import Mapping
+from enum import StrEnum
 from typing import Any
+
+# One message for a taken key or name, whichever board holds it, so a
+# members-only board's key or name can't be discovered by trying it.
+BOARD_TAKEN = "That key or name is already used by another board."
+
+
+class BoardErrorCode(StrEnum):
+    """Every ``code`` a board or import error sends beside ``detail``; clients branch on these."""
+
+    STAGE_REQUIREMENTS_MISSING = "STAGE_REQUIREMENTS_MISSING"
+    CHECKLIST_OPEN = "CHECKLIST_OPEN"
+    BOARD_KEY_TAKEN = "BOARD_KEY_TAKEN"
+    STAGE_GONE = "STAGE_GONE"
+    STAGE_NAME_TAKEN = "STAGE_NAME_TAKEN"
+    TOO_MANY_OPEN_IMPORTS = "TOO_MANY_OPEN_IMPORTS"
+    IMPORT_STILL_WORKING = "IMPORT_STILL_WORKING"
 
 
 class BoardError(Exception):
@@ -38,6 +55,17 @@ class BoardItemNotFoundError(BoardError):
 
 class BoardConflictError(BoardError):
     """The change clashes with the board's current state."""
+
+
+class BoardTakenError(BoardConflictError):
+    """A new board's key or name is taken (409 ``BOARD_KEY_TAKEN``, shown on the key field)."""
+
+    def __init__(self) -> None:
+        super().__init__(BOARD_TAKEN)
+
+    def body(self) -> Mapping[str, Any]:
+        """The code and the form field the clash belongs to."""
+        return {"code": BoardErrorCode.BOARD_KEY_TAKEN, "field": "key"}
 
 
 class BoardRuleError(BoardError):
@@ -70,8 +98,3 @@ class BoardRateLimitedError(BoardRetryLaterError):
 
 class BoardBusyError(BoardRetryLaterError):
     """The server is too busy (or shutting down) to take the work now."""
-
-
-# One message for a taken key or name, whichever board holds it, so a
-# members-only board's key or name can't be discovered by trying it.
-BOARD_TAKEN = "That key or name is already used by another board."

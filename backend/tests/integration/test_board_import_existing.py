@@ -33,6 +33,7 @@ from app.repositories.external_import_sweep import (
     recover_stuck_external_imports,
 )
 from app.services.imports import card_writer
+from app.services.imports.errors import STAGE_NAME_TAKEN
 from tests.integration.board_api_support import (
     BOARDS,
     Person,
@@ -131,7 +132,15 @@ async def test_an_existing_board_keeps_its_cards_and_a_second_import_adds_nothin
     clash = await client.put(
         f"{IMPORTS}/{second}/mapping", json=_into(board, priya=priya.id), headers=pm.headers
     )
-    assert clash.status_code == 409
+    assert (clash.status_code, clash.json()) == (
+        409,
+        {
+            "detail": STAGE_NAME_TAKEN.format(name="Shipped"),
+            "code": "STAGE_NAME_TAKEN",
+            "group_id": DONE,
+            "stage_name": "Shipped",
+        },
+    )
     board = ok(await client.get(f"{BOARDS}/{key}", headers=pm.headers))
     await save_and_start(client, pm, second, _into(board, priya=priya.id))
     await jobs.run_all()

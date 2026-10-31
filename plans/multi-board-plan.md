@@ -1537,6 +1537,18 @@ only. That avoids pulling arbitrary URLs from user-supplied JSON. API mode downl
   or `completed` session and its uploaded file, for its creator or a `boards:manage` holder
   (others get 404); 409 while it's pending, parsing or running, 502 if storage keeps the file.
   Item maps stay with no session, like the sweep.
+- **Error codes.** Import conflicts the review screen reacts to on its own carry a `code` (and
+  its facts) beside an unchanged `detail`, through the same `BoardError.body()` path as the
+  stage entry rules. Every code lives in `BoardErrorCode` (`services/boards/errors.py`); the
+  other import 409s (not ready to review, can't start, nothing mapped) stay `{"detail"}` only.
+
+  | Code | Status | Extra fields | When |
+  |---|---|---|---|
+  | `STAGE_GONE` | 409 | none | Start or resume, when an existing stage the mapping uses was deleted (`stage_plan.check_mapped_stages`). The same check stopping a run records the message as the session's `error`. |
+  | `BOARD_KEY_TAKEN` | 409 | `field: "key"` | Saving a new-board mapping, starting into a new board, or `POST /boards`, when another board has the key or name (`board_create.check_new_board`, `insert_board`). One message for either, as before; a run that loses the race records it as text. |
+  | `STAGE_NAME_TAKEN` | 409 | `group_id`, `stage_name` | Saving a mapping onto an existing board whose new stage is named like one the board has; `group_id` is the first list that clashes (`review._check_existing_stages`). |
+  | `TOO_MANY_OPEN_IMPORTS` | 409 | `scope: "user" \| "org"` | Creating a session past `import_max_open_per_user` or `_per_org` (`admission.admit`). |
+  | `IMPORT_STILL_WORKING` | 409 | none | `DELETE /boards/imports/{id}` while the session is pending, parsing or running (`housekeeping.discard`). |
 - **Review data.** Each discovered list carries `archived_card_count` (its cards closed in
   Trello) beside `card_count`. `GET /boards/limits` serves `import_max_upload_mb` from
   `import_max_upload_bytes`. Card comments return `import_source` (`trello`, or null when

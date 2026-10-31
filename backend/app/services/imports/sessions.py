@@ -34,8 +34,8 @@ from app.services.imports.queueing import CANT_START, queue_discovery, queue_job
 from app.services.imports.registry import source_for
 from app.services.imports.stage_plan import check_mapped_stages
 from app.services.imports.target import (
-    check_may_create,
     check_may_import,
+    check_new_target,
     session_mapping,
     target_board_access,
 )
@@ -78,7 +78,7 @@ async def start_import(
         )
     mapping = session_mapping(session)
     if session.board_id is None:
-        check_may_create(caller)
+        await check_new_target(db, caller, mapping)
     else:
         board = (await target_board_access(db, session, caller)).board
         stages = await BoardStageRepository(db, org_id=caller.org_id).list_for_board(board.id)
