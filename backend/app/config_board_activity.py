@@ -28,6 +28,10 @@ class BoardActivitySettings(BaseSettings):
     repo_activity_max_keys: int = Field(
         default=10, gt=0, description="Card keys one pull request or commit may name."
     )
+    repo_activity_fork_prs: bool = Field(
+        default=False,
+        description="Record pull requests from forks (anyone can name a card key in one).",
+    )
     repo_activity_scan_chars: int = Field(
         default=4000, gt=0, description="Leading characters of a commit message scanned."
     )

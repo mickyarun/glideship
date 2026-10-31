@@ -37,6 +37,9 @@ from tests.integration.github_webhook_support import signed_headers, tracked_rep
 from tests.integration.scan_features_bugs_support import Factory
 
 WEBHOOK = "/api/v1/webhooks/github"
+# GitHub's ids for the tracked repository and for a fork of it.
+GITHUB_REPO_ID = 4_100
+FORK_REPO_ID = 4_200
 
 
 @dataclass(frozen=True)
@@ -74,20 +77,31 @@ def pr_body(
     action: str = "opened",
     merged: bool = False,
     branch: str = "topic",
+    state: str | None = None,
+    fork: bool = False,
+    changes: dict[str, Any] | None = None,
 ) -> bytes:
-    """A ``pull_request`` delivery."""
+    """A ``pull_request`` delivery (from a fork's branch when ``fork``)."""
+    own = {"id": GITHUB_REPO_ID, "full_name": full_name}
+    head_repo = {"id": FORK_REPO_ID, "full_name": "someone/fork"} if fork else own
     pr = {
         "id": 700_000 + number,
         "number": number,
         "title": title,
         "html_url": f"https://github.com/{full_name}/pull/{number}",
-        "head": {"ref": branch, "sha": "h" * 40},
-        "base": {"ref": "develop", "sha": "b" * 40},
-        "state": "closed" if action == "closed" else "open",
+        "head": {"ref": branch, "sha": "h" * 40, "repo": head_repo},
+        "base": {"ref": "develop", "sha": "b" * 40, "repo": own},
+        "state": state or ("closed" if action == "closed" else "open"),
         "user": {"login": "octo", "id": 1},
         "merged": merged,
     }
-    payload = {"action": action, "repository": {"full_name": full_name}, "pull_request": pr}
+    payload: dict[str, Any] = {
+        "action": action,
+        "repository": {"full_name": full_name},
+        "pull_request": pr,
+    }
+    if changes is not None:
+        payload["changes"] = changes
     return json.dumps(payload).encode()
 
 

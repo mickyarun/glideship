@@ -33,7 +33,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tracked_repository import TrackedRepository
 from app.repositories.board_repo_activity import BoardRepoActivityRepository
 from app.services.boards.live import BoardChanges, BoardSocketEvent
-from app.services.boards.repo_activity_parse import RepoActivity, activities
+from app.services.boards.repo_activity_parse import activities
+from app.services.boards.repo_activity_types import RepoActivity
 
 logger = structlog.get_logger(__name__)
 
@@ -41,11 +42,15 @@ logger = structlog.get_logger(__name__)
 async def record_repo_activity(
     db: AsyncSession, repo: TrackedRepository, event_type: str, payload: Mapping[str, Any]
 ) -> int:
-    """Record the delivery's activity on the cards it names; how many events were new."""
-    found = activities(event_type, payload, repo.github_repo_full_name)
-    if not found:
-        return 0
+    """Record the delivery's activity on the cards it names; how many events were new.
+
+    Never raises: a malformed payload or a failed write is logged, and the
+    delivery's other work (and what it queued for after the commit) goes on.
+    """
     try:
+        found = activities(event_type, payload, repo.github_repo_full_name)
+        if not found:
+            return 0
         async with db.begin_nested():
             touched, recorded = await _record(db, repo, found)
     except Exception:

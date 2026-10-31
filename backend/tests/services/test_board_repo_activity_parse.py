@@ -20,26 +20,40 @@ from typing import Any
 import pytest
 
 from app.config import settings
-from app.services.boards.repo_activity_parse import (
-    RepoActivityKind,
-    activities,
-    card_keys,
-)
+from app.services.boards.repo_activity_parse import activities
+from app.services.boards.repo_activity_types import RepoActivityKind, card_keys
 
 FULL = "acme/api"
+REPO_ID = 41
+FORK_ID = 99
 
 
-def _pr(action: str, *, merged: bool = False, title: str = "Fix", ref: str = "main") -> Any:
+def _pr(
+    action: str,
+    *,
+    merged: bool = False,
+    title: str = "Fix",
+    ref: str = "main",
+    state: str | None = None,
+    head_repo: Any = REPO_ID,
+    **extra: Any,
+) -> Any:
+    head: dict[str, Any] = {"ref": ref}
+    if head_repo is not None:
+        head["repo"] = {"id": head_repo, "full_name": FULL if head_repo == REPO_ID else "x/api"}
     return {
         "action": action,
         "pull_request": {
             "number": 7,
             "title": title,
             "merged": merged,
-            "head": {"ref": ref},
+            "state": state or ("closed" if action == "closed" else "open"),
+            "head": head,
+            "base": {"ref": "main", "repo": {"id": REPO_ID, "full_name": FULL}},
             "user": {"login": "octo-cat"},
             "html_url": "https://evil.example/pull/7",
         },
+        **extra,
     }
 
 
@@ -93,9 +107,62 @@ def test_a_pull_request_matches_on_its_branch_and_truncates_its_title() -> None:
     assert len(found.title) == 200
 
 
-@pytest.mark.parametrize("action", ["edited", "synchronize", "reopened"])
+@pytest.mark.parametrize("action", ["synchronize", "labeled", "assigned"])
 def test_other_pull_request_actions_are_ignored(action: str) -> None:
     assert activities("pull_request", _pr(action, title="OPS-4"), FULL) == []
+
+
+def test_a_reopened_pull_request_is_its_own_activity() -> None:
+    (found,) = activities("pull_request", _pr("reopened", title="OPS-4"), FULL)
+    assert (found.kind, found.external_id) == (RepoActivityKind.PR_REOPENED, "7")
+
+
+@pytest.mark.parametrize(
+    ("state", "merged", "kind"),
+    [
+        ("open", False, RepoActivityKind.PR_OPENED),
+        ("closed", True, RepoActivityKind.PR_MERGED),
+        ("closed", False, RepoActivityKind.PR_CLOSED),
+    ],
+)
+def test_a_retitled_pull_request_links_as_it_stands(
+    state: str, merged: bool, kind: RepoActivityKind
+) -> None:
+    changes = {"title": {"from": "Fix login"}}
+    payload = _pr("edited", title="OPS-4 login", state=state, merged=merged, changes=changes)
+    (found,) = activities("pull_request", payload, FULL)
+    assert (found.kind, found.keys) == (kind, {("OPS", 4)})
+
+
+def test_an_edit_that_leaves_the_title_alone_is_ignored() -> None:
+    payload = _pr("edited", title="OPS-4", changes={"body": {"from": "old"}})
+    assert activities("pull_request", payload, FULL) == []
+
+
+@pytest.mark.parametrize("head_repo", [FORK_ID, None, "41", True])
+def test_a_pull_request_from_a_fork_is_ignored(head_repo: Any) -> None:
+    assert (
+        activities("pull_request", _pr("opened", title="OPS-4", head_repo=head_repo), FULL) == []
+    )
+
+
+def test_fork_pull_requests_can_be_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings.boards, "repo_activity_fork_prs", True)
+    (found,) = activities("pull_request", _pr("opened", title="OPS-4", head_repo=FORK_ID), FULL)
+    assert found.keys == {("OPS", 4)}
+
+
+def test_a_push_reads_at_most_the_commit_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings.boards, "repo_activity_max_commits", 20)
+    commits = [{"id": f"{n:040x}", "message": f"OPS-{n + 1}"} for n in range(25)]
+    found = activities("push", {"ref": "refs/heads/main", "commits": commits}, FULL)
+    assert len(found) == 20
+    assert {k for a in found for k in a.keys} == {("OPS", n) for n in range(1, 21)}
+
+
+def test_a_sha_with_a_trailing_newline_is_not_a_sha() -> None:
+    payload = {"ref": "refs/heads/main", "commits": [{"id": "a" * 40 + "\n", "message": "OPS-1"}]}
+    assert activities("push", payload, FULL) == []
 
 
 def test_a_pull_request_naming_no_key_is_ignored() -> None:
