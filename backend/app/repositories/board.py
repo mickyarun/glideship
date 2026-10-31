@@ -69,15 +69,16 @@ class BoardRepository(BaseRepository[Board]):
         *,
         q: str | None = None,
         done_since: datetime | None = None,
+        status: BoardStatus = BoardStatus.ACTIVE,
     ) -> Select[Any]:
-        """Active boards the caller holds a role on, with their star, last visit and counts.
+        """Boards in ``status`` the caller holds a role on, with their star, last visit and counts.
 
         ``q`` narrows to boards whose name or key contains it. Counts of done
         cards include those completed since ``done_since`` (none when unset).
         """
         counts = card_counts_subquery(self._org, done_since)
         return (
-            self._visible_base(user_id, perms, q)
+            self._visible_base(user_id, perms, q, status)
             .add_columns(
                 func.coalesce(counts.c.todo, 0),
                 func.coalesce(counts.c.in_progress, 0),
@@ -87,7 +88,11 @@ class BoardRepository(BaseRepository[Board]):
         )
 
     def _visible_base(
-        self, user_id: uuid.UUID, perms: PermissionChecker, q: str | None
+        self,
+        user_id: uuid.UUID,
+        perms: PermissionChecker,
+        q: str | None,
+        status: BoardStatus = BoardStatus.ACTIVE,
     ) -> Select[Any]:
         roles = BoardAccessRepository(self._db, org_id=self._org).role_subquery(user_id, perms)
         stmt = (
@@ -97,7 +102,7 @@ class BoardRepository(BaseRepository[Board]):
                 BoardUserPrefs,
                 and_(BoardUserPrefs.board_id == Board.id, BoardUserPrefs.user_id == user_id),
             )
-            .where(Board.org_id == self._org, Board.status == BoardStatus.ACTIVE)
+            .where(Board.org_id == self._org, Board.status == status)
         )
         if q:
             pattern = like_pattern(q)
@@ -113,10 +118,15 @@ class BoardRepository(BaseRepository[Board]):
         ]
 
     async def list_visible(
-        self, user_id: uuid.UUID, perms: PermissionChecker, *, done_since: datetime | None = None
+        self,
+        user_id: uuid.UUID,
+        perms: PermissionChecker,
+        *,
+        done_since: datetime | None = None,
+        status: BoardStatus = BoardStatus.ACTIVE,
     ) -> list[VisibleBoard]:
-        """Every active board the caller can open, by name, with its card counts."""
-        stmt = self.visible_select(user_id, perms, done_since=done_since).order_by(
+        """Every board in ``status`` the caller can open, by name, with its card counts."""
+        stmt = self.visible_select(user_id, perms, done_since=done_since, status=status).order_by(
             func.lower(Board.name), Board.id
         )
         return await self.run_visible(stmt)

@@ -16,7 +16,9 @@
 """Board cycle and lead times in SQL: median and 85th percentile per board, in one statement each.
 
 - Cycle time: from a card's first entry into ``in_progress`` (on any board)
-  to its latest entry into ``done`` on the board within the window.
+  to its latest entry into ``done`` on the board within the window
+  (:func:`latest_done_entries`, the same row throughput counts), so a card
+  sent back and done again is one duration, measured to its last finish.
 - Idea to prod: from the card's creation to each of its BUDs being
   delivered (the card's ``delivered`` event, one per BUD) within the window.
 """
@@ -32,7 +34,7 @@ from sqlalchemy.orm import aliased
 from app.models.board_card import BoardCard
 from app.models.board_card_detail import BoardCardEvent
 from app.models.board_enums import BoardCardEventType, BoardStageCategory
-from app.repositories.board_metrics import entered_done
+from app.repositories.board_metrics import latest_done_entries
 
 _MEDIAN = 0.5
 _P85 = 0.85
@@ -58,18 +60,7 @@ class BoardDurationRepository:
         self, board_ids: list[uuid.UUID], since: datetime
     ) -> dict[uuid.UUID, DurationRow]:
         """Per board: first in-progress entry to the latest done entry, done since ``since``."""
-        e = BoardCardEvent
-        done = (
-            select(e.board_id, e.card_id, func.max(e.created_at).label("done_at"))
-            .where(
-                e.org_id == self._org_id,
-                e.board_id.in_(board_ids),
-                e.created_at >= since,
-                *entered_done(),
-            )
-            .group_by(e.board_id, e.card_id)
-            .subquery("done")
-        )
+        done = latest_done_entries(self._org_id, board_ids, since)
         start = aliased(BoardCardEvent)
         started = (
             select(func.min(start.created_at))

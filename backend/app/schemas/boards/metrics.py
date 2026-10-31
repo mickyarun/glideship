@@ -23,7 +23,11 @@ from app.models.board_enums import BoardStageCategory
 
 
 class WeekCount(BaseModel):
-    """Cards that entered a done stage in the UTC week starting ``week_start`` (a Monday)."""
+    """Cards done in the UTC week starting ``week_start`` (a Monday).
+
+    Each card counts once, in the week of its latest entry into a done stage
+    within the chart, so a card sent back and done again isn't counted twice.
+    """
 
     week_start: date
     count: int

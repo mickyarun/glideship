@@ -562,6 +562,15 @@ All endpoints are under `/api/v1/boards`, with thin handlers, Pydantic schemas i
 - `PATCH /{key}`: name, description, visibility, handover settings (including
   `handover_target_status`), `ai_enabled`.
 - `POST /{key}/archive` and `/restore`.
+- **As built: finding archived boards.** `GET /?archived=true` lists the archived boards I hold
+  any role on, by name, in the same `CustomBoardItem` shape (with my `role`) and with no
+  Delivery entry; `archived=false` (the default) is the active list. Decision: the same role
+  rule as the board's page, which opens read-only for every role (`capabilities: ["view"]`,
+  plus `archive_board` for admins), so a viewer of an org-visible board, a member of a
+  members-only one and `boards:manage` holders all see it; members-only boards stay hidden
+  from everyone else. Restore stays admin-only (403 for lower roles). The switcher and
+  `GET /boards/metrics/summary` stay active-only. The frontend shows Restore when the item's
+  `role` is `admin`.
 
 **Stages**
 - `POST /{key}/stages`
@@ -2317,6 +2326,13 @@ inside `op.get_context().autocommit_block()`, following `z4_add_code_review_and_
     import sweep, leave carry forward, Slack status, MCP audit cleanup, mini-game nudge, quiz batch
     top-up, quiz scheduler, quiz monthly rollup and velocity snapshot roller. Moving them is
     mechanical but touches ten schedulers, so it's its own change.
+- **`GET /notifications/` twice per page load** (final walkthrough): not a redirect. The app
+  runs with `redirect_slashes=False`, so `/api/v1/notifications/` (the store's path) is
+  answered directly and `/api/v1/notifications` is a plain 404; nothing answers 307
+  (`tests/api/test_notification_list_path.py` pins it). The second request is the client
+  fetching twice: `useNotificationSocket` calls `store.fetchAll()` when its topic subscription
+  starts (`watch(..., { immediate: true })`) and again from `onSocketReconnect` and the
+  visibility listener, so the frontend pass dedupes it.
 
 ## XP, SP, metrics and the Garden
 
@@ -2374,11 +2390,18 @@ them use `board_card_events.to_category`, never stage names:
   aging, the visible boards) and `repositories/board_metrics_durations.py` (cycle and lead
   times). Each number is one statement for all the boards asked about, so the summary runs the
   same queries for one board or fifty (an integration test counts them).
-  - Throughput: events entering `done` (`to_category = done`, `from_category` not `done`) per
-    UTC week, `BOARDS_METRICS_THROUGHPUT_WEEKS` (12) weeks, zeros filled.
+  - Throughput (decision, from the final walkthrough): **cards, not events**. Each card counts
+    once per board, in the UTC week of its **latest** entry into `done` (`to_category = done`,
+    `from_category` not `done`) within `BOARDS_METRICS_THROUGHPUT_WEEKS` (12) weeks, zeros
+    filled, so the weeks add up to the distinct cards completed in the chart. A card handed
+    over, sent back and handed over again was counted twice before; now it's one, in the week
+    it was last finished (an earlier week loses it). The summary uses the same query, so its
+    row for a board matches that board's own metrics.
   - Cycle time: per card done on the board within `BOARDS_METRICS_WINDOW_DAYS` (90), its first
     `in_progress` entry (any board) to its latest `done` entry; `count`, `median_hours`,
-    `p85_hours` (`percentile_cont`).
+    `p85_hours` (`percentile_cont`). Throughput and cycle time read the same per-card row
+    (`board_metrics.latest_done_entries`), so a re-finished card is one duration measured to
+    its last finish.
   - WIP: open cards by their current stage's category (`board_cards.stage_id` →
     `board_stages.category`, all four categories listed), so re-categorising a stage moves its
     cards with it.

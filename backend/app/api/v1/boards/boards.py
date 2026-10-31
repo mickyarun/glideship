@@ -14,7 +14,7 @@
 
 """Boards: list, create, open, edit, archive and restore."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.boards import _access as can
@@ -30,10 +30,16 @@ router = APIRouter(tags=["boards"])
 
 @router.get("", response_model=BoardList)
 async def list_boards(
-    caller: BoardCaller = Depends(board_caller), db: AsyncSession = Depends(get_db)
+    archived: bool = Query(False, description="List the archived boards I hold a role on."),
+    caller: BoardCaller = Depends(board_caller),
+    db: AsyncSession = Depends(get_db),
 ) -> BoardList:
-    """Boards I can open, then the Delivery board when I'm in engineering."""
-    return await board_service.list_boards(db, caller)
+    """Boards I can open, then the Delivery board when I'm in engineering.
+
+    With ``archived=true``, the archived boards I hold a role on instead (they
+    open read-only; restoring stays with board admins), and no Delivery entry.
+    """
+    return await board_service.list_boards(db, caller, archived=archived)
 
 
 @router.post(

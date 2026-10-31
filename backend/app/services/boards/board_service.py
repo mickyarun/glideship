@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.board import Board, BoardStage
-from app.models.board_enums import BoardMemberRole
+from app.models.board_enums import BoardMemberRole, BoardStatus
 from app.repositories.board import BoardRepository, VisibleBoard
 from app.repositories.board_prefs import BoardPrefsRepository
 from app.repositories.board_stage import BoardStageRepository
@@ -69,14 +69,21 @@ def custom_item(visible: VisibleBoard) -> CustomBoardItem:
     )
 
 
-async def list_boards(db: AsyncSession, caller: BoardCaller) -> BoardList:
-    """Every board the caller can open, then Delivery when they may see it."""
+async def list_boards(
+    db: AsyncSession, caller: BoardCaller, *, archived: bool = False
+) -> BoardList:
+    """Every active board the caller can open, then Delivery when they may see it.
+
+    ``archived`` lists the archived boards they hold a role on instead, with
+    no Delivery entry: the same boards whose pages open read-only.
+    """
     since = datetime.now(UTC) - timedelta(days=settings.boards.recent_done_days)
+    status = BoardStatus.ARCHIVED if archived else BoardStatus.ACTIVE
     visible = await BoardRepository(db, org_id=caller.org_id).list_visible(
-        caller.user_id, caller.perms, done_since=since
+        caller.user_id, caller.perms, done_since=since, status=status
     )
     items: list[BoardListItem] = [custom_item(v) for v in visible]
-    delivery = delivery_item(caller)
+    delivery = None if archived else delivery_item(caller)
     if delivery is not None:
         items.append(delivery)
     return BoardList(items=items)

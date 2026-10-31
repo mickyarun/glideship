@@ -18,7 +18,10 @@
 Throughput reads ``board_card_events``: ``to_category`` and
 ``from_category`` (the stages' categories when the event was written) and
 the event's frozen ``board_id``, never stage names, so the numbers survive
-renamed or re-categorised stages and cards that moved board.
+renamed or re-categorised stages and cards that moved board. It counts
+cards, not events: a card that enters ``done`` more than once in the window
+(handed over, sent back, handed over again) counts once, in the week of its
+latest ``done`` entry, the same moment cycle time ends at.
 
 WIP and aging are about now: an open (unarchived) card counts by its
 current stage's category (``board_cards.stage_id`` → ``board_stages``), so
@@ -32,7 +35,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import ColumnElement, Subquery, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board import Board, BoardStage
@@ -61,13 +64,35 @@ class AgingRow:
     since: datetime
 
 
-def entered_done() -> list[ColumnElement[bool]]:
+def _entered_done() -> list[ColumnElement[bool]]:
     """WHERE clauses for an event that moved a card into ``done`` from anywhere else."""
     e = BoardCardEvent
     return [
         e.to_category == BoardStageCategory.DONE,
         or_(e.from_category.is_(None), e.from_category != BoardStageCategory.DONE),
     ]
+
+
+def latest_done_entries(
+    org_id: uuid.UUID, board_ids: list[uuid.UUID], since: datetime
+) -> Subquery:
+    """``(board_id, card_id, done_at)``: each card's latest ``done`` entry since ``since``.
+
+    One row per card and board, so a card that went back and into ``done``
+    again isn't counted twice. Throughput and cycle time both read it.
+    """
+    e = BoardCardEvent
+    return (
+        select(e.board_id, e.card_id, func.max(e.created_at).label("done_at"))
+        .where(
+            e.org_id == org_id,
+            e.board_id.in_(board_ids),
+            e.created_at >= since,
+            *_entered_done(),
+        )
+        .group_by(e.board_id, e.card_id)
+        .subquery("done")
+    )
 
 
 class BoardMetricsRepository:
@@ -93,19 +118,14 @@ class BoardMetricsRepository:
     async def throughput(
         self, board_ids: list[uuid.UUID], since: datetime
     ) -> dict[uuid.UUID, dict[date, int]]:
-        """Cards entering ``done`` per board and UTC week (Monday) since ``since``."""
-        e = BoardCardEvent
-        week = func.date_trunc("week", func.timezone("UTC", e.created_at)).label("week")
-        stmt = (
-            select(e.board_id, week, func.count())
-            .where(
-                e.org_id == self._org_id,
-                e.board_id.in_(board_ids),
-                e.created_at >= since,
-                *entered_done(),
-            )
-            .group_by(e.board_id, week)
-        )
+        """Cards done per board and UTC week (Monday) since ``since``, each card once.
+
+        A card counts in the week of its latest ``done`` entry, so the weeks
+        add up to the distinct cards completed in the window.
+        """
+        done = latest_done_entries(self._org_id, board_ids, since)
+        week = func.date_trunc("week", func.timezone("UTC", done.c.done_at)).label("week")
+        stmt = select(done.c.board_id, week, func.count()).group_by(done.c.board_id, week)
         out: dict[uuid.UUID, dict[date, int]] = {}
         for board_id, started, count in (await self._db.execute(stmt)).all():
             out.setdefault(board_id, {})[started.date()] = int(count)
