@@ -33,6 +33,7 @@ import { parseCharacterModel } from './CharacterConfig'
 import { createLevelBadge } from './LevelBadge'
 import { disposeMaterial } from '../utils/EntityUtils'
 import { lerpPose, POSITION_LERP, type PoseState } from '../multiplayer/RemoteInterp'
+import { EMOTE, EmoteHolds } from './EmoteHolds'
 
 /**
  * Per-character pose target. Extends the shared PoseState with a `seated`
@@ -50,6 +51,8 @@ import { lerpPose, POSITION_LERP, type PoseState } from '../multiplayer/RemoteIn
 interface RenderTarget extends PoseState {
   /** Seated avatars snap (no position lerp) so they don't drift off the chair. */
   seated: boolean
+  /** Standing still in the garden: the only state a client-side emote can play from. */
+  idle: boolean
 }
 
 /** Minimum snapshot shape needed to spawn/update a server-driven character. */
@@ -119,6 +122,9 @@ export class CharacterSystem {
    * `shouldSkipTransformApply` for the full rule set.
    */
   private readonly renderTargets = new Map<string, RenderTarget>()
+
+  /** Client-side emotes (a cheer for a finished card) that outlast snapshots. */
+  private readonly emoteHolds = new EmoteHolds()
 
   /** Optional callback to check if a user is mounted (set by GardenEngine). */
   isUserMounted: ((userId: string) => boolean) | null = null
@@ -255,6 +261,9 @@ export class CharacterSystem {
     // Record the target. The per-frame update(dt) loop applies it every render
     // frame so the anim component can't clobber the transform between snapshots.
     const seated = snapshot.animState === 'sit' || snapshot.animState === 'sleep'
+    const idle = snapshot.animState === 'idle'
+    // The server moved them (walking, sitting…): its state wins over a cheer.
+    if (!idle) this.emoteHolds.drop(snapshot.userId)
     const existing = this.renderTargets.get(snapshot.userId)
     if (existing) {
       // Mutate in place — avoids allocating a new target on every 20Hz snapshot.
@@ -263,6 +272,7 @@ export class CharacterSystem {
       existing.targetZ = snapshot.z
       existing.targetYaw = snapshot.yaw
       existing.seated = seated
+      existing.idle = idle
     } else {
       // First snapshot for this character: seed current* from the entity's
       // spawn pose so update(dt)'s lerp doesn't fly in from (0,0,0).
@@ -277,6 +287,7 @@ export class CharacterSystem {
         currentZ: pos.z,
         currentYaw: snapshot.yaw,
         seated,
+        idle,
       })
     }
 
@@ -295,8 +306,23 @@ export class CharacterSystem {
       const emote = snapshot.animState === 'wave' ? 1
         : snapshot.animState === 'cheer' ? 2
         : 0
-      anim.setInteger('emote', emote)
+      anim.setInteger('emote', this.emoteHolds.current(snapshot.userId) ?? emote)
     }
+  }
+
+  /**
+   * Cheer on a member's character for ``seconds``, when it's standing idle
+   * in the garden (the graph only reaches Cheer from Idle). Returns whether
+   * it cheered. The locally controlled character is the takeover's to play.
+   */
+  cheer(userId: string, seconds: number): boolean {
+    if (userId === this.takeoverUserId) return false
+    const entity = this.getCharacter(userId)?.entity
+    const target = this.renderTargets.get(userId)
+    if (!entity?.anim || !entity.enabled || (target && !target.idle)) return false
+    entity.anim.setInteger('emote', EMOTE.cheer)
+    this.emoteHolds.hold(userId, EMOTE.cheer, seconds)
+    return true
   }
 
   /**
@@ -309,6 +335,9 @@ export class CharacterSystem {
    * via quaternion. Position is lerped toward target for smooth motion.
    */
   update(_dt: number): void {
+    for (const userId of this.emoteHolds.tick(_dt)) {
+      this.getCharacter(userId)?.entity.anim?.setInteger('emote', EMOTE.none)
+    }
     for (const [userId, target] of this.renderTargets) {
       if (userId === this.takeoverUserId) continue
       const character = this.getCharacter(userId)
@@ -341,6 +370,7 @@ export class CharacterSystem {
   /** Remove a character by userId (when server MemberState is removed). */
   removeByUserId(userId: string): void {
     this.renderTargets.delete(userId)
+    this.emoteHolds.drop(userId)
     const idx = this.characters.findIndex(c => c.memberId === userId)
     if (idx === -1) return
     const character = this.characters[idx]
@@ -403,6 +433,7 @@ export class CharacterSystem {
     }
     this.characters = []
     this.renderTargets.clear()
+    this.emoteHolds.clear()
     this.characterRoot?.destroy()
     this.characterRoot = null
     this.app = null

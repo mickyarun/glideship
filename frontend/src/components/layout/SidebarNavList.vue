@@ -16,7 +16,9 @@
 
 <!-- The sidebar's main links, by workspace: engineering work, team boards,
      engineering insights, then people. Each group shows only to those who
-     can open it; the People heading shows when another group sits above. -->
+     can open it; the People heading shows when another group sits above.
+     Board users outside engineering get the Garden under their boards
+     (engineers open it from the dashboard). -->
 <template>
   <v-list density="compact" nav class="px-2">
     <EngineeringNav v-if="canAccessEngineering" group="work" :rail="rail" />
@@ -25,6 +27,13 @@
       :rail="rail"
       :boards="canViewBoards"
       :delivery="canAccessEngineering"
+    />
+    <v-list-item
+      v-if="canViewBoards && !canAccessEngineering"
+      prepend-icon="mdi-tree-outline"
+      title="Garden"
+      :to="{ name: 'garden' }"
+      rounded="lg"
     />
     <EngineeringNav v-if="canAccessEngineering" group="insights" :rail="rail" />
     <PeopleNav :rail="rail" :show-heading="canAccessEngineering || canViewBoards" />

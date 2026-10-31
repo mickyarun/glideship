@@ -40,6 +40,13 @@ export const BOARDS_VIEW = 'boards:view'
 export const BOARDS_CREATE = 'boards:create'
 
 /**
+ * Who may enter the Garden and pick a character: engineers, and anyone
+ * holding ``boards:view`` (board work shows up there). Any one is enough,
+ * the same rule the backend applies to room joins.
+ */
+export const GARDEN_PERMISSIONS: readonly string[] = [WORKSPACE_ENGINEERING, BOARDS_VIEW]
+
+/**
  * Landing route for a signed-in user, based on what they can open:
  * engineers get the dashboard, anyone else who can open a team board gets
  * the boards, and everyone else their leave. Boards need both the

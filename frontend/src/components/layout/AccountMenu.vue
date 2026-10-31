@@ -46,8 +46,14 @@
         </router-link>
       </div>
       <v-divider class="mb-1" />
-      <!-- XP profile, garden character and MCP token are all
-           engineering-workspace features. -->
+      <!-- XP profile and MCP token are engineering-workspace features; the
+           garden character is for anyone who may enter the Garden. -->
+      <v-list-item
+        v-if="!canAccessEngineering && canViewBoards"
+        prepend-icon="mdi-account-edit-outline"
+        title="Customize Character"
+        to="/character-select"
+      />
       <template v-if="canAccessEngineering">
         <v-list-item
           prepend-icon="mdi-account-circle-outline"
@@ -112,7 +118,7 @@ import { useThemePreference, type ThemePreference } from '@/composables/useTheme
 
 const router = useRouter()
 const authStore = useAuthStore()
-const { canAccessEngineering } = usePermissions()
+const { canAccessEngineering, canViewBoards } = usePermissions()
 
 // Light/dark toggle (persisted to localStorage by the composable).
 const { preference: themePref, setPreference: setThemePref } = useThemePreference()

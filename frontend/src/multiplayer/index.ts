@@ -37,3 +37,9 @@ export {
   type ConnectionStatus,
   type ConnectionStatusListener,
 } from './OrgRoomClient'
+export {
+  BOARD_ACTIVITY_MESSAGE,
+  parseBoardActivity,
+  type BoardActivityEvent,
+  type BoardActivityKind,
+} from './boardActivity'
