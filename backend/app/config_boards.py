@@ -17,10 +17,12 @@
 from datetime import time
 
 from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
+
+from app.config_board_imports import BoardImportSettings
 
 
-class BoardsConfig(BaseSettings):
+class BoardsConfig(BoardImportSettings):
     """Tunables for team boards: shape, ordering, history, imports and reminders."""
 
     model_config = SettingsConfigDict(env_prefix="BOARDS_", env_file=".env", extra="ignore")
@@ -59,27 +61,6 @@ class BoardsConfig(BaseSettings):
     )
     attachment_max_files: int = Field(
         default=20, gt=0, description="Files one card may hold; links don't count."
-    )
-    import_max_upload_bytes: int = Field(
-        default=50 * 1024 * 1024, gt=0, description="Largest import file accepted."
-    )
-    import_max_attachment_bytes: int = Field(
-        default=1024 * 1024 * 1024, gt=0, description="Attachment bytes one import may copy."
-    )
-    import_batch_size: int = Field(
-        default=50, gt=0, description="Cards one import commits at a time."
-    )
-    trello_requests_per_10s: int = Field(
-        default=90, gt=0, description="Trello API calls per 10 seconds, under its limit."
-    )
-    trello_timeout_seconds: float = Field(
-        default=30.0, gt=0, description="How long one Trello API call may take."
-    )
-    trello_max_retries: int = Field(
-        default=5, ge=0, description="Retries of a Trello call that was rate limited."
-    )
-    trello_backoff_seconds: float = Field(
-        default=2.0, gt=0, description="First wait after a 429; doubles on each retry."
     )
     due_reminder_default_time: time = Field(
         default=time(9, 0), description="Local time due reminders go out."

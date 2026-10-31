@@ -21,6 +21,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.paths import NO_NUL_PATTERN
+from app.core.upload_limits import MAX_CONFIGURABLE_ATTACHMENT_MB
 from app.models.quiz_question import QuizDifficulty, QuizQuestionType
 from app.schemas.git_ref import BranchName
 
@@ -195,16 +196,6 @@ class BUDStageSettings(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-
-# Hard ceiling on the per-org bug-attachment size limit, in MB.
-#
-# This is NOT a preference — it is the largest body the edge proxy will
-# forward. ``frontend/nginx.conf.template`` sets ``client_max_body_size``
-# just above this value so a request at the configured limit still
-# reaches the backend and gets a clean JSON 413 instead of nginx's HTML
-# error page. Raising this constant means raising that directive too,
-# or admins can save a limit that silently fails at the proxy.
-MAX_CONFIGURABLE_ATTACHMENT_MB = 25
 
 # Hard ceiling on the per-org attachments-per-bug limit. Unlike the size
 # cap this is a usability bound, not an infrastructure one: past a few
