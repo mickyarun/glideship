@@ -167,3 +167,12 @@ const tabs = computed<DetailTab[]>(() => [
 </script>
 
 <style scoped src="../buds/bud-detail-page.css"></style>
+<style scoped>
+/* A card's sections are short, so its details stay beside them on a
+   narrower page than a BUD's (a 1280px laptop with the sidebar open). */
+@container bud-page (min-width: 860px) and (max-width: 1080px) {
+  .bud-page__grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+</style>

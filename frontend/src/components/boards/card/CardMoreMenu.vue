@@ -48,9 +48,10 @@ async function copy(): Promise<void> {
 </script>
 
 <style scoped>
+/* Square, at the height of History and Move beside it. */
 .more-menu__btn {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-input);
   border-color: rgb(var(--v-theme-rule));
 }
