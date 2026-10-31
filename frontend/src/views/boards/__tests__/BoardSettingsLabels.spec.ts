@@ -111,14 +111,18 @@ describe('BoardSettingsView: Labels and Handover', () => {
     expect((returnStage.props('items') as { title: string }[]).map(i => i.title)).toEqual(['To do (To do)'])
   })
 
-  it('needs a handover stage before handover is on, then saves it all', async () => {
+  it('needs a handover stage once handover is on, then saves it all', async () => {
     const { wrapper } = await mountSettings('/boards/OPS/settings?section=handover')
     wrapper.findComponent(VSwitch).vm.$emit('update:modelValue', true)
+    await flushPromises()
+    // The board's only Done stage comes picked; clearing it asks for one.
+    const [handoverStage, returnStage] = wrapper.findAllComponents(VSelect)
+    expect(handoverStage.props('modelValue')).toBe('s3')
+    handoverStage.vm.$emit('update:modelValue', null)
     await flushPromises()
     expect(wrapper.text()).toContain('Pick the Done stage handed-over cards move to.')
     expect(button('Save changes').disabled).toBe(true)
 
-    const [handoverStage, returnStage] = wrapper.findAllComponents(VSelect)
     handoverStage.vm.$emit('update:modelValue', 's3')
     returnStage.vm.$emit('update:modelValue', 's1')
     await flushPromises()
