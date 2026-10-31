@@ -1281,10 +1281,16 @@ Moving a card to the Delivery board isn't a move. It's a handover.
   Earlier events keep the source board's id.
   - Read-time redaction: someone with no role on `from_board` reads `from_board`, `from_stage`
     and `old_key` as null, `dropped_labels` as `[]` and `cleared_repo` as null, so a members-only
-    source never leaks through the target's history. One role query covers the whole page
+    source never leaks through the target's history. The target side is blanked the same way:
+    no role on `to_board` reads `to_board` and `new_key` as null, so a card that went SEO →
+    hidden board → SEO doesn't name the hidden board to an SEO-only reader on its first move.
+    One role query covers both sides of every entry on the page
     (`BoardAccessRepository.boards_with_role`). The events listing is the only place card
     events are serialized today. The frontend renders a redacted entry as "Moved here from
-    another board".
+    another board" / "Moved to another board".
+    - Kept: `removed_assignees` (they were assignees on the source, and the list says only that
+      they couldn't edit the target, not what it is), the event's `board_id` and `to_stage_id`
+      (opaque ids, `board_id` is required) and `to_category` (metrics need it).
 - **Live, after commit.**
   - On the source board: `card_left_board {card_id}` only. Its watchers may not see the target,
     so neither its key nor the new card key goes out; an open card page asks by-key, which

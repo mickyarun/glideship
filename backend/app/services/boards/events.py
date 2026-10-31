@@ -36,14 +36,17 @@ from app.repositories.board_card_event import BoardCardEventRepository
 from app.schemas.boards.card_detail import EventPage, EventRead
 from app.services.boards.access import BoardAccess, CardAccess
 
-# What a moved_board entry says about its source board, blanked for readers
-# who can't open that board (the old key names it too).
-_HIDDEN_SOURCE: dict[str, Any] = {
-    "from_board": None,
-    "from_stage": None,
-    "old_key": None,
-    "dropped_labels": [],
-    "cleared_repo": None,
+# What a moved_board entry says about each board it names, blanked for
+# readers who can't open that board (each key names its board too).
+_HIDDEN: dict[str, dict[str, Any]] = {
+    "from_board": {
+        "from_board": None,
+        "from_stage": None,
+        "old_key": None,
+        "dropped_labels": [],
+        "cleared_repo": None,
+    },
+    "to_board": {"to_board": None, "new_key": None},
 }
 
 
@@ -103,38 +106,47 @@ async def list_events(
     page = rows[:size]
     items = [EventRead.model_validate(r) for r in page]
     return EventPage(
-        items=await _hide_unseen_sources(db, target.access, items),
+        items=await _hide_unseen_boards(db, target.access, items),
         next_before=page[-1].id if len(rows) > size else None,
     )
 
 
-def _from_board(event: EventRead) -> uuid.UUID | None:
+def _named_boards(event: EventRead) -> dict[str, uuid.UUID]:
+    """The boards a ``moved_board`` entry names, by the detail field naming each."""
     if event.type is not BoardCardEventType.MOVED_BOARD:
-        return None
-    ref = event.detail.get("from_board")
-    raw = ref.get("id") if isinstance(ref, dict) else None
-    try:
-        return uuid.UUID(str(raw))
-    except ValueError:
-        return None
+        return {}
+    named: dict[str, uuid.UUID] = {}
+    for side in _HIDDEN:
+        ref = event.detail.get(side)
+        raw = ref.get("id") if isinstance(ref, dict) else None
+        try:
+            named[side] = uuid.UUID(str(raw))
+        except ValueError:
+            continue
+    return named
 
 
-async def _hide_unseen_sources(
+async def _hide_unseen_boards(
     db: AsyncSession, access: BoardAccess, items: list[EventRead]
 ) -> list[EventRead]:
-    """Blank what a ``moved_board`` entry says about a source board the reader can't open.
+    """Blank what a ``moved_board`` entry says about a board the reader can't open.
 
-    Its name, key, stage, labels and repository stay with people who can
-    see that board; everyone else reads "moved here from another board".
-    One role lookup for the whole page.
+    Either side: a source's name, key, stage, labels and repository, or a
+    target's name and the key the card took there, stay with people who
+    can see that board; everyone else reads "another board". One role
+    lookup for the whole page.
     """
-    sources = {board for board in map(_from_board, items) if board is not None}
+    named = [_named_boards(item) for item in items]
+    boards = {board for sides in named for board in sides.values()}
     seen = await BoardAccessRepository(db, org_id=access.org_id).boards_with_role(
-        sources, access.user_id, access.perms
+        boards, access.user_id, access.perms
     )
-    return [
-        item.model_copy(update={"detail": {**item.detail, **_HIDDEN_SOURCE}})
-        if (board := _from_board(item)) is not None and board not in seen
-        else item
-        for item in items
-    ]
+    out: list[EventRead] = []
+    for item, sides in zip(items, named, strict=True):
+        hidden = [side for side, board in sides.items() if board not in seen]
+        if not hidden:
+            out.append(item)
+            continue
+        blank = {k: v for side in hidden for k, v in _HIDDEN[side].items()}
+        out.append(item.model_copy(update={"detail": {**item.detail, **blank}}))
+    return out

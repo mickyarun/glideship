@@ -103,3 +103,35 @@ async def test_history_hides_a_members_only_source_from_people_outside_it(
     assert blank["dropped_labels"] == []
     assert blank["new_key"] == moved["key"]
     assert blank["to_board"] == seen["to_board"]
+
+
+async def test_history_hides_a_members_only_target_from_people_outside_it(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org = await new_org(pg_session_factory)
+    pm = await person(pg_session_factory, org, "pm")
+    seo = (await make_board(client, pm, visibility="members"))["board"]["key"]
+    hid = (await make_board(client, pm, template="blank", visibility="members"))["board"]["key"]
+    reader, both = await person(pg_session_factory, org), await person(pg_session_factory, org)
+    await put_role(client, pm, seo, reader.id, "viewer")
+    for key in (seo, hid):
+        await put_role(client, pm, key, both.id, "viewer")
+    card = await make_card(client, pm, seo, "Round trip")
+    away = ok(await move_board(client, pm, seo, card, hid))
+    back = ok(await move_board(client, pm, hid, away, seo))
+    events = f"{BOARDS}/{seo}/cards/{back['number']}/events"
+
+    async def moved(headers: dict[str, str]) -> list[dict[str, object]]:
+        page = ok(await client.get(events, headers=headers))
+        return [dict(e["detail"]) for e in reversed(page["items"]) if e["type"] == "moved_board"]
+
+    out, home = await moved(reader.headers)
+    assert out["to_board"] is None and out["new_key"] is None
+    assert out["from_board"] is not None and out["old_key"] == card["key"]
+    assert home["from_board"] is None and home["old_key"] is None
+    assert home["from_stage"] is None
+    assert home["to_board"] is not None and home["new_key"] == back["key"]
+
+    out, home = await moved(both.headers)
+    assert out["to_board"] is not None and out["new_key"] == away["key"]
+    assert home["from_board"] is not None and home["old_key"] == away["key"]
