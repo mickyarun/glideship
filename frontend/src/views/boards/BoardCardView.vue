@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import BoardNoAccess from '@/components/boards/BoardNoAccess.vue'
@@ -131,9 +131,9 @@ import AppPanel from '@/components/common/AppPanel.vue'
 import { useBoardCardPage } from '@/composables/useBoardCardPage'
 import { useCardDrafts } from '@/composables/useCardDrafts'
 import { useCardFieldFocus } from '@/composables/useCardFieldFocus'
+import { useCardTabs } from '@/composables/useCardTabs'
 import { useNow } from '@/composables/useNow'
-import { DOC_KINDS } from '@/constants/boards'
-import type { CardDocKind, StageRequiredField } from '@/types/boards'
+import type { StageRequiredField } from '@/types/boards'
 import type { DetailTab } from '@/utils/budDetail'
 import { parseCardNumber } from '@/utils/boardRoutes'
 import { tabFor } from '@/utils/cardFocus'
@@ -164,17 +164,7 @@ function setOverview(el: unknown): void {
   attachments.value = (el as InstanceType<typeof CardOverview> | null) ?? null
 }
 
-const openTab = ref('overview')
-const docKind = ref<CardDocKind>(DOC_KINDS[0])
-/** Switching tab (or document) closes its editors, so an unsaved draft asks first. */
-async function goTo(next: string, kind: CardDocKind = docKind.value): Promise<boolean> {
-  if (next === openTab.value && kind === docKind.value) return true
-  if (!(await drafts.confirmDiscard())) return false
-  openTab.value = next
-  docKind.value = kind
-  return true
-}
-const tab = computed({ get: () => openTab.value, set: next => void goTo(next) })
+const { tab, docKind, goTo } = useCardTabs(drafts.confirmDiscard)
 // "Open card" from a refused move, or "Show me" here: the fields the stage needs.
 const focus = useCardFieldFocus({
   ready: computed(() => !!detail.value && !!board.value),

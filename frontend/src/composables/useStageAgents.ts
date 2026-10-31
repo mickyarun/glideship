@@ -15,7 +15,9 @@
 // A board's stage agents as its AI settings edit them: every stage's list,
 // the org's skills to pick from (the board skills suggested first), and
 // each change (add, switch on or off, change the trigger, reorder, remove)
-// saved at once by replacing that stage's list. Orders follow the list's
+// saved at once by replacing that stage's list. Agents already on the stage
+// go back with their ids, so they stay the same agents (their runs and Retry
+// keep pointing at them); an added one has none. Orders follow the list's
 // positions, so two agents never share one; the UI offers "when a card
 // enters" to one agent per stage, and the server refuses a second (422)
 // in words the section shows. Another admin's change reloads that stage.
@@ -36,12 +38,12 @@ interface StageList {
   error: string
 }
 
-/** What a change sets on an agent; its order is its position in the list. */
-export type AgentEdit = Pick<StageAgentRead, 'skill_id' | 'trigger' | 'enabled'>
+/** What a change sets on an agent (``id`` when it's already on the stage); its order is its position in the list. */
+export type AgentEdit = Pick<StageAgentRead, 'skill_id' | 'trigger' | 'enabled'> & { id?: string }
 
 /** An agent as the list sends it, at its position. */
 const toWrite = (a: AgentEdit, order: number): StageAgentWrite => ({
-  skill_id: a.skill_id, trigger: a.trigger, enabled: a.enabled, order,
+  ...(a.id ? { id: a.id } : {}), skill_id: a.skill_id, trigger: a.trigger, enabled: a.enabled, order,
 })
 
 export function useStageAgents(page: BoardPage, status: BoardSettingsStatus, allowed: () => boolean) {

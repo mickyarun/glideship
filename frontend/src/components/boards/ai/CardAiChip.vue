@@ -15,8 +15,9 @@
  -->
 
 <!-- A quiet "AI" chip on a board tile while a stage agent works on the
-     card (queued or drafting), in the same small mono style as the
-     repository chip. Nothing shows otherwise. -->
+     card (queued or drafting), from the card's summary, in the same small
+     mono style as the repository chip. Its title names the skill when
+     known. Nothing shows otherwise. -->
 <template>
   <span v-if="run" class="ai-chip" :title="title" role="img" :aria-label="title">
     <v-icon :icon="AI_ICON" size="14" aria-hidden="true" />
@@ -26,14 +27,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { AI_ICON } from '@/constants/boardAgents'
-import { useBoardAgentRunsStore } from '@/stores/boardAgentRuns'
+import { AI_ICON, chipTitle } from '@/constants/boardAgents'
+import type { CardAgentRun } from '@/types/boards'
 
-const props = defineProps<{ cardId: string }>()
+const props = defineProps<{ run: CardAgentRun | null | undefined }>()
 
-const runs = useBoardAgentRunsStore()
-const run = computed(() => runs.runFor(props.cardId))
-const title = computed(() => (run.value?.status === 'pending' ? 'AI run queued' : 'AI running'))
+const title = computed(() => (props.run ? chipTitle(props.run) : ''))
 </script>
 
 <style scoped>

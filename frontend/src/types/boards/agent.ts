@@ -23,8 +23,12 @@ import type { CardDocKind } from '@/types/boards/doc'
 export type AgentTrigger = 'on_enter' | 'manual'
 export type AgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled'
 
-/** One agent for a stage, as the admin's list sends it (lowest ``order`` runs first). */
+/**
+ * One agent for a stage, as the admin's list sends it (lowest ``order`` runs
+ * first). ``id`` keeps one of the stage's agents; without it one is added.
+ */
 export interface StageAgentWrite {
+  id?: string
   skill_id: string
   trigger: AgentTrigger
   enabled: boolean

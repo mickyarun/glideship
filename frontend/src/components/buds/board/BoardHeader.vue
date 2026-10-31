@@ -35,7 +35,7 @@
           v-if="canConfigure"
           variant="outlined"
           :prepend-icon="xs ? undefined : 'mdi-cog-outline'"
-          title="Customize QA framework and lifecycle stages"
+          title="AI, QA framework and lifecycle stages"
           :to="{ name: 'settings-qa-automation' }"
         >
           Settings

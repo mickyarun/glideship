@@ -70,7 +70,7 @@ export const useBoardCardAgentsStore = defineStore('boardCardAgents', () => {
       if (!same(c, mine)) return
       data.value = reply
       error.value = ''
-      boardRuns.apply(c.id, reply.active)
+      boardRuns.apply(c.id, reply.active, agentFor(reply.active)?.skill_name)
     } catch (err) {
       if (!same(c, mine)) return
       if (isAxiosError(err) && err.response?.status === 404) unavailable.value = true
@@ -142,7 +142,7 @@ export const useBoardCardAgentsStore = defineStore('boardCardAgents', () => {
       const reply = await boardCardApi.runAgent(c.key, c.number, agent.id)
       if (!same(c, mine)) return false
       applyRun(reply.run)
-      boardRuns.apply(c.id, reply.run)
+      boardRuns.apply(c.id, reply.run, agent.skill_name)
       return true
     } catch (err) {
       if (!same(c, mine)) return false

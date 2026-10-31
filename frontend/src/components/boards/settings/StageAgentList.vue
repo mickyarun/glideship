@@ -76,7 +76,7 @@ const emptyText = computed(() => {
   return `No AI on this stage.${hint}`
 })
 
-const plain = (a: StageAgentRead): AgentEdit => ({ skill_id: a.skill_id, trigger: a.trigger, enabled: a.enabled })
+const plain = (a: StageAgentRead): AgentEdit => ({ id: a.id, skill_id: a.skill_id, trigger: a.trigger, enabled: a.enabled })
 
 async function save(edit: (latest: StageAgentRead[]) => AgentEdit[], done: string): Promise<boolean> {
   busy.value = true

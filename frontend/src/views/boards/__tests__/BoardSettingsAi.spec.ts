@@ -15,8 +15,9 @@
 /**
  * The AI section of a board's settings: the board's switch, each stage's
  * agents in run order, and every change saved by replacing the stage's
- * list: add (the board skills suggested first), switch off, reorder,
- * remove. One agent per stage may run when a card enters, so the UI won't
+ * list (agents already on it by id, so they stay the same agents): add
+ * (the board skills suggested first, each saying what it writes), switch
+ * off, reorder, remove. One agent per stage may run when a card enters, so the UI won't
  * offer a second, and a refusal shows in the server's words. Anyone but
  * an admin sees only the switch, and no stage list is fetched.
  */
@@ -99,9 +100,9 @@ describe('BoardSettingsView: AI', () => {
     ;[...doing.querySelectorAll('button')].find(b => b.textContent?.includes('Add AI'))!.click()
     await flushPromises()
     const select = wrapper.findComponent(VSelect)
-    expect((select.props('items') as { title: string }[]).map(i => i.title)).toEqual([
-      'Suggested for boards', 'Design helper: drafts the design brief', 'PRD writer: drafts the PRD',
-      'Your library', 'Release notes: drafts the notes',
+    expect((select.props('items') as { title: string; props?: { subtitle: string } }[]).map(i => [i.title, i.props?.subtitle])).toEqual([
+      ['Suggested for boards', undefined], ['Design helper', 'writes a design brief'], ['PRD writer', 'writes a PRD'],
+      ['Your library', undefined], ['Release notes', 'writes notes'],
     ])
     // Design helper already runs when a card enters Doing.
     const runs = [...document.querySelectorAll<HTMLButtonElement>('.agent-add [role="radio"]')]
@@ -110,12 +111,13 @@ describe('BoardSettingsView: AI', () => {
     ])
     select.vm.$emit('update:modelValue', 'sk-c')
     await flushPromises()
+    expect(document.querySelector('.agent-add')?.textContent).toContain('Release notes writes notes')
     settings.putStageAgents.mockResolvedValue([PRD, DESIGN, makeAgent('a3', { skill_id: 'sk-c', skill_name: 'Release notes', order: 2 })])
     button('Add').click()
     await flushPromises()
     expect(settings.putStageAgents).toHaveBeenCalledWith('OPS', 's2', [
-      { skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 0 },
-      { skill_id: 'sk-a2', trigger: 'on_enter', enabled: true, order: 1 },
+      { id: 'a1', skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 0 },
+      { id: 'a2', skill_id: 'sk-a2', trigger: 'on_enter', enabled: true, order: 1 },
       { skill_id: 'sk-c', trigger: 'manual', enabled: true, order: 2 },
     ])
     expect(stageText('Doing')).toContain('Release notes')
@@ -127,21 +129,21 @@ describe('BoardSettingsView: AI', () => {
     button('Move PRD writer down').click()
     await flushPromises()
     expect(settings.putStageAgents).toHaveBeenLastCalledWith('OPS', 's2', [
-      { skill_id: 'sk-a2', trigger: 'on_enter', enabled: true, order: 0 },
-      { skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 1 },
+      { id: 'a2', skill_id: 'sk-a2', trigger: 'on_enter', enabled: true, order: 0 },
+      { id: 'a1', skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 1 },
     ])
     settings.putStageAgents.mockResolvedValue([{ ...DESIGN, order: 0, enabled: false }, { ...PRD, order: 1 }])
     document.querySelector<HTMLInputElement>('input[aria-label="Design helper on"]')!.click()
     await flushPromises()
     expect(settings.putStageAgents).toHaveBeenLastCalledWith('OPS', 's2', [
-      { skill_id: 'sk-a2', trigger: 'on_enter', enabled: false, order: 0 },
-      { skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 1 },
+      { id: 'a2', skill_id: 'sk-a2', trigger: 'on_enter', enabled: false, order: 0 },
+      { id: 'a1', skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 1 },
     ])
     settings.putStageAgents.mockResolvedValue([{ ...PRD, order: 0 }])
     button('Remove Design helper').click()
     await flushPromises()
     expect(settings.putStageAgents).toHaveBeenLastCalledWith('OPS', 's2', [
-      { skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 0 },
+      { id: 'a1', skill_id: 'sk-a1', trigger: 'manual', enabled: true, order: 0 },
     ])
     expect(stageText('Doing')).not.toContain('Design helper')
   })
@@ -185,8 +187,8 @@ describe('BoardSettingsView: AI', () => {
     resolveFirst([{ ...PRD, enabled: false }, DESIGN])
     await flushPromises()
     expect(settings.putStageAgents).toHaveBeenLastCalledWith('OPS', 's2', [
-      { skill_id: 'sk-a1', trigger: 'manual', enabled: false, order: 0 },
-      { skill_id: 'sk-a2', trigger: 'on_enter', enabled: false, order: 1 },
+      { id: 'a1', skill_id: 'sk-a1', trigger: 'manual', enabled: false, order: 0 },
+      { id: 'a2', skill_id: 'sk-a2', trigger: 'on_enter', enabled: false, order: 1 },
     ])
   })
 })

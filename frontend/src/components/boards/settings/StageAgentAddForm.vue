@@ -15,9 +15,9 @@
  -->
 
 <!-- Add AI to a stage: a skill from the org's library (the board skills
-     suggested first, each saying what it drafts) and when it runs. "When a
-     card enters" is off while another agent on the stage has it. Output
-     always lands as a draft on the card's Documents tab. -->
+     suggested first, each hinting what it writes: "writes a PRD") and when
+     it runs. "When a card enters" is off while another agent on the stage
+     has it. Output always lands as a draft on the card's Documents tab. -->
 <template>
   <form class="agent-add" :aria-label="`Add AI to ${stageName}`" @submit.prevent="submit">
     <v-select
@@ -30,6 +30,8 @@
       hide-details="auto"
       :loading="loading"
       :error-messages="error || undefined"
+      :hint="hint"
+      persistent-hint
       :no-data-text="loading ? 'Loading…' : 'No skills in your organization\'s library'"
     />
     <span :id="runsId" class="agent-add__label">Runs</span>
@@ -45,8 +47,7 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
-import { AGENT_TRIGGER_OPTIONS } from '@/constants/boardAgents'
-import { DOC_NAMES } from '@/constants/boards'
+import { AGENT_TRIGGER_OPTIONS, DOC_WRITES } from '@/constants/boardAgents'
 import type { AgentTrigger, BoardSkillOption } from '@/types/boards'
 
 const props = defineProps<{
@@ -70,15 +71,20 @@ watch(() => props.enterTaken, taken => {
   if (taken) trigger.value = 'manual'
 })
 
-/** Suggested skills under their own heading, then the library. */
+/** Suggested skills under their own heading, then the library; each says what it writes. */
 const items = computed(() => {
-  const row = (s: BoardSkillOption) => ({ title: `${s.name}: drafts the ${DOC_NAMES[s.output_kind]}`, value: s.id })
+  const row = (s: BoardSkillOption) => ({ title: s.name, value: s.id, props: { subtitle: DOC_WRITES[s.output_kind] } })
   const suggested = props.skills.filter(s => s.suggested)
   const rest = props.skills.filter(s => !s.suggested)
   return [
     ...(suggested.length ? [{ type: 'subheader', title: 'Suggested for boards' }, ...suggested.map(row)] : []),
     ...(rest.length ? [{ type: 'subheader', title: 'Your library' }, ...rest.map(row)] : []),
   ]
+})
+
+const hint = computed(() => {
+  const skill = props.skills.find(s => s.id === skillId.value)
+  return skill ? `${skill.name} ${DOC_WRITES[skill.output_kind]}` : undefined
 })
 
 function submit(): void {

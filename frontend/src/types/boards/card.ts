@@ -16,6 +16,7 @@
 // backend/app/schemas/boards/card.py.
 
 import type { BUDPriority, BUDStatus } from '@/types'
+import type { AgentRunStatus } from '@/types/boards/agent'
 import type { StageRequiredField } from '@/types/boards/board'
 
 /** A send-back or a re-handover of one of the card's BUDs. */
@@ -45,6 +46,12 @@ export interface HandoverChip {
 /** How far the card's live handovers are: none, some still in dev, all in prod. */
 export type CardDelivery = 'none' | 'in_progress' | 'delivered'
 
+/** The agent run going on a card now, for its tile; ``skill_name`` is null once the skill is deleted. */
+export interface CardAgentRun {
+  status: Extract<AgentRunStatus, 'pending' | 'running'>
+  skill_name: string | null
+}
+
 export interface CardSummary {
   id: string
   key: string
@@ -70,6 +77,8 @@ export interface CardSummary {
   repo_id: string | null
   handovers: HandoverChip[]
   delivery: CardDelivery
+  /** Its active run; a server that predates it leaves it out. */
+  agent_run?: CardAgentRun | null
 }
 
 /** One keyset page; pass ``next_cursor`` back as ``cursor``. Null on the last page. */

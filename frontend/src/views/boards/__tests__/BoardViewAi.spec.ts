@@ -14,8 +14,9 @@
 
 /**
  * AI on the board's tiles: a card shows a quiet AI chip while a stage
- * agent is queued or drafting on it (from the board's live channel), and
- * loses it when the run ends. An AI draft arriving doesn't count as the
+ * agent is queued or drafting on it (its summary's run, then the board's
+ * live channel), and loses it when the run ends; a reload shows what the
+ * summaries say. An AI draft arriving doesn't count as the
  * card's PRD; an accepted one does.
  */
 import { flushPromises } from '@vue/test-utils'
@@ -104,13 +105,37 @@ describe('BoardView AI on tiles', () => {
     send({ event: 'doc_updated', card_id: '3', kind: 'prd', version: 1, state: 'pending_review' })
     await flushPromises()
     expect(cards.columns.s1.items.find(c => c.id === '3')?.has_prd).toBe(false)
+    // Accepting it retires the draft (superseded) and makes a new current version.
+    send({ event: 'doc_updated', card_id: '3', kind: 'prd', version: 1, state: 'superseded' })
+    await flushPromises()
+    expect(cards.columns.s1.items.find(c => c.id === '3')?.has_prd).toBe(false)
     send({ event: 'doc_updated', card_id: '3', kind: 'prd', version: 2, state: 'current' })
     await flushPromises()
     expect(cards.columns.s1.items.find(c => c.id === '3')?.has_prd).toBe(true)
   })
 
-  it('forgets running chips on a reconnect, since an end it missed is never replayed', async () => {
-    const { onSocketReconnect } = await import('@/services/wsReconnect')
+  it("shows the summary's run, named, follows it live, and a reload shows what the summaries say", async () => {
+    const running = { status: 'pending' as const, skill_name: 'PRD writer' }
+    api.cards.mockImplementation(async (_k, p) => ({
+      items: p.stage_id === 's1' ? [makeCard('3', { agent_run: running }), makeCard('4')] : [],
+      next_cursor: null,
+    }))
+    await mountBoardPage()
+    expect(chip('3')?.getAttribute('aria-label')).toBe('PRD writer queued')
+    send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1') })
+    await flushPromises()
+    expect(chip('3')?.getAttribute('aria-label')).toBe('PRD writer running')
+    send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1', { status: 'failed' }) })
+    await flushPromises()
+    expect(chip('3')).toBeNull()
+    // A run that started while the socket was down shows once the board reloads.
+    reconnect()
+    await flushPromises()
+    expect(chip('3')?.getAttribute('aria-label')).toBe('PRD writer queued')
+    expect(chip('4')).toBeNull()
+  })
+
+  it('clears a chip on a reconnect when the reloaded summary has no run', async () => {
     await mountBoardPage()
     send({ event: 'agent_run_updated', card_id: '3', run: makeRun('r1') })
     await flushPromises()
@@ -118,6 +143,5 @@ describe('BoardView AI on tiles', () => {
     reconnect()
     await flushPromises()
     expect(chip('3')).toBeNull()
-    expect(onSocketReconnect).toHaveBeenCalled()
   })
 })

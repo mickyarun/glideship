@@ -19,7 +19,9 @@
 // are dropped by origin. A reconnect, a stage, label or member change
 // reloads the board; a change to who can open it reloads its people; a PRD
 // saved elsewhere lets its card into stages that need one, and a stage
-// agent's run marks its card's tile. Losing access lands on the no-access state.
+// agent's run marks its card's tile (a reload brings each card's active run
+// with it, so one that ended while the socket was down clears). Losing
+// access lands on the no-access state.
 
 import { computed, ref, watch, type Ref } from 'vue'
 import { useBoard } from '@/composables/useBoard'
@@ -73,7 +75,7 @@ export function useBoardPage(key: Ref<string>) {
       }
       const saved = filters.restore(detail.board.key, detail.filters)
       cards.reset(detail.board.key, detail.board.id, detail.stages, saved)
-      agentRuns.reset(detail.board.id)
+      agentRuns.reset()
       void cards.loadAll()
       void loadMembers(k)
       void people.load(k, () => k === key.value)
@@ -104,8 +106,6 @@ export function useBoardPage(key: Ref<string>) {
   // An import's end and a reconnect can land together: one resync runs (and
   // at most one more after it); while a board opens, its own load is enough.
   const resyncOnce = coalesced(async () => {
-    // Runs that ended while the socket was down never say so: forget them all.
-    agentRuns.reset(board.detail.value?.board.id ?? null)
     void repos.load(key.value, () => cards.boardKey === key.value)
     void people.load(key.value, () => cards.boardKey === key.value)
     await refreshBoard()

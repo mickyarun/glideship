@@ -13,42 +13,54 @@
 // limitations under the License.
 
 /**
- * Which cards on the open board have a stage agent working right now, for
- * the quiet "AI running" chip on their tiles. Fed by the board's live
- * ``agent_run_updated`` messages and by the card page (its panel's load and
- * its own Run, whose echo this tab skips). Card summaries don't carry runs,
- * so a run that started before the board opened shows once its card page
- * is visited or its next update arrives. Cleared when another board opens.
+ * Live run changes onto the open board's tiles. A card summary carries its
+ * active run (``agent_run``), so a reload always shows the truth; between
+ * reloads the board's ``agent_run_updated`` messages and the card page (its
+ * panel's load and its own Run, whose echo this tab skips) patch the loaded
+ * card. The newest run seen on each card is kept, so an older run's late
+ * end never clears a newer one. Forgotten when another board opens.
  */
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
 
 import { ACTIVE_RUN_STATUSES } from '@/constants/boardAgents'
-import type { AgentRunRead } from '@/types/boards'
+import { useBoardCardsStore } from '@/stores/boardCards'
+import type { AgentRunRead, CardAgentRun } from '@/types/boards'
+import { locate } from '@/utils/boardColumns'
+
+const isActive = (status: AgentRunRead['status']): status is CardAgentRun['status'] => ACTIVE_RUN_STATUSES.has(status)
 
 export const useBoardAgentRunsStore = defineStore('boardAgentRuns', () => {
-  const boardId = ref<string | null>(null)
-  /** The active run of each card that has one, by card id. */
-  const active = ref<Record<string, AgentRunRead>>({})
+  const cards = useBoardCardsStore()
+  /** The newest run seen on each card, by card id. */
+  let newest = new Map<string, string>()
 
-  /** Start on a board: nothing known to be running. */
-  function reset(next: string | null): void {
-    boardId.value = next
-    active.value = {}
+  /** Start on a board: no runs seen yet. */
+  function reset(): void {
+    newest = new Map()
   }
 
-  /** A run changed: it's the card's active one while pending or running, else the card has none. */
-  function apply(cardId: string, run: AgentRunRead | null): void {
-    const held = active.value[cardId]
-    // An update for an older run than the one held never clears it.
-    if (run && held && held.id !== run.id && !ACTIVE_RUN_STATUSES.has(run.status)) return
-    const next = { ...active.value }
-    if (run && ACTIVE_RUN_STATUSES.has(run.status)) next[cardId] = run
-    else delete next[cardId]
-    active.value = next
+  /**
+   * A run changed (or, with ``null``, the card has none going): its tile
+   * shows it while it's pending or running. ``skillName`` names it when the
+   * caller knows; otherwise a run the tile already shows keeps its name.
+   */
+  function apply(cardId: string, run: AgentRunRead | null, skillName: string | null = null): void {
+    const found = locate(cards.columns, cardId)
+    if (!run) {
+      if (found) found.card.agent_run = null
+      return
+    }
+    const held = newest.get(cardId)
+    if (held && held !== run.id && !isActive(run.status)) return
+    newest.set(cardId, run.id)
+    if (!found) return
+    const status = run.status
+    const shown = found.card.agent_run
+    const sameRun = !held || held === run.id
+    found.card.agent_run = isActive(status)
+      ? { status, skill_name: skillName ?? (sameRun ? shown?.skill_name ?? null : null) }
+      : null
   }
 
-  const runFor = (cardId: string): AgentRunRead | null => active.value[cardId] ?? null
-
-  return { boardId, active, reset, apply, runFor }
+  return { reset, apply }
 })

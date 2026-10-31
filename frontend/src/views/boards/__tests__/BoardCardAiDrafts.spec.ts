@@ -158,6 +158,15 @@ describe('BoardCardView AI drafts', () => {
     expect(wrapper.find('[role="radiogroup"][aria-label="Document"]').text()).toContain('PRD · AI draft')
   })
 
+  it('drops a draft retired elsewhere (superseded) from the card', async () => {
+    await openDocs()
+    expect(text()).toContain('Draft from PRD writer')
+    cardApi.docs.mockResolvedValue({ items: [doc(5, 'Accepted line')], drafts: [] })
+    send({ event: 'doc_updated', card_id: '3', kind: 'prd', version: 4, state: 'superseded' })
+    await flushPromises()
+    expect(text()).not.toContain('Draft from PRD writer')
+  })
+
   it('keeps an open edit when a draft lands, and offers the draft once the edit is cancelled', async () => {
     cardApi.docs.mockResolvedValue({ items: [doc(3, 'Old line')], drafts: [] })
     const wrapper = await openDocs()

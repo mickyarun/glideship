@@ -19,14 +19,15 @@
      separately clickable without nesting interactive elements (editors
      change the last two right here). The card's repository, when it names
      one the board links, shows as a small chip, and the BUDs it was handed
-     over to as quiet chips, and an AI chip while an agent works on it.
+     over to as quiet chips, and an AI chip while an agent works on it (the
+     summary's active run).
      Same rhythm as the BUD board card. -->
 <template>
   <article class="card-tile" :class="{ 'card-tile--archived': card.archived_at }" :data-card-id="card.id">
     <div class="card-tile__top">
       <span class="card-tile__key">{{ card.key }}</span>
       <BudPriorityChip v-if="card.priority" :priority="card.priority" />
-      <CardAiChip :card-id="card.id" />
+      <CardAiChip :run="card.agent_run" />
       <span class="card-tile__menu">
         <BoardCardMenu
           :card="card"
@@ -56,20 +57,7 @@
       <CardBudChips :card="card" />
     </div>
 
-    <div v-if="quickEdits || date || card.checklist_total || card.assignee_ids.length" class="card-tile__foot">
-      <CardDuePicker :card="card" :now="now" :can-edit="quickEdits" @failed="emit('failed', $event)" />
-      <span
-        v-if="card.checklist_total"
-        class="card-tile__checklist"
-        :aria-label="`Checklist ${card.checklist_done} of ${card.checklist_total} done`"
-      >
-        <v-icon icon="mdi-checkbox-marked-outline" size="14" aria-hidden="true" />
-        {{ card.checklist_done }}/{{ card.checklist_total }}
-      </span>
-      <span class="card-tile__people">
-        <CardAssigneePicker :card="card" :can-edit="quickEdits" @failed="emit('failed', $event)" />
-      </span>
-    </div>
+    <CardTileFoot :card="card" :now="now" :can-edit="quickEdits" @failed="emit('failed', $event)" />
   </article>
 </template>
 
@@ -77,10 +65,9 @@
 import { computed } from 'vue'
 import CardAiChip from '@/components/boards/ai/CardAiChip.vue'
 import BoardCardMenu from '@/components/boards/board/BoardCardMenu.vue'
-import CardAssigneePicker from '@/components/boards/board/CardAssigneePicker.vue'
 import CardBudChips from '@/components/boards/board/CardBudChips.vue'
-import CardDuePicker from '@/components/boards/board/CardDuePicker.vue'
 import CardRepoChip from '@/components/boards/board/CardRepoChip.vue'
+import CardTileFoot from '@/components/boards/board/CardTileFoot.vue'
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import { useBoardContext } from '@/composables/useBoardContext'
@@ -88,7 +75,6 @@ import { useBudAccess } from '@/composables/useBudAccess'
 import { useCardQuickEdit } from '@/composables/useCardQuickEdit'
 import { labelColor } from '@/constants/boards'
 import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
-import { dateChip } from '@/utils/cardChips'
 import { isLive } from '@/utils/handoverChips'
 
 const props = defineProps<{
@@ -123,7 +109,6 @@ const cardRoute = computed(() => ({
 const labels = computed(() =>
   props.card.label_ids.map(id => props.labelsById.get(id)).filter((l): l is LabelRead => !!l),
 )
-const date = computed(() => dateChip(props.card, props.now))
 const handedOver = computed(() => props.card.handovers.some(isLive))
 // The server re-checks; this only decides whether the menu offers it.
 const canHandOver = computed(
@@ -150,7 +135,6 @@ const quickEdits = computed(() => canEdit.value && !props.card.archived_at)
   border-color: rgba(var(--v-theme-primary), 0.55);
 }
 .card-tile__top,
-.card-tile__foot,
 .card-tile__labels {
   display: flex;
   align-items: center;
@@ -190,17 +174,7 @@ const quickEdits = computed(() => canEdit.value && !props.card.archived_at)
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-.card-tile__checklist {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: rgb(var(--v-theme-on-surface-variant));
-}
 .card-tile--archived {
   border-style: dashed;
-}
-.card-tile__people {
-  margin-left: auto;
 }
 </style>

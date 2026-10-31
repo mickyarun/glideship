@@ -14,8 +14,9 @@
  * limitations under the License.
  -->
 
-<!-- The card's last run, when it failed or was canceled: what happened in
-     the run's own words, that the card didn't change, and Retry (the same
+<!-- The card's last run, when it failed or was canceled: what happened
+     in the run's own words (a stale run, a restart, why it was stopped),
+     that the card didn't change, and Retry (the same
      call as Run) for editors while the agent is still on the stage. -->
 <template>
   <AppCallout
@@ -23,7 +24,7 @@
     :role="run.status === 'failed' ? 'alert' : 'status'"
     :title="title"
   >
-    {{ run.error_message || FALLBACK }} Nothing on the card changed.
+    {{ words }} Nothing on the card changed.
     <template v-if="canRetry" #actions>
       <v-btn variant="outlined" size="small" :disabled="busy" @click="emit('retry')">Try again</v-btn>
     </template>
@@ -33,13 +34,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
-import { RUN_ENDED_TITLES } from '@/constants/boardAgents'
+import { RUN_ENDED_TITLES, runEndedWords } from '@/constants/boardAgents'
 import type { AgentRunRead } from '@/types/boards'
-
-const FALLBACK = "The run stopped before it wrote a draft."
 
 const props = defineProps<{ run: AgentRunRead; skillName: string; canRetry: boolean; busy: boolean }>()
 const emit = defineEmits<{ retry: [] }>()
 
 const title = computed(() => RUN_ENDED_TITLES[props.run.status]?.(props.skillName) ?? props.skillName)
+const words = computed(() => runEndedWords(props.run))
 </script>

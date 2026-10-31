@@ -15,7 +15,7 @@
 // AI on board stages: the words, icon and timings the settings section,
 // the card's AI panel and the board's tiles share.
 
-import type { AgentRunStatus, AgentTrigger } from '@/types/boards'
+import type { AgentRunRead, AgentRunStatus, AgentTrigger, CardAgentRun, CardDocKind } from '@/types/boards'
 
 /** The spark that marks AI on a board (settings, the card panel, a tile's chip). */
 export const AI_ICON = 'mdi-creation-outline'
@@ -43,7 +43,37 @@ export const RUN_ENDED_TITLES: Partial<Record<AgentRunStatus, (skill: string) =>
   canceled: skill => `${skill} was canceled`,
 }
 
+const STOPPED = 'It was stopped before it wrote a draft.'
+const UNFINISHED = 'The run stopped before it wrote a draft.'
+
+/** A sentence's end, so the panel's own words can follow a message that has none. */
+const SENTENCE_END = /[.!?…]$/
+
+/** Why a run ended: the run's own words (a stale run, a restart, a cancel's reason), else what its status means. */
+export function runEndedWords(run: Pick<AgentRunRead, 'status' | 'error_message'>): string {
+  const own = run.error_message?.trim()
+  if (!own) return run.status === 'canceled' ? STOPPED : UNFINISHED
+  return SENTENCE_END.test(own) ? own : `${own}.`
+}
+
+/** A tile's AI chip, naming the skill when the card's summary does. */
+export function chipTitle(run: CardAgentRun): string {
+  if (!run.skill_name) return run.status === 'pending' ? 'AI run queued' : 'AI running'
+  return `${run.skill_name} ${run.status === 'pending' ? 'queued' : 'running'}`
+}
+
+/** What a skill writes, as the stage picker hints it. */
+export const DOC_WRITES: Record<CardDocKind, string> = {
+  prd: 'writes a PRD',
+  design_brief: 'writes a design brief',
+  notes: 'writes notes',
+}
+
 /** What the board's AI switch says, in settings and when it's off on a card. */
 export const AI_SWITCH_NOTE =
   'Agents write drafts for a person to accept. They never move cards or hand them over. When this is off, every agent below is paused.'
 export const AI_OFF_NOTE = 'A board admin turned AI off. Existing drafts stay; no new runs start.'
+
+/** The Delivery board's AI switch, in its settings. */
+export const DELIVERY_AI_NOTE = "When off, BUD stage agents don't start; per-BUD agent choices stay as they are."
+export const DELIVERY_AI_READONLY = 'Only people who can change organization settings can switch this.'
