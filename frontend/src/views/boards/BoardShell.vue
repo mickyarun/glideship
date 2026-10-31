@@ -38,13 +38,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import BoardNoAccess from '@/components/boards/BoardNoAccess.vue'
 import BoardSkeleton from '@/components/boards/board/BoardSkeleton.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import { provideBoardContext } from '@/composables/useBoardContext'
 import { useBoardPage } from '@/composables/useBoardPage'
+import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { useBoardsStore } from '@/stores/boards'
 import { isBoardKey } from '@/utils/boardRoutes'
 
@@ -60,6 +61,11 @@ const key = computed(() => (validKey.value ? String(route.params.key).toUpperCas
 const page = useBoardPage(key)
 const { board } = page
 provideBoardContext(page)
+
+// Cards, filters and members on every board page name people from the
+// shared directory, so it loads once here for the board, card and settings.
+const directory = useMemberDirectory()
+onMounted(() => void directory.ensureLoaded())
 </script>
 
 <style scoped>
