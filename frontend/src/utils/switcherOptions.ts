@@ -18,7 +18,7 @@
 // note (role and open cards, when I last opened it, or who can see it),
 // and the board I'm on is marked. Arrow keys walk the flat list.
 
-import { ROLE_LABELS, VISIBILITY_LABELS } from '@/constants/boards'
+import { DELIVERY_BOARD, ROLE_LABELS, VISIBILITY_LABELS } from '@/constants/boards'
 import type { CustomBoardItem, SwitcherRead } from '@/types/boards'
 import { relativeTime } from '@/utils/date'
 
@@ -93,7 +93,7 @@ export function switcherGroups(
       groups.push({
         id: 'delivery',
         label: 'Delivery',
-        options: [{ id: 'delivery', kind: 'delivery', label: `${name} (BUD board)`, path, meta: 'Engineering' }],
+        options: [{ id: 'delivery', kind: 'delivery', label: name, path, meta: DELIVERY_BOARD.type }],
       })
     }
   }

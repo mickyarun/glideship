@@ -21,7 +21,7 @@
 <template>
   <header class="bud-header">
     <nav aria-label="Breadcrumb" class="bud-header__crumbs">
-      <router-link to="/buds">Board</router-link>
+      <router-link to="/buds">Delivery</router-link>
       <span aria-hidden="true">/</span>
       <span aria-current="page" class="bud-header__mono">{{ budRef(bud.bud_number) }}</span>
     </nav>

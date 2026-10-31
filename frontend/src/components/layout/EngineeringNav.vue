@@ -28,12 +28,6 @@
       rounded="lg"
     />
     <v-list-item
-      prepend-icon="mdi-view-column-outline"
-      title="Delivery"
-      to="/buds"
-      rounded="lg"
-    />
-    <v-list-item
       prepend-icon="mdi-lightbulb-outline"
       title="Features"
       to="/features"

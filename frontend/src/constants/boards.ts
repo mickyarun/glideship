@@ -118,3 +118,14 @@ export const DOC_SOURCE_BADGES: Partial<Record<CardDocSource, { text: string; co
   agent: { text: 'AI', color: 'success' },
   revert: { text: 'Restored', color: 'warning' },
 }
+
+/**
+ * The Delivery board: the BUD board, listed as a board of type Delivery for
+ * engineering members. Built in, so it has no prefs row and can't be starred.
+ */
+export const DELIVERY_BOARD = {
+  name: 'Delivery',
+  key: 'BUD',
+  type: 'Delivery board',
+  path: '/buds',
+} as const

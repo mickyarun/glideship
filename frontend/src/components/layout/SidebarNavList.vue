@@ -20,7 +20,12 @@
 <template>
   <v-list density="compact" nav class="px-2">
     <EngineeringNav v-if="canAccessEngineering" group="work" :rail="rail" />
-    <BoardsNav v-if="canViewBoards" :rail="rail" />
+    <BoardsNav
+      v-if="canViewBoards || canAccessEngineering"
+      :rail="rail"
+      :boards="canViewBoards"
+      :delivery="canAccessEngineering"
+    />
     <EngineeringNav v-if="canAccessEngineering" group="insights" :rail="rail" />
     <PeopleNav :rail="rail" :show-heading="canAccessEngineering || canViewBoards" />
   </v-list>

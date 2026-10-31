@@ -32,7 +32,8 @@
     @auxclick="onAuxClick"
   >
     <span v-if="option.kind === 'board'" class="switcher-row__key">{{ option.board.key }}</span>
-    <v-icon v-else :icon="option.kind === 'card' ? 'mdi-card-text-outline' : 'mdi-source-branch'" size="18" aria-hidden="true" />
+    <span v-else-if="option.kind === 'delivery'" class="switcher-row__key">{{ DELIVERY_BOARD.key }}</span>
+    <v-icon v-else icon="mdi-card-text-outline" size="18" aria-hidden="true" />
     <span class="switcher-row__label">{{ option.label }}</span>
     <template v-if="option.kind === 'board' && option.board.visibility === 'members'">
       <v-icon icon="mdi-lock-outline" size="14" aria-hidden="true" />
@@ -43,6 +44,7 @@
 </template>
 
 <script setup lang="ts">
+import { DELIVERY_BOARD } from '@/constants/boards'
 import type { SwitcherOption } from '@/utils/switcherOptions'
 
 const props = defineProps<{ id: string; option: SwitcherOption; href?: string; active: boolean }>()

@@ -32,14 +32,14 @@ const api = vi.mocked(boardsApi)
 const boards = (prefix: string, n: number) =>
   Array.from({ length: n }, (_, i) => makeBoardItem(`${prefix}${'X'.repeat(i + 1)}`, { starred: prefix === 'STAR' }))
 
-async function mountNav(listed = 0) {
+async function mountNav(listed = 0, props: { boards?: boolean; delivery?: boolean } = {}) {
   const { plugins } = boardTestPlugins()
   if (listed) {
     const store = useBoardsStore()
     store.items = boards('ALL', listed)
     store.loaded = true
   }
-  const wrapper = mount({ render: () => h(VList, null, () => h(BoardsNav, { rail: false })) }, {
+  const wrapper = mount({ render: () => h(VList, null, () => h(BoardsNav, { rail: false, ...props })) }, {
     global: { plugins: plugins as never[] },
   })
   await flushPromises()
@@ -74,6 +74,29 @@ describe('BoardsNav', () => {
     expect(wrapper.find('.boards-nav__count').text()).toBe('12 boards')
     expect(wrapper.find('.boards-nav__count .d-sr-only').text()).toBe('boards')
     expect(api.list).not.toHaveBeenCalled()
+  })
+
+  it('lists Delivery first, with its key, for engineering members', async () => {
+    api.switcher.mockResolvedValue({ starred: boards('STAR', 2), recent: [], other: [], delivery: null })
+    const wrapper = await mountNav(0, { delivery: true })
+    const links = wrapper.findAll('a')
+    expect(links[0].attributes('href')).toBe('/buds')
+    expect(links[0].text()).toContain('Delivery')
+    expect(links[0].find('.boards-nav__key').text()).toBe('BUD')
+    expect(links.slice(1, 3).every(a => a.attributes('href')?.startsWith('/boards/STAR'))).toBe(true)
+  })
+
+  it('leaves Delivery out for everyone else', async () => {
+    api.switcher.mockResolvedValue({ starred: boards('STAR', 2), recent: [], other: [], delivery: null })
+    const wrapper = await mountNav()
+    expect(wrapper.find('a[href="/buds"]').exists()).toBe(false)
+  })
+
+  it('shows only Delivery to engineering members without team boards, and fetches nothing', async () => {
+    const wrapper = await mountNav(0, { boards: false, delivery: true })
+    expect(wrapper.findAll('a').map(a => a.attributes('href'))).toEqual(['/buds'])
+    expect(wrapper.text()).not.toContain('Find a board')
+    expect(api.switcher).not.toHaveBeenCalled()
   })
 
   it('opens the switcher from "Find a board"', async () => {

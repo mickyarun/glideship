@@ -52,7 +52,7 @@ describe('BUDDetailLoadState', () => {
     expect(wrapper.find('.callout').text()).toContain('BUD not found')
 
     const buttons = wrapper.findAll('button')
-    expect(buttons.map(b => b.text())).toEqual(['Back to board', 'Retry'])
+    expect(buttons.map(b => b.text())).toEqual(['Back to Delivery', 'Retry'])
     expect(buttons[0].attributes('data-to')).toBe('/buds')
     await buttons[1].trigger('click')
     expect(wrapper.emitted('retry')).toHaveLength(1)

@@ -40,6 +40,8 @@ export function boardTestRouter(): Router {
       { path: '/boards/:key/settings', name: 'board-settings', component: blank },
       { path: '/boards/:key/cards/:number', name: 'board-card', component: blank },
       { path: '/buds', component: blank },
+      { path: '/settings/qa-automation', name: 'settings-qa-automation', component: blank },
+      { path: '/members', name: 'members', component: blank },
     ],
   })
 }

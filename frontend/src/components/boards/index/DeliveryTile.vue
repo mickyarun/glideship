@@ -14,7 +14,7 @@
  * limitations under the License.
  -->
 
-<!-- The pinned Delivery tile, full width: the BUD board, for engineering
+<!-- The pinned Delivery tile, full width: the board of type Delivery (BUDs), for engineering
      members, with its stages. -->
 <template>
   <article class="delivery-tile">
@@ -22,10 +22,10 @@
       <h2 class="delivery-tile__name">
         <router-link :to="item.path" class="delivery-tile__link">{{ item.name }}</router-link>
       </h2>
-      <span class="delivery-tile__chip">BUD</span>
-      <span class="delivery-tile__note">Built in · engineering access</span>
+      <span class="delivery-tile__chip">{{ DELIVERY_BOARD.key }}</span>
+      <span class="delivery-tile__note">{{ DELIVERY_BOARD.type }} · built in · engineering access</span>
     </div>
-    <p class="delivery-tile__note">Where cards land when they're handed over. Opens the BUD board.</p>
+    <p class="delivery-tile__note">Where cards land when they're handed over. Holds every BUD.</p>
     <ul class="delivery-tile__stages" aria-label="Stages">
       <li
         v-for="stage in STAGES"
@@ -41,6 +41,7 @@
 
 <script setup lang="ts">
 import { BUD_STATUS_COLORS, BUD_STATUS_LABELS, type BUDStatus } from '@/types'
+import { DELIVERY_BOARD } from '@/constants/boards'
 import type { DeliveryBoardItem } from '@/types/boards'
 
 defineProps<{ item: DeliveryBoardItem }>()

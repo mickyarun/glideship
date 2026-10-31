@@ -18,6 +18,7 @@
  * may do on one, is the API's call: a board they can't see is a 404.
  */
 import type { RouteRecordRaw } from 'vue-router'
+import { DELIVERY_BOARD } from '@/constants/boards'
 import { BOARDS_VIEW } from '@/utils/workspace'
 
 const meta = { permission: BOARDS_VIEW }
@@ -29,6 +30,8 @@ export const boardRoutes: RouteRecordRaw[] = [
     meta,
     component: () => import('@/views/boards/BoardsIndexView.vue'),
   },
+  // The Delivery board's key, typed as a board address, opens the BUD board.
+  { path: `boards/${DELIVERY_BOARD.key}`, redirect: DELIVERY_BOARD.path },
   {
     // The shell loads the board and follows its live channel once; the
     // board, a card and the settings are its child pages.

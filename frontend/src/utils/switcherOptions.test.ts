@@ -34,7 +34,7 @@ describe('switcherGroups', () => {
   it('notes role and open cards, when I last opened it, or who can see it, and marks my board', () => {
     const rows = flatOptions(switcherGroups(DATA, '', { currentKey: 'SEO', now: NOW }))
     const meta = rows.map(r => (r.kind === 'card' ? '' : r.meta))
-    expect(meta).toEqual(['Current · 14 open', 'Viewer · 0 open', '2h ago', 'Org-visible', 'Engineering'])
+    expect(meta).toEqual(['Current · 14 open', 'Viewer · 0 open', '2h ago', 'Org-visible', 'Delivery board'])
     expect(rows[0]).toMatchObject({ kind: 'board', current: true })
   })
 

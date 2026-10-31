@@ -27,7 +27,7 @@
   <AppCallout v-else variant="error" title="This BUD didn't load">
     {{ error }}
     <template #actions>
-      <v-btn variant="text" size="small" to="/buds">Back to board</v-btn>
+      <v-btn variant="text" size="small" to="/buds">Back to Delivery</v-btn>
       <v-btn variant="outlined" size="small" @click="emit('retry')">Retry</v-btn>
     </template>
   </AppCallout>
