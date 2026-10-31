@@ -37,7 +37,8 @@
     <BoardFilterBar
       v-model="filters.filters.value"
       :labels="detail.labels"
-      :members="page.members.value"
+      :people="page.people.people.value"
+      :repos="page.repos.repos.value"
       :shown="shownCount"
       :total="totalOpen"
       :more="hasMore"
@@ -81,6 +82,7 @@
           :can-create="canCreate && !cards.filters.archived"
           :can-archive="board.can('archive_card')"
           :title-max="limits?.card_title_max ?? null"
+          :drop-block="blocks[stage.id] ?? null"
           :submit-card="cards.createCard"
           @update:composing="open => (composeIn = open ? stage.id : null)"
           @drop="act.drop"
@@ -98,6 +100,7 @@
     </template>
 
     <BoardFeedback :feedback="feedback" />
+    <ChecklistConfirmDialog :confirm="act.confirm" />
   </div>
 </template>
 
@@ -111,10 +114,12 @@ import BoardStageColumn from '@/components/boards/board/BoardStageColumn.vue'
 import BoardStageTabs from '@/components/boards/board/BoardStageTabs.vue'
 import BoardStatePanel from '@/components/boards/board/BoardStatePanel.vue'
 import BoardViewHeader from '@/components/boards/board/BoardViewHeader.vue'
+import ChecklistConfirmDialog from '@/components/boards/board/ChecklistConfirmDialog.vue'
 import { useBoardActions } from '@/composables/useBoardActions'
 import { useBoardContext } from '@/composables/useBoardContext'
 import { useBoardFeedback } from '@/composables/useBoardFeedback'
 import { useBoardStats } from '@/composables/useBoardStats'
+import { dropBlocks } from '@/composables/useCardDrag'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { useNow } from '@/composables/useNow'
 import { useBoardsStore } from '@/stores/boards'
@@ -135,6 +140,8 @@ const detail = computed(() => board.detail.value)
 const limits = computed(() => boardsStore.limits)
 const canMove = computed(() => board.can('move_card'))
 const canCreate = computed(() => board.can('create_card'))
+// While a card is dragged, the stages it can't enter yet, and why.
+const blocks = computed(() => dropBlocks(cards.columns, detail.value?.stages ?? []))
 const labelsById = computed(() => new Map((detail.value?.labels ?? []).map(l => [l.id, l])))
 const { shownCount, totalOpen, hasMore, noMatch, emptyBoard, summary } = useBoardStats(page, nameFor)
 const defaultStageId = computed(

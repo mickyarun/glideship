@@ -24,6 +24,8 @@ export type BoardRole = 'viewer' | 'editor' | 'admin'
 export type BoardVisibility = 'org' | 'members'
 export type BoardStatus = 'active' | 'archived'
 export type StageCategory = 'todo' | 'in_progress' | 'done' | 'canceled'
+/** What a card must have to enter a stage (``StageRequiredField``), in declaration order. */
+export type StageRequiredField = 'assignee' | 'due_date' | 'priority' | 'label' | 'description' | 'prd'
 export type LabelColor =
   | 'green' | 'yellow' | 'orange' | 'red' | 'purple'
   | 'blue' | 'sky' | 'lime' | 'pink' | 'black'
@@ -32,7 +34,7 @@ export type LabelColor =
 export type BoardAction =
   | 'view' | 'comment' | 'create_card' | 'edit_card' | 'move_card' | 'archive_card'
   | 'review_draft' | 'run_agent' | 'edit_settings' | 'manage_stages' | 'manage_members'
-  | 'manage_labels' | 'configure_agents' | 'import' | 'archive_board'
+  | 'manage_labels' | 'configure_agents' | 'manage_repos' | 'import' | 'archive_board'
   | 'remove_any_attachment'
 
 /**
@@ -119,6 +121,8 @@ export interface StageRead {
   position: number
   wip_limit: number | null
   is_default: boolean
+  /** Fields a card needs before it enters, in declaration order. */
+  required_fields: StageRequiredField[]
   open_cards: number
 }
 

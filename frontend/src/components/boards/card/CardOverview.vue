@@ -18,6 +18,7 @@
      links. -->
 <template>
   <CardDescription
+    data-card-field="description"
     :value="card.description_md"
     :editable="canEdit"
     :max-length="limits?.card_description_max ?? null"

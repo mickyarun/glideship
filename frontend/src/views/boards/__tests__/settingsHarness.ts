@@ -34,7 +34,7 @@ const blank = { render: () => null }
 
 export const ADMIN_CAPS: BoardAction[] = [
   ...EDITOR_CAPS, 'review_draft', 'run_agent', 'edit_settings', 'manage_stages', 'manage_members',
-  'manage_labels', 'configure_agents', 'import', 'archive_board', 'remove_any_attachment',
+  'manage_labels', 'configure_agents', 'manage_repos', 'import', 'archive_board', 'remove_any_attachment',
 ]
 /** What an admin may do on an archived board. */
 export const ARCHIVED_ADMIN_CAPS: BoardAction[] = ['view', 'archive_board']

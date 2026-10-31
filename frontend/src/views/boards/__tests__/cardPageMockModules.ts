@@ -37,7 +37,7 @@ export async function boardsApiModule(original: () => Promise<typeof import('@/s
   return {
     ...(await original()),
     boardsApi: {
-      get: vi.fn(), members: vi.fn(), switcher: vi.fn(), limits: vi.fn(), cards: vi.fn(),
+      get: vi.fn(), members: vi.fn(), people: vi.fn(async () => ({ items: [] })), repos: vi.fn(async () => ({ items: [] })), switcher: vi.fn(), limits: vi.fn(), cards: vi.fn(),
       moveCard: vi.fn(), archiveCard: vi.fn(), restoreCard: vi.fn(),
     },
   }

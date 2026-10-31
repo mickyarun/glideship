@@ -38,6 +38,9 @@ export function makeCard(id: string, over: Partial<CardSummary> = {}): CardSumma
     label_ids: [],
     checklist_done: 0,
     checklist_total: 0,
+    has_description: false,
+    has_prd: false,
+    repo_id: null,
     handovers: [],
     ...over,
   }
@@ -65,6 +68,7 @@ export function makeStage(id: string, over: Partial<StageRead> = {}): StageRead 
     position: 0,
     wip_limit: null,
     is_default: false,
+    required_fields: [],
     open_cards: 0,
     ...over,
   }

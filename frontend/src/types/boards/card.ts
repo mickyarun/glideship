@@ -16,6 +16,7 @@
 // backend/app/schemas/boards/card.py.
 
 import type { BUDPriority, BUDStatus } from '@/types'
+import type { StageRequiredField } from '@/types/boards/board'
 
 /** A BUD a card was handed over to, with that BUD's status. */
 export interface HandoverChip {
@@ -40,6 +41,12 @@ export interface CardSummary {
   label_ids: string[]
   checklist_done: number
   checklist_total: number
+  /** False when the description is blank (stored as none). */
+  has_description: boolean
+  /** Whether a current PRD exists. */
+  has_prd: boolean
+  /** One of the board's linked repositories. */
+  repo_id: string | null
   handovers: HandoverChip[]
 }
 
@@ -61,11 +68,39 @@ export interface CardDetail extends CardSummary {
 export interface CardCreate {
   title: string
   stage_id?: string | null
+  description_md?: string | null
+  priority?: BUDPriority | null
+  due_at?: string | null
+  assignee_ids?: string[]
+  label_ids?: string[]
+  repo_id?: string | null
+  confirm_open_checklist?: boolean
 }
+
+/** What a quick add can set besides the title, to meet the stage's entry rules. */
+export type CardCreateExtras = Omit<CardCreate, 'title' | 'stage_id'>
 
 /** Neither neighbour: the server puts the card at the bottom of the stage. */
 export interface CardMove {
   stage_id: string
   after_id?: string | null
   before_id?: string | null
+  /** Enter a Done stage although checklist items are open. */
+  confirm_open_checklist?: boolean
+}
+
+/** 422 on a move or create: the stage needs fields the card lacks (declaration order). */
+export interface StageRequirementsMissingBody {
+  detail: string
+  code: 'STAGE_REQUIREMENTS_MISSING'
+  stage_id: string
+  missing: StageRequiredField[]
+}
+
+/** 409 on a move or create into a Done stage: resend with ``confirm_open_checklist``. */
+export interface ChecklistOpenBody {
+  detail: string
+  code: 'CHECKLIST_OPEN'
+  open: number
+  total: number
 }

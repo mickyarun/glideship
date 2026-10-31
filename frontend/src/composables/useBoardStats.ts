@@ -36,6 +36,7 @@ export function useBoardStats(page: BoardPage, nameFor: (userId: string) => stri
       shownCount.value === 0 &&
       (allLoaded.value || !board.detail.value?.stages.length),
   )
-  const summary = computed(() => filterSummary(cards.filters, nameFor, board.detail.value?.labels ?? []))
+  const repoName = (id: string) => page.repos.find(id)?.name ?? null
+  const summary = computed(() => filterSummary(cards.filters, nameFor, board.detail.value?.labels ?? [], repoName))
   return { shownCount, totalOpen, hasMore, noMatch, emptyBoard, summary }
 }

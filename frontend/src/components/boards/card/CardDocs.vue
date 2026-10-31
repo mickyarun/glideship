@@ -34,7 +34,7 @@
       </template>
     </AppCallout>
     <div class="card-docs__grid">
-      <div class="card-docs__main">
+      <div class="card-docs__main" :data-card-field="kind">
         <v-skeleton-loader v-if="docs.loading" type="paragraph@3" />
         <CardDocCompare
           v-else-if="comparing"

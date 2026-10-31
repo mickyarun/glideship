@@ -15,24 +15,47 @@
 // The board page's card actions, with what each says back: a drag or a
 // menu move (focus follows a menu move to the card, or to its new stage's
 // heading when it lands past the loaded cards), archive with Undo, and
-// restore. Errors go to the snackbar.
+// restore. Errors go to the snackbar. Moves keep to the stages' entry rules
+// (useStageEntry): a refused one stays put and offers "Open card", which
+// opens the card's page on the first missing field (``?focus=``).
 
+import { useRouter } from 'vue-router'
 import type { BoardPage } from '@/composables/useBoardPage'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
 import type { CardDrop } from '@/composables/useCardDrag'
-import type { CardSummary } from '@/types/boards'
+import { useStageEntry } from '@/composables/useStageEntry'
+import type { CardSummary, StageRequiredField } from '@/types/boards'
+import { locate } from '@/utils/boardColumns'
+import { FOCUS_QUERY_KEY } from '@/utils/cardFocus'
 
 type Feedback = ReturnType<typeof useBoardFeedback>
 
 export function useBoardActions(page: BoardPage, feedback: Feedback) {
   const { cards } = page
   const stageName = (id: string) => page.board.detail.value?.stages.find(s => s.id === id)?.name ?? 'the stage'
-  const keyOf = (id: string) => Object.values(cards.columns).flatMap(c => c.items).find(c => c.id === id)?.key
+  const router = useRouter()
+
+  function openAt(card: CardSummary, field: StageRequiredField): void {
+    const key = page.board.detail.value?.board.key
+    if (!key) return
+    void router.push({ name: 'board-card', params: { key, number: card.number }, query: { [FOCUS_QUERY_KEY]: field } })
+  }
+
+  const entry = useStageEntry({
+    stages: () => page.board.detail.value?.stages ?? [],
+    feedback,
+    fixLabel: 'Open card',
+    fix: openAt,
+  })
 
   async function drop(d: CardDrop): Promise<void> {
-    const key = keyOf(d.cardId) ?? 'the card'
-    const result = await cards.moveCard(d.cardId, d.stageId, d.index)
-    if (feedback.fail(result.error)) return
+    const card = locate(cards.columns, d.cardId)?.card
+    if (!card) return
+    const key = card.key
+    const result = await entry.enter(card, d.stageId, confirm =>
+      cards.moveCard(d.cardId, d.stageId, d.index, { confirmOpenChecklist: confirm }),
+    )
+    if (!result) return
     feedback.announce(
       result.shown
         ? `Moved ${key} to ${stageName(d.stageId)}`
@@ -41,8 +64,11 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
   }
 
   async function menuMove(card: CardSummary, stageId: string): Promise<void> {
-    const result = await cards.moveToStage(card.id, stageId)
-    if (feedback.fail(result.error)) return
+    const held = locate(cards.columns, card.id)?.card ?? card
+    const result = await entry.enter(held, stageId, confirm =>
+      cards.moveToStage(card.id, stageId, { confirmOpenChecklist: confirm }),
+    )
+    if (!result) return
     if (result.shown && (await feedback.focusCard(card.id))) {
       feedback.announce(`Moved ${card.key} to ${stageName(stageId)}`)
       return
@@ -63,5 +89,5 @@ export function useBoardActions(page: BoardPage, feedback: Feedback) {
     feedback.show({ text: `Archived ${card.key}`, action: { label: 'Undo', run: () => void restore(archived) } })
   }
 
-  return { drop, menuMove, archive, restore }
+  return { drop, menuMove, archive, restore, confirm: entry.confirm }
 }

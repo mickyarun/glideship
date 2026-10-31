@@ -17,7 +17,7 @@
 // label.py. Omitted fields stay as they are on the server.
 
 import type { BUDStatus } from '@/types'
-import type { BoardVisibility, LabelColor, StageCategory } from '@/types/boards/board'
+import type { BoardVisibility, LabelColor, StageCategory, StageRequiredField } from '@/types/boards/board'
 
 /** The BUD stages a handed-over card can land at. */
 export type HandoverTarget = Extract<BUDStatus, 'bud' | 'design' | 'tech_arch'>
@@ -40,6 +40,7 @@ export interface StageCreate {
   category: StageCategory
   wip_limit?: number | null
   is_default?: boolean
+  required_fields?: StageRequiredField[]
 }
 
 export interface StageUpdate {
@@ -49,6 +50,8 @@ export interface StageUpdate {
   wip_limit?: number | null
   /** Only ``true`` is accepted: the default moves by naming a new one. */
   is_default?: true
+  /** Replaces the whole list; ``[]`` requires nothing. */
+  required_fields?: StageRequiredField[]
 }
 
 export interface LabelCreate {

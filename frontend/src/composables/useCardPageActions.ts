@@ -15,7 +15,9 @@
 // What a card's page does when I act, and what it says back: a live-region
 // announcement on success (and a fresh history, since the live channel
 // skips this tab's own changes), the snackbar on failure, and Undo after a
-// stage move, an archive or a deleted checklist line.
+// stage move, an archive or a deleted checklist line. Stage moves keep to
+// the stage's entry rules (useStageEntry); a refused one offers "Show me",
+// which brings the first missing field into view here.
 
 import type { ComputedRef } from 'vue'
 import type { BoardCard } from '@/composables/useBoardCard'
@@ -23,8 +25,9 @@ import type { useBoardFeedback } from '@/composables/useBoardFeedback'
 import type { useCardActivity } from '@/composables/useCardActivity'
 import type { useCardChecklist } from '@/composables/useCardChecklist'
 import type { useCardEdits } from '@/composables/useCardEdits'
+import { useStageEntry } from '@/composables/useStageEntry'
 import type { BUDPriority } from '@/types'
-import type { CardUpdate, ChecklistItem, StageRead } from '@/types/boards'
+import type { CardUpdate, ChecklistItem, StageRead, StageRequiredField } from '@/types/boards'
 
 interface Parts {
   card: BoardCard
@@ -33,9 +36,11 @@ interface Parts {
   activity: ReturnType<typeof useCardActivity>
   feedback: ReturnType<typeof useBoardFeedback>
   stages: ComputedRef<StageRead[]>
+  /** Bring a field the stage needs into view on this page. */
+  showField: (field: StageRequiredField) => void
 }
 
-export function useCardPageActions({ card, edits, checklist, activity, feedback, stages }: Parts) {
+export function useCardPageActions({ card, edits, checklist, activity, feedback, stages, showField }: Parts) {
   const key = () => card.detail.value?.key ?? ''
   const stageName = (id: string) => stages.value.find(s => s.id === id)?.name ?? 'the stage'
 
@@ -49,12 +54,16 @@ export function useCardPageActions({ card, edits, checklist, activity, feedback,
   }
 
   const save = (patch: CardUpdate, success: string) => act(edits.update(patch), success)
+  const entry = useStageEntry({ stages: () => stages.value, feedback, fixLabel: 'Show me', fix: (_, f) => showField(f) })
 
   async function move(stageId: string, { undoable = true } = {}): Promise<boolean> {
-    const from = card.detail.value?.stage_id
+    const held = card.detail.value
+    const from = held?.stage_id
     const movedKey = key()
-    if (!from || from === stageId) return true
-    if (!(await act(edits.moveTo(stageId), `Moved ${movedKey} to ${stageName(stageId)}`))) return false
+    if (!held || !from || from === stageId) return true
+    if (!(await entry.enter(held, stageId, confirm => edits.moveTo(stageId, confirm)))) return false
+    feedback.announce(`Moved ${movedKey} to ${stageName(stageId)}`)
+    activity.refresh()
     if (undoable) {
       feedback.show({
         text: `Moved ${movedKey} to ${stageName(stageId)}`,
@@ -84,7 +93,11 @@ export function useCardPageActions({ card, edits, checklist, activity, feedback,
     return true
   }
 
+  const repoSaved = (id: string | null) => (id ? 'Repository saved' : 'Repository cleared')
+
   return {
+    confirm: entry.confirm,
+    setRepo: (repoId: string | null) => save({ repo_id: repoId }, repoSaved(repoId)),
     saveTitle: (title: string) => save({ title }, 'Title saved'),
     saveDescription: (text: string) => save({ description_md: text || null }, 'Description saved'),
     setPriority: (priority: BUDPriority | null) =>
@@ -103,6 +116,13 @@ export function useCardPageActions({ card, edits, checklist, activity, feedback,
       if (feedback.fail(error)) return
       feedback.announce(success)
       activity.refresh()
+    },
+    /** A document changed here: the card's facts (has a PRD) follow. */
+    docResult: (error: string | null, success: string) => {
+      if (feedback.fail(error)) return
+      feedback.announce(success)
+      activity.refresh()
+      void edits.refresh()
     },
   }
 }

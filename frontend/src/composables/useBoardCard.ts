@@ -107,6 +107,11 @@ export function useBoardCard(number: Ref<number | null>, hooks: CardLiveHooks) {
       card_activity: message => {
         if (isMine(message.card_id)) hooks.onActivity()
       },
+      // An unlink clears the card's repository without a card_updated.
+      repos_changed: message => {
+        const held = detail.value
+        if (!message.linked && held?.repo_id === message.repo_id) detail.value = { ...held, repo_id: null }
+      },
       doc_updated: message => {
         if (!isMine(message.card_id)) return
         hooks.onDoc(message.kind)

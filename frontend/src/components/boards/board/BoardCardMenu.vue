@@ -17,7 +17,8 @@
 <!-- A card's ⋯ menu: move it to another stage (the keyboard path for
      anything drag does; it lands at the bottom), copy its link, and
      archive or restore it. Items the board's capabilities don't allow are
-     left out, so a viewer sees only Copy link. -->
+     left out, so a viewer sees only Copy link. A stage the card can't enter
+     yet says what it needs; picking it explains and offers Open card. -->
 <template>
   <v-menu location="bottom end">
     <template #activator="{ props: menuProps }">
@@ -38,6 +39,7 @@
           v-for="stage in stages"
           :key="stage.id"
           :title="stage.id === card.stage_id ? `${stage.name} (current)` : stage.name"
+          :subtitle="stage.id === card.stage_id ? undefined : needs(stage)"
           :disabled="stage.id === card.stage_id"
           @click="emit('move', stage.id)"
         >
@@ -68,6 +70,7 @@ import { useRouter } from 'vue-router'
 import { CATEGORY_COLORS } from '@/constants/boards'
 import type { CardSummary, StageRead } from '@/types/boards'
 import { copyText } from '@/utils/clipboard'
+import { missingFor, needsShort } from '@/utils/stageRules'
 
 const props = defineProps<{
   card: CardSummary
@@ -80,6 +83,11 @@ const props = defineProps<{
 const emit = defineEmits<{ move: [stageId: string]; archive: []; restore: []; copied: [] }>()
 
 const router = useRouter()
+
+function needs(stage: StageRead): string | undefined {
+  const missing = missingFor(props.card, stage)
+  return missing.length ? needsShort(missing) : undefined
+}
 
 async function copy(): Promise<void> {
   const { href } = router.resolve({

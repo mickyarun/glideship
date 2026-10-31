@@ -36,7 +36,7 @@ vi.mock('@/composables/useMemberDirectory', () => {
 import { httpError, makeCardDetail, VIEWER_CAPS } from '@/components/boards/__tests__/fixtures'
 import { dragOptions } from '@/composables/useCardDrag'
 import { boardCardApi } from '@/services/boardCardApi'
-import { mountTile, openBy } from './quickEditHarness'
+import { mountTile, openBy, PEOPLE } from './quickEditHarness'
 
 const update = vi.mocked(boardCardApi.update)
 const options = () => [...document.querySelectorAll('[role="option"] .v-list-item-title')].map(el => el.textContent?.trim())
@@ -57,10 +57,18 @@ describe('CardAssigneePicker on a board tile', () => {
     expect(checked.map(el => el.textContent?.trim())).toEqual(['Ben Lim'])
   })
 
-  it('offers the whole org on an org-wide board', async () => {
-    await mountTile({ visibility: 'org' })
+  it("offers a team's members too, saying how they have access, and assigns one", async () => {
+    update.mockResolvedValue(makeCardDetail('3', { key: 'SEO-3', number: 3, assignee_ids: ['u7'], updated_at: '2026-10-02T00:00:00Z' }))
+    const team = { id: 'u7', name: 'Chen Wu', avatar_url: null, role: 'editor' as const, via: 'team' as const }
+    const { held } = await mountTile({ people: [...PEOPLE, team] })
     await openBy('Assignees for SEO-3')
-    expect(options()).toEqual(['Asha Rao', 'Zoe Org'])
+    expect(options()).toEqual(['Asha Rao', 'Ben Lim', 'Chen Wu'])
+    const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(o => o.textContent?.includes('Chen Wu'))!
+    expect(row.textContent).toContain('via a team')
+    row.click()
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('SEO', 3, { assignee_ids: ['u7'] })
+    expect(held().assignee_ids).toEqual(['u7'])
   })
 
   it('narrows the list as I search', async () => {

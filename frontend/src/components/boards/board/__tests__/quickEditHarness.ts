@@ -13,8 +13,9 @@
 // limitations under the License.
 
 // A board card tile as the board renders it, for the quick-edit specs: the
-// board context (capabilities, members, the real cards store holding the
-// card in a loaded column) provided above it. The card API and the member
+// board context (capabilities, members, the people who can be assigned,
+// the linked repositories, the real cards store holding the card in a
+// loaded column) provided above it. The card API and the member
 // directory are mocked by each spec.
 
 import { flushPromises, mount } from '@vue/test-utils'
@@ -24,21 +25,34 @@ import { boardTestPlugins } from '@/components/boards/__tests__/mountHelpers'
 import BoardCardTile from '@/components/boards/board/BoardCardTile.vue'
 import { provideBoardContext } from '@/composables/useBoardContext'
 import type { BoardPage } from '@/composables/useBoardPage'
+import { useBoardPeople } from '@/composables/useBoardPeople'
+import { useBoardRepos } from '@/composables/useBoardRepos'
 import { useBoardCardsStore } from '@/stores/boardCards'
-import type { BoardAction, BoardVisibility, CardSummary, MemberRead } from '@/types/boards'
+import type {
+  BoardAction, BoardPersonRead, BoardRepoRead, BoardVisibility, CardSummary, MemberRead,
+} from '@/types/boards'
 
 export const MEMBERS: MemberRead[] = [
   { user_id: 'u1', name: 'Asha Rao', avatar_url: null, role: 'editor' },
   { user_id: 'u2', name: 'Ben Lim', avatar_url: null, role: 'admin' },
 ]
 
+/** GET /boards/{key}/people for the same board: the members, as their own rows. */
+export const PEOPLE: BoardPersonRead[] = MEMBERS.map(m => ({
+  id: m.user_id, name: m.name, avatar_url: m.avatar_url, role: m.role, via: 'member',
+}))
+
 interface TileOptions {
   card?: Partial<CardSummary>
   capabilities?: BoardAction[]
   visibility?: BoardVisibility
+  people?: BoardPersonRead[]
+  repos?: BoardRepoRead[]
 }
 
-export async function mountTile({ card = {}, capabilities = EDITOR_CAPS, visibility = 'members' }: TileOptions = {}) {
+export async function mountTile({
+  card = {}, capabilities = EDITOR_CAPS, visibility = 'members', people = PEOPLE, repos = [],
+}: TileOptions = {}) {
   const { plugins } = boardTestPlugins()
   const store = useBoardCardsStore()
   const stage = makeStage('s1')
@@ -47,10 +61,16 @@ export async function mountTile({ card = {}, capabilities = EDITOR_CAPS, visibil
   column.items = [makeCard('3', { key: 'SEO-3', number: 3, ...card })]
   column.loaded = true
   const detail = ref(makeDetail({ capabilities, board: { ...makeDetail().board, key: 'SEO', visibility } }))
+  const boardPeople = useBoardPeople()
+  boardPeople.people.value = people
+  const boardRepos = useBoardRepos()
+  boardRepos.set(repos)
   const page = {
     board: { detail, can: (a: BoardAction) => capabilities.includes(a), archived: ref(false) },
     cards: store,
     members: ref(MEMBERS),
+    people: boardPeople,
+    repos: boardRepos,
   } as unknown as BoardPage
 
   const failures: string[] = []

@@ -55,7 +55,7 @@
           v-if="tab === 'documents'"
           :card-key="detail.key" :can-edit="canEdit" :max-length="limits?.doc_max ?? null" :name-for="nameFor"
           :confirm-discard="drafts.confirmDiscard"
-          @result="actions.result" @dirty="what => drafts.report('document', what)"
+          @result="actions.docResult" @dirty="what => drafts.report('document', what)"
         />
         <div v-else class="bud-page__grid">
           <div class="bud-page__main">
@@ -77,15 +77,17 @@
           </div>
           <aside class="bud-page__aside" aria-label="Card details">
             <CardDetailsPanel
-              :card="detail" :stages="stages" :labels="board.labels" :members="page.members.value" :name-for="nameFor"
+              :card="detail" :stages="stages" :labels="board.labels" :people="page.people.people.value"
+              :repos="page.repos.repos.value" :name-for="nameFor"
               :can-edit="canEdit" :can-move="canMove" :save-date="actions.saveDate"
-              @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels"
+              @move="actions.move" @assignees="actions.setAssignees" @labels="actions.setLabels" @repo="actions.setRepo"
               @priority="actions.setPriority" @due-done="actions.setDueDone"
             />
           </aside>
         </div>
       </div>
       <BoardFeedback :feedback="feedback" />
+      <ChecklistConfirmDialog :confirm="actions.confirm" />
       <AppConfirmDialog
         :model-value="drafts.guard.asking.value"
         title="Leave without saving?"
@@ -105,6 +107,7 @@ import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import BoardNoAccess from '@/components/boards/BoardNoAccess.vue'
 import BoardFeedback from '@/components/boards/board/BoardFeedback.vue'
+import ChecklistConfirmDialog from '@/components/boards/board/ChecklistConfirmDialog.vue'
 import CardActivity from '@/components/boards/card/CardActivity.vue'
 import CardDetailsPanel from '@/components/boards/card/CardDetailsPanel.vue'
 import CardDocs from '@/components/boards/card/CardDocs.vue'
@@ -120,6 +123,7 @@ import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import { useBoardCardPage } from '@/composables/useBoardCardPage'
 import { useCardDrafts } from '@/composables/useCardDrafts'
+import { useCardFieldFocus } from '@/composables/useCardFieldFocus'
 import { useNow } from '@/composables/useNow'
 import type { DetailTab } from '@/utils/budDetail'
 import { parseCardNumber } from '@/utils/boardRoutes'
@@ -131,7 +135,7 @@ const number = computed(() => parseCardNumber(route.params.number))
 const {
   card, page, detail, boardKey, feedback, checklist, activity, thread, attachments,
   canEdit, canMove, canComment, canArchive, stages, stage, limits, nameFor, photoFor, actions,
-} = useBoardCardPage(number)
+} = useBoardCardPage(number, field => void focus.show(field))
 const drafts = useCardDrafts()
 const { xs } = useDisplay()
 const now = useNow()
@@ -158,6 +162,8 @@ const tab = computed({
     })
   },
 })
+// "Open card" from a refused move, or "Show me" here: the field the stage needs.
+const focus = useCardFieldFocus(computed(() => !!detail.value && !!board.value), next => (openTab.value = next))
 const tabs = computed<DetailTab[]>(() => [
   { value: 'overview', label: 'Overview' },
   { value: 'documents', label: 'Documents' },

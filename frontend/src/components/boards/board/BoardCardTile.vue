@@ -17,7 +17,9 @@
 <!-- One card on a team board. The title link stretches over the card, so
      the ⋯ menu, the due date and the assignees sit above it and stay
      separately clickable without nesting interactive elements (editors
-     change the last two right here). Same rhythm as the BUD board card. -->
+     change the last two right here). The card's repository, when it names
+     one the board links, shows as a small chip. Same rhythm as the BUD
+     board card. -->
 <template>
   <article class="card-tile" :class="{ 'card-tile--archived': card.archived_at }" :data-card-id="card.id">
     <div class="card-tile__top">
@@ -42,10 +44,11 @@
       <router-link :to="cardRoute" class="card-tile__link" draggable="false">{{ card.title }}</router-link>
     </h3>
 
-    <div v-if="labels.length" class="card-tile__labels">
+    <div v-if="labels.length || repo" class="card-tile__labels">
       <AppTag v-for="label in labels" :key="label.id" :color="labelColor(label.color)" sr-prefix="Label">
         {{ label.name }}
       </AppTag>
+      <CardRepoChip v-if="repo" :name="repo.name" />
     </div>
 
     <div v-if="quickEdits || date || card.checklist_total || card.assignee_ids.length" class="card-tile__foot">
@@ -70,8 +73,10 @@ import { computed } from 'vue'
 import BoardCardMenu from '@/components/boards/board/BoardCardMenu.vue'
 import CardAssigneePicker from '@/components/boards/board/CardAssigneePicker.vue'
 import CardDuePicker from '@/components/boards/board/CardDuePicker.vue'
+import CardRepoChip from '@/components/boards/board/CardRepoChip.vue'
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
 import AppTag from '@/components/common/AppTag.vue'
+import { useBoardContext } from '@/composables/useBoardContext'
 import { useCardQuickEdit } from '@/composables/useCardQuickEdit'
 import { labelColor } from '@/constants/boards'
 import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
@@ -96,6 +101,9 @@ const emit = defineEmits<{
 }>()
 
 const { canEdit } = useCardQuickEdit()
+const { repos } = useBoardContext()
+// Unknown until the board's repositories load (or after an unlink): no chip.
+const repo = computed(() => repos.find(props.card.repo_id))
 
 const cardRoute = computed(() => ({
   name: 'board-card',

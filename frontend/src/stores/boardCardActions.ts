@@ -14,18 +14,21 @@
 
 // What I do to cards on the open board: move (by drag, between two
 // neighbours, or from the menu, to the bottom of a stage), add, archive and
-// restore. Each shows at once and is undone if the server refuses it. Only
+// restore. Each shows at once and is undone if the server refuses it. A
+// stage's entry rules refusing (utils/entryRefusal) come back as ``refusal``
+// so the page can say what's missing or ask about the checklist. Only
 // a card's latest move may undo or settle it, so an older reply can't
-// overwrite a newer move. A 409 or 404 means the board changed under us,
+// overwrite a newer move. Any other 409 or 404 means the board changed under us,
 // so the stages involved are reloaded. Used by stores/boardCards.ts.
 
 import { isAxiosError } from 'axios'
 import type { Ref } from 'vue'
 import { boardsApi } from '@/services/boardsApi'
-import type { CardSummary } from '@/types/boards'
+import type { CardCreateExtras, CardSummary } from '@/types/boards'
 import { locate, removeCard, upsertCard, type Columns, type Located } from '@/utils/boardColumns'
 import type { CardFilters } from '@/utils/boardFilters'
 import { bottomPosition, guessPosition, neighboursAt, type Neighbours } from '@/utils/boardPositions'
+import { entryRefusal, type EntryRefusal } from '@/utils/entryRefusal'
 import { extractApiError } from '@/utils/errors'
 
 export interface CardActionContext {
@@ -41,6 +44,13 @@ export interface CardActionContext {
 export interface ActionResult {
   error: string | null
   shown: boolean
+  /** The stage's entry rules refused it (the error says how, too). */
+  refusal?: EntryRefusal | null
+}
+
+export interface MoveOptions {
+  /** Enter a Done stage although checklist items are open. */
+  confirmOpenChecklist?: boolean
 }
 
 const OWN = { ignoreFilters: true }
@@ -53,7 +63,9 @@ export function cardActions(ctx: CardActionContext) {
   const moveSeq = new Map<string, number>()
   const place = (card: CardSummary) => upsertCard(ctx.columns.value, card, ctx.filters.value, OWN)
 
-  async function send(found: Located, toStageId: string, n: Neighbours, guess: CardSummary): Promise<ActionResult> {
+  async function send(
+    found: Located, toStageId: string, n: Neighbours, guess: CardSummary, opts: MoveOptions,
+  ): Promise<ActionResult> {
     const id = found.card.id
     const seq = (moveSeq.get(id) ?? 0) + 1
     moveSeq.set(id, seq)
@@ -66,27 +78,29 @@ export function cardActions(ctx: CardActionContext) {
       ctx.bump(toStageId, 1)
     }
     try {
-      const detail = await boardsApi.moveCard(key, found.card.number, { stage_id: toStageId, ...n })
+      const confirm = opts.confirmOpenChecklist ? { confirm_open_checklist: true } : {}
+      const detail = await boardsApi.moveCard(key, found.card.number, { stage_id: toStageId, ...n, ...confirm })
       if (latest()) shown = place(detail) === 'shown'
       return { error: null, shown }
     } catch (err) {
+      const refusal = entryRefusal(err)
       if (latest()) {
         place(found.card)
         if (changesStage) {
           ctx.bump(toStageId, -1)
           ctx.bump(found.stageId, 1)
         }
-        if (boardChanged(err)) {
+        if (!refusal && boardChanged(err)) {
           void ctx.reload(toStageId)
           if (changesStage) void ctx.reload(found.stageId)
         }
       }
-      return { error: extractApiError(err, "Couldn't move the card. Try again."), shown: false }
+      return { error: extractApiError(err, "Couldn't move the card. Try again."), shown: false, refusal }
     }
   }
 
   /** Move a card to ``index`` in a stage's loaded cards (a drag). */
-  async function moveCard(cardId: string, toStageId: string, index: number): Promise<ActionResult> {
+  async function moveCard(cardId: string, toStageId: string, index: number, opts: MoveOptions = {}): Promise<ActionResult> {
     const found = locate(ctx.columns.value, cardId)
     const target = ctx.columns.value[toStageId]
     if (!found || !target) return { error: null, shown: true }
@@ -98,26 +112,27 @@ export function cardActions(ctx: CardActionContext) {
     const others = target.items.filter(c => c.id !== cardId)
     const after = others.find(c => c.id === n.after_id)
     const before = others.find(c => c.id === n.before_id)
-    return send(found, toStageId, n, { ...found.card, stage_id: toStageId, position: guessPosition(after, before) })
+    return send(found, toStageId, n, { ...found.card, stage_id: toStageId, position: guessPosition(after, before) }, opts)
   }
 
   /** Move a card to the bottom of a stage (the menu); the server places it. */
-  async function moveToStage(cardId: string, toStageId: string): Promise<ActionResult> {
+  async function moveToStage(cardId: string, toStageId: string, opts: MoveOptions = {}): Promise<ActionResult> {
     const found = locate(ctx.columns.value, cardId)
     const target = ctx.columns.value[toStageId]
     if (!found || !target || found.stageId === toStageId) return { error: null, shown: true }
     const bottom = bottomPosition(target.items.filter(c => c.id !== cardId))
     const none = { after_id: null, before_id: null }
-    return send(found, toStageId, none, { ...found.card, stage_id: toStageId, position: bottom })
+    return send(found, toStageId, none, { ...found.card, stage_id: toStageId, position: bottom }, opts)
   }
 
-  async function createCard(stageId: string, title: string): Promise<ActionResult> {
+  /** Add a card at the bottom of a stage, with whatever its entry rules ask for. */
+  async function createCard(stageId: string, title: string, extras: CardCreateExtras = {}): Promise<ActionResult> {
     try {
-      const card = await boardsApi.createCard(ctx.boardKey.value, { title, stage_id: stageId })
+      const card = await boardsApi.createCard(ctx.boardKey.value, { ...extras, title, stage_id: stageId })
       ctx.bump(stageId, 1)
       return { error: null, shown: place(card) === 'shown' }
     } catch (err) {
-      return { error: extractApiError(err, "Couldn't add the card. Try again."), shown: false }
+      return { error: extractApiError(err, "Couldn't add the card. Try again."), shown: false, refusal: entryRefusal(err) }
     }
   }
 

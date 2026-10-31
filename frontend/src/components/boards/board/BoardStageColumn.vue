@@ -20,17 +20,21 @@
      and the page scrolls instead, so the next page loads as the bottom
      reaches the window. Cards aren't windowed: SortableJS needs
      them all in the DOM. A drag heading in past the WIP limit says so,
-     and the drop still goes through. -->
+     and the drop still goes through; a stage the dragged card can't enter
+     yet (``dropBlock``) is muted with its reason, and refuses the drop. -->
 <template>
   <section
     class="stage-col"
-    :class="{ 'stage-col--drop-target': dropTarget }"
+    :class="{ 'stage-col--drop-target': dropTarget && !dropBlock, 'stage-col--no-drop': !!dropBlock }"
     :aria-labelledby="headingId"
     :data-stage-col="stage.id"
   >
     <StageColumnHeader :id="headingId" :stage="stage" :count="count" />
-    <p v-if="goesOver" class="stage-col__over" role="status">
+    <p v-if="goesOver && !dropBlock" class="stage-col__over" role="status">
       {{ stage.name }} goes over its limit of {{ limit }}. You can still drop here.
+    </p>
+    <p v-if="dropBlock" class="stage-col__blocked" role="status">
+      <v-icon icon="mdi-lock-outline" size="14" aria-hidden="true" />{{ dropBlock }}
     </p>
 
     <div ref="scrollBox" class="stage-col__scroll">
@@ -88,7 +92,8 @@
       v-model:open="composing"
       :stage-name="stage.name"
       :max-length="titleMax"
-      :submit-card="title => submitCard(stage.id, title)"
+      :required="stage.required_fields"
+      :submit-card="(title, extras) => submitCard(stage.id, title, extras)"
     />
   </section>
 </template>
@@ -105,7 +110,7 @@ import {
 } from '@/composables/useCardDrag'
 import { useLoadMoreSentinel } from '@/composables/useLoadMoreSentinel'
 import type { ActionResult } from '@/stores/boardCardActions'
-import type { CardSummary, LabelRead, StageRead } from '@/types/boards'
+import type { CardCreateExtras, CardSummary, LabelRead, StageRead } from '@/types/boards'
 import type { Column } from '@/utils/boardColumns'
 import { wipLimit } from '@/utils/wip'
 
@@ -124,7 +129,9 @@ const props = defineProps<{
   canCreate: boolean
   canArchive: boolean
   titleMax: number | null
-  submitCard: (stageId: string, title: string) => Promise<ActionResult>
+  /** Why the card being dragged can't enter this stage, or null. */
+  dropBlock?: string | null
+  submitCard: (stageId: string, title: string, extras: CardCreateExtras) => Promise<ActionResult>
 }>()
 
 const emit = defineEmits<{

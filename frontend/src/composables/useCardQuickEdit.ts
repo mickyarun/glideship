@@ -15,13 +15,14 @@
 // Quick edits from a card on the board: who's on it and when it's due.
 // Each shows at once and goes back if the server refuses it; only a card's
 // latest edit may settle or undo it, so an older reply can't overwrite a
-// newer pick. The people offered are those who can open the board: the
-// whole org for an org-wide board, its members otherwise (the members list
-// doesn't expand teams), plus anyone already assigned so they can be taken
-// off.
+// newer pick. The people offered are those who can open the board (GET
+// /boards/{key}/people: members, teams expanded, admins by permission, or
+// the whole org for an org-wide board), plus anyone already assigned so
+// they can be taken off.
 
 import { computed } from 'vue'
 import { useBoardContext } from '@/composables/useBoardContext'
+import { VIA_NOTES } from '@/composables/useBoardPeople'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { boardCardApi } from '@/services/boardCardApi'
 import type { CardSummary, CardUpdate } from '@/types/boards'
@@ -32,27 +33,28 @@ export interface QuickPerson {
   id: string
   name: string
   photo: string | null
+  /** How their access reads ("via a team"), when it isn't their own role. */
+  note: string | null
 }
 
 const OWN = { ignoreFilters: true }
 const editSeq = new Map<string, number>()
 
 export function useCardQuickEdit() {
-  const { board, cards, members } = useBoardContext()
+  const { board, cards, people: boardPeople } = useBoardContext()
   const directory = useMemberDirectory()
 
   const canEdit = computed(() => board.can('edit_card'))
 
   /** Everyone who can be assigned, by name, with ``assigned`` kept in even if they lost access. */
   function people(assigned: string[]): QuickPerson[] {
-    const orgWide = board.detail.value?.board.visibility === 'org'
-    const list: QuickPerson[] = orgWide
-      ? directory.entries.value.map(e => ({ id: e.id, name: e.name, photo: e.avatar_url ?? null }))
-      : members.value.map(m => ({ id: m.user_id, name: m.name, photo: m.avatar_url }))
+    const list: QuickPerson[] = boardPeople.people.value.map(p => ({
+      id: p.id, name: p.name, photo: p.avatar_url, note: VIA_NOTES[p.via],
+    }))
     const known = new Set(list.map(p => p.id))
     const extra = assigned
       .filter(id => !known.has(id))
-      .map(id => ({ id, name: directory.nameFor(id), photo: directory.photoFor(id) }))
+      .map(id => ({ id, name: directory.nameFor(id), photo: directory.photoFor(id), note: 'no access now' }))
     return [...list, ...extra].sort((a, b) => a.name.localeCompare(b.name))
   }
 

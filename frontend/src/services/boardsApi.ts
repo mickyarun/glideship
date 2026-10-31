@@ -23,6 +23,7 @@ import type {
   BoardDetail,
   BoardLimits,
   BoardList,
+  BoardReposRead,
   BoardTemplate,
   CardCreate,
   CardDetail,
@@ -55,6 +56,7 @@ export interface CardListParams {
   assignee?: string | null
   label?: string | null
   priority?: string | null
+  repo?: string | null
   archived?: boolean | null
 }
 
@@ -75,6 +77,8 @@ export const boardsApi = {
   members: async (key: string) => (await api.get<MembersRead>(`${boardUrl(key)}/members`)).data,
   /** Everyone who can open the board, so cards can be assigned to them. */
   people: async (key: string) => (await api.get<BoardPeopleRead>(`${boardUrl(key)}/people`)).data,
+  /** The repositories the board links, by name. */
+  repos: async (key: string) => (await api.get<BoardReposRead>(`${boardUrl(key)}/repos`)).data,
   prefs: async (key: string) => (await api.get<PrefsRead>(`${boardUrl(key)}/prefs`)).data,
   savePrefs: async (key: string, filters: SavedFilters) =>
     (await api.put<PrefsRead>(`${boardUrl(key)}/prefs`, filters)).data,

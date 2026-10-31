@@ -20,6 +20,9 @@
      can't change them reads them as text. -->
 <template>
   <AppPanel title="Stages" :note="note" flush>
+    <p v-if="!disabled" class="stages__intro">
+      A stage can ask for fields before a card enters it. Moves that would break that stay put and say what's missing.
+    </p>
     <StageTextList v-if="disabled" :stages="stages.list.value" :board="board" />
     <div v-else class="stages" :style="{ '--stage-cols': COLUMNS }">
       <div class="stages__head" aria-hidden="true">
@@ -48,10 +51,12 @@
           :wip-max="wipMax"
           :reordering="stages.reordering.value"
           :successes="status.successes.value"
+          :refusal="stages.refusals.value[stage.id] || null"
           @rename="name => stages.rename(stage, name)"
           @category="category => stages.setCategory(stage, category)"
           @wip="limit => stages.setWip(stage, limit)"
           @default="makeDefault(stage)"
+          @required="fields => stages.setRequired(stage, fields)"
           @step="delta => stages.step(stage, delta)"
           @delete="askDelete(stage)"
         />
@@ -132,6 +137,12 @@ async function remove(moveTo: StageRead | null): Promise<void> {
 <style scoped>
 .stages {
   container: stages / inline-size;
+}
+.stages__intro {
+  margin: 0;
+  padding: 12px 20px 4px;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .stages__head {
   display: grid;

@@ -25,13 +25,14 @@ import { useCardChecklist } from '@/composables/useCardChecklist'
 import { useCardEdits } from '@/composables/useCardEdits'
 import { useCardPageActions } from '@/composables/useCardPageActions'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
+import type { StageRequiredField } from '@/types/boards'
 import { cardUrl } from '@/services/boardsApi'
 import { useBoardCardDocsStore } from '@/stores/boardCardDocs'
 import { useBoardsStore } from '@/stores/boards'
 import { createCommentThread } from '@/stores/commentThread'
 import { CARD_COMMENT_WIRE } from '@/utils/boardCardWire'
 
-export function useBoardCardPage(number: Ref<number | null>) {
+export function useBoardCardPage(number: Ref<number | null>, showField: (field: StageRequiredField) => void) {
   const feedback = useBoardFeedback()
   const docs = useBoardCardDocsStore()
   const boardsStore = useBoardsStore()
@@ -80,10 +81,13 @@ export function useBoardCardPage(number: Ref<number | null>) {
   const stage = computed(() => stages.value.find(s => s.id === detail.value?.stage_id) ?? null)
   const limits = computed(() => boardsStore.limits)
 
-  const nameFor = (id: string) => page.members.value.find(m => m.user_id === id)?.name ?? directory.nameFor(id)
-  const photoFor = (id: string) => page.members.value.find(m => m.user_id === id)?.avatar_url ?? directory.photoFor(id)
+  const nameFor = (id: string) => page.people.find(id)?.name ?? directory.nameFor(id)
+  const photoFor = (id: string) => {
+    const person = page.people.find(id)
+    return person ? person.avatar_url : directory.photoFor(id)
+  }
 
-  const actions = useCardPageActions({ card, edits, checklist, activity, feedback, stages })
+  const actions = useCardPageActions({ card, edits, checklist, activity, feedback, stages, showField })
 
   onMounted(() => {
     void directory.ensureLoaded()

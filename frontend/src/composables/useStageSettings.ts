@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // A board's stages as its settings edit them: add, rename, re-categorise,
-// set the WIP limit, make one the default, reorder (dragged, or one step
+// set the WIP limit and what a card needs to enter, make one the default
+// (both refused inline, on the row, when the server says no), reorder (dragged, or one step
 // with the arrow buttons) and delete, moving its cards elsewhere. The list
 // follows the open board, so a change made elsewhere shows up here; a
 // reorder shows at once and goes back if the server refuses it.
@@ -23,8 +24,9 @@ import type { BoardPage } from '@/composables/useBoardPage'
 import type { BoardSettingsStatus } from '@/composables/useBoardSettingsStatus'
 import { CATEGORY_LABELS } from '@/constants/boards'
 import { boardSettingsApi } from '@/services/boardSettingsApi'
-import type { BoardLimits, StageCategory, StageRead } from '@/types/boards'
-import { addBlock, moveItem, movedId } from '@/utils/boardStageRules'
+import type { BoardLimits, StageCategory, StageRead, StageRequiredField } from '@/types/boards'
+import { addBlock, moveItem, movedId, requiredBlock } from '@/utils/boardStageRules'
+import { needsList } from '@/utils/stageRules'
 
 export interface NewStage {
   name: string
@@ -48,8 +50,21 @@ export function useStageSettings(page: BoardPage, status: BoardSettingsStatus, l
     return max ? addBlock(list.value.length, max) : null
   })
 
+  /** The server's refusal of a row's last change, by stage id, for changes the row explains itself. */
+  const refusals = ref<Record<string, string>>({})
+  // Any change going through settles what was refused before.
+  watch(status.successes, () => (refusals.value = {}))
+
   function patch(stage: StageRead, body: Parameters<typeof boardSettingsApi.updateStage>[2], done: string) {
     return status.run(key => boardSettingsApi.updateStage(key, stage.id, body), done)
+  }
+
+  /** A change refused on its row rather than at the top of the page. */
+  async function patchInline(stage: StageRead, body: Parameters<typeof patch>[1], done: string): Promise<boolean> {
+    refusals.value = { ...refusals.value, [stage.id]: '' }
+    const ok = await status.run(key => boardSettingsApi.updateStage(key, stage.id, body), done, { inline: true })
+    if (!ok) refusals.value = { ...refusals.value, [stage.id]: status.inlineError.value }
+    return ok
   }
 
   function add(stage: NewStage): Promise<boolean> {
@@ -79,7 +94,20 @@ export function useStageSettings(page: BoardPage, status: BoardSettingsStatus, l
 
   function makeDefault(stage: StageRead): Promise<boolean> {
     if (stage.is_default) return Promise.resolve(true)
-    return patch(stage, { is_default: true }, `New cards now land in ${stage.name}`)
+    const block = requiredBlock({ ...stage, is_default: true }, stage.required_fields)
+    if (block) {
+      refusals.value = { ...refusals.value, [stage.id]: block }
+      return Promise.resolve(false)
+    }
+    return patchInline(stage, { is_default: true }, `New cards now land in ${stage.name}`)
+  }
+
+  function setRequired(stage: StageRead, fields: StageRequiredField[]): Promise<boolean> {
+    if (fields.join() === stage.required_fields.join()) return Promise.resolve(true)
+    const done = fields.length
+      ? `${stage.name} now needs ${needsList(fields)}`
+      : `${stage.name} no longer needs anything to enter`
+    return patchInline(stage, { required_fields: fields }, done)
   }
 
   /**
@@ -115,7 +143,10 @@ export function useStageSettings(page: BoardPage, status: BoardSettingsStatus, l
     return status.run(key => boardSettingsApi.deleteStage(key, stage.id, moveTo?.id ?? null), done, { inline: true })
   }
 
-  return { list, reordering, addError, add, rename, setCategory, setWip, makeDefault, reorder, step, remove }
+  return {
+    list, reordering, addError, refusals,
+    add, rename, setCategory, setWip, makeDefault, setRequired, reorder, step, remove,
+  }
 }
 
 export type StageSettings = ReturnType<typeof useStageSettings>

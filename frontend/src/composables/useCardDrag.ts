@@ -22,6 +22,9 @@
 
 import { ref } from 'vue'
 import { DRAG_ANIMATION_MS, DRAG_START_TOLERANCE_PX, DRAG_TOUCH_DELAY_MS } from '@/constants/boards'
+import type { StageRead } from '@/types/boards'
+import { locate, type Columns } from '@/utils/boardColumns'
+import { missingFor, needsShort } from '@/utils/stageRules'
 import { overWip } from '@/utils/wip'
 
 export interface CardDrop {
@@ -81,6 +84,22 @@ export function dragGoesOver(stageId: string, count: number, limit: number | nul
 export function isDropTarget(stageId: string): boolean {
   const drag = dragging.value
   return !!drag && drag.overStageId === stageId && drag.fromStageId !== stageId
+}
+
+/**
+ * While a card is dragged: each other stage it can't enter yet, with why
+ * ("Needs an assignee and a PRD"). Empty when nothing is being dragged.
+ */
+export function dropBlocks(columns: Columns, stages: StageRead[]): Record<string, string> {
+  const drag = dragging.value
+  const card = drag ? locate(columns, drag.cardId)?.card : null
+  if (!drag || !card) return {}
+  const blocks: Record<string, string> = {}
+  for (const stage of stages) {
+    const missing = stage.id === drag.fromStageId ? [] : missingFor(card, stage)
+    if (missing.length) blocks[stage.id] = needsShort(missing)
+  }
+  return blocks
 }
 
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'

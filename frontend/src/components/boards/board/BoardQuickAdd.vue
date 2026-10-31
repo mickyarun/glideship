@@ -17,10 +17,14 @@
 <!-- Add a card at the bottom of a column. Enter adds it and keeps the box
      open for the next one, even while the last is still saving (titles
      queue up in order); Esc (or Cancel) closes it and puts focus back on
-     "Add a card". Shift+Enter is a line break the title will trim. -->
+     "Add a card". Shift+Enter is a line break the title will trim. A stage
+     with "Required to enter" fields asks for them under the title (and
+     keeps them for the next card, all but the description); one that
+     needs a PRD says new cards start elsewhere. -->
 <template>
   <div class="quick-add">
-    <form v-if="open" class="quick-add__form" @submit.prevent="submit">
+    <p v-if="createBlock" class="quick-add__note">{{ createBlock }}</p>
+    <form v-else-if="open" class="quick-add__form" @submit.prevent="submit">
       <v-textarea
         ref="field"
         v-model="title"
@@ -35,9 +39,10 @@
         @keydown.enter.exact.prevent="submit"
         @keydown.esc.prevent="close"
       />
+      <QuickAddRequired v-if="fields.length" v-model="extras" :stage-name="stageName" :fields="fields" />
       <p class="quick-add__status" role="status">{{ notice }}</p>
       <div class="quick-add__actions">
-        <v-btn type="submit" color="primary" size="small" :loading="queued > 0" :disabled="!title.trim()">
+        <v-btn type="submit" color="primary" size="small" :loading="queued > 0" :disabled="!title.trim() || missing.length > 0">
           Add card
         </v-btn>
         <v-btn variant="text" size="small" @click="close">Cancel</v-btn>
@@ -58,21 +63,35 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import QuickAddRequired from '@/components/boards/board/QuickAddRequired.vue'
 import type { ActionResult } from '@/stores/boardCardActions'
+import type { CardCreateExtras, StageRequiredField } from '@/types/boards'
+import { inOrder, missingFor, needsList, newCardFacts, NOT_ON_CREATE } from '@/utils/stageRules'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   stageName: string
   /** From GET /boards/limits; null until it loads. */
   maxLength: number | null
-  submitCard: (title: string) => Promise<ActionResult>
-}>()
+  /** The stage's "Required to enter" fields. */
+  required?: StageRequiredField[]
+  submitCard: (title: string, extras: CardCreateExtras) => Promise<ActionResult>
+}>(), { required: () => [] })
 
 const open = defineModel<boolean>('open', { default: false })
 const title = ref('')
 const error = ref('')
 const notice = ref('')
 const queued = ref(0)
+const extras = ref<CardCreateExtras>({})
+const fields = computed(() => inOrder(props.required))
+const missing = computed(() => missingFor(newCardFacts(extras.value), { required_fields: fields.value }))
+const createBlock = computed(() => {
+  const never = fields.value.filter(f => NOT_ON_CREATE.has(f))
+  return never.length
+    ? `${props.stageName} needs ${needsList(never)}, so new cards start in another stage and move here once they have one.`
+    : null
+})
 const field = ref<{ focus: () => void } | null>(null)
 const opener = ref<{ $el: HTMLElement } | null>(null)
 // Saves run one after another, so cards land in the order they were typed.
@@ -95,23 +114,27 @@ async function close(): Promise<void> {
   title.value = ''
   error.value = ''
   notice.value = ''
+  extras.value = {}
   await nextTick()
   opener.value?.$el.focus()
 }
 
 function submit(): void {
   const text = title.value.trim()
-  if (!text) return
+  if (!text || missing.value.length) return
+  const sent = { ...extras.value }
+  extras.value = { ...sent, description_md: null }
   title.value = ''
   error.value = ''
   queued.value++
   chain = chain.then(async () => {
-    const result = await props.submitCard(text)
+    const result = await props.submitCard(text, sent)
     queued.value--
     if (result.error) {
       error.value = result.error
       // Give the title back unless something new is already typed.
       if (!title.value) title.value = text
+      if (!extras.value.description_md) extras.value = { ...extras.value, description_md: sent.description_md ?? null }
     } else {
       notice.value = result.shown
         ? `Added "${text}".`
@@ -130,6 +153,12 @@ function submit(): void {
 .quick-add__status {
   margin: 0;
   min-height: 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.quick-add__note {
+  margin: 0;
+  padding: 4px;
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface-variant));
 }

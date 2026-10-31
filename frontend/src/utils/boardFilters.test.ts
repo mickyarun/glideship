@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { makeCard } from '@/components/boards/__tests__/fixtures'
-import type { MemberRead } from '@/types/boards'
+import type { BoardPersonRead } from '@/types/boards'
 import {
   assigneeOptions, filterSummary, fromSaved, hasFilters, matchesCard, matchesQuery, NO_FILTERS,
   toListParams, toSaved,
@@ -56,10 +56,24 @@ describe('matchesCard', () => {
 
 describe('saved filters', () => {
   it('round-trips through the prefs shape, keeping the archived view', () => {
-    const f = { query: ' seo ', assignee: 'u1', label: null, priority: 'P2' as const, archived: true }
+    const f = { query: ' seo ', assignee: 'u1', label: null, priority: 'P2' as const, repo: null, archived: true }
     expect(toSaved(f)).toEqual({ q: 'seo', assignee_ids: ['u1'], label_ids: [], priorities: ['P2'], archived: true })
     expect(fromSaved(toSaved(f))).toEqual({ ...f, query: 'seo' })
     expect(fromSaved(null)).toEqual(NO_FILTERS)
+  })
+
+  it('never sends the repository (the server does not save it yet) but reads one it gets back', () => {
+    expect(toSaved({ ...NO_FILTERS, repo: 'r1' })).not.toHaveProperty('repo_ids')
+    expect(fromSaved({ q: null, assignee_ids: [], label_ids: [], priorities: [], archived: false, repo_ids: ['r1'] }).repo).toBe('r1')
+  })
+
+  it('narrows by repository, on the server and for live cards', () => {
+    const f = { ...NO_FILTERS, repo: 'r1' }
+    expect(hasFilters(f)).toBe(true)
+    expect(toListParams(f).repo).toBe('r1')
+    expect(matchesCard(makeCard('1', { repo_id: 'r1' }), f)).toBe(true)
+    expect(matchesCard(makeCard('2', { repo_id: 'r2' }), f)).toBe(false)
+    expect(matchesCard(makeCard('3'), f)).toBe(false)
   })
 
   it('knows when anything narrows the cards and drops blanks from the params', () => {
@@ -72,9 +86,9 @@ describe('saved filters', () => {
 })
 
 describe('the filter bar options and summary', () => {
-  const members: MemberRead[] = [
-    { user_id: 'u1', name: 'Zoe', avatar_url: null, role: 'editor' },
-    { user_id: 'u2', name: 'Asha', avatar_url: null, role: 'admin' },
+  const members: BoardPersonRead[] = [
+    { id: 'u1', name: 'Zoe', avatar_url: null, role: 'editor', via: 'team' },
+    { id: 'u2', name: 'Asha', avatar_url: null, role: 'admin', via: 'member' },
   ]
 
   it('lists the board\'s people by name, not just those on loaded cards', () => {
@@ -85,5 +99,6 @@ describe('the filter bar options and summary', () => {
     const labels = [{ id: 'l1', name: 'Refresh', color: 'pink' as const }]
     const f = { ...NO_FILTERS, assignee: 'u1', label: 'l1', priority: 'P0' as const }
     expect(filterSummary(f, () => 'Tom Okafor', labels)).toBe('Assignee: Tom Okafor · Label: Refresh · Priority: P0')
+    expect(filterSummary({ ...NO_FILTERS, repo: 'r1' }, () => '', labels, () => 'northwind-web')).toBe('Repository: northwind-web')
   })
 })

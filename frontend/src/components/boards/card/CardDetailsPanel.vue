@@ -15,46 +15,34 @@
  -->
 
 <!-- A card's facts beside its content, in the BUD details panel's layout:
-     stage, assignees, labels, priority, start and due dates, and when it
-     was made and changed. Editors get a Change control on each; viewers
-     read plain text. -->
+     stage, assignees (anyone who can open the board), labels, priority,
+     repository, start and due dates, and when it was made and changed.
+     Editors get a Change control on each; viewers read plain text. Each
+     field a stage can require is marked (data-card-field) so a refused
+     move can bring it into view. -->
 <template>
   <AppPanel title="Details">
     <dl class="bud-facts">
       <dt>Stage</dt>
       <dd class="bud-facts__split">
-        <span>{{ stage?.name ?? 'Unknown stage' }}</span>
-        <v-menu v-if="canMove && stages.length > 1" location="bottom end">
-          <template #activator="{ props: menuProps }">
-            <button v-bind="menuProps" type="button" class="bud-facts__link" aria-label="Change stage">Change</button>
-          </template>
-          <v-list density="compact" min-width="200" aria-label="Move to stage">
-            <v-list-item
-              v-for="s in stages"
-              :key="s.id"
-              :title="s.id === card.stage_id ? `${s.name} (current)` : s.name"
-              :disabled="s.id === card.stage_id"
-              @click="emit('move', s.id)"
-            />
-          </v-list>
-        </v-menu>
+        <CardStageField :card="card" :stages="stages" :can-move="canMove" @move="emit('move', $event)" />
       </dd>
 
       <dt>Assignees</dt>
-      <dd class="bud-facts__split">
+      <dd class="bud-facts__split" data-card-field="assignee">
         <span>{{ assigneeNames || 'Unassigned' }}</span>
         <CardPickMenu
           v-if="canEdit"
           :items="memberItems"
           :selected="card.assignee_ids"
           label="assignees"
-          empty-text="No members on this board"
+          empty-text="No one else can open this board"
           @change="emit('assignees', $event)"
         />
       </dd>
 
       <dt>Labels</dt>
-      <dd class="bud-facts__split">
+      <dd class="bud-facts__split" data-card-field="label">
         <span class="bud-facts__tags">
           <AppTag v-for="l in cardLabels" :key="l.id" :color="labelColor(l.color)" sr-prefix="Label">{{ l.name }}</AppTag>
           <span v-if="!cardLabels.length" class="bud-facts__muted">None</span>
@@ -70,15 +58,20 @@
       </dd>
 
       <dt>Priority</dt>
-      <dd class="bud-facts__split">
+      <dd class="bud-facts__split" data-card-field="priority">
         <CardPriorityField :priority="card.priority" :editable="canEdit" @change="emit('priority', $event)" />
+      </dd>
+
+      <dt>Repository</dt>
+      <dd class="bud-facts__split">
+        <CardRepoField :repo-id="card.repo_id" :repos="repos" :editable="canEdit" @change="emit('repo', $event)" />
       </dd>
 
       <dt>Start</dt>
       <dd><CardDateField label="Start" :value="card.start_at" :editable="canEdit" :save="iso => saveDate('start_at', iso)" /></dd>
 
       <dt>Due</dt>
-      <dd>
+      <dd data-card-field="due_date">
         <CardDateField label="Due" :value="card.due_at" :editable="canEdit" :save="iso => saveDate('due_at', iso)">
           <v-checkbox
             v-if="card.due_at && canEdit"
@@ -107,11 +100,14 @@ import { computed } from 'vue'
 import CardDateField from '@/components/boards/card/CardDateField.vue'
 import CardPickMenu, { type PickItem } from '@/components/boards/card/CardPickMenu.vue'
 import CardPriorityField from '@/components/boards/card/CardPriorityField.vue'
+import CardRepoField from '@/components/boards/card/CardRepoField.vue'
+import CardStageField from '@/components/boards/card/CardStageField.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import AppTag from '@/components/common/AppTag.vue'
 import { labelColor } from '@/constants/boards'
 import type { BUDPriority } from '@/types'
-import type { CardDetail, LabelRead, MemberRead, StageRead } from '@/types/boards'
+import { VIA_NOTES } from '@/composables/useBoardPeople'
+import type { BoardPersonRead, BoardRepoRead, CardDetail, LabelRead, StageRead } from '@/types/boards'
 import { formatDate } from '@/utils/date'
 import { wordList } from '@/utils/format'
 
@@ -119,7 +115,8 @@ const props = defineProps<{
   card: CardDetail
   stages: StageRead[]
   labels: LabelRead[]
-  members: MemberRead[]
+  people: BoardPersonRead[]
+  repos: BoardRepoRead[]
   nameFor: (id: string) => string
   canEdit: boolean
   canMove: boolean
@@ -131,14 +128,14 @@ const emit = defineEmits<{
   assignees: [ids: string[]]
   labels: [ids: string[]]
   priority: [priority: BUDPriority | null]
+  repo: [repoId: string | null]
   'due-done': [done: boolean]
 }>()
 
-const stage = computed(() => props.stages.find(s => s.id === props.card.stage_id) ?? null)
 const assigneeNames = computed(() => wordList(props.card.assignee_ids.map(props.nameFor)))
 const cardLabels = computed(() => props.labels.filter(l => props.card.label_ids.includes(l.id)))
 const memberItems = computed<PickItem[]>(() =>
-  props.members.map(m => ({ id: m.user_id, title: m.name, person: true, photo: m.avatar_url })),
+  props.people.map(p => ({ id: p.id, title: p.name, person: true, photo: p.avatar_url, note: VIA_NOTES[p.via] })),
 )
 const labelItems = computed<PickItem[]>(() => props.labels.map(l => ({ id: l.id, title: l.name, color: labelColor(l.color) })))
 </script>
@@ -169,29 +166,10 @@ const labelItems = computed<PickItem[]>(() => props.labels.map(l => ({ id: l.id,
   flex-wrap: wrap;
   gap: 4px;
 }
-.bud-facts__link {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  color: var(--color-accent-text);
-  cursor: pointer;
-}
-.bud-facts__link:hover { text-decoration: underline; }
-.bud-facts__link:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
 .bud-facts__done { flex: 0 0 auto; }
 .bud-facts__done :deep(.v-label) { font-size: 14px; }
 .bud-facts__done :deep(.v-selection-control) { min-height: 0; }
 .bud-facts__muted {
   color: rgb(var(--v-theme-on-surface-variant));
-}
-@media (pointer: coarse) {
-  .bud-facts__link {
-    min-height: 44px;
-  }
 }
 </style>

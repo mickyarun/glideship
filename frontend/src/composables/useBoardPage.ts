@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // Everything an open board runs, once per board route: load the board
-// (which brings my saved filters), load each stage, its members, and follow
+// (which brings my saved filters), load each stage, its members, the people
+// who can be assigned and its linked repositories, and follow
 // ``board:<id>`` for other tabs' and people's changes. This tab's own echoes
 // are dropped by origin. A reconnect, a stage, label or member change
 // reloads the board; losing access lands on the no-access state.
@@ -21,6 +22,8 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useBoard } from '@/composables/useBoard'
 import { useBoardFilters } from '@/composables/useBoardFilters'
+import { useBoardPeople } from '@/composables/useBoardPeople'
+import { useBoardRepos } from '@/composables/useBoardRepos'
 import { useTopicChannel } from '@/composables/useTopicChannel'
 import { boardsApi } from '@/services/boardsApi'
 import { useBoardCardsStore } from '@/stores/boardCards'
@@ -34,6 +37,8 @@ export function useBoardPage(key: Ref<string>) {
   const boards = useBoardsStore()
   const filters = useBoardFilters(next => void cards.setFilters(next))
   const members = ref<MemberRead[]>([])
+  const people = useBoardPeople()
+  const repos = useBoardRepos()
   let membersSeq = 0
   let opening = 0
 
@@ -50,6 +55,8 @@ export function useBoardPage(key: Ref<string>) {
   async function open(k: string): Promise<void> {
     opening++
     members.value = []
+    people.reset()
+    repos.reset()
     try {
       const loaded = await board.load(k)
       if (k !== key.value) return
@@ -62,6 +69,8 @@ export function useBoardPage(key: Ref<string>) {
       cards.reset(detail.board.key, detail.board.id, detail.stages, saved)
       void cards.loadAll()
       void loadMembers(k)
+      void people.load(k, () => k === key.value)
+      void repos.load(k, () => k === key.value)
       // Opening a board moves it up my recent list.
       void boards.fetchNav()
     } finally {
@@ -88,12 +97,23 @@ export function useBoardPage(key: Ref<string>) {
   // An import's end and a reconnect can land together: one resync runs (and
   // at most one more after it); while a board opens, its own load is enough.
   const resyncOnce = coalesced(async () => {
+    void repos.load(key.value, () => cards.boardKey === key.value)
     await refreshBoard()
     await cards.loadAll({ keep: true })
   })
   async function resync(): Promise<void> {
     if (opening > 0) return
     await resyncOnce()
+  }
+
+  /**
+   * A repository was unlinked (here or elsewhere): it leaves the list, the
+   * loaded cards naming it lose it, and a filter on it is dropped.
+   */
+  function forgetRepo(repoId: string): void {
+    repos.unlinked(repoId)
+    cards.clearRepo(repoId)
+    if (filters.filters.value.repo === repoId) filters.filters.value = { ...filters.filters.value, repo: null }
   }
 
   const topic = computed(() => (board.detail.value ? boardTopic(board.detail.value.board.id) : null))
@@ -128,6 +148,12 @@ export function useBoardPage(key: Ref<string>) {
       member_changed: () => {
         refresh()
         void loadMembers(key.value)
+        void people.load(key.value)
+      },
+      repos_changed: message => {
+        if (!forOpenBoard()) return
+        if (message.linked) repos.linked(message.repo)
+        else forgetRepo(message.repo_id)
       },
     },
     () => void resync(),
@@ -149,7 +175,7 @@ export function useBoardPage(key: Ref<string>) {
     return error
   }
 
-  return { board, cards, filters, members, open, toggleStar, resync }
+  return { board, cards, filters, members, people, repos, open, toggleStar, resync, forgetRepo }
 }
 
 export type BoardPage = ReturnType<typeof useBoardPage>

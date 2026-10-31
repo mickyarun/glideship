@@ -112,6 +112,13 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
     return loadAll()
   }
 
+  /** A repository was unlinked: the loaded cards naming it lose it (no event comes per card). */
+  function clearRepo(repoId: string): void {
+    for (const column of Object.values(columns.value)) {
+      column.items = column.items.map(c => (c.repo_id === repoId ? { ...c, repo_id: null } : c))
+    }
+  }
+
   /** Apply someone else's card change. */
   function applyCardEvent(message: CardEvent): void {
     applyEvent({ columns: columns.value, counts: counts.value, filters: filters.value }, message)
@@ -128,7 +135,7 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
 
   return {
     boardKey, boardId, columns, counts, filters,
-    reset, clear, syncStages, loadStage, loadAll, setFilters, applyCardEvent,
+    reset, clear, syncStages, loadStage, loadAll, setFilters, applyCardEvent, clearRepo,
     ...actions,
   }
 })

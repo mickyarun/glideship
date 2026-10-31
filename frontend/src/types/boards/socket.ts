@@ -21,6 +21,7 @@ import type { BoardRead, LabelRead } from '@/types/boards/board'
 import type { CardSummary } from '@/types/boards/card'
 import type { CardDocKind } from '@/types/boards/doc'
 import type { ImportResult, ImportStatus } from '@/types/boards/imports'
+import type { BoardRepoRead } from '@/types/boards/repo'
 
 interface Base<E extends string> {
   event: E
@@ -48,6 +49,12 @@ export type BoardSocketMessage =
   | (Base<'stage_reordered'> & { stage_id: string })
   | (Base<'label_changed'> & { label?: LabelRead; label_id?: string; deleted?: boolean })
   | Base<'member_changed'>
+  // A link carries the repository; an unlink says how many cards it cleared
+  // (no card_updated follows for them: clear repo_id on the loaded cards).
+  | (Base<'repos_changed'> & { repo_id: string } & (
+      | { linked: true; repo: BoardRepoRead }
+      | { linked: false; cleared: number }
+    ))
   // One summary when an import run ends (completed, or failed with cards
   // left). A run that wrote every batch also carries its result counts.
   | (Base<'board_imported'> & { session_id: string; status: ImportStatus; error?: string | null } & Partial<ImportResult>)

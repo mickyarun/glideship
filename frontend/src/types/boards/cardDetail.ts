@@ -30,6 +30,8 @@ export interface CardUpdate {
   due_done?: boolean
   assignee_ids?: string[]
   label_ids?: string[]
+  /** One of the board's linked repositories; ``null`` clears it. */
+  repo_id?: string | null
 }
 
 export interface ChecklistItem {

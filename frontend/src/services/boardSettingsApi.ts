@@ -13,18 +13,21 @@
 // limitations under the License.
 
 // Typed calls behind a board's settings page: the board, its stages,
-// members, teams and labels. Every write is admin-only on the server; the
+// members, teams, labels and linked repositories. Every write is admin-only on the server; the
 // page refreshes the open board after each one.
 
 import api from '@/services/api'
 import { boardUrl } from '@/services/boardsApi'
-import type { BoardDetail, BoardRole, LabelRead, MembersRead, StageRead, TeamOptions } from '@/types/boards'
+import type {
+  BoardDetail, BoardReposRead, BoardRole, LabelRead, MembersRead, RepoOptions, StageRead, TeamOptions,
+} from '@/types/boards'
 import type {
   BoardUpdate, LabelCreate, LabelUpdate, StageCreate, StageUpdate,
 } from '@/types/boards/settings'
 
 const stagesUrl = (key: string) => `${boardUrl(key)}/stages`
 const labelsUrl = (key: string) => `${boardUrl(key)}/labels`
+const reposUrl = (key: string) => `${boardUrl(key)}/repos`
 
 export const boardSettingsApi = {
   update: async (key: string, body: BoardUpdate) =>
@@ -61,4 +64,13 @@ export const boardSettingsApi = {
   deleteLabel: async (key: string, id: string) => {
     await api.delete(`${labelsUrl(key)}/${id}`)
   },
+
+  /** The org's active repositories, each saying whether the board links it. */
+  repoOptions: async (key: string) => (await api.get<RepoOptions>(`${reposUrl(key)}/options`)).data,
+  /** Link a repository; the reply is the board's linked list. */
+  linkRepo: async (key: string, repoId: string) =>
+    (await api.put<BoardReposRead>(`${reposUrl(key)}/${repoId}`)).data,
+  /** Unlink a repository; cards naming it lose it. The reply is the linked list. */
+  unlinkRepo: async (key: string, repoId: string) =>
+    (await api.delete<BoardReposRead>(`${reposUrl(key)}/${repoId}`)).data,
 }

@@ -27,6 +27,7 @@
       <AppTag v-if="stage.id === board.handover_stage_id" color="category-done">Handover stage</AppTag>
       <AppTag v-if="stage.id === board.return_stage_id" color="category-todo">Return stage</AppTag>
       <span class="stage-text__meta">{{ plural(stage.open_cards, 'open card') }}</span>
+      <span v-if="stage.required_fields.length" class="stage-text__meta">{{ needsShort(stage.required_fields) }} to enter</span>
     </li>
   </ol>
 </template>
@@ -36,6 +37,7 @@ import AppTag from '@/components/common/AppTag.vue'
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '@/constants/boards'
 import type { BoardRead, StageRead } from '@/types/boards'
 import { plural } from '@/utils/format'
+import { needsShort } from '@/utils/stageRules'
 
 defineProps<{ stages: StageRead[]; board: BoardRead }>()
 </script>

@@ -19,7 +19,9 @@
 // server checks the same rules and has the last word.
 
 import { CATEGORY_LABELS } from '@/constants/boards'
-import type { BoardRead, StageCategory, StageRead } from '@/types/boards'
+import type { BoardRead, StageCategory, StageRead, StageRequiredField } from '@/types/boards'
+import { wordList } from '@/utils/format'
+import { fieldName, NOT_ON_CREATE } from '@/utils/stageRules'
 
 /** The categories a board can never be without. */
 const REQUIRED: StageCategory[] = ['todo', 'done']
@@ -34,6 +36,17 @@ function lastOf(stages: StageRead[], stage: StageRead): StageCategory | null {
 
 function needsOne(category: StageCategory): string {
   return `A board needs at least one ${CATEGORY_LABELS[category]} stage.`
+}
+
+/** What a Done stage's row says about completing a card (move_rules.py). */
+export const CHECKLIST_RULE = 'Asks first when a card arrives with checklist items open'
+
+/** Why the stage new cards land in can't require these fields, or null. */
+export function requiredBlock(stage: Pick<StageRead, 'name' | 'is_default'>, fields: StageRequiredField[]): string | null {
+  const never = fields.filter(f => NOT_ON_CREATE.has(f))
+  if (!stage.is_default || !never.length) return null
+  const names = wordList(never.map(fieldName))
+  return `${stage.name} is where new cards land, and a new card has no ${names} yet. Make another stage the default, or don't require it here.`
 }
 
 /** Why a stage can't be deleted, or null when it can. */

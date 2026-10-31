@@ -35,6 +35,22 @@
   font-size: 12px;
   color: rgb(var(--v-theme-warning));
 }
+/* While a drag is on, a stage whose entry rules the card doesn't meet
+   reads as not taking it: muted, with its reason under the header. */
+.stage-col--no-drop {
+  border-style: dashed;
+}
+.stage-col--no-drop .stage-col__scroll {
+  opacity: 0.55;
+}
+.stage-col__blocked {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
 .stage-col__scroll {
   flex: 1 1 auto;
   min-height: 0;

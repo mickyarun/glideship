@@ -16,7 +16,8 @@
 
 <!-- Who's on a card, on its board tile. Editors get a button (the avatars,
      or a "+ person" icon when no one is assigned) that opens a searchable
-     list of the people who can open the board; each pick saves at once and
+     list of the people who can open the board (a team's members too, with
+     how they have access); each pick saves at once and
      the list stays open for the next. Viewers see the avatars only. -->
 <template>
   <span v-if="!canEdit" class="assignees">
@@ -78,6 +79,7 @@
             <AppMonogram :name="p.name" :src="p.photo" :size="22" class="mr-2" />
           </template>
           <v-list-item-title>{{ p.name }}</v-list-item-title>
+          <v-list-item-subtitle v-if="p.note" class="assignees__note">{{ p.note }}</v-list-item-subtitle>
         </v-list-item>
       </v-list>
     </v-card>
@@ -87,6 +89,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import AppMonogram from '@/components/common/AppMonogram.vue'
+import { useBoardContext } from '@/composables/useBoardContext'
 import { useCardQuickEdit } from '@/composables/useCardQuickEdit'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import type { CardSummary } from '@/types/boards'
@@ -97,10 +100,16 @@ const emit = defineEmits<{ failed: [error: string] }>()
 
 const quick = useCardQuickEdit()
 const { nameFor, photoFor } = useMemberDirectory()
+const { people } = useBoardContext()
 const open = ref(false)
 const query = ref('')
 
-const assigned = computed(() => props.card.assignee_ids.map(id => ({ id, name: nameFor(id), photo: photoFor(id) })))
+const assigned = computed(() =>
+  props.card.assignee_ids.map(id => {
+    const p = people.find(id)
+    return { id, name: p?.name ?? nameFor(id), photo: p ? p.avatar_url : photoFor(id) }
+  }),
+)
 const names = computed(() => `Assigned to ${wordList(assigned.value.map(p => p.name))}`)
 // Worked out only while the list is open, so tiles don't each walk the directory.
 const shown = computed(() => {
@@ -136,6 +145,9 @@ async function toggle(id: string): Promise<void> {
   background: transparent;
   color: rgb(var(--v-theme-on-surface-variant));
   cursor: pointer;
+}
+.assignees__note {
+  font-size: 12px;
 }
 .assignees__trigger:hover {
   background: rgb(var(--v-theme-surface-bright));

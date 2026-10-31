@@ -37,6 +37,7 @@
           <span v-else-if="item.color" class="pick-menu__swatch mr-2" :style="{ background: `rgb(var(--v-theme-${item.color}))` }" />
         </template>
         <v-list-item-title>{{ item.title }}</v-list-item-title>
+        <v-list-item-subtitle v-if="item.note">{{ item.note }}</v-list-item-subtitle>
       </v-list-item>
     </v-list>
   </v-menu>
@@ -51,6 +52,8 @@ export interface PickItem {
   photo?: string | null
   /** A theme colour name for a swatch (labels). */
   color?: string
+  /** A quiet second line ("via a team"). */
+  note?: string | null
 }
 </script>
 

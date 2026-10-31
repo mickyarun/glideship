@@ -28,7 +28,7 @@ vi.mock('@/services/socket', () => ({
 }))
 vi.mock('@/services/boardsApi', () => ({
   boardsApi: {
-    get: vi.fn(), cards: vi.fn(), members: vi.fn(), switcher: vi.fn(), limits: vi.fn(),
+    get: vi.fn(), cards: vi.fn(), members: vi.fn(), people: vi.fn(async () => ({ items: [] })), repos: vi.fn(async () => ({ items: [] })), switcher: vi.fn(), limits: vi.fn(),
     archiveCard: vi.fn(), restoreCard: vi.fn(), savePrefs: vi.fn(),
   },
 }))

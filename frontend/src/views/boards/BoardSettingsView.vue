@@ -63,6 +63,7 @@
           :can-edit-visibility="board.can('edit_settings')"
         />
         <LabelsSection v-else-if="section === 'labels'" :limits="limits" :status="status" :disabled="!board.can('manage_labels')" />
+        <ReposSection v-else-if="section === 'repos'" :status="status" :disabled="!board.can('manage_repos')" />
         <HandoverSection v-else-if="section === 'handover'" :form="handover" :disabled="!board.can('edit_settings')" />
         <ArchiveSection
           v-else
@@ -94,6 +95,7 @@ import GeneralSection from '@/components/boards/settings/GeneralSection.vue'
 import HandoverSection from '@/components/boards/settings/HandoverSection.vue'
 import LabelsSection from '@/components/boards/settings/LabelsSection.vue'
 import MembersSection from '@/components/boards/settings/MembersSection.vue'
+import ReposSection from '@/components/boards/settings/ReposSection.vue'
 import StagesSection from '@/components/boards/settings/StagesSection.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'

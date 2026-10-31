@@ -14,8 +14,8 @@
  * limitations under the License.
  -->
 
-<!-- A board's filters: search, assignee (the board's people), label and
-     priority, how many cards match ("11 of 13 cards", in a live region
+<!-- A board's filters: search, assignee (everyone who can open the board),
+     label, priority and repository (once the board links one), how many cards match ("11 of 13 cards", in a live region
      that's always there), Clear filters, and Show archived. Every board
      keeps my last filters (useBoardFilters saves them). -->
 <template>
@@ -30,9 +30,10 @@
       clearable
       :maxlength="searchMax ?? undefined"
     />
-    <BoardFilterMenu v-model="assignee" label="Assignee" all-label="Anyone" :options="assigneeOptions(members)" />
+    <BoardFilterMenu v-model="assignee" label="Assignee" all-label="Anyone" :options="assigneeOptions(people)" />
     <BoardFilterMenu v-if="labels.length" v-model="label" label="Label" all-label="Any label" :options="labelOptions(labels)" />
     <BoardFilterMenu v-model="priority" label="Priority" all-label="Any priority" :options="priorityOptions()" />
+    <BoardFilterMenu v-if="repos.length" v-model="repo" label="Repository" all-label="Any repository" :options="repoOptions(repos)" />
     <span class="filter-bar__count" role="status">{{ countText }}</span>
     <v-btn v-if="hasFilters(model)" variant="text" size="small" prepend-icon="mdi-close" @click="emit('clear')">
       Clear filters
@@ -54,15 +55,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BoardFilterMenu from '@/components/buds/board/BoardFilterMenu.vue'
-import type { LabelRead, MemberRead } from '@/types/boards'
+import type { BoardPersonRead, BoardRepoRead, LabelRead } from '@/types/boards'
 import {
-  assigneeOptions, hasFilters, labelOptions, priorityOptions, type CardFilters,
+  assigneeOptions, hasFilters, labelOptions, priorityOptions, repoOptions, type CardFilters,
 } from '@/utils/boardFilters'
 import { plural } from '@/utils/format'
 
 const props = defineProps<{
   labels: LabelRead[]
-  members: MemberRead[]
+  people: BoardPersonRead[]
+  repos: BoardRepoRead[]
   /** Cards shown (loaded and matching). */
   shown: number
   /** Open cards on the board. */
@@ -87,6 +89,7 @@ function field<K extends keyof CardFilters>(key: K) {
 const assignee = field('assignee')
 const label = field('label')
 const priority = field('priority')
+const repo = field('repo')
 const archived = computed<boolean>({
   get: () => model.value.archived,
   set: value => {

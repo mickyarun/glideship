@@ -27,6 +27,8 @@ export interface SavedFilters {
   label_ids: string[]
   priorities: BUDPriority[]
   archived: boolean
+  /** Not saved by the server yet; read when it is. */
+  repo_ids?: string[]
 }
 
 export interface PrefsRead {
@@ -53,13 +55,16 @@ export interface MembersRead {
   teams: { team_id: string; name: string; role: BoardRole }[]
 }
 
+/** Where someone's role on a board comes from: their own row, a team, ``boards:manage``, or an org-wide board. */
+export type BoardAccessVia = 'member' | 'team' | 'permission' | 'org'
+
 /** Someone who can open a board (a role of their own or through a team). */
 export interface BoardPersonRead {
   id: string
   name: string
   avatar_url: string | null
   role: BoardRole
-  via: string
+  via: BoardAccessVia
 }
 
 export interface BoardPeopleRead {

@@ -54,7 +54,7 @@ describe('BoardQuickAdd', () => {
     await box.setValue('  Write the launch post  ')
     await box.trigger('keydown', { key: 'Enter' })
     await flushPromises()
-    expect(submitCard).toHaveBeenCalledWith('Write the launch post')
+    expect(submitCard).toHaveBeenCalledWith('Write the launch post', {})
     expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('')
     expect(document.activeElement).toBe(wrapper.find('textarea').element)
     wrapper.unmount()

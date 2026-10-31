@@ -66,6 +66,10 @@
   height: 18px;
   accent-color: rgb(var(--v-theme-primary));
 }
+.stage-row__required {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
 .stage-row__tags {
   grid-column: 2 / -1;
   display: flex;
@@ -88,7 +92,8 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     padding: 12px 16px;
   }
-  .stage-row__tags {
+  .stage-row__tags,
+  .stage-row__required {
     grid-column: 1 / -1;
   }
   /* Order on the left of the first line, delete on its right, rather than

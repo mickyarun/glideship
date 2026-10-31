@@ -22,7 +22,7 @@
 // a "BUD-" prefix instead, so the two aren't shared.
 
 import { BUD_PRIORITIES, type BUDPriority } from '@/types'
-import type { CardSummary, LabelRead, MemberRead, SavedFilters } from '@/types/boards'
+import type { BoardPersonRead, BoardRepoRead, CardSummary, LabelRead, SavedFilters } from '@/types/boards'
 import type { FilterOption } from '@/utils/budBoard'
 
 export interface CardFilters {
@@ -30,6 +30,8 @@ export interface CardFilters {
   assignee: string | null
   label: string | null
   priority: BUDPriority | null
+  /** One of the board's linked repositories. */
+  repo: string | null
   /** Show the stages' archived cards instead of their open ones. */
   archived: boolean
 }
@@ -39,12 +41,13 @@ export const NO_FILTERS: Readonly<CardFilters> = Object.freeze({
   assignee: null,
   label: null,
   priority: null,
+  repo: null,
   archived: false,
 })
 
 /** Whether anything narrows the cards (the archived view isn't a narrowing). */
 export function hasFilters(f: CardFilters): boolean {
-  return f.query.trim() !== '' || f.assignee !== null || f.label !== null || f.priority !== null
+  return f.query.trim() !== '' || f.assignee !== null || f.label !== null || f.priority !== null || f.repo !== null
 }
 
 const DIGITS = /^\d+$/
@@ -62,6 +65,7 @@ export function matchesCard(card: CardSummary, f: CardFilters): boolean {
   if (f.assignee && !card.assignee_ids.includes(f.assignee)) return false
   if (f.label && !card.label_ids.includes(f.label)) return false
   if (f.priority && card.priority !== f.priority) return false
+  if (f.repo && card.repo_id !== f.repo) return false
   return matchesQuery(card, f.query)
 }
 
@@ -72,11 +76,16 @@ export function toListParams(f: CardFilters) {
     assignee: f.assignee,
     label: f.label,
     priority: f.priority,
+    repo: f.repo,
     archived: f.archived || null,
   }
 }
 
-/** Saved prefs hold lists; the bar picks one of each. */
+/**
+ * Saved prefs hold lists; the bar picks one of each. The server doesn't
+ * save a repository yet (its saved filters refuse unknown fields), so the
+ * Repository filter is read when a save brings one and never sent.
+ */
 export function fromSaved(saved: SavedFilters | null | undefined): CardFilters {
   if (!saved) return { ...NO_FILTERS }
   return {
@@ -84,6 +93,7 @@ export function fromSaved(saved: SavedFilters | null | undefined): CardFilters {
     assignee: saved.assignee_ids[0] ?? null,
     label: saved.label_ids[0] ?? null,
     priority: saved.priorities[0] ?? null,
+    repo: saved.repo_ids?.[0] ?? null,
     archived: saved.archived,
   }
 }
@@ -98,11 +108,13 @@ export function toSaved(f: CardFilters): SavedFilters {
   }
 }
 
-/** The board's people, by name, for the assignee filter. */
-export function assigneeOptions(members: MemberRead[]): FilterOption[] {
-  return members
-    .map(m => ({ value: m.user_id, label: m.name }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+/** Everyone who can open the board, by name, for the assignee filter. */
+export function assigneeOptions(people: BoardPersonRead[]): FilterOption[] {
+  return people.map(p => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))
+}
+
+export function repoOptions(repos: BoardRepoRead[]): FilterOption[] {
+  return repos.map(r => ({ value: r.id, label: r.name }))
 }
 
 export function labelOptions(labels: LabelRead[]): FilterOption[] {
@@ -118,11 +130,13 @@ export function filterSummary(
   f: CardFilters,
   nameOf: (userId: string) => string,
   labels: LabelRead[],
+  repoName: (repoId: string) => string | null = () => null,
 ): string {
   const parts: string[] = []
   if (f.query.trim()) parts.push(`Search: "${f.query.trim()}"`)
   if (f.assignee) parts.push(`Assignee: ${nameOf(f.assignee)}`)
   if (f.label) parts.push(`Label: ${labels.find(l => l.id === f.label)?.name ?? 'removed label'}`)
   if (f.priority) parts.push(`Priority: ${f.priority}`)
+  if (f.repo) parts.push(`Repository: ${repoName(f.repo) ?? 'unlinked repository'}`)
   return parts.join(' · ')
 }
