@@ -31,6 +31,7 @@
       <v-switch
         v-model="options.autoGenerate.value[stage.value]"
         :label="stage.label"
+        :aria-label="`Auto-generate ${stage.label}`"
         color="primary"
         density="compact"
         hide-details

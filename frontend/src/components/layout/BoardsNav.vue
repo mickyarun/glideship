@@ -30,7 +30,7 @@
     rounded="lg"
   >
     <template v-if="!rail" #append>
-      <span class="boards-nav__key">{{ DELIVERY_BOARD.key }}</span>
+      <span class="boards-nav__key" aria-hidden="true">{{ DELIVERY_BOARD.key }}</span>
     </template>
   </v-list-item>
   <template v-if="boards">
@@ -43,7 +43,7 @@
       rounded="lg"
     >
       <template v-if="!rail" #append>
-        <span class="boards-nav__key">{{ board.key }}</span>
+        <span class="boards-nav__key" aria-hidden="true">{{ board.key }}</span>
       </template>
     </v-list-item>
     <v-list-item
