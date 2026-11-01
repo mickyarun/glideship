@@ -31,8 +31,9 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI
 
-from app.core.auth_deps import get_current_user, get_db
+from app.core.auth_deps import get_current_user
 from app.core.permission_deps import PermissionSet, get_permission_set
+from app.database import request_session
 
 EDITOR = frozenset({"settings:view", "settings:edit"})
 SETTINGS_PREFIX = "/api/v1/settings"
@@ -46,7 +47,7 @@ def settings_app(
     """``router`` at the settings prefix, signed in with ``permissions``."""
     app = FastAPI()
     app.include_router(router, prefix=SETTINGS_PREFIX)
-    app.dependency_overrides[get_db] = db
+    app.dependency_overrides[request_session] = db
     user = SimpleNamespace(id=uuid.uuid4(), must_change_password=False)
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_permission_set] = lambda: PermissionSet(

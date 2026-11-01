@@ -37,9 +37,8 @@ from app.api.router import api_router
 from app.api.v1.ws import router as ws_router
 from app.config import settings
 from app.core.auth_deps import oauth2_scheme
-from app.core.deps import get_db
 from app.core.security import create_refresh_token
-from app.database import get_db as database_get_db
+from app.database import request_session
 from tests.api.route_walk import ServedRoute, depends_on, served_routes
 
 # Reachable without a user's access token. Most authenticate some other way;
@@ -169,8 +168,7 @@ def _protected_calls() -> list[tuple[str, str]]:
 async def test_every_protected_route_rejects_callers_without_a_valid_access_token() -> None:
     app = FastAPI()
     app.include_router(api_router)
-    app.dependency_overrides[get_db] = _inert_db
-    app.dependency_overrides[database_get_db] = _inert_db
+    app.dependency_overrides[request_session] = _inert_db
     calls = _protected_calls()
     assert len(calls) > 300, f"only {len(calls)} protected calls found"
 

@@ -42,8 +42,13 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def _request_session() -> AsyncGenerator[AsyncSession, None]:
-    """Open a session, commit it if the route succeeds, roll it back if not."""
+async def request_session() -> AsyncGenerator[AsyncSession, None]:
+    """Open a session, commit it if the route succeeds, roll it back if not.
+
+    Tests that need a different session override this, not ``get_db``: an
+    override takes the scope of the ``Depends`` it replaces, so overriding
+    this one keeps the commit before the response.
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -54,7 +59,7 @@ async def _request_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_db(
-    session: AsyncSession = Depends(_request_session, scope="function"),
+    session: AsyncSession = Depends(request_session, scope="function"),
 ) -> AsyncSession:
     """FastAPI dependency for the request's database session.
 
@@ -65,7 +70,7 @@ async def get_db(
     ``scope="function"`` (FastAPI 0.121+) runs the commit as soon as the
     route returns, before the response goes out.
 
-    The session lives in ``_request_session`` so every ``Depends(get_db)``
+    The session lives in ``request_session`` so every ``Depends(get_db)``
     gets the function scope without having to ask for it.
     """
     return session

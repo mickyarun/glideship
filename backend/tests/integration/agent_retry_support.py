@@ -33,8 +33,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.router import api_router
-from app.core.deps import get_db
 from app.core.security import create_access_token
+from app.database import request_session
 from app.models.agent_skill import AgentSkill, AgentType
 from app.models.bud import BUDDesign, BUDDesignStatus, BUDDocument, BUDStatus
 from app.models.bud_agent_task import AgentTaskStatus, BUDAgentTask
@@ -80,7 +80,7 @@ async def slow_commit_client(factory: Factory) -> AsyncIterator[AsyncClient]:
             yield session
             await commit()
 
-    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[request_session] = _db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
 
