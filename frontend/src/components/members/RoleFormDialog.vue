@@ -86,7 +86,7 @@
 import { computed, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import { useMembersStore, type PermissionCategory, type RoleOption } from '@/stores/members'
-import { baseRoleItems } from '@/utils/members'
+import { baseRoleItems, roleFormComplete } from '@/utils/members'
 
 const props = defineProps<{ role: RoleOption | null }>()
 const open = defineModel<boolean>({ required: true })
@@ -97,10 +97,7 @@ const submitError = ref('')
 const form = ref({ name: '', description: '', baseRoleId: '', permissionIds: [] as string[] })
 
 const isSystem = computed(() => props.role?.scopeType === 'SYSTEM')
-// A custom role needs its base role too; without one the save is refused.
-const canSubmit = computed(() =>
-  !!form.value.name.trim() && form.value.permissionIds.length > 0 && (isSystem.value || !!form.value.baseRoleId),
-)
+const canSubmit = computed(() => roleFormComplete(form.value, !props.role))
 
 // New roles start from the Developer system role so the picker is never empty.
 function defaultBaseRoleId(): string {
@@ -142,8 +139,9 @@ async function submit(): Promise<void> {
   const ok = props.role
     ? await store.updateRole(props.role.id, {
         ...body,
-        // A system role is its own base; only custom roles send one.
-        base_role_id: isSystem.value ? undefined : form.value.baseRoleId,
+        // A system role is its own base; only custom roles send one, and
+        // an older custom role may have none to send.
+        base_role_id: isSystem.value ? undefined : form.value.baseRoleId || undefined,
       })
     : await store.createRole({ ...body, base_role_id: form.value.baseRoleId })
   saving.value = false
