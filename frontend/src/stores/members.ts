@@ -14,6 +14,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import api from '@/services/api'
 import { extractApiError } from '@/utils/errors'
 import { useAuthStore } from '@/stores/auth'
@@ -153,6 +154,7 @@ export const useMembersStore = defineStore('members', () => {
     try {
       const { data } = await api.post<Member>('/v1/members', payload)
       members.value.push(data)
+      useMemberDirectory().markStale()
       return data
     } catch (err) {
       error.value = extractApiError(err, 'Failed to add member.')
@@ -166,6 +168,7 @@ export const useMembersStore = defineStore('members', () => {
       const { data } = await api.patch(`/v1/members/${userId}/status`)
       const idx = members.value.findIndex(m => m.id === userId)
       if (idx !== -1) members.value[idx] = data
+      useMemberDirectory().markStale()
       return true
     } catch (err) {
       error.value = extractApiError(err, 'Failed to update status.')
@@ -229,6 +232,7 @@ export const useMembersStore = defineStore('members', () => {
     error.value = null
     try {
       await api.post(`/v1/members/${targetId}/merge`, { sourceId })
+      useMemberDirectory().markStale()
       await fetchMembers()
       return true
     } catch (err) {

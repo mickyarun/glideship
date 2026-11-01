@@ -70,7 +70,7 @@ import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import { usePermissions } from '@/composables/usePermissions'
 import { BUG_BOARD_COLUMNS, BUG_STATUS_LABELS, type BugRead, type BugStatusValue } from '@/types'
-import { statusConfirm } from '@/utils/bugList'
+import { ownerOptions, statusConfirm } from '@/utils/bugList'
 import BugFeaturePicker from './BugFeaturePicker.vue'
 
 // ``save`` patches the bug and resolves true once it's saved.
@@ -83,7 +83,7 @@ const { canEditBugs, canAssignBugs } = usePermissions()
 
 const STATUS_OPTIONS = BUG_BOARD_COLUMNS.map(value => ({ title: BUG_STATUS_LABELS[value], value }))
 
-const assigneeOptions = computed(() => directory.entries.value.map(m => ({ title: m.name || m.email, value: m.id })))
+const assigneeOptions = computed(() => ownerOptions(directory.entries.value, props.bug))
 
 function save(body: Record<string, unknown>): void {
   void props.save(body)
