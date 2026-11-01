@@ -94,7 +94,9 @@ async def test_managers_see_plain_leave_everywhere_hr_and_she_see_the_type(
     assert PERIOD in await balance_names(hr)
     assert PERIOD in await balance_names(woman)
 
-    history = await client.get(f"{LEAVE}/history/{woman}", headers=as_user(mgr, org))
+    history = await client.get(
+        f"{LEAVE}/history/{woman}", params={"year": mon.year}, headers=as_user(mgr, org)
+    )
     assert [row["leave_type"] for row in history.json()["rows"]] == [None]
     summary = await client.get(f"{LEAVE}/reports/summary", params=span, headers=as_user(mgr, org))
     assert PERIOD not in {t["name"] for t in summary.json()["leave_types"]}

@@ -26,6 +26,7 @@ from sqlalchemy import select
 from app.models.leave_request import LeaveRequest
 from app.models.notification import Notification
 from app.models.policy_holiday import HolidayKind, PolicyHoliday
+from app.services.leave.calendar_math import LeaveYearBounds, leave_year_bounds
 from app.services.leave.policies import ensure_default_policy
 from tests.integration.leave_support import Factory, add_request, as_user, team
 
@@ -36,6 +37,20 @@ async def _notes_for(factory: Factory, user: uuid.UUID) -> list[str]:
     async with factory() as db:
         rows = await db.scalars(select(Notification.title).where(Notification.user_id == user))
         return list(rows)
+
+
+async def _year_around_today(factory: Factory, org: uuid.UUID) -> LeaveYearBounds:
+    """Start the org's leave year six months before this month and return it.
+
+    Leave under way runs from before today to after it, so with a January
+    year it would cross into the next year around New Year.
+    """
+    today = datetime.now(UTC).date()
+    async with factory() as db:
+        policy = await ensure_default_policy(db, org)
+        policy.year_start_month = (today.month + 5) % 12 + 1
+        await db.commit()
+        return leave_year_bounds(today, policy.year_start_month)
 
 
 async def _under_way(factory: Factory, org: uuid.UUID, user: uuid.UUID, casual: uuid.UUID,
@@ -57,6 +72,7 @@ async def test_leave_under_way_keeps_the_days_taken(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     org, p, casual = await team(pg_session_factory)
+    await _year_around_today(pg_session_factory, org)
     today = datetime.now(UTC).date()
     start = today - timedelta(days=3)
     end = today + timedelta(days=3)
@@ -91,14 +107,15 @@ async def test_started_leave_extends_within_the_year_but_not_past_it(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     org, p, casual = await team(pg_session_factory)
+    year = await _year_around_today(pg_session_factory, org)
     today = datetime.now(UTC).date()
-    # Started yesterday and runs to the end of the week after next.
+    # Started yesterday and runs to tomorrow.
     start = today - timedelta(days=1)
     end = today + timedelta(days=1)
     rid = await _under_way(pg_session_factory, org, p["emp"], casual, start, end, "1", p["mgr"])
     headers = as_user(p["mgr"], org)
 
-    next_year = date(today.year + 1, 1, 5)
+    next_year = year.end + timedelta(days=1)
     crossing = await client.post(
         f"/api/v1/leave/requests/{rid}/reschedule",
         json={"start_date": start.isoformat(), "end_date": next_year.isoformat()},
@@ -123,6 +140,7 @@ async def test_shortening_started_leave_to_only_days_off_is_refused(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     org, p, casual = await team(pg_session_factory)
+    await _year_around_today(pg_session_factory, org)
     today = datetime.now(UTC).date()
     yesterday = today - timedelta(days=1)
     rid = await _under_way(

@@ -64,23 +64,24 @@ async def test_heads_up_then_warning_for_the_requester_approver_and_hr(
     await report_to(pg_session_factory, org, emp, mgr)
     await give_role(pg_session_factory, org, hr, "hr")
     sick = await _unlimited_with_lines(pg_session_factory, org, casual)
-    year = future_monday().year
-    jan = date(year, 1, 5)
+    mon = future_monday()
+    year = mon.year
+    # Booked the week after, so it never overlaps the requests below.
+    later = mon + timedelta(weeks=1)
     await add_request(
-        pg_session_factory, org, emp, jan, jan + timedelta(days=1), "2", type_id=casual
+        pg_session_factory, org, emp, later, later + timedelta(days=1), "2", type_id=casual
     )
     # Sick leave doesn't count toward the lines.
     await add_request(
         pg_session_factory,
         org,
         emp,
-        jan + timedelta(days=7),
-        jan + timedelta(days=11),
-        "5",
+        later + timedelta(days=2),
+        later + timedelta(days=4),
+        "3",
         type_id=sick,
     )
 
-    mon = future_monday()
     async with pg_session_factory() as db:
         member = await resolve_member_policy(db, org, emp)
         # 2 taken + 1 asked = 3: the heads-up.
