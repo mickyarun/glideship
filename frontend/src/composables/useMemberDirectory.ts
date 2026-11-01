@@ -69,6 +69,8 @@ async function ensureLoaded(force = false): Promise<void> {
       entries.value = data
       reindex()
     } catch (err) {
+      // Try again on the next read rather than keep a roster known to be old.
+      if (latest()) stale = true
       console.error('[useMemberDirectory] directory fetch failed:', err)
     } finally {
       if (latest()) {

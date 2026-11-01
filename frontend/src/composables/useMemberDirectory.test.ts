@@ -46,6 +46,21 @@ describe('useMemberDirectory', () => {
     expect(dir.entries.value.map(e => e.id)).toEqual(['u1', 'u2'])
   })
 
+  it('tries again on the next read after a failed refresh', async () => {
+    const dir = useMemberDirectory()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    get.mockResolvedValueOnce(reply([dana]))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(reply([dana, eli]))
+    await dir.ensureLoaded()
+    dir.markStale()
+    await dir.ensureLoaded()
+    expect(dir.entries.value.map(e => e.id)).toEqual(['u1'])
+    await dir.ensureLoaded()
+    expect(get).toHaveBeenCalledTimes(3)
+    expect(dir.entries.value.map(e => e.id)).toEqual(['u1', 'u2'])
+  })
+
   it('drops a load that lands after sign-out', async () => {
     const dir = useMemberDirectory()
     let land!: (value: unknown) => void
