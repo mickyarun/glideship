@@ -115,7 +115,7 @@ watch(open, isOpen => {
   }
   submitError.value = ''
   if (store.permissionCategories.length === 0) void store.fetchPermissions()
-  if (store.roles.length === 0) void store.fetchRoles()
+  void store.ensureRoles()
 })
 
 // Opened before the roles had loaded: take the default once they arrive,

@@ -17,6 +17,7 @@ import { ref } from 'vue'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import api from '@/services/api'
 import { extractApiError } from '@/utils/errors'
+import { latestCall } from '@/utils/latestCall'
 import { useAuthStore } from '@/stores/auth'
 
 export interface Member {
@@ -87,9 +88,28 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
-  async function fetchRoles(): Promise<void> {
+  // A refresh after a role change starts its own load, and an older reply
+  // that lands after it is dropped. ensureRoles() joins whichever is running.
+  const beginRolesLoad = latestCall()
+  let rolesLoad: Promise<void> | null = null
+
+  function fetchRoles(): Promise<void> {
+    const load = loadRoles(beginRolesLoad())
+    rolesLoad = load
+    void load.finally(() => { if (rolesLoad === load) rolesLoad = null })
+    return load
+  }
+
+  /** The roles, loaded only if they aren't here or on their way already. */
+  function ensureRoles(): Promise<void> {
+    if (roles.value.length > 0) return Promise.resolve()
+    return rolesLoad ?? fetchRoles()
+  }
+
+  async function loadRoles(latest: () => boolean): Promise<void> {
     try {
       const { data } = await api.get('/v1/roles')
+      if (!latest()) return
       roles.value = data.map((r: Record<string, unknown>) => ({
         id: r.id as string,
         name: r.name as string,
@@ -324,6 +344,7 @@ export const useMembersStore = defineStore('members', () => {
     error,
     fetchMembers,
     fetchRoles,
+    ensureRoles,
     fetchAssignableRoleIds,
     fetchPermissions,
     addMember,
