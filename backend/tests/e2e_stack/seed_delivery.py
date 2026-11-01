@@ -75,7 +75,8 @@ async def _repos(
 async def add_repo(db: AsyncSession, org_id: uuid.UUID, spec: RepoSpec) -> SeededRepo:
     """A tracked repo with main, develop and uat branches (no checkout needed).
 
-    Names are unique per org, so asking again for one the org has returns it.
+    The path is built from the name, and a path is unique per org, so asking
+    again for a name the org has returns that repo rather than failing.
     """
     existing = await TrackedRepoRepository(db, org_id=org_id).get_by_name(spec.name)
     if existing is not None:

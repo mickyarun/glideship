@@ -979,7 +979,9 @@ The follow-up pull request that covers the later BUD stages, settings, reports a
 does the same. The bugs board and AI settings fixes have Vitest tests. The custom role, Add
 member and bug owner fixes are caught by `members.spec.ts` and `bug-detail.spec.ts`, which
 found them. The menu, picker and naming fixes are caught by the specs that find those controls
-by role.
+by role. The fixes from that pull request's code review all have Vitest tests. The testing to
+UAT one relies on its Vitest test: `bud-release.spec.ts` moves on straight after marking the
+last case, but locally the save usually lands first, so the spec catches it only sometimes.
 
 | Area | Bug | PR |
 | --- | --- | --- |
@@ -1036,6 +1038,11 @@ by role.
 | Frontend | Switching the Bugs page's environment while it loaded could leave the older board on screen | More-flows PR (own commit) |
 | AI settings | A sign-in choice made before the saved settings loaded was replaced by them, so Save sent the old mode | More-flows PR (own commit) |
 | Frontend | The members row menu wasn't a menu, and the BUD assignee picker's people weren't options | More-flows PR (own commit) |
+| Frontend | A bug owned by a deactivated member showed their id as the owner, and the member directory never refreshed after members changed or someone signed out | More-flows PR (own commit) |
+| Frontend | Moving testing on straight after marking the last manual case said cases were still pending, because the results were still saving | More-flows PR (own commit) |
+| Frontend | A custom role from before base roles were required couldn't be saved, not even renamed | More-flows PR (own commit) |
+| Frontend | Opening the role dialog while the members page loaded fetched the roles twice, and the older reply could win | More-flows PR (own commit) |
+| Frontend | A BUD title held by a running agent was still announced as "rename" | More-flows PR (own commit) |
 
 ## Open questions
 
