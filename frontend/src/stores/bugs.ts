@@ -17,6 +17,7 @@ import { ref } from 'vue'
 import api from '@/services/api'
 import { createBugComments } from '@/stores/bugComments'
 import { extractApiError } from '@/utils/errors'
+import { latestCall } from '@/utils/latestCall'
 import {
   type BugBoardFilters,
   type BugListFilters,
@@ -51,12 +52,11 @@ export const useBugsStore = defineStore('bugs', () => {
 
   // Latest list and board loads. Switching filters while one is in flight
   // must not let the older, slower reply replace the newer list.
-  let listSeq = 0
-  let boardSeq = 0
+  const beginListLoad = latestCall()
+  const beginBoardLoad = latestCall()
 
   async function fetchBugs(filters?: BugListFilters): Promise<void> {
-    const seq = ++listSeq
-    const latest = (): boolean => seq === listSeq
+    const latest = beginListLoad()
     loading.value = true
     loadError.value = null
     try {
@@ -75,8 +75,7 @@ export const useBugsStore = defineStore('bugs', () => {
   }
 
   async function fetchBoard(filters?: BugBoardFilters): Promise<void> {
-    const seq = ++boardSeq
-    const latest = (): boolean => seq === boardSeq
+    const latest = beginBoardLoad()
     boardLoading.value = true
     loadError.value = null
     try {
