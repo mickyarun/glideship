@@ -14,6 +14,7 @@
 
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { trackResultSave } from '@/stores/manualResultSaves'
 import type { AutomationTestCase, ManualTestCase, TestEvidence } from '@/types'
 
 interface QATestCasesResponse {
@@ -167,27 +168,30 @@ export function useQATestCases(budId: string) {
       }
     }
 
-    try {
-      const resp = await fetch(`/api/v1/buds/${budId}/qa/manual-results`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${authStore.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ test_case_id: testCaseId, result, notes }),
-      })
-      if (resp.ok) {
-        error.value = null
+    // Tracked so leaving testing waits for it (see manualResultSaves).
+    await trackResultSave(budId, (async () => {
+      try {
+        const resp = await fetch(`/api/v1/buds/${budId}/qa/manual-results`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${authStore.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ test_case_id: testCaseId, result, notes }),
+        })
+        if (resp.ok) {
+          error.value = null
+        }
+        else {
+          revert()
+          error.value = await readResponseError(resp, 'Failed to update test result')
+        }
       }
-      else {
+      catch (err) {
         revert()
-        error.value = await readResponseError(resp, 'Failed to update test result')
+        error.value = networkErrorMessage('Updating the test result', err)
       }
-    }
-    catch (err) {
-      revert()
-      error.value = networkErrorMessage('Updating the test result', err)
-    }
+    })())
   }
 
   async function uploadEvidence(testCaseId: string, file: File): Promise<TestEvidence | null> {

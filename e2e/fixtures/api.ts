@@ -84,12 +84,6 @@ export function createBug(api: Api, title: string, description: string): Promise
   return api.post<Bug>('bugs', { title, description })
 }
 
-/** Ids of the BUD's manual test cases still waiting for a result. */
-export async function pendingManualCases(api: Api, budId: string): Promise<string[]> {
-  const bud = await api.get<{ qa_manual_cases: { id: string; result: string }[] | null }>(`buds/${budId}`)
-  return (bud.qa_manual_cases ?? []).filter((c) => c.result === 'pending').map((c) => c.id)
-}
-
 export type BudStatus =
   | 'bud' | 'design' | 'tech_arch' | 'development' | 'code_review' | 'testing' | 'uat' | 'prod'
   | 'closed' | 'discarded'

@@ -17,7 +17,7 @@
  * result, release merges (what release detection records) move the UAT and
  * Prod tabs on, and closing or discarding ends it.
  */
-import { createBud, moveBud, pendingManualCases, setUatEnabled } from '../fixtures/api.ts'
+import { createBud, moveBud, setUatEnabled } from '../fixtures/api.ts'
 import { expect, test } from '../fixtures/test.ts'
 import {
   budSections, chooseStage, expectSection, markRemainingCases, openBudMenu, recordCaseResult,
@@ -46,9 +46,7 @@ test('a BUD goes from testing through UAT and prod to closed', async ({ signedIn
   await recordCaseResult(page, 'MTC-001', 'Pass')
   await markRemainingCases(page, 'Skipped')
   await expect(page.getByText('2/2 completed')).toBeVisible()
-  // The panel counts a result before it is saved; Move to UAT checks the saved ones.
-  await expect.poll(() => pendingManualCases(api, bud.id)).toEqual([])
-
+  // Straight on, with the results possibly still saving: the move waits for them.
   await page.getByRole('button', { name: 'Move to UAT' }).click()
   await expectSection(page, 'UAT')
   await stack.recordRelease(org, bud.id, { stage: 'uat', repoId: repo.id, prNumber: 101, title: 'Release 2026.11.1' })
@@ -115,7 +113,6 @@ test('QA records results and moves testing on, but cannot edit the BUD', async (
   await page.goto(`/buds/${bud.id}?tab=testing`)
   await recordCaseResult(page, 'MTC-001', 'Pass')
   await expect(page.getByText('1/1 completed')).toBeVisible()
-  await expect.poll(() => pendingManualCases(pmApi, bud.id)).toEqual([])
   await page.getByRole('button', { name: 'Move to UAT' }).click()
   await expectSection(page, 'UAT')
 
