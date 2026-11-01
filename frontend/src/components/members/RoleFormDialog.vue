@@ -39,7 +39,7 @@
           class="mb-4"
           hint="Members with this role take part in the stages the base role owns."
           persistent-hint
-          :rules="[v => !!v || 'Base role is required']"
+          :rules="[v => !!v || !!role || 'Base role is required']"
         />
         <div class="d-flex align-center justify-space-between mb-2">
           <span class="text-subtitle-2">Permissions</span>
