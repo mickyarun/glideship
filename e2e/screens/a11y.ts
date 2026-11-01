@@ -30,11 +30,26 @@ import { expect, type Page } from '@playwright/test'
 const WCAG_21_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
 const FAILING = new Set(['serious', 'critical'])
 const CLOSED_OVERLAYS = '.v-overlay:not(.v-overlay--active)'
+// Far past any menu or dialog transition in the app.
+const SETTLE_MS = 5_000
+
+/**
+ * Animations still running that will end: endless ones (spinners, the
+ * garden) never settle and one with no effect paints nothing, so neither
+ * counts. Runs in the page, so it uses nothing from this module.
+ */
+function finiteAnimationsRunning(): string[] {
+  return document.getAnimations()
+    .filter((a) => a.playState === 'running' && a.effect !== null
+      && a.effect.getComputedTiming().endTime !== Infinity)
+    .map((a) => (a as CSSAnimation).animationName ?? (a as CSSTransition).transitionProperty ?? (a.id || 'unnamed'))
+}
 
 export async function expectAccessible(page: Page, screen: string): Promise<void> {
-  // Endless ones (spinners, the garden) never settle, so only finite ones count.
-  await page.waitForFunction(() => document.getAnimations().every((a) =>
-    a.playState !== 'running' || a.effect?.getComputedTiming().endTime === Infinity))
+  await expect.poll(() => page.evaluate(finiteAnimationsRunning), {
+    message: `animations still running on ${screen}`,
+    timeout: SETTLE_MS,
+  }).toEqual([])
   const results = await new AxeBuilder({ page }).withTags(WCAG_21_AA).exclude(CLOSED_OVERLAYS).analyze()
   const found = results.violations
     .filter((violation) => FAILING.has(violation.impact ?? ''))
