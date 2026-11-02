@@ -85,3 +85,19 @@ function stringifyDetail(detail: unknown): string {
   }
   return String(detail)
 }
+
+/**
+ * The words to show for an error string from {@link extractApiError}: a
+ * typed envelope's ``message`` (e.g. ``bud_stage_content_missing``), or
+ * the string itself.
+ */
+export function readableError(error: string): string {
+  if (!error.startsWith('{')) return error
+  try {
+    const parsed: unknown = JSON.parse(error)
+    const message = parsed && typeof parsed === 'object' ? (parsed as { message?: unknown }).message : null
+    return typeof message === 'string' && message ? message : error
+  } catch {
+    return error
+  }
+}

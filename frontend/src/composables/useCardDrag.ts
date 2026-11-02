@@ -142,10 +142,10 @@ export function dragOptions(boardId: string, enabled: boolean) {
     filter: '.card-tile__menu, .card-tile__quick',
     preventOnFilter: false,
     // The slot the card will land in, the card picked up, and the copy
-    // that follows the pointer (styled in stage-column.css).
-    ghostClass: 'card-tile--ghost',
-    chosenClass: 'card-tile--chosen',
-    dragClass: 'card-tile--drag',
+    // that follows the pointer (styled in drag-states.css).
+    ghostClass: 'drag-ghost',
+    chosenClass: 'drag-chosen',
+    dragClass: 'drag-copy',
     // Draw that copy ourselves, for mouse and touch alike, rather than the
     // browser's faded snapshot. It sits on <body>, outside the column's
     // paint containment, which would otherwise clip it.

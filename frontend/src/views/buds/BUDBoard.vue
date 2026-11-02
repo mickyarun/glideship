@@ -15,7 +15,9 @@
  -->
 
 <!-- The BUD board: one column per lifecycle stage in the org's phase
-     order, filters in the header, and the shared New BUD dialog. -->
+     order, filters in the header, and the shared New BUD dialog. BUDs drag
+     one stage forward or back (useBudBoardDrag), through the same guards
+     and dialogs as the BUD page; phones move them from the BUD page. -->
 <template>
   <div class="board-page">
     <BoardHeader
@@ -57,36 +59,53 @@
       <p>A BUD captures what to build and why. It moves across this board as it heads to production.</p>
     </div>
 
-    <div v-else class="board-scroller">
-      <div class="board-page__columns">
-        <BoardColumn
-          v-for="status in columns"
-          :key="status"
-          :status="status"
-          :buds="budsByColumn[status] ?? []"
-          :now="now"
-          :filtering="filtering"
-          :can-restore="canEditBuds"
-          @restore="restoreDialog?.open($event)"
-        />
+    <template v-else>
+      <div class="board-scroller" :class="{ 'board-scroller--blocked': overBlocked() }">
+        <div class="board-page__columns">
+          <BoardColumn
+            v-for="status in columns"
+            :key="status"
+            :status="status"
+            :buds="budsByColumn[status] ?? []"
+            :now="now"
+            :filtering="filtering"
+            :can-restore="canEditBuds"
+            :can-drag="dragOn"
+            :drop-block="blocks[status] ?? null"
+            @restore="restoreDialog?.open($event)"
+            @drop="drop"
+            @blocked="blocked"
+          />
+        </div>
       </div>
-    </div>
+      <p v-if="dragOn" class="board-page__hint">
+        Drag a BUD to the next or previous stage. Open it to move it further.
+      </p>
+    </template>
 
     <BUDCreateDialog v-model="showCreateDialog" />
+    <BUDStatusDialogs :controller="statusController" />
+    <BoardFeedback :feedback="feedback" />
     <!-- Shared with the BUD detail page so restore behaves the same from both. -->
     <BUDRestoreDialog ref="restoreDialog" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useDisplay } from 'vuetify'
+import BoardFeedback from '@/components/boards/board/BoardFeedback.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import BUDCreateDialog from '@/components/buds/BUDCreateDialog.vue'
 import BUDRestoreDialog from '@/components/buds/BUDRestoreDialog.vue'
+import BUDStatusDialogs from '@/components/buds/BUDStatusDialogs.vue'
 import YieldOfferNotice from '@/components/buds/YieldOfferNotice.vue'
 import BoardColumn from '@/components/buds/board/BoardColumn.vue'
 import BoardHeader from '@/components/buds/board/BoardHeader.vue'
+import { useBoardFeedback } from '@/composables/useBoardFeedback'
 import { useBudBoard } from '@/composables/useBudBoard'
+import { useBudBoardDrag } from '@/composables/useBudBoardDrag'
+import { overBlocked } from '@/composables/useCardDrag'
 import { useNow } from '@/composables/useNow'
 import { usePermissions } from '@/composables/usePermissions'
 import '@/assets/styles/board-layout.css'
@@ -96,6 +115,11 @@ const {
   priorityOptions, assignees, teamOptions, columns, budsByColumn, shownCount, filtering,
 } = useBudBoard()
 const { canViewQAAutomation, canCreateBuds, canEditBuds, canManageMembers } = usePermissions()
+
+const feedback = useBoardFeedback()
+const { canDrag, blocks, status: statusController, drop, blocked } = useBudBoardDrag(columns, feedback)
+const { xs } = useDisplay()
+const dragOn = computed(() => canDrag.value && !xs.value)
 
 const showCreateDialog = ref(false)
 const restoreDialog = ref<InstanceType<typeof BUDRestoreDialog> | null>(null)
@@ -119,9 +143,15 @@ const now = useNow()
 }
 .board-page__columns {
   display: flex;
-  align-items: flex-start;
+  /* Every column as tall as the longest, so a BUD drops anywhere below a header. */
+  align-items: stretch;
   gap: var(--board-column-gap);
   width: max-content;
+}
+.board-page__hint {
+  margin: 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .board-page__empty {
   display: flex;

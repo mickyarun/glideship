@@ -26,8 +26,8 @@
      once when the drag starts, so this note isn't a live region. -->
 <template>
   <section
-    class="stage-col"
-    :class="{ 'stage-col--drop-target': dropTarget && !dropBlock, 'stage-col--no-drop': !!dropBlock }"
+    class="stage-col drop-col"
+    :class="{ 'drop-col--target': dropTarget && !dropBlock, 'drop-col--blocked': !!dropBlock }"
     :aria-labelledby="headingId"
     :data-stage-col="stage.id"
   >
@@ -35,19 +35,19 @@
     <p v-if="goesOver && !dropBlock" class="stage-col__over" role="status">
       {{ stage.name }} goes over its limit of {{ limit }}. You can still drop here.
     </p>
-    <p v-if="dropBlock" class="stage-col__blocked">
+    <p v-if="dropBlock" class="drop-col__blocked">
       <v-icon icon="mdi-lock-outline" size="14" aria-hidden="true" />{{ dropBlock }}
     </p>
 
-    <div ref="scrollBox" class="stage-col__scroll">
-      <VueDraggable
-        :model-value="column.items"
-        v-bind="dragOptions(boardId, canDrag)"
-        @move="dragMoved"
+    <div ref="scrollBox" class="stage-col__scroll drop-col__cards">
+      <StageDragList
+        :items="column.items"
+        :stage-id="stage.id"
+        :group="boardId"
+        :enabled="canDrag"
         class="stage-col__cards"
-        :data-stage-id="stage.id"
-        @start="dragStarted"
-        @end="onEnd"
+        @drop="emit('drop', $event)"
+        @blocked="(cardId, stageId) => emit('blocked', cardId, stageId)"
       >
         <BoardCardTile
           v-for="card in column.items"
@@ -66,7 +66,7 @@
           @copied="emit('copied', $event)"
           @failed="emit('failed', $event)"
         />
-      </VueDraggable>
+      </StageDragList>
 
       <template v-if="column.loading && !column.items.length">
         <v-skeleton-loader v-for="i in 2" :key="i" type="list-item-two-line" class="stage-col__skeleton" />
@@ -103,15 +103,12 @@
 
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue'
-import { VueDraggable } from 'vue-draggable-plus'
 import { useDisplay } from 'vuetify'
 import BoardCardTile from '@/components/boards/board/BoardCardTile.vue'
 import BoardQuickAdd from '@/components/boards/board/BoardQuickAdd.vue'
 import StageColumnHeader from '@/components/boards/board/StageColumnHeader.vue'
-import {
-  blockedLanding, dragEnded, dragGoesOver, dragMoved, dragOptions, dragStarted, dropFromDragEnd, isDropTarget,
-  type CardDrop,
-} from '@/composables/useCardDrag'
+import StageDragList from '@/components/boards/board/StageDragList.vue'
+import { dragGoesOver, isDropTarget, type CardDrop } from '@/composables/useCardDrag'
 import { useLoadMoreSentinel } from '@/composables/useLoadMoreSentinel'
 import type { ActionResult } from '@/stores/boardCardActions'
 import type { CardCreateExtras, CardSummary, LabelRead, StageRead } from '@/types/boards'
@@ -167,16 +164,7 @@ const sentinelRoot = computed(() => (xs.value ? null : scrollBox.value))
 useLoadMoreSentinel(sentinel, sentinelRoot, () => {
   if (props.column.cursor && !props.column.loading) emit('load', true)
 })
-
-function onEnd(event: Parameters<typeof dropFromDragEnd>[0]): void {
-  // Let go over a stage it can't enter: SortableJS would drop it in the last
-  // column it passed through, so that drop is cancelled and the reason given.
-  const blocked = blockedLanding()
-  dragEnded()
-  const drop = dropFromDragEnd(event)
-  if (blocked) emit('blocked', blocked.cardId, blocked.stageId)
-  else if (drop) emit('drop', drop)
-}
 </script>
 
 <style scoped src="./stage-column.css"></style>
+<style scoped src="./drag-states.css"></style>

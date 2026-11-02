@@ -141,6 +141,17 @@ export const useBUDStore = defineStore('bud', () => {
     }
   }
 
+  /** One BUD's latest read without opening it (the board's stage-change guards); null on failure. */
+  async function peekBUD(id: string): Promise<BUDDocument | null> {
+    await replyOrder.settled(id)
+    try {
+      const { data } = await api.get(`/v1/buds/${id}`)
+      return data
+    } catch {
+      return null
+    }
+  }
+
   async function createBUD(
     title: string,
     requirements_md?: string,
@@ -182,7 +193,9 @@ export const useBUDStore = defineStore('bud', () => {
       const resp = await replyOrder.track(id, () => api.patch(`/v1/buds/${id}`, updates))
       const data = resp.data
       const idx = buds.value.findIndex(p => p.id === id)
-      if (idx !== -1) buds.value[idx] = data
+      // Merged, not swapped: the list row carries fields one BUD's read
+      // doesn't (bug count, origin card, which sections are written).
+      if (idx !== -1) buds.value[idx] = { ...buds.value[idx], ...data }
       showWriteReply(id, data)
       // Check if backend signals design phase transition
       if (resp.headers['x-design-available'] === 'true') {
@@ -718,6 +731,7 @@ export const useBUDStore = defineStore('bud', () => {
     fetchBUDs,
     fetchBUD,
     refreshBUDIfCurrent,
+    peekBUD,
     createBUD,
     updateBUD,
     restoreBUD,

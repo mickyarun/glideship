@@ -53,7 +53,7 @@
 
     <template v-if="detail.stages.length && !noMatch">
       <BoardStageTabs v-if="xs" v-model="phoneStage" :stages="detail.stages" :counts="columnCounts" />
-      <div class="board-page__columns board-scroller" :class="{ 'board-page__columns--blocked': overBlocked() }">
+      <div class="board-page__columns board-scroller" :class="{ 'board-scroller--blocked': overBlocked() }">
         <BoardStageColumn
           v-for="stage in shownStages"
           :key="stage.id"

@@ -13,7 +13,8 @@
 // limitations under the License.
 
 /**
- * Status-transition orchestration for the BUD detail page.
+ * Status-transition orchestration for a BUD's stage changes, on the BUD
+ * detail page and when a BUD is dragged on the Delivery board.
  *
  * Owns the guard logic (code_review → testing PR-merge check, testing
  * → uat/prod manual-cases check, no-open-PR warning for entering code
@@ -33,10 +34,20 @@
 import { ref } from 'vue'
 import { useBUDStore } from '@/stores/bud'
 import type { BUDDocument } from '@/types'
+import { readableError } from '@/utils/errors'
+
+/** What a stage change reads from the BUD it moves: a full BUD, or a board's list item. */
+export type StatusSubject = Pick<BUDDocument, 'id' | 'status'>
+  & Partial<Pick<BUDDocument, 'qa_manual_cases' | 'active_agent_task'>>
 
 export interface BudStatusHooks {
-  /** Current BUD; null while the page is still loading. */
-  getBud: () => BUDDocument | null
+  /** The BUD being moved; null while the page is still loading. */
+  getBud: () => StatusSubject | null
+  /**
+   * The BUD's latest read, for its manual test cases. Defaults to
+   * refreshing the open BUD and reading ``getBud`` again.
+   */
+  refreshBud?: (id: string) => Promise<StatusSubject | null>
   /** Switch the page's active tab — used by openQATab and the post-
    *  success tab sync after a successful PATCH. */
   setActiveTab: (tab: string) => void
@@ -189,8 +200,9 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
       // Background refresh: still on this BUD by the time we got here
       // (the dialog is a child of BUDDetail) — but use the guarded
       // variant so a parallel navigation doesn't race the refresh.
-      await budStore.refreshBUDIfCurrent(bud.id)
-      const refreshed = hooks.getBud()
+      const refreshed = hooks.refreshBud
+        ? await hooks.refreshBud(bud.id)
+        : await budStore.refreshBUDIfCurrent(bud.id).then(() => hooks.getBud())
       const pending = (refreshed?.qa_manual_cases ?? []).filter(
         tc => tc.result === 'pending',
       )
@@ -240,7 +252,7 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
     // manual-cases guard catching a race the client-side preempt
     // missed).
     if (result === null && budStore.error) {
-      statusErrorMessage.value = budStore.error
+      statusErrorMessage.value = readableError(budStore.error)
       statusErrorSnackbar.value = true
       return
     }

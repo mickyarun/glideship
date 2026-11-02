@@ -14,12 +14,13 @@
  * limitations under the License.
  -->
 
-<!-- One BUD on the board. The title link stretches over the whole card,
+<!-- One BUD on the board. A draggable one carries ``data-card-id`` for the
+     board's drag list. The title link stretches over the whole card,
      so the origin card's link (when I can open its board), the bug-count
      link and the Restore button sit above it and stay separately
      clickable without nesting interactive elements. -->
 <template>
-  <article class="board-card">
+  <article class="board-card" :data-card-id="draggable ? bud.id : undefined">
     <div class="board-card__top">
       <span class="board-card__ref">{{ budRef(bud.bud_number) }}</span>
       <BudPriorityChip :priority="bud.priority" />
@@ -35,7 +36,7 @@
     </div>
 
     <h3 class="board-card__title">
-      <router-link :to="`/buds/${bud.id}`" class="board-card__link">{{ bud.title }}</router-link>
+      <router-link :to="`/buds/${bud.id}`" class="board-card__link" draggable="false">{{ bud.title }}</router-link>
     </h3>
 
     <span v-for="line in lines" :key="line.text" class="board-card__status" :class="`board-card__status--${line.tone}`">
@@ -98,6 +99,8 @@ const props = defineProps<{
   bud: BUDListItem
   now: Date
   canRestore: boolean
+  /** Can be picked up and dragged to another stage (it carries ``data-card-id``). */
+  draggable?: boolean
 }>()
 
 const emit = defineEmits<{ restore: [bud: BUDListItem] }>()

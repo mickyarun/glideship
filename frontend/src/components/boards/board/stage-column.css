@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* A team board stage column (BoardStageColumn.vue). */
+/* A team board stage column (BoardStageColumn.vue); drag states are in drag-states.css. */
 .stage-col {
   position: relative;
   contain: paint;
@@ -34,22 +34,6 @@
   margin: 0 4px;
   font-size: 12px;
   color: rgb(var(--v-theme-warning));
-}
-/* While a drag is on, a stage whose entry rules the card doesn't meet
-   reads as not taking it: muted, with its reason under the header. */
-.stage-col--no-drop {
-  border-style: dashed;
-}
-.stage-col--no-drop .stage-col__scroll {
-  opacity: 0.55;
-}
-.stage-col__blocked {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0 4px;
-  font-size: 12px;
-  color: rgb(var(--v-theme-on-surface-variant));
 }
 .stage-col__scroll {
   flex: 1 1 auto;
@@ -88,43 +72,6 @@
 }
 .stage-col__sentinel { height: 1px; flex-shrink: 0; }
 .stage-col__more { align-self: center; }
-/* A drag in progress (useCardDrag). The column the card would land in
-   lights up faintly; the card's landing slot is a dashed outline with a
-   faint fill; the copy under the pointer is lifted with the one drop
-   shadow the theme allows. Card tiles take this column's scope, and the
-   copy keeps it when it moves to <body>. */
-.stage-col {
-  transition:
-    border-color var(--dur-short) var(--ease-out),
-    background-color var(--dur-short) var(--ease-out);
-}
-.stage-col--drop-target {
-  border-color: rgba(var(--v-theme-primary), 0.45);
-  background: rgba(var(--v-theme-primary), 0.05);
-}
-/* Picked up (on touch, once the hold has done its work). */
-.card-tile.card-tile--chosen {
-  border-color: rgba(var(--v-theme-primary), 0.55);
-}
-.card-tile.card-tile--ghost {
-  border: 1px dashed rgba(var(--v-theme-primary), 0.7);
-  background: rgba(var(--v-theme-primary), 0.08);
-}
-.card-tile.card-tile--ghost > * {
-  visibility: hidden;
-}
-.card-tile.card-tile--drag {
-  /* SortableJS sets its copy to 0.8 opacity inline; a lifted card is solid. */
-  opacity: 1 !important;
-  border-color: rgba(var(--v-theme-primary), 0.55);
-  box-shadow: var(--v-lift-shadow);
-  cursor: grabbing;
-}
-@media (prefers-reduced-motion: reduce) {
-  .stage-col {
-    transition: none;
-  }
-}
 /* Phones show one stage at a time: the column grows with its cards and
    the page scrolls, rather than a short box scrolling under the header. */
 @media (max-width: 600px) {

@@ -52,3 +52,12 @@
   padding: 0 var(--board-gutter) 8px;
   scroll-padding-inline: var(--board-gutter);
 }
+
+/*
+ * A drag over a stage the card can't enter (useCardDrag): the landing slot
+ * SortableJS left in the last column passed through hides too, so no
+ * column looks like the drop.
+ */
+.board-scroller--blocked .drag-ghost {
+  display: none;
+}

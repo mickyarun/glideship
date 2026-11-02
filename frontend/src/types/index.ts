@@ -216,6 +216,9 @@ export interface BUDListItem {
    * board; null otherwise. Sent on the BUD list only, not on one BUD's read.
    */
   origin?: BUDListOrigin | null
+  /** Whether the PRD and tech spec are written; they gate later stages (utils/budStageGates). */
+  has_prd?: boolean
+  has_tech_spec?: boolean
   created_at: string
   updated_at: string
 }

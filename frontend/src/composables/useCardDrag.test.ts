@@ -49,9 +49,9 @@ describe('dragOptions', () => {
       group: 'board-b1',
       disabled: false,
       animation: DRAG_ANIMATION_MS,
-      ghostClass: 'card-tile--ghost',
-      chosenClass: 'card-tile--chosen',
-      dragClass: 'card-tile--drag',
+      ghostClass: 'drag-ghost',
+      chosenClass: 'drag-chosen',
+      dragClass: 'drag-copy',
       forceFallback: true,
       fallbackOnBody: true,
     })
