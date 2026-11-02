@@ -18,6 +18,7 @@
  * archived, and quiet live refreshes that keep an open comment edit.
  */
 import { flushPromises } from '@vue/test-utils'
+import type { AxiosRequestConfig } from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/socket', async () => (await import('./cardPageMockModules')).socketModule())
@@ -49,9 +50,10 @@ let pages: { items: CardCommentRead[]; next_cursor: string | null }[] = []
 
 async function mountAs(capabilities: BoardAction[], card = CARD) {
   cardDefaults(capabilities, card)
-  http.get.mockImplementation(async (url: string, config?: { params?: { cursor?: string } }) => {
+  http.get.mockImplementation(async (url: string, config?: AxiosRequestConfig) => {
+    const cursor = (config?.params as { cursor?: string } | undefined)?.cursor
     if (url.endsWith('/attachments')) return { data: { items: attachments, limits: ATTACHMENT_LIMITS } }
-    if (url.endsWith('/comments')) return { data: pages[config?.params?.cursor ? Number(config.params.cursor) : 0] }
+    if (url.endsWith('/comments')) return { data: pages[cursor ? Number(cursor) : 0] }
     return { data: new Blob(['x'], { type: 'image/png' }) }
   })
   const mounted = await mountCardPage()
