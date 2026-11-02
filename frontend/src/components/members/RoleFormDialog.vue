@@ -39,7 +39,7 @@
           class="mb-4"
           hint="Members with this role take part in the stages the base role owns."
           persistent-hint
-          :rules="[v => !!v || 'Base role is required']"
+          :rules="[v => !!v || !!role || 'Base role is required']"
         />
         <div class="d-flex align-center justify-space-between mb-2">
           <span class="text-subtitle-2">Permissions</span>
@@ -86,7 +86,7 @@
 import { computed, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import { useMembersStore, type PermissionCategory, type RoleOption } from '@/stores/members'
-import { baseRoleItems } from '@/utils/members'
+import { baseRoleItems, roleFormComplete } from '@/utils/members'
 
 const props = defineProps<{ role: RoleOption | null }>()
 const open = defineModel<boolean>({ required: true })
@@ -97,7 +97,7 @@ const submitError = ref('')
 const form = ref({ name: '', description: '', baseRoleId: '', permissionIds: [] as string[] })
 
 const isSystem = computed(() => props.role?.scopeType === 'SYSTEM')
-const canSubmit = computed(() => !!form.value.name.trim() && form.value.permissionIds.length > 0)
+const canSubmit = computed(() => roleFormComplete(form.value, !props.role))
 
 // New roles start from the Developer system role so the picker is never empty.
 function defaultBaseRoleId(): string {
@@ -115,6 +115,13 @@ watch(open, isOpen => {
   }
   submitError.value = ''
   if (store.permissionCategories.length === 0) void store.fetchPermissions()
+  void store.ensureRoles()
+})
+
+// Opened before the roles had loaded: take the default once they arrive,
+// instead of leaving the base role empty.
+watch(() => store.roles.length, () => {
+  if (open.value && !props.role && !form.value.baseRoleId) form.value.baseRoleId = defaultBaseRoleId()
 })
 
 function countSelected(cat: PermissionCategory): number {
@@ -132,8 +139,9 @@ async function submit(): Promise<void> {
   const ok = props.role
     ? await store.updateRole(props.role.id, {
         ...body,
-        // A system role is its own base; only custom roles send one.
-        base_role_id: isSystem.value ? undefined : form.value.baseRoleId,
+        // A system role is its own base; only custom roles send one, and
+        // an older custom role may have none to send.
+        base_role_id: isSystem.value ? undefined : form.value.baseRoleId || undefined,
       })
     : await store.createRole({ ...body, base_role_id: form.value.baseRoleId })
   saving.value = false

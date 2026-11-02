@@ -35,7 +35,7 @@ from fastapi import FastAPI, status
 from httpx import ASGITransport, AsyncClient
 
 from app.api.v1 import setup as setup_api
-from app.core.auth_deps import get_db
+from app.database import request_session
 
 ORG_BODY = {
     "organization": {"name": "Acme", "slug": "acme"},
@@ -95,7 +95,7 @@ def side_effects(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 async def client() -> AsyncIterator[AsyncClient]:
     app = FastAPI()
     app.include_router(setup_api.router, prefix="/api/setup")
-    app.dependency_overrides[get_db] = _no_db
+    app.dependency_overrides[request_session] = _no_db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
         yield c
 

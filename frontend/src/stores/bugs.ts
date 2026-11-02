@@ -16,6 +16,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/services/api'
 import { extractApiError } from '@/utils/errors'
+import { latestCall } from '@/utils/latestCall'
 import {
   type BugBoardFilters,
   type BugListFilters,
@@ -46,38 +47,47 @@ export const useBugsStore = defineStore('bugs', () => {
   // failed save, comment or attachment) so a page can show them in place.
   const loadError = ref<string | null>(null)
 
+  // Latest list and board loads. Switching filters while one is in flight
+  // must not let the older, slower reply replace the newer list.
+  const beginListLoad = latestCall()
+  const beginBoardLoad = latestCall()
+
   async function fetchBugs(filters?: BugListFilters): Promise<void> {
+    const latest = beginListLoad()
     loading.value = true
     loadError.value = null
     try {
       const params = bugListParams(filters, page.value, pageSize.value)
       const { data } = await api.get<BugListResponse>('/v1/bugs', { params })
+      if (!latest()) return
       bugs.value = data.items
       total.value = data.total
       page.value = data.page
       pageSize.value = data.pageSize
     } catch (err) {
-      loadError.value = extractApiError(err, 'Failed to load bugs.')
+      if (latest()) loadError.value = extractApiError(err, 'Failed to load bugs.')
     } finally {
-      loading.value = false
+      if (latest()) loading.value = false
     }
   }
 
   async function fetchBoard(filters?: BugBoardFilters): Promise<void> {
+    const latest = beginBoardLoad()
     boardLoading.value = true
     loadError.value = null
     try {
       const params = bugBoardParams(filters)
       const { data } = await api.get<BugBoardResponse>('/v1/bugs/board', { params })
+      if (!latest()) return
       const merged = emptyBoard()
       for (const col of BUG_BOARD_COLUMNS) {
         merged[col] = data.columns[col] ?? []
       }
       board.value = merged
     } catch (err) {
-      loadError.value = extractApiError(err, 'Failed to load bugs.')
+      if (latest()) loadError.value = extractApiError(err, 'Failed to load bugs.')
     } finally {
-      boardLoading.value = false
+      if (latest()) boardLoading.value = false
     }
   }
 

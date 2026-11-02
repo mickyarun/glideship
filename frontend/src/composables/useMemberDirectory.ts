@@ -23,12 +23,15 @@
  *   - RaceLobbyPanel — label pending-invitee slots with a name instead of
  *     a truncated user id.
  *
- * The fetch is cached at module scope so the three consumers share a
- * single round-trip and a single reactive list; `ensureLoaded()` is
- * idempotent and dedupes concurrent callers onto one in-flight promise.
+ * The fetch is cached at module scope so the consumers share a single
+ * round-trip and a single reactive list; `ensureLoaded()` is idempotent
+ * and dedupes concurrent callers onto one in-flight promise. Changing
+ * membership marks it stale (`markStale`), and signing out empties it
+ * (`reset`), so the next org never sees this one's people.
  */
 import { ref } from 'vue'
 import api from '@/services/api'
+import { latestCall } from '@/utils/latestCall'
 import { logFailure } from '@/utils/logFailure'
 
 export interface DirectoryEntry {
@@ -39,10 +42,12 @@ export interface DirectoryEntry {
 }
 
 // Module-scoped so every component instance reads the same roster and a
-// second mount never re-fetches.
+// second mount never re-fetches, until a member change marks it stale.
 const entries = ref<DirectoryEntry[]>([])
 const loading = ref(false)
 let inflight: Promise<void> | null = null
+let stale = false
+const beginLoad = latestCall()
 const byId = new Map<string, DirectoryEntry>()
 
 function reindex(): void {
@@ -51,24 +56,49 @@ function reindex(): void {
 }
 
 async function ensureLoaded(force = false): Promise<void> {
-  if (!force && (entries.value.length > 0 || inflight)) {
+  if (!force && !stale && (entries.value.length > 0 || inflight)) {
     await inflight
     return
   }
+  stale = false
+  const latest = beginLoad()
   inflight = (async () => {
     loading.value = true
     try {
       const { data } = await api.get<DirectoryEntry[]>('/v1/members/directory')
+      if (!latest()) return
       entries.value = data
       reindex()
     } catch (err) {
+      // Try again on the next read rather than keep a roster known to be old.
+      if (latest()) stale = true
       logFailure('useMemberDirectory', 'directory fetch', err)
     } finally {
-      loading.value = false
-      inflight = null
+      if (latest()) {
+        loading.value = false
+        inflight = null
+      }
     }
   })()
   await inflight
+}
+
+/**
+ * Someone joined, left or was merged: the next `ensureLoaded()` fetches
+ * again. The current list stays on screen until then.
+ */
+function markStale(): void {
+  stale = true
+}
+
+/** Signed out: forget this org's roster, including a load still in flight. */
+function reset(): void {
+  beginLoad()
+  entries.value = []
+  reindex()
+  inflight = null
+  loading.value = false
+  stale = false
 }
 
 /**
@@ -96,5 +126,5 @@ function photoFor(userId: string): string | null {
 }
 
 export function useMemberDirectory() {
-  return { entries, loading, ensureLoaded, nameFor, photoFor }
+  return { entries, loading, ensureLoaded, markStale, reset, nameFor, photoFor }
 }

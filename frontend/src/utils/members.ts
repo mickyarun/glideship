@@ -58,6 +58,19 @@ export function baseRoleItems(roles: RoleOption[]): { title: string; value: stri
   return roleItems(roles.filter(r => r.scopeType === 'SYSTEM'))
 }
 
+/**
+ * Whether the role form can be saved: a name and at least one permission,
+ * and, for a new role, the base role it starts from (the server refuses a
+ * new custom role without one). An existing role may have none, from
+ * before base roles were required, and still saves.
+ */
+export function roleFormComplete(
+  form: { name: string; permissionIds: string[]; baseRoleId: string },
+  creating: boolean,
+): boolean {
+  return !!form.name.trim() && form.permissionIds.length > 0 && (!creating || !!form.baseRoleId)
+}
+
 /** Active members as picker options, optionally leaving one out. */
 export function memberPickerItems(members: Member[], excludeId = ''): { title: string; value: string }[] {
   return members

@@ -24,6 +24,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useBudActivityChannel } from '@/composables/useBudActivityChannel'
 import { VALID_BUD_TABS, type BUDDocument } from '@/types'
 import { STATUS_TAB_MAP } from '@/utils/budDetail'
+import { latestCall } from '@/utils/latestCall'
 
 export interface BudLoaderHooks {
   bud: ComputedRef<BUDDocument | null>
@@ -51,13 +52,12 @@ export function useBudDetailLoader(hooks: BudLoaderHooks) {
     onLearningRecorded: hooks.onLearningRecorded,
   })
 
-  // Each load takes a ticket; a load that a newer one has overtaken stops
-  // at its next await, so it can't set the tab or connect a stale channel.
-  let loadSeq = 0
+  // A load that a newer one has overtaken stops at its next await, so it
+  // can't set the tab or connect a stale channel.
+  const beginLoad = latestCall()
 
   async function loadBud(id: string): Promise<void> {
-    const seq = ++loadSeq
-    const stale = () => seq !== loadSeq
+    const latest = beginLoad()
     channel.disconnect()
     hooks.startNewSession()
     // A ?tab= the page doesn't know counts as none, so the BUD opens on its stage tab.
@@ -65,11 +65,11 @@ export function useBudDetailLoader(hooks: BudLoaderHooks) {
     const tabParam = query && VALID_BUD_TABS.has(query) ? query : undefined
     if (tabParam) hooks.activeTab.value = tabParam
     await budStore.fetchBUD(id)
-    if (stale()) return
+    if (!latest()) return
     const bud = hooks.bud.value
     if (!tabParam && bud) hooks.activeTab.value = STATUS_TAB_MAP[bud.status] ?? hooks.activeTab.value
     await hooks.loadChatHistory()
-    if (stale()) return
+    if (!latest()) return
     membersStore.fetchMembers()
     void hooks.loadTimeline()
     // UAT visibility and the release tabs' branch links read these.

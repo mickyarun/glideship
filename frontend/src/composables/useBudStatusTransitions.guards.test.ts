@@ -20,6 +20,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BUDDocument, BUDStatus } from '@/types'
+import { trackResultSave } from '@/stores/manualResultSaves'
 import { STATUS_TAB_MAP } from '@/utils/budDetail'
 
 const store = vi.hoisted(() => ({
@@ -139,6 +140,19 @@ describe('leaving testing', () => {
     c.openQATab()
     expect(c.showPendingCasesDialog.value).toBe(false)
     expect(setActiveTab).toHaveBeenCalledWith('testing', expect.objectContaining({ id: 'bud-1' }))
+  })
+
+  it('reads the cases only after a result still saving has landed', async () => {
+    const c = at('testing', { qa_manual_cases: [] })
+    let land!: () => void
+    void trackResultSave('bud-1', new Promise<void>(resolve => { land = resolve }))
+    const moving = c.updateStatus('uat')
+    await Promise.resolve()
+    expect(store.refreshBUDIfCurrent).not.toHaveBeenCalled()
+    land()
+    await moving
+    expect(store.refreshBUDIfCurrent).toHaveBeenCalledWith('bud-1')
+    expect(store.updateBUD).toHaveBeenCalledWith('bud-1', { status: 'uat' })
   })
 
   it('moves to prod when no case is pending', async () => {

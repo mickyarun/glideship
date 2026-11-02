@@ -20,6 +20,7 @@ import {
   memberPickerItems,
   membersSubtitle,
   memberStatusOptions,
+  roleFormComplete,
   roleItems,
   roleTitle,
 } from './members'
@@ -85,5 +86,20 @@ describe('memberPickerItems', () => {
 describe('membersSubtitle', () => {
   it('counts people with access', () => {
     expect(membersSubtitle(members)).toBe('2 people with access to this workspace')
+  })
+})
+
+describe('roleFormComplete', () => {
+  const form = { name: 'Release captain', permissionIds: ['p1'], baseRoleId: '' }
+
+  it('needs a base role only for a new role', () => {
+    expect(roleFormComplete(form, true)).toBe(false)
+    expect(roleFormComplete({ ...form, baseRoleId: 'r1' }, true)).toBe(true)
+    expect(roleFormComplete(form, false)).toBe(true)
+  })
+
+  it('needs a name and a permission either way', () => {
+    expect(roleFormComplete({ ...form, name: '  ' }, false)).toBe(false)
+    expect(roleFormComplete({ ...form, permissionIds: [] }, false)).toBe(false)
   })
 })

@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** The header shows the assignee's photo, initials without one, and an empty ring when unassigned. */
+/**
+ * The header shows the assignee's photo, initials without one, and an empty
+ * ring when unassigned. The title offers a rename only when one is possible.
+ */
 
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
@@ -23,7 +26,7 @@ import BUDHeader from '../BUDHeader.vue'
 
 const PHOTO = '/api/v1/employees/avatars/0123456789abcdef0123456789abcdef'
 
-function mountHeader(assignee: { name: string | null; photo: string | null }) {
+function mountHeader(assignee: { name: string | null; photo: string | null }, agentLocked = false) {
   const bud = {
     id: 'b1',
     bud_number: 7,
@@ -46,7 +49,7 @@ function mountHeader(assignee: { name: string | null; photo: string | null }) {
       changingStatus: false,
       canDelete: false,
       isClosed: false,
-      agentLocked: false,
+      agentLocked,
       chatOpen: false,
       chatable: false,
       canEditPriority: false,
@@ -80,5 +83,18 @@ describe('BUDHeader assignee', () => {
     const button = mountHeader({ name: null, photo: null }).find('.bud-header__assignee')
     expect(button.find('.bud-header__avatar-empty').exists()).toBe(true)
     expect(button.text()).toBe('Unassigned')
+  })
+})
+
+describe('BUDHeader title', () => {
+  it('is named as a rename button', () => {
+    const title = mountHeader({ name: null, photo: null }).find('.bud-header__title-btn')
+    expect(title.attributes('aria-label')).toBe('Checkout retries, rename')
+  })
+
+  it('is named by the title alone while an agent holds the BUD', () => {
+    const title = mountHeader({ name: null, photo: null }, true).find('.bud-header__title-btn')
+    expect(title.attributes('aria-label')).toBe('Checkout retries')
+    expect(title.attributes('disabled')).toBeDefined()
   })
 })

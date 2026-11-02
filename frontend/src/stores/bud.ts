@@ -19,6 +19,7 @@ import type { BUDListItem, BUDDocument, BUDStatus, BUDPriority, BUDDesign, BUDEs
 import { BUD_STATUS_ORDER, CODE_REVIEW_OVERRIDE_REASON_MIN } from '@/types'
 import api from '@/services/api'
 import { extractApiError } from '@/utils/errors'
+import { latestCall } from '@/utils/latestCall'
 import { createBudReplyOrder } from './budReplyOrder'
 
 // Maps legacy DB status values to new pipeline statuses (pre-migration compat)
@@ -85,11 +86,10 @@ export const useBUDStore = defineStore('bud', () => {
 
   // Latest fetchBUD call. Moving from /buds/A to /buds/B while A is still
   // loading must not let A's late reply replace B on the page.
-  let fetchSeq = 0
+  const beginFetch = latestCall()
 
   async function fetchBUD(id: string): Promise<BUDDocument | null> {
-    const seq = ++fetchSeq
-    const latest = (): boolean => seq === fetchSeq
+    const latest = beginFetch()
     loading.value = true
     error.value = ''
     const sentAt = replyOrder.stamp()

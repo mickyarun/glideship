@@ -33,6 +33,7 @@
 
 import { computed, ref } from 'vue'
 import { useBUDStore } from '@/stores/bud'
+import { resultSavesSettled } from '@/stores/manualResultSaves'
 import type { BUDDocument } from '@/types'
 
 /** What a stage change reads from the BUD it moves: a full BUD, or a board's list item. */
@@ -204,8 +205,10 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
     // in the QA tab. The test runner composable (useQATestCases)
     // updates its own local ref but doesn't refresh the store's
     // currentBUD, so bud.qa_manual_cases can be stale after marking
-    // cases as pass.
+    // cases as pass. It shows a result before saving it, so wait for
+    // saves still in flight, or a case marked just now reads as pending.
     if (bud.status === 'testing' && (newStatus === 'uat' || newStatus === 'prod')) {
+      await resultSavesSettled(bud.id)
       // Background refresh: still on this BUD by the time we got here
       // (the dialog is a child of BUDDetail) — but use the guarded
       // variant so a parallel navigation doesn't race the refresh.
