@@ -16,7 +16,9 @@
 
 Dates come from :func:`future_monday` / :func:`month_mondays`, which never
 let a test's week cross into the next leave year, so the suite doesn't
-start failing in December.
+start failing in December. Those dates can still fall in the next leave year,
+so a test reading a view that defaults to the current year (history,
+balances) asks for the booked date's year instead.
 """
 
 from __future__ import annotations
@@ -65,7 +67,9 @@ def future_monday(weeks: int = 2) -> date:
 
 def month_mondays(months_ahead: int = 2) -> list[date]:
     """The first three Mondays of a month ``months_ahead`` from now."""
-    first = (date.today().replace(day=1) + timedelta(days=32 * months_ahead)).replace(day=1)
+    today = date.today()
+    index = today.month - 1 + months_ahead
+    first = date(today.year + index // 12, index % 12 + 1, 1)
     day = first + timedelta(days=(7 - first.weekday()) % 7)
     return [day + timedelta(weeks=n) for n in range(3)]
 
