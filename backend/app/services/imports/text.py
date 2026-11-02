@@ -22,21 +22,32 @@ removed; tabs and line breaks stay. Links are kept only when they are
 plain ``http(s)`` URLs that fit the column; anything else is dropped.
 """
 
-import re
+import unicodedata
 from typing import Final
 from urllib.parse import urlsplit
 
 from app.models.board_card_detail import ATTACHMENT_URL_LENGTH
 
-# C0 controls except tab, line feed and carriage return; DEL and C1
-# controls; bidi embeddings, overrides, isolates and marks.
-_UNSAFE: Final = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f؜‎‏‪-‮⁦-⁩]")
+# Control characters (Unicode category Cc: C0, DEL and C1) go, except these.
+_KEPT_CONTROLS: Final = frozenset("\t\n\r")
+# Bidi marks, embeddings, overrides and isolates, which can make text read backwards.
+_BIDI: Final = frozenset(
+    "\u061c\u200e\u200f"  # Arabic letter mark, left-to-right and right-to-left marks
+    "\u202a\u202b\u202c\u202d\u202e"  # embeddings, pop, overrides
+    "\u2066\u2067\u2068\u2069"  # isolates and their pop
+)
 _WEB_SCHEMES: Final = frozenset({"http", "https"})
+
+
+def _unsafe(char: str) -> bool:
+    if char in _BIDI:
+        return True
+    return unicodedata.category(char) == "Cc" and char not in _KEPT_CONTROLS
 
 
 def clean_text(value: str) -> str:
     """``value`` without control or bidi-override characters."""
-    return _UNSAFE.sub("", value)
+    return "".join(char for char in value if not _unsafe(char))
 
 
 def http_url(value: str, *, max_length: int = ATTACHMENT_URL_LENGTH) -> str | None:
