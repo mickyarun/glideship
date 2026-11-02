@@ -81,4 +81,29 @@ describe('budOrigin store', () => {
     expect(store.moreError).not.toBe('')
     expect(ids()).toEqual(['c5'])
   })
+
+  it('keeps an open send-back and its reason when the same BUD opens again (a page redrawn)', async () => {
+    const store = useBudOriginStore()
+    api.origin.mockResolvedValue(page(['c1'], null))
+    await store.load('b2')
+    store.askSendBack()
+    store.reason = 'Pricing is undecided'
+    await store.load('b2')
+    expect(store.asking).toBe(true)
+    expect(store.reason).toBe('Pricing is undecided')
+    expect(store.origin?.card?.key).toBe('PDT-1')
+  })
+
+  it('starts each send-back, and each other BUD, with no reason', async () => {
+    const store = useBudOriginStore()
+    api.origin.mockResolvedValue(page(['c1'], null))
+    await store.load('b2')
+    store.reason = 'left over'
+    store.askSendBack()
+    expect(store.reason).toBe('')
+    store.reason = 'left over'
+    await store.load('b3')
+    expect(store.reason).toBe('')
+    expect(store.asking).toBe(false)
+  })
 })

@@ -37,7 +37,7 @@ export function useBudSendBack(bud: () => BUDDocument | null) {
   })
 
   function ask(): void {
-    store.asking = true
+    store.askSendBack()
   }
 
   return { card, offered, ask }

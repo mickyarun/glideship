@@ -69,6 +69,12 @@ def install_fakes(backend_port: int, log_path: Path) -> None:
     TaggingClaudeRunner(f"http://127.0.0.1:{backend_port}", STATE.agent_problems).install(patch)
 
 
+# Longer than any test runs (Playwright's timeout is 60 s). A test's API
+# client reuses idle connections; with uvicorn's 5 s default, the server
+# could close one just as the client sent on it (ECONNRESET).
+KEEP_ALIVE_SECONDS = 120
+
+
 async def _serve(port: int) -> None:
     loop = asyncio.get_running_loop()
     # The stdlib loop, from asyncio.run, never uvloop: uvloop resolves and
@@ -77,7 +83,13 @@ async def _serve(port: int) -> None:
     if not type(loop).__module__.startswith("asyncio"):
         raise SystemExit(f"e2e stack: needs the asyncio event loop, got {type(loop)!r}")
     loop.set_default_executor(ContextThreadPool())
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+        timeout_keep_alive=KEEP_ALIVE_SECONDS,
+    )
     await uvicorn.Server(config).serve()
 
 

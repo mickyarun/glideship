@@ -16,10 +16,11 @@
  * Where the open BUD came from, shared by its Origin panel, its header and
  * Send back: the card (or that it's on a board I can't see, or that it
  * wasn't handed over), the card's comments a page at a time (newest
- * first), and its handovers. Opening another BUD loads afresh; a change to
- * this one (its status, a send-back) refreshes the card and handovers and
- * adds any newer comments, keeping the older pages already shown. A reply
- * overtaken by a later one is dropped.
+ * first), and its handovers. Opening another BUD loads afresh; opening the
+ * same one again, or a change to it (its status, a send-back), refreshes
+ * the card and handovers and adds any newer comments, keeping the older
+ * pages already shown and an open send-back with what's been typed. A
+ * reply overtaken by a later one is dropped.
  */
 import { isAxiosError } from 'axios'
 import { defineStore } from 'pinia'
@@ -45,6 +46,8 @@ export const useBudOriginStore = defineStore('budOrigin', () => {
   const moreError = ref('')
   /** The send-back dialog is open (the header's menu asks for it). */
   const asking = ref(false)
+  /** The send-back reason being typed: here, so a page redrawn meanwhile keeps it. */
+  const reason = ref('')
   // ``seq`` counts BUDs opened (a page of older comments belongs to one);
   // ``head`` counts reads of the card and its newest comments.
   let seq = 0
@@ -81,8 +84,9 @@ export const useBudOriginStore = defineStore('budOrigin', () => {
     }
   }
 
-  /** Open another BUD's origin, from the first page of comments. */
+  /** Open a BUD's origin from the first page of comments; the one already open is refreshed. */
   function load(id: string): Promise<void> {
+    if (id === budId.value && origin.value) return read(id, false)
     seq++
     budId.value = id
     origin.value = null
@@ -90,6 +94,7 @@ export const useBudOriginStore = defineStore('budOrigin', () => {
     nextCursor.value = null
     moreError.value = ''
     asking.value = false
+    reason.value = ''
     return read(id, true)
   }
 
@@ -134,8 +139,14 @@ export const useBudOriginStore = defineStore('budOrigin', () => {
     }
   }
 
+  /** Open the send-back dialog with an empty reason. */
+  function askSendBack(): void {
+    reason.value = ''
+    asking.value = true
+  }
+
   return {
-    budId, origin, comments, nextCursor, loading, loadingMore, error, moreError, asking, active,
-    load, refresh, more, sendBack,
+    budId, origin, comments, nextCursor, loading, loadingMore, error, moreError, asking, reason, active,
+    load, refresh, more, sendBack, askSendBack,
   }
 })

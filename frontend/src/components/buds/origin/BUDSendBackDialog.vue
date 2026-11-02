@@ -61,15 +61,15 @@ const props = defineProps<{ modelValue: boolean; budKey: string; cardKey: string
 const emit = defineEmits<{ 'update:modelValue': [open: boolean]; sent: [] }>()
 
 const store = useBudOriginStore()
-const reason = ref('')
 const busy = ref(false)
 const failure = ref('')
 const field = ref<{ focus: () => void } | null>(null)
 
+// The reason lives in the store (opening clears it), so a dialog redrawn
+// mid-typing keeps it; only the failure note is this dialog's own.
+const reason = computed({ get: () => store.reason, set: (v: string) => (store.reason = v) })
 watch(() => props.modelValue, open => {
-  if (!open) return
-  reason.value = ''
-  failure.value = ''
+  if (open) failure.value = ''
 })
 
 const PREFIXES = SEND_BACK_REASONS.map(r => `${r}:`)
