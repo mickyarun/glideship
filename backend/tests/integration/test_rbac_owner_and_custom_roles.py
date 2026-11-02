@@ -30,7 +30,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_db, require_permissions
+from app.core.deps import require_permissions
+from app.database import request_session
 from app.models.role import Role, RoleScopeType
 from app.repositories.role import RoleRepository
 from app.repositories.user import UserRepository
@@ -60,7 +61,7 @@ def _probe_app(factory: Factory) -> FastAPI:
         async with factory() as session:
             yield session
 
-    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[request_session] = _db
     return app
 
 

@@ -41,8 +41,9 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1 import settings_repos as repos_api
 from app.api.v1 import settings_repos_local as local_api
-from app.core.auth_deps import get_current_user, get_db
+from app.core.auth_deps import get_current_user
 from app.core.permission_deps import PermissionSet, get_permission_set
+from app.database import request_session
 from app.models.tracked_repository import RepoStatus, TrackedRepository
 from app.services.repo_cloner import CloneResult
 
@@ -121,7 +122,7 @@ async def client(monkeypatch: pytest.MonkeyPatch, cloned: Path) -> AsyncIterator
     app.include_router(repos_api.router, prefix="/api/v1/settings")
     app.include_router(local_api.router, prefix="/api/v1/settings")
     user = SimpleNamespace(id=uuid.uuid4(), must_change_password=False)
-    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[request_session] = _db
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_permission_set] = lambda: PermissionSet(
         ids=frozenset({"settings:view", "settings:edit"}), is_owner=False

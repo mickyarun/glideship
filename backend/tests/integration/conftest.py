@@ -52,7 +52,7 @@ from alembic import command
 from app.api.router import api_router
 from app.api.v1._hr_errors import register_hr_errors
 from app.api.v1._leave_errors import register_leave_errors
-from app.core.deps import get_db
+from app.database import request_session
 from app.services.permission_seeder import seed_permissions
 
 _INTEGRATION_DIR = Path(__file__).resolve().parent
@@ -177,6 +177,6 @@ async def client(
                 await session.rollback()
                 raise
 
-    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[request_session] = _db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http

@@ -30,7 +30,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.router import api_router
-from app.core.deps import get_db
+from app.database import request_session
 from app.services.permission_seeder import seed_permissions
 from tests.fakes.seed import Factory
 
@@ -58,6 +58,6 @@ async def slow_commit_client(factory: Factory) -> AsyncIterator[AsyncClient]:
             yield session
             await commit()
 
-    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[request_session] = _db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http

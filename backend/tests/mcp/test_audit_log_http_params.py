@@ -30,7 +30,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.deps import get_db
+from app.database import request_session
 from app.mcp import server as mcp_server
 from app.mcp.audit import _sanitise_params
 from app.mcp.auth import MCPAuthResult, verify_mcp_token
@@ -47,7 +47,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     async def _fake_db() -> Any:
         yield MagicMock()
 
-    app.dependency_overrides[get_db] = _fake_db
+    app.dependency_overrides[request_session] = _fake_db
     monkeypatch.setattr(mcp_server, "enforce_rate_limit", AsyncMock())
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
