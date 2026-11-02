@@ -16,6 +16,7 @@
  * Switching the Bugs page's environment while the first board is still
  * loading: whichever reply lands last, the board shows the newer filter.
  */
+import type { AxiosRequestConfig } from 'axios'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -35,9 +36,9 @@ beforeEach(() => {
   setActivePinia(createPinia())
   replies.clear()
   get.mockReset()
-  get.mockImplementation((_url: string, config?: { params?: Record<string, string> }) =>
+  get.mockImplementation((_url: string, config?: AxiosRequestConfig) =>
     new Promise((ok, fail) => {
-      const params = config?.params ?? {}
+      const params = (config?.params ?? {}) as Record<string, string>
       replies.set(params.bugType ?? params.budId ?? '', { ok, fail })
     }))
 })
