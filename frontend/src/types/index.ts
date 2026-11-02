@@ -217,8 +217,8 @@ export interface BUDListItem {
    */
   origin?: BUDListOrigin | null
   /** Whether the PRD and tech spec are written; they gate later stages (utils/budStageGates). */
-  has_prd?: boolean
-  has_tech_spec?: boolean
+  has_prd: boolean
+  has_tech_spec: boolean
   created_at: string
   updated_at: string
 }

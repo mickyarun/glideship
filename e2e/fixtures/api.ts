@@ -36,6 +36,10 @@ export class Api {
     return this.check<T>('POST', path, await this.ctx.post(path, { data }))
   }
 
+  async patch<T>(path: string, data: unknown): Promise<T> {
+    return this.check<T>('PATCH', path, await this.ctx.patch(path, { data }))
+  }
+
   /** Status of a GET, for checks that expect a refusal. */
   async statusOf(path: string): Promise<number> {
     return (await this.ctx.get(path)).status()
@@ -60,10 +64,10 @@ export interface Bud {
   status: string
 }
 
-/** A BUD with every stage agent off (the API's default). */
-export function createBud(api: Api, title: string): Promise<Bud> {
+/** A BUD with every stage agent off (the API's default); ``fields`` such as ``requirements_md``. */
+export function createBud(api: Api, title: string, fields: Record<string, unknown> = {}): Promise<Bud> {
   // Trailing slash: the API doesn't redirect slashes.
-  return api.post<Bud>('buds/', { title })
+  return api.post<Bud>('buds/', { title, ...fields })
 }
 
 export interface LeaveRequest {

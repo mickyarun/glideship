@@ -181,7 +181,9 @@ def written_sections(
     status: BUDStatus, *, requirements_md: str | None, tech_spec_md: str | None
 ) -> dict[str, str]:
     """The stand-in sections a BUD in ``status`` would have written by now."""
-    missing = missing_content(status, requirements_md=requirements_md, tech_spec_md=tech_spec_md)
+    missing = missing_content(
+        BUDStatus.BUD, status, requirements_md=requirements_md, tech_spec_md=tech_spec_md
+    )
     return dict(_STAND_IN[m] for m in missing)
 
 

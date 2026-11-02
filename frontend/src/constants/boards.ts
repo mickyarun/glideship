@@ -124,6 +124,8 @@ export const ORIGIN_COMMENTS_PAGE = 5
 
 /** On touch screens a card must be held this long before it drags, so the column still scrolls. */
 export const DRAG_TOUCH_DELAY_MS = 150
+/** The drag group of the Delivery board's stages; a team board's is its id. */
+export const DELIVERY_DRAG_GROUP = 'delivery'
 /** How long a drag's slide animation runs (none when the OS asks for reduced motion). */
 export const DRAG_ANIMATION_MS = 150
 /** How far a press must travel before it drags, so a slightly shaky click still opens the card. */

@@ -32,6 +32,8 @@
 }
 .drop-col--blocked {
   border-style: dashed;
+  /* The plain rule colour is too faint dashed on the dark theme. */
+  border-color: rgba(var(--v-theme-on-surface), 0.25);
 }
 .drop-col--blocked .drop-col__cards {
   opacity: 0.55;

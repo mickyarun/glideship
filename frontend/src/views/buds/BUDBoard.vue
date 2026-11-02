@@ -60,7 +60,7 @@
     </div>
 
     <template v-else>
-      <div class="board-scroller" :class="{ 'board-scroller--blocked': overBlocked() }">
+      <div class="board-scroller board-page__scroller" :class="{ 'board-scroller--blocked': overBlocked() }">
         <div class="board-page__columns">
           <BoardColumn
             v-for="status in columns"
@@ -79,7 +79,7 @@
         </div>
       </div>
       <p v-if="dragOn" class="board-page__hint">
-        Drag a BUD to the next or previous stage. Open it to move it further.
+        Drag a BUD one stage forward or back. To move it further, open it.
       </p>
     </template>
 
@@ -141,9 +141,14 @@ const now = useNow()
   justify-content: center;
   padding: 48px 0;
 }
+.board-page__scroller {
+  display: flex;
+  flex-direction: column;
+}
 .board-page__columns {
   display: flex;
-  /* Every column as tall as the longest, so a BUD drops anywhere below a header. */
+  /* Columns reach the bottom of the page, so a BUD drops anywhere below a header. */
+  flex: 1 0 auto;
   align-items: stretch;
   gap: var(--board-column-gap);
   width: max-content;

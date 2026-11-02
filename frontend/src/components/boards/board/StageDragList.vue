@@ -55,7 +55,8 @@ export default defineComponent({
     // <slot>. A re-rendered slot is wrapped in a fragment, and when a stage's
     // last card leaves, Vue clears that fragment between its anchors; the
     // card SortableJS has just put back sits after them, so it stayed on
-    // screen, shown twice.
+    // screen, shown twice. Callers keep their cards a plain keyed v-for for
+    // the same reason: wrapped in a v-if or <template>, it comes back.
     return () =>
       h(
         VueDraggable,

@@ -24,10 +24,10 @@ vi.mock('@/stores/bud', () => ({
 function makeController(status = 'prod') {
   return useBudStatusTransitions({
     getBud: () => ({ id: 'bud-1', status } as never),
+    refreshBud: async () => null,
     setActiveTab: vi.fn(),
     getStatusTabMap: () => ({ closed: 'closed', design: 'design' }),
-    triggerDesignGeneration: vi.fn(),
-    reloadTimeline: vi.fn().mockResolvedValue(undefined),
+    onStatusChanged: vi.fn(),
   })
 }
 

@@ -19,7 +19,7 @@
 // (useBudStatusTransitions): the close confirm, the PR checks, unfinished
 // test cases. The board renders their dialogs with BUDStatusDialogs.
 
-import { computed, ref, watch, type Ref } from 'vue'
+import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dragBlocks, dragging, type CardDrop } from '@/composables/useCardDrag'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
@@ -28,7 +28,7 @@ import { usePermissions } from '@/composables/usePermissions'
 import { usePhaseOrder } from '@/composables/usePhaseOrder'
 import { useBUDStore } from '@/stores/bud'
 import { BUD_STATUS_LABELS, budRef, type BUDListItem, type BUDStatus } from '@/types'
-import { budDropBlock, budDropBlocks } from '@/utils/budStageGates'
+import { budDragSummary, budDropBlock, budDropBlocks, type BudDropBlock } from '@/utils/budStageGates'
 
 export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<typeof useBoardFeedback>) {
   const budStore = useBUDStore()
@@ -45,12 +45,10 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
     dragged.value ? budDropBlocks(dragged.value, columns.value, phaseOrder.value, hasPermission) : {},
   )
   watch(blocks, next => (dragBlocks.value = next), { flush: 'sync', immediate: true })
+  // The drag state is shared by every board; leave none behind.
+  onScopeDispose(() => (dragBlocks.value = {}))
   watch(() => dragged.value?.id, () => {
-    const bud = dragged.value
-    const blocked = columns.value.filter(s => blocks.value[s] && s !== bud?.status)
-    if (!bud || !blocked.length) return
-    const reasons = blocked.map(s => `${BUD_STATUS_LABELS[s]} (${blocks.value[s]})`).join(', ')
-    feedback.announce(`${budRef(bud.bud_number)} can't go to ${reasons}.`)
+    if (dragged.value) feedback.announce(budDragSummary(dragged.value, phaseOrder.value, hasPermission))
   })
 
   // The BUD a drop is moving and where to; the guards read it through getBud.
@@ -64,27 +62,26 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
     // "Open QA tab" on the unfinished-cases dialog opens the BUD there.
     setActiveTab: tab => moving.value && openBud(moving.value.bud.id, tab),
     getStatusTabMap: () => ({}),
-    triggerDesignGeneration: () => undefined,
-    reloadTimeline: async () => {
+    onStatusChanged: () => {
       const m = moving.value
       if (m) feedback.announce(`Moved ${budRef(m.bud.bud_number)} to ${BUD_STATUS_LABELS[m.to]}`)
     },
   })
 
   /** Say why a BUD can't go to a stage, with the BUD page as the way on. */
-  function refuse(bud: BUDListItem, to: BUDStatus, why: string): void {
-    const text = `${budRef(bud.bud_number)} can't go to ${BUD_STATUS_LABELS[to]}: ${why}.`
-    feedback.show({ text, action: { label: 'Open BUD', run: () => openBud(bud.id) }, persist: true })
-    feedback.announce(text)
+  function refuse(bud: BUDListItem, block: BudDropBlock): void {
+    feedback.show({ text: block.sentence, action: { label: 'Open BUD', run: () => openBud(bud.id) }, persist: true })
+    feedback.announce(block.sentence)
   }
 
   function drop(d: CardDrop): void {
     const bud = find(d.cardId)
     const to = d.stageId as BUDStatus
-    // A BUD's place within a stage isn't kept, so a drop in its own stage does nothing.
-    if (!bud || to === bud.status) return
-    const why = budDropBlock(bud, to, phaseOrder.value, hasPermission)
-    if (why) return refuse(bud, to, why)
+    // A BUD's place within a stage isn't kept, so a drop in its own stage
+    // does nothing; nor does one while another move is still checking.
+    if (!bud || to === bud.status || status.changingStatus.value) return
+    const block = budDropBlock(bud, to, phaseOrder.value, hasPermission)
+    if (block) return refuse(bud, block)
     moving.value = { bud, to }
     void status.updateStatus(to)
   }
@@ -92,8 +89,8 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
   /** A drag let go over a stage the BUD can't enter. */
   function blocked(budId: string, to: string): void {
     const bud = find(budId)
-    const why = bud ? budDropBlock(bud, to as BUDStatus, phaseOrder.value, hasPermission) : null
-    if (bud && why) refuse(bud, to as BUDStatus, why)
+    const block = bud ? budDropBlock(bud, to as BUDStatus, phaseOrder.value, hasPermission) : null
+    if (bud && block) refuse(bud, block)
   }
 
   return { canDrag, blocks, status, drop, blocked }

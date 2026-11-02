@@ -16,9 +16,11 @@
 
 A BUD's PRD is written at the ``bud`` stage and its tech spec at
 ``tech_arch`` (see :mod:`app.services.bud_edit_policy`), so a BUD can't
-reach design or later without a PRD, or development or later without a
-tech spec. Closing and discarding stay open at any stage: they end the
-BUD rather than deliver it.
+move on to design or later without a PRD, or on to development or later
+without a tech spec. The check is on crossing into those stages: a BUD
+already past them (moved there before this rule, or by a flow below)
+isn't stranded where it is. Closing and discarding stay open at any
+stage: they end the BUD rather than deliver it.
 
 Only a person's stage change (the status PATCH) is gated. The flows that
 move a BUD on their own (PR merges, release detection, handover landing)
@@ -69,14 +71,22 @@ def has_text(markdown: str | None) -> bool:
     return bool(markdown and markdown.strip())
 
 
+def _crosses(current: BUDStatus, target: BUDStatus, stages: frozenset[BUDStatus]) -> bool:
+    return target in stages and current not in stages
+
+
 def missing_content(
-    target: BUDStatus, *, requirements_md: str | None, tech_spec_md: str | None
+    current: BUDStatus,
+    target: BUDStatus,
+    *,
+    requirements_md: str | None,
+    tech_spec_md: str | None,
 ) -> list[StageContent]:
-    """The sections ``target`` needs that aren't written yet, PRD first."""
+    """The sections a move from ``current`` to ``target`` needs that aren't written, PRD first."""
     missing: list[StageContent] = []
-    if target in _DELIVERY_FROM_DESIGN and not has_text(requirements_md):
+    if _crosses(current, target, _DELIVERY_FROM_DESIGN) and not has_text(requirements_md):
         missing.append(StageContent.PRD)
-    if target in _DELIVERY_FROM_DEVELOPMENT and not has_text(tech_spec_md):
+    if _crosses(current, target, _DELIVERY_FROM_DEVELOPMENT) and not has_text(tech_spec_md):
         missing.append(StageContent.TECH_SPEC)
     return missing
 
@@ -95,9 +105,15 @@ def _raise_content_missing(target: BUDStatus, missing: list[StageContent]) -> No
 
 
 def assert_stage_content(
-    target: BUDStatus, *, requirements_md: str | None, tech_spec_md: str | None
+    current: BUDStatus,
+    target: BUDStatus,
+    *,
+    requirements_md: str | None,
+    tech_spec_md: str | None,
 ) -> None:
     """HTTP wrapper: raise 409 ``bud_stage_content_missing`` when a section is missing."""
-    missing = missing_content(target, requirements_md=requirements_md, tech_spec_md=tech_spec_md)
+    missing = missing_content(
+        current, target, requirements_md=requirements_md, tech_spec_md=tech_spec_md
+    )
     if missing:
         _raise_content_missing(target, missing)

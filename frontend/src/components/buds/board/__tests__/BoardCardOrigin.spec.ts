@@ -21,7 +21,7 @@ import type { BUDListItem } from '@/types'
 
 const BUD: BUDListItem = {
   id: 'b2', bud_number: 2, title: 'Saved filters', status: 'design', priority: 'P1', complexity: null, prod_p70_date: null,
-  current_phase_deadline: null, assignee_id: null, assignee_name: null, open_bug_count: 0, origin: null,
+  current_phase_deadline: null, assignee_id: null, assignee_name: null, open_bug_count: 0, origin: null, has_prd: false, has_tech_spec: false,
   created_at: '2026-10-30T10:00:00Z', updated_at: '2026-10-31T10:00:00Z',
 }
 const mountCard = (bud: BUDListItem) =>

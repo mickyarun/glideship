@@ -67,7 +67,7 @@ async def test_a_prd_written_in_the_same_patch_counts(
 ) -> None:
     org = await new_org(pg_session_factory)
     pm = await add_member(pg_session_factory, org, "pm")
-    bud_id = await add_bud(pg_session_factory, org)
+    bud_id = await add_bud(pg_session_factory, org, requirements_md=None)
 
     with stub_externals():
         res = await client.patch(
@@ -104,7 +104,7 @@ async def test_closing_stays_open_without_content(
 ) -> None:
     org = await new_org(pg_session_factory)
     pm = await add_member(pg_session_factory, org, "pm")
-    bud_id = await add_bud(pg_session_factory, org)
+    bud_id = await add_bud(pg_session_factory, org, requirements_md=None)
 
     with stub_externals():
         res = await client.patch(
@@ -119,7 +119,7 @@ async def test_the_list_says_which_sections_are_written(
 ) -> None:
     org = await new_org(pg_session_factory)
     pm = await add_member(pg_session_factory, org, "pm")
-    empty = await add_bud(pg_session_factory, org, number=1)
+    empty = await add_bud(pg_session_factory, org, number=1, requirements_md=None)
     planned = await add_bud(
         pg_session_factory, org, number=2, requirements_md=PRD, tech_spec_md="## Plan"
     )
@@ -130,3 +130,51 @@ async def test_the_list_says_which_sections_are_written(
     by_id = {row["id"]: row for row in res.json()}
     assert (by_id[str(empty)]["has_prd"], by_id[str(empty)]["has_tech_spec"]) == (False, False)
     assert (by_id[str(planned)]["has_prd"], by_id[str(planned)]["has_tech_spec"]) == (True, True)
+
+
+async def test_a_bud_already_past_development_is_not_stranded(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    """Older data: in testing with no tech spec, it can still move on."""
+    org = await new_org(pg_session_factory)
+    pm = await add_member(pg_session_factory, org, "pm")
+    bud_id = await add_bud(
+        pg_session_factory, org, status=BUDStatus.TESTING, requirements_md=None, tech_spec_md=None
+    )
+
+    with stub_externals():
+        res = await client.patch(
+            f"/api/v1/buds/{bud_id}", json={"status": "uat"}, headers=as_user(pm, org)
+        )
+
+    assert res.status_code == 200, res.text
+
+
+async def test_approving_an_empty_tech_plan_is_refused(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org = await new_org(pg_session_factory)
+    owner = await add_member(pg_session_factory, org, "owner", "org_owner")
+    bud_id = await add_bud(pg_session_factory, org, status=BUDStatus.TECH_ARCH, tech_spec_md=" ")
+
+    with stub_externals():
+        res = await client.post(
+            f"/api/v1/buds/{bud_id}/approve-tech-arch", headers=as_user(owner, org)
+        )
+
+    assert res.status_code == 409, res.text
+    assert res.json()["detail"]["missing"] == ["tech_spec"]
+    assert (await load_bud(pg_session_factory, bud_id)).status is BUDStatus.TECH_ARCH
+
+
+async def test_one_bud_read_says_which_sections_are_written(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org = await new_org(pg_session_factory)
+    pm = await add_member(pg_session_factory, org, "pm")
+    bud_id = await add_bud(pg_session_factory, org, requirements_md=PRD)
+
+    res = await client.get(f"/api/v1/buds/{bud_id}", headers=as_user(pm, org))
+
+    assert res.status_code == 200, res.text
+    assert (res.json()["has_prd"], res.json()["has_tech_spec"]) == (True, False)

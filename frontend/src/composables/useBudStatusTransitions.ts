@@ -26,9 +26,9 @@
  * BUDWorkflowActions (skill_invoked) and was removed; only the guard
  * dialogs and the error snackbar render UI from this composable.
  *
- * Cross-cutting view dependencies (active tab switching, design-
- * generation trigger, timeline reload) come in as hooks; the
- * composable doesn't reach into view-only refs directly.
+ * Cross-cutting view dependencies (which BUD, its fresh read, active tab
+ * switching, what follows a move) come in as hooks; the composable
+ * doesn't reach into view-only refs directly.
  */
 
 import { ref } from 'vue'
@@ -43,21 +43,16 @@ export type StatusSubject = Pick<BUDDocument, 'id' | 'status'>
 export interface BudStatusHooks {
   /** The BUD being moved; null while the page is still loading. */
   getBud: () => StatusSubject | null
-  /**
-   * The BUD's latest read, for its manual test cases. Defaults to
-   * refreshing the open BUD and reading ``getBud`` again.
-   */
-  refreshBud?: (id: string) => Promise<StatusSubject | null>
+  /** The BUD's latest read, for its manual test cases; null when it can't be read. */
+  refreshBud: (id: string) => Promise<StatusSubject | null>
   /** Switch the page's active tab — used by openQATab and the post-
    *  success tab sync after a successful PATCH. */
   setActiveTab: (tab: string) => void
   /** Status → tab mapping owned by the view (single source of truth
    *  for tab routing across multiple watchers). */
   getStatusTabMap: () => Record<string, string>
-  /** Open the design-generation flow when entering the design phase. */
-  triggerDesignGeneration: () => void | Promise<void>
-  /** Refresh the timeline after a successful transition. */
-  reloadTimeline: () => Promise<void>
+  /** After a move lands (the page reloads its timeline, the board announces it). */
+  onStatusChanged: (status: string) => void | Promise<void>
 }
 
 export function useBudStatusTransitions(hooks: BudStatusHooks) {
@@ -78,6 +73,10 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
   // A stage change is in flight. Further requests are ignored until it
   // settles, so a double click can't fire two PATCHes or two guards.
   const changingStatus = ref(false)
+  // The BUD the change in flight is about, taken once when it starts: on
+  // the board, another drop changes what getBud returns while this one is
+  // still checking or waiting in a dialog.
+  let subject: StatusSubject | null = null
 
   async function inFlight(run: () => Promise<void>): Promise<void> {
     if (changingStatus.value) return
@@ -144,11 +143,14 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
   }
 
   function updateStatus(newStatus: string): Promise<void> {
-    return inFlight(() => runStatusGuards(newStatus))
+    return inFlight(() => {
+      subject = hooks.getBud()
+      return runStatusGuards(newStatus)
+    })
   }
 
   async function runStatusGuards(newStatus: string): Promise<void> {
-    const bud = hooks.getBud()
+    const bud = subject
     if (!bud) return
 
     if (newStatus === 'closed') {
@@ -200,9 +202,7 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
       // Background refresh: still on this BUD by the time we got here
       // (the dialog is a child of BUDDetail) — but use the guarded
       // variant so a parallel navigation doesn't race the refresh.
-      const refreshed = hooks.refreshBud
-        ? await hooks.refreshBud(bud.id)
-        : await budStore.refreshBUDIfCurrent(bud.id).then(() => hooks.getBud())
+      const refreshed = await hooks.refreshBud(bud.id)
       const pending = (refreshed?.qa_manual_cases ?? []).filter(
         tc => tc.result === 'pending',
       )
@@ -240,7 +240,7 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
   }
 
   async function executeStatusChange(newStatus: string, reason?: string): Promise<void> {
-    const bud = hooks.getBud()
+    const bud = subject
     if (!bud) return
     const payload: Record<string, unknown> = { status: newStatus }
     if (reason) payload.status_override_reason = reason
@@ -262,11 +262,11 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
     if (targetTab) hooks.setActiveTab(targetTab)
 
     // The design-phase auto-trigger lives in BUDDesignPanel.vue as a
-    // watcher on ``budStore.designAvailable`` (with ``immediate: true``)
+    // watcher on ``budStore.designAvailableFor`` (with ``immediate: true``)
     // — placing it there removes the parent→child ref-call mount-order
     // race we hit when the user flips status before the panel mounts.
 
-    await hooks.reloadTimeline()
+    await hooks.onStatusChanged(newStatus)
   }
 
   return {

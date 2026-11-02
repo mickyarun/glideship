@@ -36,7 +36,7 @@
     <StageDragList
       :items="buds"
       :stage-id="status"
-      group="delivery"
+      :group="DELIVERY_DRAG_GROUP"
       :enabled="canDrag"
       class="board-column__cards drop-col__cards"
       @drop="emit('drop', $event)"
@@ -52,7 +52,7 @@
         @restore="emit('restore', $event)"
       />
     </StageDragList>
-    <p v-if="!buds.length" class="board-column__empty">{{ filtering ? 'No matches' : 'Nothing here' }}</p>
+    <p v-if="!buds.length && !dropTarget" class="board-column__empty">{{ filtering ? 'No matches' : 'Nothing here' }}</p>
   </section>
 </template>
 
@@ -61,6 +61,7 @@ import { computed } from 'vue'
 import BoardCard from './BoardCard.vue'
 import StageDragList from '@/components/boards/board/StageDragList.vue'
 import { isDropTarget, type CardDrop } from '@/composables/useCardDrag'
+import { DELIVERY_DRAG_GROUP } from '@/constants/boards'
 import { BUD_STATUS_COLORS, BUD_STATUS_LABELS, type BUDListItem, type BUDStatus } from '@/types'
 import { canDragBud } from '@/utils/budStageGates'
 
@@ -86,7 +87,6 @@ const label = computed(() => BUD_STATUS_LABELS[props.status])
 const dropTarget = computed(() => isDropTarget(props.status))
 </script>
 
-<style scoped src="@/components/boards/board/drag-states.css"></style>
 <style scoped>
 .board-column {
   position: relative;
@@ -142,4 +142,9 @@ const dropTarget = computed(() => isDropTarget(props.status))
   color: rgb(var(--v-theme-on-surface-variant));
   pointer-events: none;
 }
+.drop-col--blocked .board-column__empty {
+  opacity: 0.55;
+}
 </style>
+<!-- After the column's own rules, so the drag states win over its border and fill. -->
+<style scoped src="@/components/boards/board/drag-states.css"></style>

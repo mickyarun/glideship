@@ -104,7 +104,7 @@ describe('HandoverDialog draft', () => {
   it('searches open BUDs on the server once typing settles', async () => {
     api.searchBuds.mockResolvedValue([
       { id: 'b7', bud_number: 7, title: 'Saved views', status: 'design', priority: 'P2', complexity: null, prod_p70_date: null,
-        current_phase_deadline: null, assignee_id: null, assignee_name: null, open_bug_count: 0, created_at: '', updated_at: '' },
+        current_phase_deadline: null, assignee_id: null, assignee_name: null, open_bug_count: 0, has_prd: false, has_tech_spec: false, created_at: '', updated_at: '' },
     ])
     await openDialog()
     vi.useFakeTimers()

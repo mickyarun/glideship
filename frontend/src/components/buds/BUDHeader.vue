@@ -95,11 +95,12 @@
           Ask AI
         </v-btn>
         <v-btn
-          v-if="nextStatus && canMoveTo(nextStatus)"
+          v-if="nextStatus && (canMoveTo(nextStatus) || nextNeeds)"
           color="primary"
           variant="flat"
           :loading="changingStatus"
-          :disabled="agentLocked || changingStatus"
+          :disabled="agentLocked || changingStatus || !!nextNeeds"
+          :title="nextNeeds ?? undefined"
           @click="emit('update-status', nextStatus)"
         >
           Move to {{ BUD_STATUS_LABELS[nextStatus] }}
@@ -142,6 +143,8 @@ const props = defineProps<{
   statusItems: ReadonlyArray<{ title: string; value: BUDStatus }>
   /** The stage the primary button moves to; null hides it. */
   nextStatus: BUDStatus | null
+  /** What the next stage needs written first ("Design needs a PRD first."); disables the button. */
+  nextNeeds?: string | null
   /** Whether the viewer may move the BUD to this stage (buds:edit, or QA out of testing). */
   canMoveTo: (status: BUDStatus) => boolean
   /** A stage change is in flight. */

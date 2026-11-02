@@ -36,16 +36,20 @@ import { useBudStatusTransitions } from '@/composables/useBudStatusTransitions'
 
 let bud: BUDDocument | null
 const setActiveTab = vi.fn()
-const reloadTimeline = vi.fn(async () => undefined)
+const onStatusChanged = vi.fn(async () => undefined)
 
 function at(status: BUDStatus, extra: Record<string, unknown> = {}) {
   bud = { id: 'bud-1', status, ...extra } as unknown as BUDDocument
   return useBudStatusTransitions({
     getBud: () => bud,
+    // As the BUD page does: refresh the open BUD, then read it again.
+    refreshBud: async (id: string) => {
+      await store.refreshBUDIfCurrent(id)
+      return bud
+    },
     setActiveTab,
     getStatusTabMap: () => STATUS_TAB_MAP,
-    triggerDesignGeneration: vi.fn(),
-    reloadTimeline,
+    onStatusChanged,
   })
 }
 
@@ -80,7 +84,7 @@ describe('entering code review', () => {
     await c.updateStatus('code_review')
     expect(c.showNoPRWarningDialog.value).toBe(false)
     expect(store.updateBUD).toHaveBeenCalledWith('bud-1', { status: 'code_review' })
-    expect(reloadTimeline).toHaveBeenCalled()
+    expect(onStatusChanged).toHaveBeenCalled()
   })
 })
 
@@ -156,7 +160,7 @@ describe('a refused stage change', () => {
     expect(c.statusErrorSnackbar.value).toBe(true)
     expect(c.statusErrorMessage.value).toBe('Manual test cases still pending')
     expect(setActiveTab).not.toHaveBeenCalled()
-    expect(reloadTimeline).not.toHaveBeenCalled()
+    expect(onStatusChanged).not.toHaveBeenCalled()
     expect(c.changingStatus.value).toBe(false)
   })
 

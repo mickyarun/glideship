@@ -20,7 +20,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/services/api', () => ({ default: { get: vi.fn(), patch: vi.fn() } }))
+vi.mock('@/services/api', () => ({ default: { get: vi.fn(), patch: vi.fn(), post: vi.fn() } }))
 
 import api from '@/services/api'
 import { useBUDStore } from '@/stores/bud'
@@ -35,6 +35,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   vi.mocked(api.get).mockReset()
   vi.mocked(api.patch).mockReset()
+  vi.mocked(api.post).mockReset()
 })
 
 describe('a stage change from the list', () => {
@@ -46,6 +47,38 @@ describe('a stage change from the list', () => {
     await store.updateBUD('A', { status: 'tech_arch' })
 
     expect(store.buds[0]).toMatchObject({ status: 'tech_arch', open_bug_count: 3, origin: row.origin, has_prd: true })
+  })
+})
+
+describe('restoring from the list', () => {
+  it('keeps what only the list sends', async () => {
+    const store = useBUDStore()
+    store.buds = [{ ...row, status: 'discarded' }]
+    vi.mocked(api.post).mockResolvedValue({ data: { id: 'A', status: 'design', has_prd: true, has_tech_spec: false } })
+
+    await store.restoreBUD('A')
+
+    expect(store.buds[0]).toMatchObject({ status: 'design', open_bug_count: 3, origin: row.origin, has_prd: true })
+  })
+})
+
+describe('entering design', () => {
+  const enteredDesign = { data: { id: 'A', status: 'design' }, headers: { 'x-design-available': 'true' } }
+
+  it('flags only the BUD that entered it, for its design panel', async () => {
+    const store = useBUDStore()
+    vi.mocked(api.patch).mockResolvedValue(enteredDesign)
+    await store.updateBUD('A', { status: 'design' })
+    expect(store.designAvailableFor).toBe('A')
+  })
+
+  it('drops the flag when that BUD moves again first', async () => {
+    const store = useBUDStore()
+    vi.mocked(api.patch).mockResolvedValueOnce(enteredDesign)
+    await store.updateBUD('A', { status: 'design' })
+    vi.mocked(api.patch).mockResolvedValueOnce({ data: { id: 'A', status: 'bud' }, headers: {} })
+    await store.updateBUD('A', { status: 'bud' })
+    expect(store.designAvailableFor).toBeNull()
   })
 })
 

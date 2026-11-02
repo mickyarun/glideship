@@ -34,7 +34,7 @@
         />
       </v-tabs-window-item>
 
-      <!-- Eager, so the panel's designAvailable watcher is live from the
+      <!-- Eager, so the panel's designAvailableFor watcher is live from the
            start and generation auto-starts the moment the BUD enters
            Design, whichever tab is open. -->
       <v-tabs-window-item value="design" eager>

@@ -72,10 +72,10 @@ describe('while a BUD is dragged', () => {
     dragging.value = { cardId: 'b2', fromStageId: 'bud', overStageId: 'bud' }
     await nextTick()
     expect(drag.blocks.value.design).toBe('Needs a PRD')
-    expect(drag.blocks.value.development).toBe('Next or previous stage only')
+    expect(drag.blocks.value.development).toBe('One stage at a time')
     expect(dragBlocks.value).toEqual(drag.blocks.value)
     await nextTick()
-    expect(feedback.announcement.value).toContain("BUD-002 can't go to Design (Needs a PRD)")
+    expect(feedback.announcement.value).toBe("BUD-002 can't move from here. Design needs a PRD first.")
   })
 
   it('marks nothing once the drag ends', async () => {
@@ -107,7 +107,7 @@ describe('a drop', () => {
     const { drag, feedback } = board(bud('design'))
     drag.drop(drop('development'))
     expect(store.updateBUD).not.toHaveBeenCalled()
-    expect(feedback.toast.value?.text).toBe("BUD-002 can't go to Development: Next or previous stage only.")
+    expect(feedback.toast.value?.text).toBe('BUD-002 moves one stage at a time. Open it to move it to Development.')
     expect(feedback.toast.value?.persist).toBe(true)
     feedback.toast.value?.action?.run()
     expect(push).toHaveBeenCalledWith({ path: '/buds/b2', query: undefined })
@@ -116,7 +116,7 @@ describe('a drop', () => {
   it('reports letting go over a stage it cannot enter', () => {
     const { drag, feedback } = board(bud('tech_arch', { has_tech_spec: false }))
     drag.blocked('b2', 'development')
-    expect(feedback.toast.value?.text).toBe("BUD-002 can't go to Development: Needs a tech spec.")
+    expect(feedback.toast.value?.text).toBe('Development needs a tech spec first.')
   })
 
   it('asks before closing, and closes once confirmed', async () => {
@@ -137,6 +137,46 @@ describe('a drop', () => {
     expect(store.updateBUD).not.toHaveBeenCalled()
     drag.status.openQATab()
     expect(push).toHaveBeenCalledWith({ path: '/buds/b2', query: { tab: 'testing' } })
+  })
+
+  it('moves the BUD it was dropped, even when another is dropped while it checks', async () => {
+    let answer: (v: unknown) => void = () => undefined
+    store.peekBUD.mockReturnValue(new Promise(ok => (answer = ok)))
+    const other = bud('design', { id: 'b3', bud_number: 3 })
+    const { drag } = board(bud('testing'), other)
+    drag.drop(drop('uat'))
+    drag.drop({ cardId: 'b3', stageId: 'tech_arch', index: 0 })
+    answer({ id: 'b2', status: 'testing', qa_manual_cases: [] })
+    await vi.waitFor(() => expect(store.updateBUD).toHaveBeenCalled())
+    expect(store.updateBUD.mock.calls).toEqual([['b2', { status: 'uat' }]])
+  })
+
+  it('warns before code review when no PR is open', async () => {
+    store.fetchCodeReviewStatus.mockResolvedValue({ repos: [{ pr_state: 'merged' }] })
+    const { drag } = board(bud('development'))
+    drag.drop(drop('code_review'))
+    await vi.waitFor(() => expect(drag.status.showNoPRWarningDialog.value).toBe(true))
+    expect(store.updateBUD).not.toHaveBeenCalled()
+  })
+
+  it('asks why when skipping unmerged PRs into testing, and sends the reason', async () => {
+    store.fetchCodeReviewStatus.mockResolvedValue({ repos: [{ pr_state: 'open' }] })
+    const { drag } = board(bud('code_review'))
+    drag.drop(drop('testing'))
+    await vi.waitFor(() => expect(drag.status.overrideReasonDialog.value).toBe(true))
+    drag.status.overrideReasonText.value = 'Docs only'
+    await drag.status.confirmOverrideStatus()
+    expect(store.updateBUD).toHaveBeenCalledWith('b2', { status: 'testing', status_override_reason: 'Docs only' })
+  })
+
+  it('lets QA take a BUD out of testing, and nowhere else', async () => {
+    perms.granted = new Set(['buds:test'])
+    store.peekBUD.mockResolvedValue({ id: 'b2', status: 'testing', qa_manual_cases: [] })
+    const { drag, feedback } = board(bud('testing'))
+    drag.drop(drop('code_review'))
+    expect(feedback.toast.value?.text).toBe('You can only move BUDs out of Testing.')
+    drag.drop(drop('uat'))
+    await vi.waitFor(() => expect(store.updateBUD).toHaveBeenCalledWith('b2', { status: 'uat' }))
   })
 
   it('shows the server\'s words when it refuses', async () => {

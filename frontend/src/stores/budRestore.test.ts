@@ -53,6 +53,8 @@ const DISCARDED_ROW: BUDListItem = {
   assignee_id: null,
   assignee_name: null,
   open_bug_count: 3,
+  has_prd: true,
+  has_tech_spec: false,
   created_at: '2026-08-01T00:00:00Z',
   updated_at: '2026-08-02T00:00:00Z',
 }

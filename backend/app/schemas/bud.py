@@ -36,6 +36,7 @@ from app.schemas.bud_design import (  # noqa: F401
     DesignHtmlUpdate,
 )
 from app.schemas.bud_release import ReleaseStage
+from app.services.bud_stage_gates import has_text
 
 # Single source of truth for the accepted Figma share-URL shape:
 # - ``/file/<key>/...`` (legacy)
@@ -211,7 +212,24 @@ class BUDAgentTaskRead(BaseModel):
         return data
 
 
-class BUDRead(BaseModel):
+class BUDSectionsWritten(BaseModel):
+    """Whether the PRD and the tech spec are written, read from the sections.
+
+    Sent with every BUD, listed or read alone, so a client's copy stays
+    current after any write. The stages they gate are in
+    :mod:`app.services.bud_stage_gates`.
+    """
+
+    has_prd: bool = Field(default=False, validation_alias="requirements_md")
+    has_tech_spec: bool = Field(default=False, validation_alias="tech_spec_md")
+
+    @field_validator("has_prd", "has_tech_spec", mode="before")
+    @classmethod
+    def _written(cls, value: object) -> bool:
+        return has_text(value if isinstance(value, str) else None)
+
+
+class BUDRead(BUDSectionsWritten):
     """Schema for reading a single BUD with full content."""
 
     id: uuid.UUID
@@ -317,7 +335,7 @@ class BUDListOrigin(BaseModel):
     can_open: bool = True
 
 
-class BUDListItem(BaseModel):
+class BUDListItem(BUDSectionsWritten):
     """Schema for BUD list view (no full content).
 
     ``origin`` is the BUD's live origin card when the caller can open its board.
@@ -336,10 +354,6 @@ class BUDListItem(BaseModel):
     assignee_avatar_url: str | None = None
     open_bug_count: int = 0
     origin: BUDListOrigin | None = None
-    # Whether the PRD and the tech spec are written: the stages they gate
-    # are in app/services/bud_stage_gates.py.
-    has_prd: bool = False
-    has_tech_spec: bool = False
     created_at: datetime
     updated_at: datetime
 

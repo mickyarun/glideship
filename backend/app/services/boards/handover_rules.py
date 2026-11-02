@@ -44,6 +44,7 @@ from app.services.boards.handover_errors import (
     HandoverNeedsRequirementsError,
     HandoverPermissionError,
 )
+from app.services.bud_stage_gates import has_text
 
 BUDS_CREATE = "buds:create"
 BUDS_EDIT = "buds:edit"
@@ -89,7 +90,7 @@ def target_of(access: BoardAccess, body: HandoverRequest) -> BUDStatus:
 
 def check_requirements(target: BUDStatus, requirements_md: str) -> None:
     """A BUD landing at the tech plan needs something to plan from."""
-    if target is BUDStatus.TECH_ARCH and not requirements_md.strip():
+    if target is BUDStatus.TECH_ARCH and not has_text(requirements_md):
         raise HandoverNeedsRequirementsError()
 
 

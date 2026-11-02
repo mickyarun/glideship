@@ -44,15 +44,27 @@ SPEC = "## Approach\nAdd an export job."
 def test_an_empty_bud_needs_what_each_stage_builds_on(
     target: BUDStatus, expected: list[StageContent]
 ) -> None:
-    assert missing_content(target, requirements_md=None, tech_spec_md=None) == expected
+    gaps = missing_content(BUDStatus.BUD, target, requirements_md=None, tech_spec_md=None)
+    assert gaps == expected
 
 
 def test_a_written_prd_opens_design_but_not_development() -> None:
-    assert missing_content(BUDStatus.DESIGN, requirements_md=PRD, tech_spec_md=None) == []
-    assert missing_content(BUDStatus.DEVELOPMENT, requirements_md=PRD, tech_spec_md=None) == [
-        StageContent.TECH_SPEC
-    ]
-    assert missing_content(BUDStatus.TESTING, requirements_md=PRD, tech_spec_md=SPEC) == []
+    def gaps(current: BUDStatus, target: BUDStatus, spec: str | None) -> list[StageContent]:
+        return missing_content(current, target, requirements_md=PRD, tech_spec_md=spec)
+
+    assert gaps(BUDStatus.BUD, BUDStatus.DESIGN, None) == []
+    assert gaps(BUDStatus.TECH_ARCH, BUDStatus.DEVELOPMENT, None) == [StageContent.TECH_SPEC]
+    assert gaps(BUDStatus.TECH_ARCH, BUDStatus.TESTING, SPEC) == []
+
+
+def test_only_crossing_into_the_gated_stages_is_checked() -> None:
+    """A BUD already past a gate (older data, a system move) isn't stranded there."""
+    for current, target in [
+        (BUDStatus.TESTING, BUDStatus.UAT),
+        (BUDStatus.TESTING, BUDStatus.DEVELOPMENT),
+        (BUDStatus.TECH_ARCH, BUDStatus.DESIGN),
+    ]:
+        assert missing_content(current, target, requirements_md=None, tech_spec_md=None) == []
 
 
 def test_whitespace_is_not_written() -> None:
@@ -63,11 +75,13 @@ def test_whitespace_is_not_written() -> None:
 
 def test_the_refusal_names_what_is_missing() -> None:
     with pytest.raises(HTTPException) as caught:
-        assert_stage_content(BUDStatus.DEVELOPMENT, requirements_md="", tech_spec_md=None)
+        assert_stage_content(
+            BUDStatus.TECH_ARCH, BUDStatus.DEVELOPMENT, requirements_md="", tech_spec_md=None
+        )
     assert caught.value.status_code == 409
     assert caught.value.detail == {
         "code": "bud_stage_content_missing",
         "target_status": "development",
-        "missing": ["prd", "tech_spec"],
-        "message": "A BUD needs a PRD and a tech spec before it can move to development.",
+        "missing": ["tech_spec"],
+        "message": "A BUD needs a tech spec before it can move to development.",
     }

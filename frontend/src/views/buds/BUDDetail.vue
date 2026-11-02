@@ -34,7 +34,7 @@
 
         <BUDHeader
           v-model:chat-open="chatOpen"
-          :bud="bud" :status-items="statusItems" :next-status="nextStatus" :can-move-to="canMoveTo"
+          :bud="bud" :status-items="statusItems" :next-status="nextStatus" :next-needs="nextNeeds" :can-move-to="canMoveTo"
           :changing-status="changingStatus" :is-closed="isClosed" :agent-locked="agentLocked"
           :chatable="currentSectionChatable" :can-edit-priority="canEditBud" :can-edit-buds="canEditBud"
           :can-delete="hasPermission('backlog:delete')"
@@ -144,6 +144,7 @@ import { useBUDStore } from '@/stores/bud'
 import { useBudLinkedFeaturesStore } from '@/stores/budLinkedFeatures'
 import { BUD_STATUS_LABELS, type BUDStatus } from '@/types'
 import { STATUS_TAB_MAP, budStepper, canMoveBud, nextBudStage } from '@/utils/budDetail'
+import { needsFirst } from '@/utils/budStageGates'
 
 const budStore = useBUDStore()
 const linkedFeaturesStore = useBudLinkedFeaturesStore()
@@ -189,17 +190,26 @@ const { downloadSection, importSection } = useBudSectionFiles(bud, () => designP
 
 const statusController = useBudStatusTransitions({
   getBud: () => bud.value,
+  refreshBud: async id => {
+    await budStore.refreshBUDIfCurrent(id)
+    return bud.value
+  },
   setActiveTab: (tab) => { activeTab.value = tab },
   getStatusTabMap: () => STATUS_TAB_MAP,
-  triggerDesignGeneration: () => designPanel.value?.triggerDesignGeneration(),
-  reloadTimeline: () => loadTimeline(),
+  onStatusChanged: () => loadTimeline(),
 })
 const { updateStatus, changingStatus, cancelRunningAgent, cancellingAgent, cancelDesign, cancellingDesignId } =
   statusController
 
 const statusItems = computed(() => phaseOrder.value.map(s => ({ title: BUD_STATUS_LABELS[s], value: s })))
 const nextStatus = computed(() => (bud.value ? nextBudStage(phaseOrder.value, bud.value.status) : null))
-const canMoveTo = (to: BUDStatus): boolean => !!bud.value && canMoveBud(hasPermission, bud.value.status, to)
+// A stage the BUD can't enter until a section is written (utils/budStageGates):
+// the menu disables it, and the Move button stays, disabled, saying why.
+const mayMoveTo = (to: BUDStatus): boolean => !!bud.value && canMoveBud(hasPermission, bud.value.status, to)
+const canMoveTo = (to: BUDStatus): boolean => !!bud.value && mayMoveTo(to) && !needsFirst(bud.value, to)
+const nextNeeds = computed(() =>
+  bud.value && nextStatus.value && mayMoveTo(nextStatus.value) ? needsFirst(bud.value, nextStatus.value) : null,
+)
 
 const { requirements, techSpec, isEditing, toggleEdit, syncEditor } =
   useBudSectionEditors(bud, activeTab, currentSectionEditable, () => designPanel.value)

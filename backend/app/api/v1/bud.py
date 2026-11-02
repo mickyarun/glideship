@@ -110,7 +110,7 @@ from app.services.bud_edit_policy import assert_section_editable
 from app.services.bud_estimation import estimate_bud_dates
 from app.services.bud_learning_alias_resolver import resolve_aliased_contributors
 from app.services.bud_metrics import compute_and_persist as compute_bud_metrics
-from app.services.bud_stage_gates import assert_stage_content, has_text
+from app.services.bud_stage_gates import assert_stage_content
 from app.services.bud_stage_jobs import run_stage_jobs
 from app.services.bud_stage_overrides import (
     StageSkillOverrideError,
@@ -208,15 +208,11 @@ async def list_buds(
     bug_counts = await bug_repo.open_bug_counts_by_bud(bud_ids)
     origins = await list_origins(db, caller, bud_ids)
 
-    # Inject open_bug_count, origin and which sections are written as
-    # transient attributes so Pydantic's from_attributes picks them up
-    # alongside the ORM columns. The board reads the sections to grey out
-    # stages a BUD can't enter yet (services/bud_stage_gates.py).
+    # Inject open_bug_count and origin as transient attributes so Pydantic's
+    # from_attributes picks them up alongside the ORM columns.
     for b in buds:
         b.open_bug_count = bug_counts.get(b.id, 0)  # type: ignore[attr-defined]
         b.origin = origins.get(b.id)  # type: ignore[attr-defined]
-        b.has_prd = has_text(b.requirements_md)  # type: ignore[attr-defined]
-        b.has_tech_spec = has_text(b.tech_spec_md)  # type: ignore[attr-defined]
     return buds
 
 
@@ -619,11 +615,12 @@ async def update_bud(
             detail=f"Cannot change status of a {bud.status.value} BUD. {remedy}",
         )
 
-    # Guard: a stage needs what comes before it written (PRD for design
-    # on, tech spec for development on). A PATCH may write the section and
+    # Guard: moving on into design or later needs the PRD written, into
+    # development or later the tech spec. A PATCH may write the section and
     # move in one go, so its own text counts.
     if "status" in update_data and update_data["status"] != bud.status:
         assert_stage_content(
+            bud.status,
             update_data["status"],
             requirements_md=update_data.get("requirements_md", bud.requirements_md),
             tech_spec_md=update_data.get("tech_spec_md", bud.tech_spec_md),
