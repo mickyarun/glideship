@@ -23,8 +23,10 @@
   <header class="stage-head">
     <div class="stage-head__row">
       <span class="stage-head__dot" :style="{ background: `rgb(var(--v-theme-${CATEGORY_COLORS[stage.category]}))` }" aria-hidden="true" />
-      <h2 :id="id" class="stage-head__name">
-        {{ stage.name }}<span class="d-sr-only">, {{ CATEGORY_LABELS[stage.category] }}</span>
+      <!-- The category is in the name, not a hidden span: an absolutely
+           placed span reads as its own block, "Writing , In progress". -->
+      <h2 :id="id" class="stage-head__name" :aria-label="`${stage.name}, ${CATEGORY_LABELS[stage.category]}`">
+        {{ stage.name }}
       </h2>
       <span class="stage-head__count" :class="{ 'stage-head__count--over': over }">
         <span aria-hidden="true">{{ limit ? `${count} / ${limit}` : shown }}</span>

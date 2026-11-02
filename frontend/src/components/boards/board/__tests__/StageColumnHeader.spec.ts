@@ -59,6 +59,7 @@ describe('StageColumnHeader', () => {
   })
 
   it('names the category for screen readers', () => {
-    expect(header(1, null).find('h2').text()).toBe('Writing, In progress')
+    expect(header(1, null).find('h2').attributes('aria-label')).toBe('Writing, In progress')
+    expect(header(1, null).find('h2').text()).toBe('Writing')
   })
 })

@@ -32,13 +32,14 @@
     :model-value="modelValue"
     max-width="460"
     :persistent="busy"
+    :aria-labelledby="titleId"
     @update:model-value="emit('update:modelValue', $event)"
     @after-enter="cancel?.$el.focus()"
   >
     <!-- Pinned flat: a confirm opened from inside a menu would otherwise
          pick up the menu-card shadow and border from the theme defaults. -->
     <v-card color="surface" class="app-confirm" :elevation="0" :border="false">
-      <h2 class="app-confirm__title">{{ title }}</h2>
+      <h2 :id="titleId" class="app-confirm__title">{{ title }}</h2>
       <p class="app-confirm__body"><slot name="body">{{ body }}</slot></p>
       <slot />
       <div class="app-confirm__actions">
@@ -51,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, ref, useId, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -71,6 +72,9 @@ const props = withDefaults(
   { body: '', busy: false, color: 'primary', returnFocus: null, secondary: '', disabled: false },
 )
 const emit = defineEmits<{ 'update:modelValue': [open: boolean]; confirm: []; secondary: [] }>()
+
+// The dialog is named by its title, so a screen reader announces what it asks.
+const titleId = useId()
 const cancel = ref<{ $el: HTMLElement } | null>(null)
 let opener: HTMLElement | null = null
 
