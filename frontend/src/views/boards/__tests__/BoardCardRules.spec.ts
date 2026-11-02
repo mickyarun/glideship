@@ -41,6 +41,9 @@ const STAGES = [
 ]
 const WEB = { id: 'r1', name: 'northwind-web', url: 'https://github.com/northwind/northwind-web' }
 const later = (s: number) => new Date(Date.parse(CARD.updated_at) + s * 1000).toISOString()
+// Vuetify mounts a menu's items once it activates, which on a loaded CI
+// runner can take longer than vi.waitFor's 1 s default.
+const MENU_OPENS = { timeout: 5_000 }
 const menuItem = (text: string) =>
   [...document.querySelectorAll<HTMLElement>('.v-overlay--active .v-list-item')].find(i => i.textContent?.includes(text))
 const buttonNamed = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)
@@ -92,14 +95,14 @@ describe('BoardCardView stage rules and repository', () => {
     const { wrapper } = await mountCardPage()
     await wrapper.find('button[aria-label="Change repository"]').trigger('click')
     await flushPromises()
-    await vi.waitFor(() => menuItem('northwind-web')!.click())
+    await vi.waitFor(() => menuItem('northwind-web')!.click(), MENU_OPENS)
     await flushPromises()
     expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { repo_id: 'r1' })
     const link = wrapper.find('aside[aria-label="Card details"] a[href="https://github.com/northwind/northwind-web"]')
     expect(link.attributes('rel')).toContain('noopener')
     await wrapper.find('button[aria-label="Change repository"]').trigger('click')
     await flushPromises()
-    await vi.waitFor(() => menuItem('No repository')!.click())
+    await vi.waitFor(() => menuItem('No repository')!.click(), MENU_OPENS)
     await flushPromises()
     expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { repo_id: null })
   })
