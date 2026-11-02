@@ -67,7 +67,7 @@ async def test_pending_counts_against_balance_and_first_decision_wins(
         request, _ = await submit(db, org, emp, leave_body(casual, mon, mon + timedelta(days=2)))
         await db.commit()
         assert request.status == LeaveStatus.PENDING and request.days == Decimal("3")
-        summary = await build_summary(db, org, emp, None)
+        summary = await build_summary(db, org, emp, mon.year)
         assert summary.balances[0].available == Decimal("2")
         assert {p.user_id for p in summary.approvers} == {m1, m2}
         await decide(
@@ -243,7 +243,8 @@ async def test_cancel_pending_frees_the_balance(pg_session_factory: Factory) -> 
         cancelled = await cancel(db, org, emp, request.id)
         await db.commit()
         assert cancelled.status == LeaveStatus.CANCELLED
-        assert (await build_summary(db, org, emp, None)).balances[0].available == Decimal("5")
+        summary = await build_summary(db, org, emp, mon.year)
+        assert summary.balances[0].available == Decimal("5")
 
 
 async def test_calendar_hides_leave_type_from_peers(pg_session_factory: Factory) -> None:
