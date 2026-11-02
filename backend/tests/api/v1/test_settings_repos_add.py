@@ -44,8 +44,9 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1 import settings_repos as repos_api
 from app.config import settings as app_settings
-from app.core.auth_deps import get_current_user, get_db
+from app.core.auth_deps import get_current_user
 from app.core.permission_deps import PermissionSet, get_permission_set
+from app.database import request_session
 from app.models.tracked_repository import RepoStatus, TrackedRepository
 
 ADD = "/api/v1/settings/repos"
@@ -95,7 +96,7 @@ def _app(permissions: frozenset[str] | None) -> FastAPI:
     """The router at its production prefix; ``None`` means no session."""
     app = FastAPI()
     app.include_router(repos_api.router, prefix="/api/v1/settings")
-    app.dependency_overrides[get_db] = _session
+    app.dependency_overrides[request_session] = _session
     if permissions is not None:
         user = SimpleNamespace(id=uuid.uuid4(), must_change_password=False)
         app.dependency_overrides[get_current_user] = lambda: user

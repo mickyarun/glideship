@@ -25,7 +25,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import ASGITransport
 
-from app.core.deps import get_db
+from app.database import request_session
 from app.mcp import server as mcp_server
 from app.mcp import streamable
 from app.mcp.audit import _AUDITABLE_PARAM_KEYS
@@ -54,7 +54,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     async def _fake_db() -> Any:
         yield MagicMock(rollback=AsyncMock())
 
-    app.dependency_overrides[get_db] = _fake_db
+    app.dependency_overrides[request_session] = _fake_db
     # Rate limit is fail-open by design; stub it anyway so a missing
     # Redis in CI doesn't taint the audit-call assertions.
     monkeypatch.setattr(streamable, "enforce_rate_limit", AsyncMock())
