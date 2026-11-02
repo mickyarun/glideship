@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The BUD page's "start designing" hint for a card handed over straight to design.
+"""The BUD page's "start designing" hint for a BUD in design with no design yet.
 
-A handover that lands at design doesn't start design generation (the
-repository picker may need a person), so whoever opens the BUD first
+Moving a BUD into design from its own page starts design generation right
+there. Anywhere else (a handover landing at design, a drag on the Delivery
+board) has no repository picker to show, so whoever opens the BUD first
 starts it. ``design_pending`` stays true until a design exists.
 """
 
@@ -27,7 +28,7 @@ from app.services.bud_agent_trigger import should_auto_generate_phase
 
 
 async def design_pending(db: AsyncSession, bud: BUDDocument) -> bool:
-    """In design with generation on, landed there by a handover, and no design started yet.
+    """In design with generation on, and no design started yet.
 
     Costs no query unless the BUD is in design with generation on.
     """
@@ -35,5 +36,4 @@ async def design_pending(db: AsyncSession, bud: BUDDocument) -> bool:
         return False
     if not should_auto_generate_phase(bud.auto_generate_phases or {}, BUDStatus.DESIGN.value):
         return False
-    repo = BUDDesignPendingRepository(db, org_id=bud.org_id)
-    return await repo.landed_at_design_without_designs(bud.id)
+    return await BUDDesignPendingRepository(db, org_id=bud.org_id).has_no_designs(bud.id)

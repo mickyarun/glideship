@@ -21,7 +21,7 @@
 // asks why. BUD_STAGE_NEEDS mirrors backend/app/services/bud_stage_gates.py,
 // which refuses the same moves.
 
-import { BUD_STATUS_LABELS, BUD_STATUS_ORDER, budRef, type BUDListItem, type BUDStatus } from '@/types'
+import { BUD_STATUS_LABELS, BUD_STATUS_ORDER, budRef, type BUDDocument, type BUDListItem, type BUDStatus } from '@/types'
 import { budStages, canMoveBud } from '@/utils/budDetail'
 
 export type StageContent = 'prd' | 'tech_spec'
@@ -56,6 +56,15 @@ export function neighbourStages(phaseOrder: readonly BUDStatus[], status: BUDSta
   if (at < 0) return []
   const near = [stages[at - 1], stages[at + 1]].filter((s): s is BUDStatus => !!s)
   return status === 'prod' ? [...near, 'closed'] : near
+}
+
+/**
+ * A full BUD's sections as written right now, read from their text rather
+ * than the flags its last read carried, so an edit (by hand or by Ask AI)
+ * shows at once on its page.
+ */
+export function writtenNow(bud: Pick<BUDDocument, 'status' | 'requirements_md' | 'tech_spec_md'>): Written {
+  return { status: bud.status, has_prd: !!bud.requirements_md?.trim(), has_tech_spec: !!bud.tech_spec_md?.trim() }
 }
 
 /** What a move to ``to`` still needs written, as a sentence ("Design needs a PRD first."), or null. */

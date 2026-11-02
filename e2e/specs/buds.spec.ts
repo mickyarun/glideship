@@ -49,7 +49,7 @@ test('moving a BUD through its stages opens each stage tab', async ({ signedIn, 
   // Development needs the tech spec written first.
   const toDevelopment = page.getByRole('button', { name: 'Move to Development' })
   await expect(toDevelopment).toBeDisabled()
-  await expect(toDevelopment).toHaveAttribute('title', 'Development needs a tech spec first.')
+  await expect(page.getByText('Development needs a tech spec first.')).toBeVisible()
   await api.patch(`buds/${bud.id}`, { tech_spec_md: '## Approach\nA token bucket per key.' })
   await page.reload()
   await moveBudTo(page, 'Development', 'Development')

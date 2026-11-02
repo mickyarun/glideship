@@ -156,6 +156,10 @@
 .bud-header__actions {
   flex-wrap: wrap;
 }
+.bud-header__needs {
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
 @media (max-width: 600px) {
   .bud-header__title {
     font-size: 24px;

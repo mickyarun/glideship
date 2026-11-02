@@ -546,7 +546,7 @@ const designPending = computed(() => {
   return !!bud && bud.id === props.budId && bud.design_pending && props.editable && pendingStartedFor !== props.budId
 })
 watch(
-  () => budStore.designAvailableFor === props.budId || designPending.value,
+  () => (budStore.designAvailableFor === props.budId && props.editable) || designPending.value,
   async (val) => {
     if (!val) return
     budStore.designAvailableFor = null

@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import WORKSPACE_ENGINEERING
 from app.models.board_card import BoardCard
-from app.models.bud import BUDDocument, BUDStatus
+from app.models.bud import BUDDocument, BUDStatus, has_text
 from app.repositories.board_handover import BoardHandoverRepository
 from app.repositories.bud import BUDRepository
 from app.schemas.boards.handover import HandoverMode, HandoverRequest
@@ -44,7 +44,6 @@ from app.services.boards.handover_errors import (
     HandoverNeedsRequirementsError,
     HandoverPermissionError,
 )
-from app.services.bud_stage_gates import has_text
 
 BUDS_CREATE = "buds:create"
 BUDS_EDIT = "buds:edit"

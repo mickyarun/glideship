@@ -144,7 +144,7 @@ import { useBUDStore } from '@/stores/bud'
 import { useBudLinkedFeaturesStore } from '@/stores/budLinkedFeatures'
 import { BUD_STATUS_LABELS, type BUDStatus } from '@/types'
 import { STATUS_TAB_MAP, budStepper, canMoveBud, nextBudStage } from '@/utils/budDetail'
-import { needsFirst } from '@/utils/budStageGates'
+import { needsFirst, writtenNow } from '@/utils/budStageGates'
 
 const budStore = useBUDStore()
 const linkedFeaturesStore = useBudLinkedFeaturesStore()
@@ -192,7 +192,7 @@ const statusController = useBudStatusTransitions({
   getBud: () => bud.value,
   refreshBud: async id => {
     await budStore.refreshBUDIfCurrent(id)
-    return bud.value
+    return bud.value?.id === id ? bud.value : null
   },
   setActiveTab: (tab) => { activeTab.value = tab },
   getStatusTabMap: () => STATUS_TAB_MAP,
@@ -206,9 +206,11 @@ const nextStatus = computed(() => (bud.value ? nextBudStage(phaseOrder.value, bu
 // A stage the BUD can't enter until a section is written (utils/budStageGates):
 // the menu disables it, and the Move button stays, disabled, saying why.
 const mayMoveTo = (to: BUDStatus): boolean => !!bud.value && canMoveBud(hasPermission, bud.value.status, to)
-const canMoveTo = (to: BUDStatus): boolean => !!bud.value && mayMoveTo(to) && !needsFirst(bud.value, to)
+const canMoveTo = (to: BUDStatus): boolean => !!bud.value && mayMoveTo(to) && !needsFirst(writtenNow(bud.value), to)
 const nextNeeds = computed(() =>
-  bud.value && nextStatus.value && mayMoveTo(nextStatus.value) ? needsFirst(bud.value, nextStatus.value) : null,
+  bud.value && nextStatus.value && mayMoveTo(nextStatus.value)
+    ? needsFirst(writtenNow(bud.value), nextStatus.value)
+    : null,
 )
 
 const { requirements, techSpec, isEditing, toggleEdit, syncEditor } =

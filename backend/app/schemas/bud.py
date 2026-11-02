@@ -24,9 +24,9 @@ import uuid
 from datetime import datetime
 from typing import Any, get_args
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
-from app.models.bud import BUDPriority, BUDStatus
+from app.models.bud import BUDPriority, BUDStatus, has_text
 
 # Re-export design schemas so legacy imports keep working; new code
 # should import directly from :mod:`app.schemas.bud_design`.
@@ -36,7 +36,6 @@ from app.schemas.bud_design import (  # noqa: F401
     DesignHtmlUpdate,
 )
 from app.schemas.bud_release import ReleaseStage
-from app.services.bud_stage_gates import has_text
 
 # Single source of truth for the accepted Figma share-URL shape:
 # - ``/file/<key>/...`` (legacy)
@@ -220,12 +219,19 @@ class BUDSectionsWritten(BaseModel):
     :mod:`app.services.bud_stage_gates`.
     """
 
-    has_prd: bool = Field(default=False, validation_alias="requirements_md")
-    has_tech_spec: bool = Field(default=False, validation_alias="tech_spec_md")
+    has_prd: bool = Field(
+        default=False, validation_alias=AliasChoices("requirements_md", "has_prd")
+    )
+    has_tech_spec: bool = Field(
+        default=False, validation_alias=AliasChoices("tech_spec_md", "has_tech_spec")
+    )
 
     @field_validator("has_prd", "has_tech_spec", mode="before")
     @classmethod
     def _written(cls, value: object) -> bool:
+        """A section's text says whether it's written; a flag given as such stands."""
+        if isinstance(value, bool):
+            return value
         return has_text(value if isinstance(value, str) else None)
 
 

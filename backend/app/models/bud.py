@@ -78,6 +78,11 @@ class BUDTimelineEventType(StrEnum):
     RETURNED_TO_BOARD = "returned_to_board"
 
 
+def has_text(markdown: str | None) -> bool:
+    """Whether a BUD section has anything written in it: whitespace isn't writing."""
+    return bool(markdown and markdown.strip())
+
+
 class BUDStatus(StrEnum):
     """Lifecycle stage of a BUD document."""
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from 'vitest'
-import { extractApiError, extractBlobApiError, readableError } from './errors'
+import { extractApiError, extractBlobApiError } from './errors'
 
 const blobError = (status: number, body: unknown, type = 'application/json') => ({
   response: { status, data: new Blob([JSON.stringify(body)], { type }) },
@@ -52,18 +52,16 @@ describe('extractApiError', () => {
   })
 })
 
-describe('readableError', () => {
-  it("shows a typed envelope's message", () => {
-    const error = extractApiError(
-      { response: { status: 409, data: { detail: { code: 'bud_stage_content_missing', message: 'A BUD needs a PRD.' } } } },
-      'Failed',
-    )
-    expect(readableError(error)).toBe('A BUD needs a PRD.')
+describe('coded refusals', () => {
+  const refused = (detail: unknown) => ({ response: { status: 409, data: { detail } } })
+
+  it("reads as the refusal's message", () => {
+    expect(extractApiError(refused({ code: 'bud_stage_content_missing', message: 'A BUD needs a PRD.' }), 'Failed'))
+      .toBe('A BUD needs a PRD.')
   })
 
-  it('leaves plain words and envelopes without a message alone', () => {
-    expect(readableError('Cannot advance to uat')).toBe('Cannot advance to uat')
-    expect(readableError('{"code":"x"}')).toBe('{"code":"x"}')
-    expect(readableError('{not json')).toBe('{not json')
+  it('keeps the GitHub envelope as JSON for its form to read', () => {
+    const detail = { error: 'bad_key', message: 'The key is not valid.' }
+    expect(extractApiError(refused(detail), 'Failed')).toBe(JSON.stringify(detail))
   })
 })

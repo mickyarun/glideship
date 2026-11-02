@@ -94,13 +94,14 @@
         >
           Ask AI
         </v-btn>
+        <span v-if="nextStatus && nextNeeds" :id="needsId" class="bud-header__needs">{{ nextNeeds }}</span>
         <v-btn
           v-if="nextStatus && (canMoveTo(nextStatus) || nextNeeds)"
           color="primary"
           variant="flat"
           :loading="changingStatus"
           :disabled="agentLocked || changingStatus || !!nextNeeds"
-          :title="nextNeeds ?? undefined"
+          :aria-describedby="nextNeeds ? needsId : undefined"
           @click="emit('update-status', nextStatus)"
         >
           Move to {{ BUD_STATUS_LABELS[nextStatus] }}
@@ -127,7 +128,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import AppMonogram from '@/components/common/AppMonogram.vue'
 import BUDAssigneeMenu from './detail/BUDAssigneeMenu.vue'
 import BUDMoreMenu from './detail/BUDMoreMenu.vue'
@@ -160,6 +161,9 @@ const props = defineProps<{
   /** buds:edit — gates restoring a discarded BUD. */
   canEditBuds: boolean
 }>()
+
+// Says what the next stage still needs, beside its disabled Move button.
+const needsId = useId()
 
 const emit = defineEmits<{
   'update:chatOpen': [value: boolean]

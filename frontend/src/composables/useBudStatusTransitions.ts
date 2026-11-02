@@ -31,10 +31,9 @@
  * doesn't reach into view-only refs directly.
  */
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useBUDStore } from '@/stores/bud'
 import type { BUDDocument } from '@/types'
-import { readableError } from '@/utils/errors'
 
 /** What a stage change reads from the BUD it moves: a full BUD, or a board's list item. */
 export type StatusSubject = Pick<BUDDocument, 'id' | 'status'>
@@ -45,14 +44,14 @@ export interface BudStatusHooks {
   getBud: () => StatusSubject | null
   /** The BUD's latest read, for its manual test cases; null when it can't be read. */
   refreshBud: (id: string) => Promise<StatusSubject | null>
-  /** Switch the page's active tab — used by openQATab and the post-
+  /** Switch to a tab of the moved BUD — used by openQATab and the post-
    *  success tab sync after a successful PATCH. */
-  setActiveTab: (tab: string) => void
+  setActiveTab: (tab: string, bud: StatusSubject) => void
   /** Status → tab mapping owned by the view (single source of truth
    *  for tab routing across multiple watchers). */
   getStatusTabMap: () => Record<string, string>
   /** After a move lands (the page reloads its timeline, the board announces it). */
-  onStatusChanged: (status: string) => void | Promise<void>
+  onStatusChanged: (status: string, bud: StatusSubject) => void | Promise<void>
 }
 
 export function useBudStatusTransitions(hooks: BudStatusHooks) {
@@ -142,7 +141,15 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
     }
   }
 
+  const dialogOpen = () =>
+    showNoPRWarningDialog.value || overrideReasonDialog.value
+    || showPendingCasesDialog.value || showCloseConfirmDialog.value
+  /** A change is being checked, sent, or waiting on one of its dialogs: a new one is ignored. */
+  const busy = computed(() => changingStatus.value || dialogOpen())
+
   function updateStatus(newStatus: string): Promise<void> {
+    // Its dialog's confirm moves ``subject``, so a new change can't replace it meanwhile.
+    if (dialogOpen()) return Promise.resolve()
     return inFlight(() => {
       subject = hooks.getBud()
       return runStatusGuards(newStatus)
@@ -219,7 +226,7 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
 
   function openQATab(): void {
     showPendingCasesDialog.value = false
-    hooks.setActiveTab('testing')
+    if (subject) hooks.setActiveTab('testing', subject)
   }
 
   async function confirmNoPRWarning(): Promise<void> {
@@ -252,27 +259,28 @@ export function useBudStatusTransitions(hooks: BudStatusHooks) {
     // manual-cases guard catching a race the client-side preempt
     // missed).
     if (result === null && budStore.error) {
-      statusErrorMessage.value = readableError(budStore.error)
+      statusErrorMessage.value = budStore.error
       statusErrorSnackbar.value = true
       return
     }
 
     // Switch tab to match the new status phase.
     const targetTab = hooks.getStatusTabMap()[newStatus]
-    if (targetTab) hooks.setActiveTab(targetTab)
+    if (targetTab) hooks.setActiveTab(targetTab, bud)
 
     // The design-phase auto-trigger lives in BUDDesignPanel.vue as a
     // watcher on ``budStore.designAvailableFor`` (with ``immediate: true``)
     // — placing it there removes the parent→child ref-call mount-order
     // race we hit when the user flips status before the panel mounts.
 
-    await hooks.onStatusChanged(newStatus)
+    await hooks.onStatusChanged(newStatus, bud)
   }
 
   return {
     cancellingAgent,
     cancellingDesignId,
     changingStatus,
+    busy,
     showCloseConfirmDialog,
     // guard-dialog state
     showNoPRWarningDialog,

@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest'
 import { BUD_STATUS_ORDER, type BUDStatus } from '@/types'
 import {
-  budDragSummary, budDropBlock, budDropBlocks, canDragBud, missingContent, neighbourStages,
+  budDragSummary, budDropBlock, budDropBlocks, canDragBud, missingContent, needsFirst, neighbourStages, writtenNow,
 } from '@/utils/budStageGates'
 
 const ALL = BUD_STATUS_ORDER
@@ -126,5 +126,14 @@ describe('canDragBud', () => {
     expect(canDragBud({ status: 'testing' })).toBe(true)
     expect(canDragBud({ status: 'closed' })).toBe(false)
     expect(canDragBud({ status: 'discarded' })).toBe(false)
+  })
+})
+
+describe('writtenNow', () => {
+  it('reads a BUD page\'s sections from their text, so an edit counts at once', () => {
+    const page = { status: 'bud' as const, requirements_md: '## Problem', tech_spec_md: '  ' }
+    expect(writtenNow(page)).toEqual({ status: 'bud', has_prd: true, has_tech_spec: false })
+    expect(needsFirst(writtenNow(page), 'design')).toBeNull()
+    expect(needsFirst(writtenNow({ ...page, requirements_md: null }), 'design')).toBe('Design needs a PRD first.')
   })
 })

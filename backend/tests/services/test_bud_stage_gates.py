@@ -17,13 +17,9 @@
 import pytest
 from fastapi import HTTPException
 
-from app.models.bud import BUDStatus
-from app.services.bud_stage_gates import (
-    StageContent,
-    assert_stage_content,
-    has_text,
-    missing_content,
-)
+from app.models.bud import BUDStatus, has_text
+from app.schemas.bud import BUDSectionsWritten
+from app.services.bud_stage_gates import StageContent, assert_stage_content, missing_content
 
 PRD = "## Problem\nUsers can't export."
 SPEC = "## Approach\nAdd an export job."
@@ -85,3 +81,9 @@ def test_the_refusal_names_what_is_missing() -> None:
         "missing": ["tech_spec"],
         "message": "A BUD needs a tech spec before it can move to development.",
     }
+
+
+def test_the_section_flags_take_text_or_a_given_flag() -> None:
+    assert BUDSectionsWritten.model_validate({"requirements_md": PRD}).has_prd is True
+    assert BUDSectionsWritten.model_validate({"tech_spec_md": "  "}).has_tech_spec is False
+    assert BUDSectionsWritten(has_prd=True).has_prd is True

@@ -25,6 +25,7 @@ import { BUD_STATUS_ORDER, type BUDListItem, type BUDStatus } from '@/types'
 
 const store = vi.hoisted(() => ({
   buds: [] as BUDListItem[],
+  designAvailableFor: null as string | null,
   error: '',
   updateBUD: vi.fn(),
   peekBUD: vi.fn(),
@@ -60,6 +61,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   perms.granted = new Set(['buds:edit'])
   store.error = ''
+  store.designAvailableFor = null
   store.updateBUD.mockResolvedValue({})
 })
 afterEach(() => {
@@ -151,6 +153,28 @@ describe('a drop', () => {
     expect(store.updateBUD.mock.calls).toEqual([['b2', { status: 'uat' }]])
   })
 
+  it('closes only the BUD whose close it asked about, and says to wait meanwhile', async () => {
+    const other = bud('development', { id: 'b3', bud_number: 3 })
+    const { drag, feedback } = board(bud('prod'), other)
+    drag.drop(drop('closed'))
+    await vi.waitFor(() => expect(drag.status.showCloseConfirmDialog.value).toBe(true))
+    drag.drop({ cardId: 'b3', stageId: 'code_review', index: 0 })
+    expect(feedback.toast.value?.text).toBe('Wait for BUD-002 to finish moving.')
+    await drag.status.confirmClose()
+    expect(store.updateBUD.mock.calls).toEqual([['b2', { status: 'closed' }]])
+  })
+
+  it('leaves starting designs to whoever opens the BUD', async () => {
+    store.updateBUD.mockImplementation(async (id: string) => {
+      store.designAvailableFor = id
+      return {}
+    })
+    const { drag } = board(bud('bud'))
+    drag.drop(drop('design'))
+    await vi.waitFor(() => expect(store.updateBUD).toHaveBeenCalled())
+    await vi.waitFor(() => expect(store.designAvailableFor).toBeNull())
+  })
+
   it('warns before code review when no PR is open', async () => {
     store.fetchCodeReviewStatus.mockResolvedValue({ repos: [{ pr_state: 'merged' }] })
     const { drag } = board(bud('development'))
@@ -181,7 +205,8 @@ describe('a drop', () => {
 
   it('shows the server\'s words when it refuses', async () => {
     store.updateBUD.mockImplementation(async () => {
-      store.error = JSON.stringify({ code: 'bud_stage_content_missing', message: 'A BUD needs a PRD before it can move to design.' })
+      // As extractApiError reads a coded refusal.
+      store.error = 'A BUD needs a PRD before it can move to design.'
       return null
     })
     const { drag } = board(bud('bud'))

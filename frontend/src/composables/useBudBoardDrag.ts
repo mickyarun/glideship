@@ -19,7 +19,7 @@
 // (useBudStatusTransitions): the close confirm, the PR checks, unfinished
 // test cases. The board renders their dialogs with BUDStatusDialogs.
 
-import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
+import { computed, onScopeDispose, watch, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dragBlocks, dragging, type CardDrop } from '@/composables/useCardDrag'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
@@ -51,20 +51,23 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
     if (dragged.value) feedback.announce(budDragSummary(dragged.value, phaseOrder.value, hasPermission))
   })
 
-  // The BUD a drop is moving and where to; the guards read it through getBud.
-  const moving = ref<{ bud: BUDListItem; to: BUDStatus } | null>(null)
+  // The BUD the last drop asked to move; the guards take it once, through getBud.
+  let dropped: BUDListItem | null = null
   const openBud = (id: string, tab?: string) =>
     void router.push({ path: `/buds/${id}`, query: tab ? { tab } : undefined })
 
   const status = useBudStatusTransitions({
-    getBud: () => moving.value?.bud ?? null,
+    getBud: () => dropped,
     refreshBud: id => budStore.peekBUD(id),
     // "Open QA tab" on the unfinished-cases dialog opens the BUD there.
-    setActiveTab: tab => moving.value && openBud(moving.value.bud.id, tab),
+    setActiveTab: (tab, bud) => openBud(bud.id, tab),
     getStatusTabMap: () => ({}),
-    onStatusChanged: () => {
-      const m = moving.value
-      if (m) feedback.announce(`Moved ${budRef(m.bud.bud_number)} to ${BUD_STATUS_LABELS[m.to]}`)
+    onStatusChanged: (to, bud) => {
+      // The board has no design panel: a BUD dragged into design starts its
+      // designs when it's next opened (the server's design_pending).
+      if (budStore.designAvailableFor === bud.id) budStore.designAvailableFor = null
+      const moved = find(bud.id)
+      if (moved) feedback.announce(`Moved ${budRef(moved.bud_number)} to ${BUD_STATUS_LABELS[to as BUDStatus]}`)
     },
   })
 
@@ -77,12 +80,16 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
   function drop(d: CardDrop): void {
     const bud = find(d.cardId)
     const to = d.stageId as BUDStatus
-    // A BUD's place within a stage isn't kept, so a drop in its own stage
-    // does nothing; nor does one while another move is still checking.
-    if (!bud || to === bud.status || status.changingStatus.value) return
+    // A BUD's place within a stage isn't kept, so a drop in its own stage does nothing.
+    if (!bud || to === bud.status) return
+    if (status.busy.value && dropped) {
+      const text = `Wait for ${budRef(dropped.bud_number)} to finish moving.`
+      feedback.show({ text })
+      return feedback.announce(text)
+    }
     const block = budDropBlock(bud, to, phaseOrder.value, hasPermission)
     if (block) return refuse(bud, block)
-    moving.value = { bud, to }
+    dropped = bud
     void status.updateStatus(to)
   }
 

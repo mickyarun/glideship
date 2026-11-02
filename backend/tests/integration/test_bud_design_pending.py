@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""``design_pending`` on the BUD page: a card handed over straight to design, not designed yet."""
+"""``design_pending`` on the BUD page: in design with generation on, not designed yet.
+
+However it got there: a card handed over straight to design, or a drag on
+the Delivery board.
+"""
 
 from __future__ import annotations
 
@@ -61,10 +65,10 @@ async def test_pending_until_a_design_exists(
     assert await _pending(client, d, bud_id) is False
 
 
-async def test_not_pending_without_generation_a_design_landing_or_a_handover(
+async def test_not_pending_without_generation_or_outside_design(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
-    """Design generation off, landed at bud, or a BUD moved to design by hand: never pending."""
+    """Design generation off, or not in design: never pending."""
     d = await desk(client, pg_session_factory)
     off = await handed(
         client, d.pm, await card(client, d, "Off", description_md="x"), target_status="design"
@@ -76,6 +80,16 @@ async def test_not_pending_without_generation_a_design_landing_or_a_handover(
         target_status="bud",
         auto_generate_phases=DESIGN_ON,
     )
+
+    assert await _pending(client, d, bud_of(off)) is False
+    assert await _pending(client, d, bud_of(at_bud)) is False
+
+
+async def test_pending_for_a_bud_moved_to_design_without_a_handover(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    """Moved into design (from the board, say) with generation on: pending."""
+    d = await desk(client, pg_session_factory)
     plain = ok(
         await client.post(
             f"{BUDS}/",
@@ -85,8 +99,5 @@ async def test_not_pending_without_generation_a_design_landing_or_a_handover(
         201,
     )
     await set_status(pg_session_factory, uuid.UUID(plain["id"]), BUDStatus.DESIGN)
-    await set_status(pg_session_factory, bud_of(at_bud), BUDStatus.DESIGN)
 
-    assert await _pending(client, d, bud_of(off)) is False
-    assert await _pending(client, d, bud_of(at_bud)) is False
-    assert await _pending(client, d, plain["id"]) is False
+    assert await _pending(client, d, plain["id"]) is True

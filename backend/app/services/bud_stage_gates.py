@@ -34,7 +34,7 @@ from typing import NoReturn
 
 from fastapi import HTTPException, status
 
-from app.models.bud import BUDStatus
+from app.models.bud import BUDStatus, has_text
 
 
 class StageContent(StrEnum):
@@ -64,11 +64,6 @@ _CONTENT_NAMES: dict[StageContent, str] = {
     StageContent.PRD: "a PRD",
     StageContent.TECH_SPEC: "a tech spec",
 }
-
-
-def has_text(markdown: str | None) -> bool:
-    """Whether a section has anything written in it."""
-    return bool(markdown and markdown.strip())
 
 
 def _crosses(current: BUDStatus, target: BUDStatus, stages: frozenset[BUDStatus]) -> bool:

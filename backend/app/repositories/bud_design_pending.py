@@ -12,16 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Whether a handed-over BUD still waits for its first design, in one query."""
+"""Whether a BUD still waits for its first design, in one query."""
 
 import uuid
 
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.board_enums import BoardHandoverStatus
-from app.models.board_handover import BoardCardHandover
-from app.models.bud import BUDDesign, BUDStatus
+from app.models.bud import BUDDesign
 
 
 class BUDDesignPendingRepository:
@@ -31,17 +29,10 @@ class BUDDesignPendingRepository:
         self._db = db
         self._org_id = org_id
 
-    async def landed_at_design_without_designs(self, bud_id: uuid.UUID) -> bool:
-        """The BUD's live handover landed it at design, and no design row exists for it yet.
+    async def has_no_designs(self, bud_id: uuid.UUID) -> bool:
+        """No design row exists for the BUD yet.
 
         Any design row (pending, generating, ready or failed) means generation started.
         """
-        landed = exists().where(
-            BoardCardHandover.org_id == self._org_id,
-            BoardCardHandover.bud_id == bud_id,
-            BoardCardHandover.status == BoardHandoverStatus.ACTIVE,
-            BoardCardHandover.target_status == BUDStatus.DESIGN,
-        )
         designed = exists().where(BUDDesign.org_id == self._org_id, BUDDesign.bud_id == bud_id)
-        stmt = select(landed & ~designed)
-        return bool((await self._db.execute(stmt)).scalar_one())
+        return not bool((await self._db.execute(select(designed))).scalar_one())
