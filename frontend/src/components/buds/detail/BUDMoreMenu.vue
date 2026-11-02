@@ -16,8 +16,8 @@
 
 <!-- The header's overflow menu: move to any stage, restore a discarded
      BUD, send a BUD from a card back to it, open the AI skills settings,
-     delete. It opens clear of its own button (useMenuRoom), and a click
-     that lands while it's opening isn't taken as a pick, so a quick double
+     delete. It opens clear of its own button (useMenuRoom), and the second
+     click of a double click isn't taken as a pick, so a quick double
      click on the button can't change the stage. -->
 <template>
   <v-menu
@@ -38,7 +38,7 @@
           v-if="status === 'discarded' && canEditBuds"
           role="menuitem"
           prepend-icon="mdi-restore"
-          @click="pick(() => emit('restore'))"
+          @click="pick($event, () => emit('restore'))"
         >
           <v-list-item-title>Restore BUD</v-list-item-title>
         </v-list-item>
@@ -57,12 +57,12 @@
             :title="s.title"
             :active="status === s.value"
             :disabled="agentLocked || changingStatus || !canMoveTo(s.value) || status === s.value"
-            @click="pick(() => emit('update-status', s.value))"
+            @click="pick($event, () => emit('update-status', s.value))"
           />
         </template>
       </div>
       <v-divider class="my-1" />
-      <v-list-item v-if="sendBackTo" role="menuitem" prepend-icon="mdi-keyboard-return" @click="pick(() => emit('send-back'))">
+      <v-list-item v-if="sendBackTo" role="menuitem" prepend-icon="mdi-keyboard-return" @click="pick($event, () => emit('send-back'))">
         <v-list-item-title>Send back to {{ sendBackTo }}…</v-list-item-title>
       </v-list-item>
       <v-list-item
@@ -70,7 +70,7 @@
         prepend-icon="mdi-tune-variant"
         :aria-disabled="isClosed"
         :disabled="isClosed"
-        @click="pick(() => emit('open-skill-settings'))"
+        @click="pick($event, () => emit('open-skill-settings'))"
       >
         <v-list-item-title>AI skills</v-list-item-title>
       </v-list-item>
@@ -82,7 +82,7 @@
           prepend-icon="mdi-delete-outline"
           :aria-disabled="agentLocked"
           :disabled="agentLocked"
-          @click="pick(() => emit('delete'))"
+          @click="pick($event, () => emit('delete'))"
         >
           <v-list-item-title>Delete BUD</v-list-item-title>
         </v-list-item>
@@ -124,9 +124,9 @@ watch(open, isOpen => {
   if (isOpen) room.opened(menu.value?.activatorEl)
 }, { flush: 'sync' })
 
-/** Run an item's action unless the click was the end of the one that opened the menu. */
-function pick(run: () => void): void {
-  if (!room.picking()) return
+/** Run an item's action unless the click is the opening double click landing. */
+function pick(event: Event | undefined, run: () => void): void {
+  if (!room.picking(event)) return
   open.value = false
   void nextTick(run)
 }

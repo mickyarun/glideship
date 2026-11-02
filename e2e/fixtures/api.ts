@@ -40,6 +40,10 @@ export class Api {
     return this.check<T>('PATCH', path, await this.ctx.patch(path, { data }))
   }
 
+  async put<T>(path: string, data: unknown): Promise<T> {
+    return this.check<T>('PUT', path, await this.ctx.put(path, { data }))
+  }
+
   /** Status of a PATCH, for checks that expect a refusal. */
   async patchStatusOf(path: string, data: unknown): Promise<number> {
     return (await this.ctx.patch(path, { data })).status()
@@ -88,8 +92,33 @@ export type BudStatus =
   | 'bud' | 'design' | 'tech_arch' | 'development' | 'code_review' | 'testing' | 'uat' | 'prod'
   | 'closed' | 'discarded'
 
-/** Moves a BUD straight to `status` (the API checks gates, not order). */
-export function moveBud(api: Api, budId: string, status: BudStatus, reason?: string): Promise<Bud> {
+// Moving on into these stages needs the PRD written, then the tech spec too
+// (backend/app/services/bud_stage_gates.py).
+const NEEDS_PRD: readonly BudStatus[] = ['design', 'tech_arch', 'development', 'code_review', 'testing', 'uat', 'prod']
+const NEEDS_TECH_SPEC: readonly BudStatus[] = NEEDS_PRD.slice(2)
+
+interface BudSections extends Bud {
+  status: BudStatus
+  has_prd: boolean
+  has_tech_spec: boolean
+}
+
+/**
+ * Moves a BUD straight to `status` (the API checks gates, not order). A
+ * BUD moving on past a section it hasn't written gets a stand-in first, as
+ * its owner would have: the PRD at the BUD stage, the tech spec at Tech
+ * Architecture (each is only editable in its own stage).
+ */
+export async function moveBud(api: Api, budId: string, status: BudStatus, reason?: string): Promise<Bud> {
+  const crosses = (gated: readonly BudStatus[], from: BudStatus) => gated.includes(status) && !gated.includes(from)
+  let bud = await api.get<BudSections>(`buds/${budId}`)
+  if (crosses(NEEDS_PRD, bud.status) && !bud.has_prd) {
+    bud = await api.patch<BudSections>(`buds/${budId}`, { requirements_md: '## Problem\nStand-in PRD.' })
+  }
+  if (crosses(NEEDS_TECH_SPEC, bud.status) && !bud.has_tech_spec) {
+    if (bud.status !== 'tech_arch') await api.patch(`buds/${budId}`, { status: 'tech_arch' })
+    await api.patch(`buds/${budId}`, { tech_spec_md: '## Approach\nStand-in tech spec.' })
+  }
   return api.patch<Bud>(`buds/${budId}`, reason ? { status, status_override_reason: reason } : { status })
 }
 

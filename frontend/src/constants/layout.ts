@@ -27,8 +27,3 @@ export const MENU_OFFSET_PX = 4
 export const MENU_VIEWPORT_MARGIN_PX = 12
 /** Below this much room under its button, a menu opens above when there's more room there. */
 export const MENU_MIN_ROOM_PX = 240
-/**
- * Clicks on a menu's items this soon after it opened are the rest of the
- * click (or double click) that opened it, not a pick.
- */
-export const MENU_PICK_GUARD_MS = 400

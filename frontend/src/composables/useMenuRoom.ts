@@ -16,22 +16,20 @@
 // doesn't fit back into the window, which can lay its items over the
 // button, so a quick double click picks one. Measured as it opens, the menu
 // opens below its button (or above, when there's more room there), only as
-// tall as that room and scrolling past it; and items ignore clicks that
-// arrive while the opening click is still landing.
+// tall as that room and scrolling past it; and an item ignores the second
+// click of a double click, which is the opening gesture landing, not a pick.
 
 import { ref } from 'vue'
-import { MENU_MIN_ROOM_PX, MENU_OFFSET_PX, MENU_PICK_GUARD_MS, MENU_VIEWPORT_MARGIN_PX } from '@/constants/layout'
+import { MENU_MIN_ROOM_PX, MENU_OFFSET_PX, MENU_VIEWPORT_MARGIN_PX } from '@/constants/layout'
 
 type Side = 'bottom end' | 'top end'
 
 export function useMenuRoom() {
   const location = ref<Side>('bottom end')
   const maxHeight = ref<number | undefined>(undefined)
-  let openedAt = 0
 
   /** Call as the menu opens, with its button. */
   function opened(button: Element | null | undefined): void {
-    openedAt = performance.now()
     if (!button) return
     const box = button.getBoundingClientRect()
     const gap = MENU_OFFSET_PX + MENU_VIEWPORT_MARGIN_PX
@@ -42,9 +40,13 @@ export function useMenuRoom() {
     maxHeight.value = Math.max(0, Math.floor(down ? below : above))
   }
 
-  /** Whether a click on an item is a real pick, not the end of the opening click. */
-  function picking(): boolean {
-    return performance.now() - openedAt >= MENU_PICK_GUARD_MS
+  /**
+   * Whether a click on an item is a real pick. A deliberate pick, by mouse
+   * or keyboard, is a single click; the second click of a double click on
+   * the button is the opening gesture landing on the menu.
+   */
+  function picking(event: Event | undefined): boolean {
+    return !(event instanceof MouseEvent && event.detail > 1)
   }
 
   return { location, maxHeight, offset: MENU_OFFSET_PX, opened, picking }
