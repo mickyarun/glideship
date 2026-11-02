@@ -15,6 +15,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@/types'
+import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import api from '@/services/api'
 import { extractApiError } from '@/utils/errors'
 import { forgetReturnTo } from '@/utils/returnTo'
@@ -81,6 +82,8 @@ export const useAuthStore = defineStore('auth', () => {
     loginError.value = null
     // Never send whoever signs in next to this person's page.
     forgetReturnTo()
+    // Nor show them this org's people.
+    useMemberDirectory().reset()
   }
 
   async function fetchUser(): Promise<void> {
