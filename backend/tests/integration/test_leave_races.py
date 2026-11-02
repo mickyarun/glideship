@@ -82,9 +82,11 @@ async def _try_decide(
             return status_for(exc)
 
 
-async def _available(factory: Factory, org: uuid.UUID, user: uuid.UUID) -> Decimal | None:
+async def _available(
+    factory: Factory, org: uuid.UUID, user: uuid.UUID, year: int
+) -> Decimal | None:
     async with factory() as db:
-        summary = await build_summary(db, org, user, None)
+        summary = await build_summary(db, org, user, year)
         return summary.balances[0].available
 
 
@@ -107,9 +109,9 @@ async def test_parallel_submits_cannot_overspend(pg_session_factory: Factory) ->
         _try_submit(pg_session_factory, org, emp, leave_body(casual, week2, week2 + timedelta(2))),
     )
     assert results == [201, 201]
-    assert await _available(pg_session_factory, org, emp) == Decimal("0")
+    assert await _available(pg_session_factory, org, emp, week1.year) == Decimal("0")
     async with pg_session_factory() as db:
-        summary = await build_summary(db, org, emp, None)
+        summary = await build_summary(db, org, emp, week1.year)
     assert summary.lop_days == Decimal("1")
 
 
@@ -174,7 +176,7 @@ async def test_cancelling_leave_under_way_keeps_the_days_taken(
         mon + timedelta(1),
         Decimal("2"),
     )
-    assert await _available(pg_session_factory, org, emp) == Decimal("3")
+    assert await _available(pg_session_factory, org, emp, mon.year) == Decimal("3")
 
 
 async def test_finished_leave_cannot_be_cancelled(

@@ -94,7 +94,7 @@ async def test_approval_refuses_once_the_balance_dropped_below_it(
         # HR takes a day off the balance while it's waiting.
         change = adjustments.BalanceChange(
             org_id=org, actor_id=hr, actor_is_owner=True, user_id=emp,
-            leave_type_id=sick.id, leave_year=None, sees_restricted=True,
+            leave_type_id=sick.id, leave_year=mon.year, sees_restricted=True,
         )  # fmt: skip
         await adjustments.adjust(db, change, D(-1), "Correction")
         await db.commit()
