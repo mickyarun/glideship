@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /** Team boards and their cards, set up through the real boards API. */
-import { randomBytes } from 'node:crypto'
+import { randomInt } from 'node:crypto'
 import type { Api } from './api.ts'
 
 export type Template = 'blank' | 'content-seo' | 'design' | 'ops' | 'product'
@@ -48,7 +48,7 @@ interface BoardDetail {
 
 /** A board key no other test will pick: six capital letters. */
 export function boardKey(): string {
-  return [...randomBytes(6)].map(b => String.fromCharCode(65 + (b % 26))).join('')
+  return Array.from({ length: 6 }, () => String.fromCharCode(65 + randomInt(26))).join('')
 }
 
 /** A board made from a template by ``api``'s member, who becomes its admin. */
