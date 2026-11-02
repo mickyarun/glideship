@@ -336,6 +336,10 @@ class BUDListItem(BaseModel):
     assignee_avatar_url: str | None = None
     open_bug_count: int = 0
     origin: BUDListOrigin | None = None
+    # Whether the PRD and the tech spec are written: the stages they gate
+    # are in app/services/bud_stage_gates.py.
+    has_prd: bool = False
+    has_tech_spec: bool = False
     created_at: datetime
     updated_at: datetime
 

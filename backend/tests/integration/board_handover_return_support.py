@@ -31,6 +31,7 @@ from app.models.bud import BUDDocument, BUDStatus
 from app.services import event_bus
 from tests.integration.board_api_support import Person, ok
 from tests.integration.board_handover_support import Desk, hand_over, stubbed
+from tests.integration.bud_lifecycle_support import written_sections
 from tests.integration.scan_features_bugs_support import Factory
 
 BUDS = "/api/v1/buds"
@@ -59,9 +60,16 @@ async def send_back(
 
 
 async def set_status(factory: Factory, bud_id: uuid.UUID, status: BUDStatus) -> None:
-    """Move a BUD in the database, as dev work would have."""
+    """Move a BUD in the database, as dev work would have, writing what the stage needs."""
     async with factory() as db:
-        await db.execute(update(BUDDocument).where(BUDDocument.id == bud_id).values(status=status))
+        bud = await db.get(BUDDocument, bud_id)
+        assert bud is not None
+        written = written_sections(
+            status, requirements_md=bud.requirements_md, tech_spec_md=bud.tech_spec_md
+        )
+        await db.execute(
+            update(BUDDocument).where(BUDDocument.id == bud_id).values(status=status, **written)
+        )
         await db.commit()
 
 
