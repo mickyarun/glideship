@@ -14,14 +14,19 @@
 
 /** Form controls Vuetify renders in ways a plain `fill` can't drive. */
 import { expect, type Locator, type Page } from '@playwright/test'
+import { settled } from './motion.ts'
 
 /**
  * Opens a select or autocomplete by its label and picks one option. It opens
  * from the keyboard, as a keyboard user would: Vuetify keeps the input itself
  * transparent, so there is nothing visible to click on.
+ *
+ * It waits for the page to settle first: a side sheet still sliding in takes
+ * focus back when it lands, which would close the list just opened.
  */
 export async function pickOption(scope: Page | Locator, label: string | RegExp, option: string | RegExp): Promise<void> {
   const page = 'page' in scope ? scope.page() : scope
+  await settled(page, `the ${String(label)} field`)
   await scope.getByRole('combobox', { name: label }).press('ArrowDown')
   const choice = page.getByRole('option', { name: option, exact: typeof option === 'string' })
   await expect(choice).toBeVisible()
