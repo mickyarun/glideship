@@ -37,6 +37,8 @@ from app.repositories.team import UNSET, TeamRepository, _Unset
 from app.repositories.tracked_repository import TrackedRepoRepository
 from app.repositories.user import UserRepository
 from app.schemas.team import TeamMemberRead, TeamRead, TeamRepoRead
+from app.services.access_recheck import recheck_people
+from app.services.boards.people_service import team_people_changed
 
 __all__ = [
     "MembershipNotFoundError",
@@ -205,10 +207,18 @@ async def update_team(
     use the standard ``None`` = skip convention.
     """
     repo = TeamRepository(db, org_id=org_id)
+    archiving = status is TeamStatus.ARCHIVED and team.status is not TeamStatus.ARCHIVED
+    restoring = status is TeamStatus.ACTIVE and team.status is not TeamStatus.ACTIVE
     try:
-        return await repo.update_team(team, name=name, description=description, status=status)
+        updated = await repo.update_team(team, name=name, description=description, status=status)
     except IntegrityError as exc:
         raise TeamNameConflictError(name or team.name) from exc
+    if archiving:
+        await _recheck_members(db, org_id, team.id)
+    elif restoring:
+        # An active team grants its board roles again.
+        await team_people_changed(db, org_id, team.id)
+    return updated
 
 
 async def archive_team(db: AsyncSession, org_id: uuid.UUID, team: Team) -> Team:
@@ -218,7 +228,19 @@ async def archive_team(db: AsyncSession, org_id: uuid.UUID, team: Team) -> Team:
     team_id can still resolve a name. Re-activate by passing
     ``status=active`` to :func:`update_team`.
     """
-    return await TeamRepository(db, org_id=org_id).update_team(team, status=TeamStatus.ARCHIVED)
+    updated = await TeamRepository(db, org_id=org_id).update_team(team, status=TeamStatus.ARCHIVED)
+    await _recheck_members(db, org_id, team.id)
+    return updated
+
+
+async def _recheck_members(db: AsyncSession, org_id: uuid.UUID, team_id: uuid.UUID) -> None:
+    """An archived team no longer grants board roles; its members' sockets re-check.
+
+    The boards that gave it a role hear ``people_changed``.
+    """
+    members = await TeamRepository(db, org_id=org_id).list_member_ids(team_id)
+    recheck_people(db, org_id, members)
+    await team_people_changed(db, org_id, team_id, losing=members)
 
 
 async def add_member(db: AsyncSession, org_id: uuid.UUID, team: Team, user_id: uuid.UUID) -> None:
@@ -233,6 +255,7 @@ async def add_member(db: AsyncSession, org_id: uuid.UUID, team: Team, user_id: u
         await TeamRepository(db, org_id=org_id).add_member(team, user_id)
     except IntegrityError as exc:
         raise TeamMembershipConflictError(str(user_id)) from exc
+    await team_people_changed(db, org_id, team.id)
 
 
 async def remove_member(
@@ -242,6 +265,9 @@ async def remove_member(
     deleted = await TeamRepository(db, org_id=org_id).remove_member(team_id, user_id)
     if not deleted:
         raise MembershipNotFoundError(f"{team_id}/{user_id}")
+    # Board roles held through the team go with it.
+    recheck_people(db, org_id, {user_id})
+    await team_people_changed(db, org_id, team_id, losing={user_id})
 
 
 async def add_repo(db: AsyncSession, org_id: uuid.UUID, team: Team, repo_id: uuid.UUID) -> None:

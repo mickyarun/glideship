@@ -29,6 +29,7 @@ from app.repositories.bud_timeline import BUDTimelineRepository
 from app.schemas.bud import BUDRead, ReassignmentRequest, RejectTechArchRequest
 from app.services.bud_development import on_bud_development_started
 from app.services.bud_restore import restore_discarded_bud
+from app.services.bud_stage_gates import assert_stage_content
 from app.services.yield_offer_lock import supersede_offers_for_assigned_bud
 
 router = APIRouter()
@@ -96,6 +97,14 @@ async def approve_tech_arch(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only tech leads, managers, or org owners can approve",
         )
+
+    # Approval moves the BUD on to development, which needs its tech spec.
+    assert_stage_content(
+        bud.status,
+        BUDStatus.DEVELOPMENT,
+        requirements_md=bud.requirements_md,
+        tech_spec_md=bud.tech_spec_md,
+    )
 
     meta = dict(bud.metadata_ or {})
     approval_state = meta.get("tech_arch_approval", {})

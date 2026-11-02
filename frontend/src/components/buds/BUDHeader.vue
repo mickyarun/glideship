@@ -15,13 +15,13 @@
  -->
 
 <!-- BUD detail header: breadcrumb, reference / priority / stage, the
-     title (click to rename), who owns it and when it moved, and the
-     actions: history, AI chat, move to the next stage, and the overflow
-     menu. -->
+     title (click to rename), who owns it, the card it came from and when
+     it moved, and the actions: history, AI chat, move to the next stage,
+     and the overflow menu (with Send back for a BUD from a card). -->
 <template>
   <header class="bud-header">
     <nav aria-label="Breadcrumb" class="bud-header__crumbs">
-      <router-link to="/buds">Board</router-link>
+      <router-link to="/buds">Delivery</router-link>
       <span aria-hidden="true">/</span>
       <span aria-current="page" class="bud-header__mono">{{ budRef(bud.bud_number) }}</span>
     </nav>
@@ -76,13 +76,14 @@
               </button>
             </template>
           </BUDAssigneeMenu>
+          <BUDOriginChip :bud-id="bud.id" />
           <span>Created {{ formatDate(bud.created_at) }}</span>
           <span>Updated {{ formatDate(bud.updated_at) }}</span>
           <span v-if="bud.prod_p70_date && !isClosed">Ships by {{ formatDate(bud.prod_p70_date) }} · 70% likely</span>
         </div>
       </div>
 
-      <div class="bud-header__actions">
+      <div class="bud-header__actions bo-header-actions">
         <v-btn variant="text" prepend-icon="mdi-history" title="View edit history and restore earlier versions" @click="emit('open-history')">
           History
         </v-btn>
@@ -97,12 +98,14 @@
         >
           Ask AI
         </v-btn>
+        <span v-if="nextStatus && nextNeeds" :id="needsId" class="bud-header__needs">{{ nextNeeds }}</span>
         <v-btn
-          v-if="nextStatus && canMoveTo(nextStatus)"
+          v-if="nextStatus && (canMoveTo(nextStatus) || nextNeeds)"
           color="primary"
           variant="flat"
           :loading="changingStatus"
-          :disabled="agentLocked || changingStatus"
+          :disabled="agentLocked || changingStatus || !!nextNeeds"
+          :aria-describedby="nextNeeds ? needsId : undefined"
           @click="emit('update-status', nextStatus)"
         >
           Move to {{ BUD_STATUS_LABELS[nextStatus] }}
@@ -116,7 +119,9 @@
           :can-edit-buds="canEditBuds"
           :can-move-to="canMoveTo"
           :can-delete="canDelete"
+          :send-back-to="sendBack.offered.value ? sendBack.card.value?.board.name : null"
           @update-status="emit('update-status', $event)"
+          @send-back="sendBack.ask()"
           @restore="emit('restore')"
           @open-skill-settings="emit('open-skill-settings')"
           @delete="emit('delete')"
@@ -127,11 +132,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import AppMonogram from '@/components/common/AppMonogram.vue'
 import BUDAssigneeMenu from './detail/BUDAssigneeMenu.vue'
 import BUDMoreMenu from './detail/BUDMoreMenu.vue'
 import BUDPriorityMenu from './detail/BUDPriorityMenu.vue'
+import BUDOriginChip from './origin/BUDOriginChip.vue'
+import { useBudSendBack } from '@/composables/useBudSendBack'
 import { BUD_STATUS_COLORS, BUD_STATUS_LABELS, budRef } from '@/types'
 import type { BUDDocument, BUDPriority, BUDStatus } from '@/types'
 import { formatDate } from '@/utils/date'
@@ -141,6 +148,8 @@ const props = defineProps<{
   statusItems: ReadonlyArray<{ title: string; value: BUDStatus }>
   /** The stage the primary button moves to; null hides it. */
   nextStatus: BUDStatus | null
+  /** What the next stage needs written first ("Design needs a PRD first."); disables the button. */
+  nextNeeds?: string | null
   /** Whether the viewer may move the BUD to this stage (buds:edit, or QA out of testing). */
   canMoveTo: (status: BUDStatus) => boolean
   /** A stage change is in flight. */
@@ -157,6 +166,9 @@ const props = defineProps<{
   canEditBuds: boolean
 }>()
 
+// Says what the next stage still needs, beside its disabled Move button.
+const needsId = useId()
+
 const emit = defineEmits<{
   'update:chatOpen': [value: boolean]
   'change-assignee': [memberId: string | null]
@@ -168,6 +180,8 @@ const emit = defineEmits<{
   'open-skill-settings': []
   'open-history': []
 }>()
+
+const sendBack = useBudSendBack(() => props.bud)
 
 const assigneeLabel = computed(() =>
   `${props.bud.assignee_name ? `Assigned to ${props.bud.assignee_name}` : 'Unassigned'}. Change assignee`,

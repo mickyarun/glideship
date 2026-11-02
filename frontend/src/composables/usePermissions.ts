@@ -109,6 +109,12 @@ export function usePermissions() {
   // independently of org admin — keeping competing players out of the answers.
   const canManageQuiz = computed(() => hasPermission('quiz:configure'))
 
+  // Team boards: the boards area, and creating a board (whose creator
+  // becomes its admin). What someone may do on one board comes from that
+  // board's ``capabilities``, never from here.
+  const canViewBoards = computed(() => hasPermission('boards:view'))
+  const canCreateBoards = computed(() => hasPermission('boards:create'))
+
   // Bug board. Each helper pairs the new ``bugs:*`` perm with the
   // legacy ``buds:*`` fallback so role tokens minted before the Step E
   // backend rollout don't lose access. Drop the legacy half once the
@@ -149,6 +155,8 @@ export function usePermissions() {
     canViewCodeSettings,
     canManageRepos,
     canManageQuiz,
+    canViewBoards,
+    canCreateBoards,
     canViewBugs,
     canReportBugs,
     canEditBugs,

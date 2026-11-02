@@ -19,6 +19,8 @@ Routers are split into two groups:
 * **Shared** — reachable by every authenticated member regardless of
   workspace: auth, setup, membership, notifications, and transports that
   authenticate themselves (webhooks, MCP tokens, the Colyseus bridge).
+* **Boards** — team boards, behind ``boards:view`` and a per-board role
+  rather than the engineering workspace.
 * **Engineering** — everything else, mounted under one parent router that
   requires ``workspace:engineering``. A people-only role such as ``sales``
   gets 403 on all of it.
@@ -37,7 +39,9 @@ from app.api.v1.ai_settings import router as ai_settings_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.backlash import internal_router as backlash_internal_router
 from app.api.v1.backlash import router as backlash_router
+from app.api.v1.boards import router as boards_router
 from app.api.v1.bud import router as bud_router
+from app.api.v1.bud_origin import router as bud_origin_router
 from app.api.v1.bug_attachments import router as bug_attachments_router
 from app.api.v1.bug_comments import router as bug_comments_router
 from app.api.v1.bugs import router as bugs_router
@@ -86,11 +90,13 @@ from app.api.v1.roles import router as roles_router
 from app.api.v1.scans import router as scans_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.settings_claude import router as settings_claude_router
+from app.api.v1.settings_delivery import router as settings_delivery_router
 from app.api.v1.settings_github_members import router as settings_gh_members_router
 from app.api.v1.settings_mcp_tokens import router as settings_mcp_tokens_router
 from app.api.v1.settings_repos import router as settings_repos_router
 from app.api.v1.settings_repos_local import router as settings_repos_local_router
 from app.api.v1.settings_slack import router as settings_slack_router
+from app.api.v1.settings_trello import router as settings_trello_router
 from app.api.v1.setup import router as setup_router
 from app.api.v1.skills import router as skills_router
 from app.api.v1.slack import router as slack_router
@@ -175,6 +181,9 @@ api_router.include_router(mcp_remote_router)
 api_router.include_router(internal_colyseus_router, prefix="/api/v1")
 api_router.include_router(backlash_internal_router, prefix="/api/v1")
 api_router.include_router(races_internal_router, prefix="/api/v1")
+# Team boards: open to every member holding ``boards:view``, including
+# people-only roles. Each route then checks the caller's role on its board.
+api_router.include_router(boards_router)
 
 # ── Engineering workspace ───────────────────────────────────────────────
 # Sub-routers must be included into the parent *before* the parent is
@@ -184,6 +193,7 @@ engineering_router = APIRouter(
 )
 engineering_router.include_router(claude_router, prefix="/api/v1/claude")
 engineering_router.include_router(bud_router, prefix="/api/v1/buds")
+engineering_router.include_router(bud_origin_router, prefix="/api/v1/buds")
 engineering_router.include_router(bugs_router, prefix="/api/v1/bugs")
 engineering_router.include_router(bug_comments_router, prefix="/api/v1/bugs")
 engineering_router.include_router(bug_attachments_router, prefix="/api/v1/bugs")
@@ -194,7 +204,9 @@ engineering_router.include_router(agent_skills_router, prefix="/api/v1/settings/
 engineering_router.include_router(settings_repos_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_repos_local_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_slack_router, prefix="/api/v1/settings")
+engineering_router.include_router(settings_trello_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_claude_router, prefix="/api/v1/settings")
+engineering_router.include_router(settings_delivery_router, prefix="/api/v1/settings")
 engineering_router.include_router(ai_settings_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_gh_members_router, prefix="/api/v1/settings")
 engineering_router.include_router(settings_mcp_tokens_router, prefix="/api/v1/settings")

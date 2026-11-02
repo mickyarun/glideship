@@ -25,7 +25,7 @@
  * directly unit-testable.
  */
 
-import type { BugAttachmentLimits } from '@/types'
+import type { AttachmentLimits } from '@/utils/attachmentWire'
 
 /**
  * Fallback limits used before the server's real ones arrive (and in the
@@ -34,14 +34,14 @@ import type { BugAttachmentLimits } from '@/types'
  * limits simply gets a slightly stale hint until the list loads, and
  * the server still has the final say.
  */
-export const DEFAULT_ATTACHMENT_LIMITS: BugAttachmentLimits = {
+export const DEFAULT_ATTACHMENT_LIMITS: AttachmentLimits = {
   maxFileMb: 10,
-  maxFilesPerBug: 10,
+  maxFiles: 10,
   acceptedExtensions: ['.jpeg', '.jpg', '.pdf', '.png', '.xls', '.xlsx'],
 }
 
 /** Value for an `<input type="file">` `accept` attribute, e.g. `.jpg,.pdf`. */
-export function acceptAttribute(limits: BugAttachmentLimits): string {
+export function acceptAttribute(limits: AttachmentLimits): string {
   return limits.acceptedExtensions.join(',')
 }
 
@@ -71,11 +71,11 @@ export function fileExtension(filename: string): string {
  */
 export function attachmentRejectionReason(
   file: File,
-  limits: BugAttachmentLimits,
+  limits: AttachmentLimits,
   currentCount: number,
 ): string | null {
-  if (currentCount >= limits.maxFilesPerBug) {
-    return `Limit of ${limits.maxFilesPerBug} files reached. Remove one before adding another.`
+  if (currentCount >= limits.maxFiles) {
+    return `Limit of ${limits.maxFiles} files reached. Remove one before adding another.`
   }
   const ext = fileExtension(file.name)
   if (!limits.acceptedExtensions.includes(ext)) {

@@ -17,18 +17,22 @@
  *
  * Agents are spawned by skill_invoked events and despawned by skill_completed.
  * Walking and work animations are driven server-side and synced to clients.
+ *
+ * `@view()` fields name engineering work (who ran it, which repository, what
+ * it is doing) and reach only engineering viewers (`rooms/engineeringViews`);
+ * everyone else receives them as empty strings.
  */
-import { Schema, type } from "@colyseus/schema"
+import { Schema, type, view } from "@colyseus/schema"
 
 export class AgentState extends Schema {
   // Identity
   @type("string") agentId = ""           // task_id or unique key
   @type("string") skillSlug = ""
   @type("string") skillName = ""
-  @type("string") actorName = ""
+  @view() @type("string") actorName = ""
 
   // Target
-  @type("string") repoName = ""          // current repo tree
+  @view() @type("string") repoName = ""  // current repo tree
   @type("number") budNumber = 0
 
   // Position
@@ -42,5 +46,5 @@ export class AgentState extends Schema {
   @type("string") action = ""            // current work action (grab/spin/miniguns)
 
   // Label
-  @type("string") message = ""           // e.g., "Analyzing code..."
+  @view() @type("string") message = ""   // e.g., "Analyzing code..."
 }

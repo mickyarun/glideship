@@ -21,38 +21,81 @@
        <AppConfirmDialog v-model="open" title="Close this bug?" body="…" action="Close bug" @confirm="close" />
 
      It stays open while ``busy``; the parent closes it once the action
-     has succeeded. It opens with focus on Cancel, the safe choice. -->
+     has succeeded. It opens with focus on Cancel, the safe choice, and on
+     closing gives focus back to whatever had it when it opened; when that
+     is gone (a deleted row), to ``returnFocus`` (the next row, an add
+     field). ``color`` is the action's: ``error`` for destructive ones.
+     ``secondary`` adds a quieter third choice beside Cancel; ``disabled``
+     holds the action back until there's something to confirm. -->
 <template>
   <v-dialog
     :model-value="modelValue"
     max-width="460"
     :persistent="busy"
+    :aria-labelledby="titleId"
     @update:model-value="emit('update:modelValue', $event)"
     @after-enter="cancel?.$el.focus()"
   >
     <!-- Pinned flat: a confirm opened from inside a menu would otherwise
          pick up the menu-card shadow and border from the theme defaults. -->
     <v-card color="surface" class="app-confirm" :elevation="0" :border="false">
-      <h2 class="app-confirm__title">{{ title }}</h2>
+      <h2 :id="titleId" class="app-confirm__title">{{ title }}</h2>
       <p class="app-confirm__body"><slot name="body">{{ body }}</slot></p>
       <slot />
       <div class="app-confirm__actions">
+        <v-btn v-if="secondary" variant="text" :disabled="busy" @click="emit('secondary')">{{ secondary }}</v-btn>
         <v-btn ref="cancel" variant="text" :disabled="busy" @click="emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" :loading="busy" @click="emit('confirm')">{{ action }}</v-btn>
+        <v-btn :color="color" variant="flat" :loading="busy" :disabled="disabled" @click="emit('confirm')">{{ action }}</v-btn>
       </div>
     </v-card>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref, useId, watch } from 'vue'
 
-withDefaults(defineProps<{ modelValue: boolean; title: string; body?: string; action: string; busy?: boolean }>(), {
-  body: '',
-  busy: false,
-})
-const emit = defineEmits<{ 'update:modelValue': [open: boolean]; confirm: [] }>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean
+    title: string
+    body?: string
+    action: string
+    busy?: boolean
+    color?: 'primary' | 'error' | 'warning'
+    /** Where focus goes on close when the element that opened it is gone. */
+    returnFocus?: HTMLElement | null
+    /** A third choice's label ("Open card"); emits ``secondary``. */
+    secondary?: string
+    /** The action can't be taken yet (nothing picked). */
+    disabled?: boolean
+  }>(),
+  { body: '', busy: false, color: 'primary', returnFocus: null, secondary: '', disabled: false },
+)
+const emit = defineEmits<{ 'update:modelValue': [open: boolean]; confirm: []; secondary: [] }>()
+
+// The dialog is named by its title, so a screen reader announces what it asks.
+const titleId = useId()
 const cancel = ref<{ $el: HTMLElement } | null>(null)
+let opener: HTMLElement | null = null
+
+watch(() => props.modelValue, async (open, was) => {
+  if (open) {
+    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    return
+  }
+  if (!was) return
+  // After the parent has redrawn (a deleted row is gone by then) and the
+  // overlay has let go of focus.
+  await nextTick()
+  setTimeout(restoreFocus)
+}, { immediate: true })
+
+function restoreFocus(): void {
+  if (!opener) return
+  const target = opener.isConnected ? opener : props.returnFocus
+  opener = null
+  target?.focus()
+}
 </script>
 
 <style scoped>

@@ -32,6 +32,7 @@ local Postgres is never touched.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -50,10 +51,13 @@ from testcontainers.postgres import PostgresContainer
 
 from alembic import command
 from app.api.router import api_router
+from app.api.v1._board_errors import register_board_errors
 from app.api.v1._hr_errors import register_hr_errors
 from app.api.v1._leave_errors import register_leave_errors
 from app.database import request_session
+from app.services import background
 from app.services.permission_seeder import seed_permissions
+from tests.integration.board_notify_support import flush_open_fakes
 
 _INTEGRATION_DIR = Path(__file__).resolve().parent
 
@@ -167,6 +171,7 @@ async def client(
     app.include_router(api_router)
     register_leave_errors(app)
     register_hr_errors(app)
+    register_board_errors(app)
 
     async def _db() -> AsyncIterator[AsyncSession]:
         async with pg_session_factory() as session:
@@ -180,3 +185,40 @@ async def client(
     app.dependency_overrides[request_session] = _db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
+
+
+async def drain_background_work() -> None:
+    """Await every fire-and-forget job a test left behind (``background.spawn``, fake Slack sends).
+
+    Without this a job still queued when the test ends is dropped with
+    "coroutine ... was never awaited", or runs in a later test against
+    patches and an engine that are gone.
+    """
+    await flush_open_fakes()
+    while background._tasks:
+        await asyncio.gather(*list(background._tasks), return_exceptions=True)
+
+
+@pytest.fixture(autouse=True)
+def _engine_if_used(request: pytest.FixtureRequest) -> None:
+    """Bring in the test's database engine first, but only for a test that uses it.
+
+    A test without one starts no container. Requested here (outside any
+    event loop, so the migrations can run), the engine is disposed only after
+    :func:`_drain_background` has drained.
+    """
+    if "pg_session_factory" in request.fixturenames:
+        request.getfixturevalue("pg_session_factory")
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _drain_background(
+    _engine_if_used: None, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[None]:
+    """Drain background work at teardown, while the test's patches and engine are still up.
+
+    Depending on ``monkeypatch`` and :func:`_engine_if_used` puts this
+    teardown before theirs.
+    """
+    yield
+    await drain_background_work()

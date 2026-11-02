@@ -24,6 +24,42 @@ from app.models.agent_skill_bud_stage import AgentSkillBudStage
 from app.models.backend_route_cache import BackendRouteCache
 from app.models.backlash import BacklashMatch, BacklashPlayerStats
 from app.models.base import Base, BaseModel
+from app.models.board import Board, BoardLabel, BoardStage
+from app.models.board_agent import (
+    BoardAgentRunStatus,
+    BoardAgentTrigger,
+    BoardCardAgentRun,
+    BoardStageAgent,
+)
+from app.models.board_card import (
+    BoardCard,
+    BoardCardAssignee,
+    BoardCardKeyAlias,
+    BoardCardLabel,
+)
+from app.models.board_card_detail import (
+    BoardCardAttachment,
+    BoardCardChecklistItem,
+    BoardCardComment,
+    BoardCardEvent,
+)
+from app.models.board_card_doc import BoardCardDoc
+from app.models.board_enums import (
+    BoardAttachmentKind,
+    BoardCardDocKind,
+    BoardCardDocState,
+    BoardCardEventType,
+    BoardHandoverStatus,
+    BoardLabelColor,
+    BoardMemberRole,
+    BoardStageCategory,
+    BoardStatus,
+    BoardVisibility,
+    StageRequiredField,
+)
+from app.models.board_handover import BoardCardHandover, BoardCardHandoverKey
+from app.models.board_member import BoardMember, BoardTeam, BoardUserPrefs
+from app.models.board_repo import BoardRepo
 from app.models.bud import (
     BUDChatMessage,
     BUDDesign,
@@ -56,12 +92,21 @@ from app.models.cluster_cache import ClusterCache
 from app.models.design_system import DesignSystemRef
 from app.models.dev_activity import DevActivityLog
 from app.models.developer_xp import DeveloperXP, RewardEvent, RewardType
+from app.models.digest_claim import DigestClaim
 from app.models.employee_audit_event import EmployeeAuditEvent
 from app.models.employee_document import EmployeeDocument
 from app.models.employee_profile import EmployeeProfile
 from app.models.employee_reporting_manager import EmployeeReportingManager
 from app.models.employee_sensitive import EmployeeSensitiveDetails
 from app.models.enterprise_rule import EnterpriseRule
+from app.models.external_import import (
+    ExternalImportSession,
+    ExternalImportStatus,
+    ExternalItemMap,
+    ExternalItemStatus,
+    ImportMode,
+    ImportSourceKind,
+)
 from app.models.feature import Feature
 from app.models.feature_learning import FeatureLearning
 from app.models.feature_match_log import FeatureMatchLog
@@ -143,6 +188,39 @@ __all__ = [
     "BUDAgentTask",
     "Base",
     "BaseModel",
+    "Board",
+    "BoardAgentRunStatus",
+    "BoardAgentTrigger",
+    "BoardAttachmentKind",
+    "BoardCardAgentRun",
+    "BoardStageAgent",
+    "BoardCard",
+    "BoardCardAssignee",
+    "BoardCardAttachment",
+    "BoardCardChecklistItem",
+    "BoardCardComment",
+    "BoardCardDoc",
+    "BoardCardDocKind",
+    "BoardCardDocState",
+    "BoardCardEvent",
+    "BoardCardEventType",
+    "BoardCardHandover",
+    "BoardCardHandoverKey",
+    "BoardCardKeyAlias",
+    "BoardCardLabel",
+    "BoardHandoverStatus",
+    "BoardLabel",
+    "BoardLabelColor",
+    "BoardMember",
+    "BoardMemberRole",
+    "BoardRepo",
+    "BoardStage",
+    "BoardStageCategory",
+    "BoardStatus",
+    "BoardTeam",
+    "BoardUserPrefs",
+    "BoardVisibility",
+    "StageRequiredField",
     "BUDChatMessage",
     "BUDDesign",
     "BUDDesignStatus",
@@ -196,6 +274,8 @@ __all__ = [
     "RepoRunStatus",
     "ScanKind",
     "StepStatus",
+    "ImportMode",
+    "ImportSourceKind",
     "ImportStatus",
     "JiraImportSession",
     "JiraIssueBudMap",
@@ -246,6 +326,11 @@ __all__ = [
     "TeamMember",
     "TeamRepo",
     "TeamStatus",
+    "ExternalImportSession",
+    "ExternalImportStatus",
+    "ExternalItemMap",
+    "ExternalItemStatus",
+    "DigestClaim",
     "Feature",
     "FeatureQASession",
     "FeatureQAStatus",

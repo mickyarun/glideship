@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Custom roles that existed before the engineering workspace gate keep their access."""
+"""Custom roles that existed before a backfilled permission keep their access."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ import uuid
 import pytest
 from sqlalchemy import delete, select
 
+from app.core.permissions import WORKSPACE_ENGINEERING
+from app.core.permissions_boards import BOARDS_VIEW
 from app.models.permission import Permission
 from app.models.role import RolePermission
 from app.repositories.user import UserRepository
@@ -28,7 +30,6 @@ from app.services.permission_seeder import seed_permissions
 from tests.integration.leave_support import Factory, give_custom_role, setup_org
 
 pytestmark = pytest.mark.integration
-GATE = "workspace:engineering"
 
 
 async def _role_perms(factory: Factory, org: uuid.UUID, user: uuid.UUID) -> set[str]:
@@ -43,24 +44,25 @@ async def _role_perms(factory: Factory, org: uuid.UUID, user: uuid.UUID) -> set[
         return set(rows)
 
 
+@pytest.mark.parametrize("gate", [WORKSPACE_ENGINEERING, BOARDS_VIEW])
 async def test_the_gate_reaches_existing_custom_roles_only_once(
-    pg_session_factory: Factory,
+    pg_session_factory: Factory, gate: str
 ) -> None:
     org, (before, after), _ = await setup_org(pg_session_factory, "Before", "After")
     async with pg_session_factory() as db:
         # An install from before the gate: no such permission yet.
-        gate = (await db.scalars(select(Permission).where(Permission.resource_id == GATE))).one()
-        await db.execute(delete(RolePermission).where(RolePermission.permission_id == gate.id))
-        await db.delete(gate)
+        row = (await db.scalars(select(Permission).where(Permission.resource_id == gate))).one()
+        await db.execute(delete(RolePermission).where(RolePermission.permission_id == row.id))
+        await db.delete(row)
         await db.commit()
     await give_custom_role(pg_session_factory, org, before, "knowledge:view")
     async with pg_session_factory() as db:
         await seed_permissions(db)
         await db.commit()
-    assert GATE in await _role_perms(pg_session_factory, org, before)
+    assert gate in await _role_perms(pg_session_factory, org, before)
     # A role made after the upgrade (say, for sales) isn't touched by later boots.
     await give_custom_role(pg_session_factory, org, after, "knowledge:view")
     async with pg_session_factory() as db:
         await seed_permissions(db)
         await db.commit()
-    assert GATE not in await _role_perms(pg_session_factory, org, after)
+    assert gate not in await _role_perms(pg_session_factory, org, after)

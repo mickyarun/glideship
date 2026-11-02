@@ -22,6 +22,8 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from app.services.slack_mrkdwn import escape_mrkdwn
+
 APPROVE = "leave_approve"
 REJECT = "leave_reject"
 OPEN = "leave_open"
@@ -32,24 +34,19 @@ NOTE_INPUT = "note_input"
 Block = dict[str, Any]
 
 
-def escape(text: str) -> str:
-    """Escape Slack's control characters so names can't inject mrkdwn links."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
 def _plain(text: str) -> dict[str, str]:
     return {"type": "plain_text", "text": text}
 
 
 def _section(text: str) -> Block:
-    return {"type": "section", "text": {"type": "mrkdwn", "text": escape(text)}}
+    return {"type": "section", "text": {"type": "mrkdwn", "text": escape_mrkdwn(text)}}
 
 
 def _context(lines: Sequence[str]) -> list[Block]:
     """Small grey lines; none at all when there's nothing to say."""
     if not lines:
         return []
-    elements = [{"type": "mrkdwn", "text": escape(line)} for line in lines]
+    elements = [{"type": "mrkdwn", "text": escape_mrkdwn(line)} for line in lines]
     return [{"type": "context", "elements": elements}]
 
 
@@ -73,7 +70,7 @@ def approval_blocks(
                     "value": value,
                     "confirm": {
                         "title": _plain("Approve this request?"),
-                        "text": {"type": "mrkdwn", "text": escape(text)},
+                        "text": {"type": "mrkdwn", "text": escape_mrkdwn(text)},
                         "confirm": _plain("Approve"),
                         "deny": _plain("Not yet"),
                     },
@@ -95,7 +92,7 @@ def outcome_blocks(text: str, outcome: str) -> list[Block]:
     """The request line with its outcome instead of buttons."""
     return [
         _section(text),
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": escape(outcome)}]},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": escape_mrkdwn(outcome)}]},
     ]
 
 

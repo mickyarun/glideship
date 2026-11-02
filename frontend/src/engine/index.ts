@@ -65,6 +65,8 @@ import { PerfHud } from './utils/PerfHud'
 import { classifyDiff } from './core/SceneDiff'
 import { PostFX } from './rendering/PostFX'
 import { AmbientParticles } from './effects/AmbientParticles'
+import { BoardActivityEffects } from './effects/BoardActivityEffects'
+import { EMOTE } from './characters/EmoteHolds'
 import { VehicleController } from './vehicles/VehicleController'
 import { VehicleSystem } from './vehicles/VehicleSystem'
 import { getVehicleDef } from './vehicles/VehicleManifest'
@@ -152,6 +154,8 @@ export class GardenEngine {
   private takeoverUI: TakeoverUI | null = null
   private takeoverProximity: ProximitySystem | null = null
   private takeoverUserId: string | null = null
+  /** Board work celebrated in the garden (org room `board_activity`). */
+  private boardActivity: BoardActivityEffects | null = null
   private vehicleCtrl: VehicleController | null = null
   private vehicleSystem: VehicleSystem | null = null
   /** Set of unlocked vehicle IDs — gates V-key mount. */
@@ -241,6 +245,16 @@ export class GardenEngine {
 
     // Scene manager — orchestrates all Phase 2+ subsystems
     this.sceneManager = new SceneManager(this.app, this.materials)
+
+    this.boardActivity = new BoardActivityEffects({
+      cheer: (userId, seconds) => this.sceneManager?.characterSystemRef?.cheer(userId, seconds) ?? false,
+      takeover: () => {
+        const ctrl = this.takeoverCtrl
+        const userId = this.takeoverUserId
+        return ctrl && userId ? { userId, cheer: () => ctrl.playEmote(EMOTE.cheer) } : null
+      },
+      overlay: () => this.canvas?.parentElement ?? null,
+    })
     // setCurrentUser may have been called before init(); replay the id so the
     // village build picks up "your home" highlighting on the first scene build.
     this.sceneManager.setCurrentUserId(this.currentUser?.id ?? null)
@@ -513,6 +527,8 @@ export class GardenEngine {
       }
     }
 
+    this.orgRoomClient.onBoardActivity = (event) => this.boardActivity?.handle(event)
+
     // Replay cached snapshots so the freshly-rebuilt systems render everything
     // that was present before the rebuild. First-connect replays are no-ops
     // because the cache is empty until after `room.joinOrCreate` resolves.
@@ -645,6 +661,7 @@ export class GardenEngine {
    */
   async disconnectOrgRoom(): Promise<void> {
     if (this.orgRoomClient) {
+      this.orgRoomClient.onBoardActivity = null
       try {
         await this.orgRoomClient.disconnect()
       } catch (err) {
@@ -1890,6 +1907,7 @@ export class GardenEngine {
     } catch (err) {
       console.warn('[GardenEngine] disconnectOrgRoom failed during destroy:', err)
     }
+    this.boardActivity = null
 
     // Subsystem teardowns. Each is wrapped individually so a throw in one
     // (e.g. an animation frame already ran on torn-down state, a vehicle

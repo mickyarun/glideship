@@ -132,6 +132,8 @@ CAPABILITIES: dict[AIProvider, ProviderCapabilities] = {
         version_cmd=("codex", "--version"),
         install_hint="Install: npm install -g @openai/codex",
         docs_url="https://developers.openai.com/codex/cli",
+        # ``codex exec`` has no flag that removes its shell and file tools.
+        scopes_builtin_tools=False,
     ),
     AIProvider.ollama: ProviderCapabilities(
         provider=AIProvider.ollama,

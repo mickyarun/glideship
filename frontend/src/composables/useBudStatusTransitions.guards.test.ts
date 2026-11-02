@@ -37,16 +37,20 @@ import { useBudStatusTransitions } from '@/composables/useBudStatusTransitions'
 
 let bud: BUDDocument | null
 const setActiveTab = vi.fn()
-const reloadTimeline = vi.fn(async () => undefined)
+const onStatusChanged = vi.fn(async () => undefined)
 
 function at(status: BUDStatus, extra: Record<string, unknown> = {}) {
   bud = { id: 'bud-1', status, ...extra } as unknown as BUDDocument
   return useBudStatusTransitions({
     getBud: () => bud,
+    // As the BUD page does: refresh the open BUD, then read it again.
+    refreshBud: async (id: string) => {
+      await store.refreshBUDIfCurrent(id)
+      return bud
+    },
     setActiveTab,
     getStatusTabMap: () => STATUS_TAB_MAP,
-    triggerDesignGeneration: vi.fn(),
-    reloadTimeline,
+    onStatusChanged,
   })
 }
 
@@ -72,7 +76,7 @@ describe('entering code review', () => {
     await c.confirmNoPRWarning()
     expect(c.showNoPRWarningDialog.value).toBe(false)
     expect(store.updateBUD).toHaveBeenCalledWith('bud-1', { status: 'code_review' })
-    expect(setActiveTab).toHaveBeenCalledWith('code-review')
+    expect(setActiveTab).toHaveBeenCalledWith('code-review', expect.objectContaining({ id: 'bud-1' }))
   })
 
   it('moves straight on with an open PR', async () => {
@@ -81,7 +85,7 @@ describe('entering code review', () => {
     await c.updateStatus('code_review')
     expect(c.showNoPRWarningDialog.value).toBe(false)
     expect(store.updateBUD).toHaveBeenCalledWith('bud-1', { status: 'code_review' })
-    expect(reloadTimeline).toHaveBeenCalled()
+    expect(onStatusChanged).toHaveBeenCalled()
   })
 })
 
@@ -135,7 +139,7 @@ describe('leaving testing', () => {
 
     c.openQATab()
     expect(c.showPendingCasesDialog.value).toBe(false)
-    expect(setActiveTab).toHaveBeenCalledWith('testing')
+    expect(setActiveTab).toHaveBeenCalledWith('testing', expect.objectContaining({ id: 'bud-1' }))
   })
 
   it('reads the cases only after a result still saving has landed', async () => {
@@ -155,7 +159,7 @@ describe('leaving testing', () => {
     const c = at('testing', { qa_manual_cases: [{ id: 't1', title: 'x', result: 'fail' }] })
     await c.updateStatus('prod')
     expect(store.updateBUD).toHaveBeenCalledWith('bud-1', { status: 'prod' })
-    expect(setActiveTab).toHaveBeenCalledWith('prod')
+    expect(setActiveTab).toHaveBeenCalledWith('prod', expect.objectContaining({ id: 'bud-1' }))
   })
 })
 
@@ -170,7 +174,7 @@ describe('a refused stage change', () => {
     expect(c.statusErrorSnackbar.value).toBe(true)
     expect(c.statusErrorMessage.value).toBe('Manual test cases still pending')
     expect(setActiveTab).not.toHaveBeenCalled()
-    expect(reloadTimeline).not.toHaveBeenCalled()
+    expect(onStatusChanged).not.toHaveBeenCalled()
     expect(c.changingStatus.value).toBe(false)
   })
 
@@ -204,5 +208,29 @@ describe('cancelling', () => {
     expect(c.statusErrorMessage.value).toBe('Already finished')
     expect(c.statusInfoSnackbar.value).toBe(false)
     expect(c.cancellingDesignId.value).toBeNull()
+  })
+})
+
+describe('the BUD a change is about', () => {
+  it('is the one asked about, even if the page moves to another while it checks', async () => {
+    prs('open')
+    const c = at('code_review')
+    const asked = c.updateStatus('testing')
+    bud = { id: 'bud-2', status: 'design' } as unknown as BUDDocument
+    await asked
+    expect(c.overrideReasonDialog.value).toBe(true)
+    c.overrideReasonText.value = 'Docs only'
+    await c.confirmOverrideStatus()
+    expect(store.updateBUD).toHaveBeenCalledWith('bud-1', { status: 'testing', status_override_reason: 'Docs only' })
+  })
+
+  it('takes no new change while a dialog waits on the last one', async () => {
+    const c = at('prod')
+    await c.updateStatus('closed')
+    expect(c.showCloseConfirmDialog.value).toBe(true)
+    await c.updateStatus('testing')
+    expect(c.busy.value).toBe(true)
+    await c.confirmClose()
+    expect(store.updateBUD.mock.calls).toEqual([['bud-1', { status: 'closed' }]])
   })
 })

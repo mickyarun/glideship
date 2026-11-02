@@ -28,13 +28,19 @@ from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.api.router import api_router
+from app.api.v1._board_errors import register_board_errors
 from app.api.v1._hr_errors import register_hr_errors
 from app.api.v1._leave_errors import register_leave_errors
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.event_loop import configure_event_loop_policy
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
+from app.repositories.board_agent_run_sweep import recover_stuck_board_agent_runs
+from app.repositories.external_import_sweep import recover_stuck_external_imports
+from app.services.boards.agents.stale_sweep import run_forever as run_board_agent_stale_sweep
+from app.services.boards.due_reminders import run_forever as run_board_due_reminders
 from app.services.celebrations.scheduler import run_forever as run_celebrations
+from app.services.imports.sweeper import run_forever as run_import_sweep
 from app.services.leave.carry_scheduler import run_forever as run_leave_carry_forward
 from app.services.leave.digest_scheduler import run_forever as run_leave_digest
 from app.services.leave.slack_status.scheduler import run_forever as run_slack_status
@@ -80,10 +86,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # subscribers (dashboard WebSocket) AND to each registered transport.
     # Colyseus forwarding lives here so the multiplayer server sees every
     # agent event regardless of which handler raised it.
-    from app.services.colyseus_forwarder import forward_agent_activity_to_colyseus
+    from app.services.colyseus_forwarder import forward_activity_to_colyseus
     from app.services.event_bus import register_transport
 
-    register_transport(forward_agent_activity_to_colyseus)
+    register_transport(forward_activity_to_colyseus)
 
     from app.services.job_handlers import setup_job_handlers
     from app.services.job_queue import cleanup_completed_jobs, start_workers, stop_workers
@@ -228,6 +234,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.warning("import_session_recovery_failed", exc_info=True)
 
+    # 6c. Board imports interrupted by the restart become failed; starting
+    # one again resumes after its last committed batch.
+    try:
+        async with AsyncSessionLocal() as session:
+            recovered = await recover_stuck_external_imports(session)
+            await session.commit()
+        if recovered:
+            logger.info("recovered_stuck_board_imports", count=recovered)
+    except Exception:
+        logger.warning("board_import_recovery_failed", exc_info=True)
+
+    # 6d. Board agent runs interrupted by the restart become failed, so the
+    # card's one-active-run slot frees up and Retry can start them again.
+    try:
+        async with AsyncSessionLocal() as session:
+            recovered = await recover_stuck_board_agent_runs(session)
+            await session.commit()
+        if recovered:
+            logger.info("recovered_stuck_board_agent_runs", count=recovered)
+    except Exception:
+        logger.warning("board_agent_run_recovery_failed", exc_info=True)
+
     # 7. Periodic Slack presence polling
     from app.services.presence_cache import refresh_all_presence
 
@@ -299,6 +327,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # digest per org per local date to the configured Slack channel. No-ops
     # entirely until an org sets a channel and flips the feature on.
     celebrations_task = asyncio.create_task(run_celebrations())
+    # 8j. Board imports left unfinished past their retention are removed with
+    # their files — hourly by default, single-instance like the sweeps above.
+    import_sweep_task = asyncio.create_task(run_import_sweep())
+    # 8k. Board due reminders: each morning (org time, leave digest timezone)
+    # one DM and in-app note per assignee, claimed once per person-day.
+    board_due_task = asyncio.create_task(run_board_due_reminders())
+    # 8l. Card agent runs past their deadline plus a grace are failed, so a
+    # hung or lost job never holds its card's one active run.
+    board_agent_stale_task = asyncio.create_task(run_board_agent_stale_sweep())
 
     # 9. PR-merge Redis-stream worker pool. One consumer per
     # (org, repo) stream; supervisor task spawns consumers lazily as
@@ -343,6 +380,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     leave_carry_task.cancel()
     quiz_rollup_task.cancel()
     celebrations_task.cancel()
+    import_sweep_task.cancel()
+    board_due_task.cancel()
+    board_agent_stale_task.cancel()
     if pr_merge_pool is not None:
         await pr_merge_pool.stop()
     await stop_workers()
@@ -370,8 +410,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    # Content-Disposition carries CSV export file names to a cross-origin SPA.
-    expose_headers=["X-Design-Job-Id", "Content-Disposition"],
+    # Content-Disposition carries CSV export file names to a cross-origin SPA;
+    # Retry-After tells it when a busy or rate-limited request may try again.
+    expose_headers=["X-Design-Job-Id", "Content-Disposition", "Retry-After"],
 )
 
 
@@ -416,6 +457,7 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=_block_cors_on_mcp)
 app.include_router(api_router)
 register_leave_errors(app)
 register_hr_errors(app)
+register_board_errors(app)
 
 
 @app.get("/")

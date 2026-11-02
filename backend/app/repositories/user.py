@@ -19,20 +19,19 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Select, and_, case, false, func, null, or_, select, true
+from sqlalchemy import Select, and_, case, func, null, or_, select, true
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import update as sql_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.core.role_defs import UNASSIGNED_MEMBER_PERMISSIONS
 from app.models.developer_xp import DeveloperXP
-from app.models.permission import Permission
-from app.models.role import Role, RolePermission, RoleScopeType
+from app.models.role import Role, RoleScopeType
 from app.models.skill_profile import SkillProfile
 from app.models.user import OrgToUser, User, UserEmailAlias, UserRole
 from app.repositories.base import BaseRepository, SelectT, rowcount
+from app.repositories.membership_predicates import membership_holds
 
 
 def _effective_role_case(base_role_alias: Any) -> Any:
@@ -61,39 +60,6 @@ def _effective_role_case(base_role_alias: Any) -> Any:
         (Role.scope_type == RoleScopeType.CUSTOM, base_role_alias.name),
         else_=Role.name,
     )
-
-
-def _membership_holds(permission: str) -> Any:
-    """SQL predicate: the ``OrgToUser`` row's role grants ``permission``.
-
-    Correlates on ``OrgToUser.role_id`` from the enclosing query. The
-    system ``org_owner`` role holds every permission.
-    """
-    holds = (
-        select(RolePermission.role_id)
-        .join(Permission, Permission.id == RolePermission.permission_id)
-        .where(
-            RolePermission.role_id == OrgToUser.role_id,
-            Permission.resource_id == permission,
-        )
-        .exists()
-    )
-    is_owner = (
-        select(Role.id)
-        .where(
-            Role.id == OrgToUser.role_id,
-            Role.scope_type == RoleScopeType.SYSTEM,
-            Role.name == UserRole.ORG_OWNER.value,
-        )
-        .exists()
-    )
-    # Role-less memberships resolve to the unassigned-member set, the same
-    # rule ``permission_deps.permissions_for_role`` applies in Python.
-    unassigned = and_(
-        OrgToUser.role_id.is_(None),
-        true() if permission in UNASSIGNED_MEMBER_PERMISSIONS else false(),
-    )
-    return or_(holds, is_owner, unassigned)
 
 
 def _role_from_name(name: str | None) -> UserRole | None:
@@ -258,7 +224,7 @@ class UserRepository(BaseRepository[User]):
             )
         )
         if permission is not None:
-            stmt = stmt.where(_membership_holds(permission))
+            stmt = stmt.where(membership_holds(permission))
         if user_ids is not None:
             stmt = stmt.where(User.id.in_(list(user_ids)))
         result = await self._db.execute(stmt)
@@ -803,7 +769,7 @@ class UserRepository(BaseRepository[User]):
             .where(
                 OrgToUser.org_id == org_id,
                 User.is_active.is_(True),
-                _membership_holds(permission),
+                membership_holds(permission),
             )
         )
         return list((await self._db.execute(stmt)).scalars().all())

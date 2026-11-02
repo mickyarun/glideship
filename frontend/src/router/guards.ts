@@ -92,6 +92,12 @@ async function loadPermissions(): Promise<string[] | null> {
   return authStore.user?.permissions ?? null
 }
 
+/** The signed-in user's home, from their permissions and whether they have boards. */
+async function loadHome(): Promise<RouteLocationRaw> {
+  const permissions = await loadPermissions()
+  return homeRouteFor(permissions, useAuthStore().user?.has_boards)
+}
+
 function satisfies(permissions: string[], required: string | string[]): boolean {
   return Array.isArray(required)
     ? required.some(p => permissions.includes(p))
@@ -103,8 +109,9 @@ async function accessRedirect(to: RouteLocationNormalized): Promise<RouteLocatio
   if (!workspace && !permission) return null
   const permissions = await loadPermissions()
   if (permissions === null) return null
-  if (workspace && !canOpenWorkspace(permissions, workspace)) return homeRouteFor(permissions)
-  if (permission && !satisfies(permissions, permission)) return homeRouteFor(permissions)
+  const hasBoards = useAuthStore().user?.has_boards
+  if (workspace && !canOpenWorkspace(permissions, workspace)) return homeRouteFor(permissions, hasBoards)
+  if (permission && !satisfies(permissions, permission)) return homeRouteFor(permissions, hasBoards)
   return null
 }
 
@@ -134,7 +141,7 @@ export function installGuards(router: Router): void {
 
     // Setup done, or already signed in — leave setup/login for home
     if ((done && to.name === 'setup') || (to.name === 'login' && hasToken)) {
-      return homeRouteFor(await loadPermissions())
+      return loadHome()
     }
 
     return (await accessRedirect(to)) ?? true

@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock
 
 from app.core.deps import PermissionSet, is_org_owner
 from app.core.permissions import SENSITIVE_PERMISSION_IDS, WORKSPACE_ENGINEERING
+from app.core.permissions_boards import BOARDS_VIEW
 from app.core.role_defs import (
     DEFAULT_SYSTEM_ROLES,
     RESERVED_ROLE_NAMES,
@@ -59,8 +60,8 @@ def test_every_existing_role_keeps_engineering_access() -> None:
         assert WORKSPACE_ENGINEERING in perms, f"{name} lost engineering access"
 
 
-def test_sales_role_has_no_permissions() -> None:
-    assert ROLES["sales"] == set()
+def test_sales_role_can_only_open_boards() -> None:
+    assert ROLES["sales"] == {BOARDS_VIEW}
 
 
 def test_hr_role_is_people_only() -> None:

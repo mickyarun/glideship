@@ -14,8 +14,11 @@
 
 import { createRouter, createWebHistory } from 'vue-router'
 import { installGuards } from './guards'
+import { boardRoutes } from './routes/boards'
 import { engineeringRoutes } from './routes/engineering'
+import { gardenRoutes } from './routes/garden'
 import { peopleRoutes } from './routes/people'
+import { GARDEN_PERMISSIONS } from '@/utils/workspace'
 
 export { resetSetupCache } from './guards'
 
@@ -55,10 +58,10 @@ const router = createRouter({
       component: () => import('@/views/methodology/MethodologyView.vue'),
     },
     {
-      // The garden avatar picker — part of the engineering workspace.
+      // The garden avatar picker, for anyone who may enter the Garden.
       path: '/character-select',
       name: 'character-select',
-      meta: { workspace: 'engineering' },
+      meta: { permission: [...GARDEN_PERMISSIONS], shortcuts: false },
       component: () => import('@/views/character/CharacterSelectView.vue'),
     },
     {
@@ -74,7 +77,7 @@ const router = createRouter({
     {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
-      children: [...engineeringRoutes, ...peopleRoutes],
+      children: [...engineeringRoutes, ...boardRoutes, ...gardenRoutes, ...peopleRoutes],
     },
   ],
 })

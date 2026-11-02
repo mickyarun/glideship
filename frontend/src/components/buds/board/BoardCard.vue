@@ -14,14 +14,17 @@
  * limitations under the License.
  -->
 
-<!-- One BUD on the board. The title link stretches over the whole card,
-     so the bug-count link and the Restore button sit above it and stay
-     separately clickable without nesting interactive elements. -->
+<!-- One BUD on the board. A movable one carries ``data-card-id`` for the
+     board's drag list; its ⋯ menu moves it from the keyboard. The title link stretches over the whole card,
+     so the origin card's link (when I can open its board), the bug-count
+     link and the Restore button sit above it and stay separately
+     clickable without nesting interactive elements. -->
 <template>
-  <article class="board-card">
+  <article class="board-card" :data-card-id="draggable ? bud.id : undefined">
     <div class="board-card__top">
       <span class="board-card__ref">{{ budRef(bud.bud_number) }}</span>
       <BudPriorityChip :priority="bud.priority" />
+      <BudOriginLink v-if="bud.origin" :origin="bud.origin" />
       <span
         v-if="bud.complexity"
         class="board-card__dots"
@@ -30,10 +33,20 @@
       >
         <span v-for="i in 5" :key="i" class="board-card__dot" :class="{ 'board-card__dot--on': i <= bud.complexity }" />
       </span>
+      <span class="board-card__menu">
+        <BudCardMenu
+          :bud="bud"
+          :stages="stages"
+          :can-move="canMove && !!draggable"
+          :block-for="blockFor"
+          @move="emit('move', bud, $event)"
+          @copied="emit('copied', bud)"
+        />
+      </span>
     </div>
 
     <h3 class="board-card__title">
-      <router-link :to="`/buds/${bud.id}`" class="board-card__link">{{ bud.title }}</router-link>
+      <router-link :to="`/buds/${bud.id}`" class="board-card__link" draggable="false" data-card-link>{{ bud.title }}</router-link>
     </h3>
 
     <span v-for="line in lines" :key="line.text" class="board-card__status" :class="`board-card__status--${line.tone}`">
@@ -86,8 +99,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
+import BudCardMenu from '@/components/buds/board/BudCardMenu.vue'
+import BudOriginLink from '@/components/buds/board/BudOriginLink.vue'
 import AppMonogram from '@/components/common/AppMonogram.vue'
-import { budRef, type BUDListItem } from '@/types'
+import { budRef, type BUDListItem, type BUDStatus } from '@/types'
 import { budAge, cardStatusLines } from '@/utils/budBoard'
 import { formatDate } from '@/utils/date'
 
@@ -95,11 +110,20 @@ const props = defineProps<{
   bud: BUDListItem
   now: Date
   canRestore: boolean
+  /** Not closed or discarded, so it can change stage: by drag (it carries ``data-card-id``) or its menu. */
+  draggable?: boolean
+  /** The stages its menu offers. */
+  stages: readonly BUDStatus[]
+  /** The viewer may move BUDs (buds:edit, or buds:test out of testing). */
+  canMove: boolean
+  /** Why it can't go to a stage yet, or null. */
+  blockFor: (stage: BUDStatus) => string | null
 }>()
 
-const emit = defineEmits<{ restore: [bud: BUDListItem] }>()
+const emit = defineEmits<{ restore: [bud: BUDListItem]; move: [bud: BUDListItem, stage: BUDStatus]; copied: [bud: BUDListItem] }>()
 
 const lines = computed(() => cardStatusLines(props.bud, props.now))
+
 </script>
 
 <style scoped>
@@ -107,8 +131,8 @@ const lines = computed(() => cardStatusLines(props.bud, props.now))
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 12px 10px;
+  gap: var(--board-card-gap);
+  padding: var(--board-card-padding);
   background: rgb(var(--v-theme-surface));
   border: 1px solid rgb(var(--v-theme-rule));
   border-radius: var(--radius-card);
@@ -132,6 +156,13 @@ const lines = computed(() => cardStatusLines(props.bud, props.now))
   display: inline-flex;
   gap: 3px;
   margin-left: auto;
+}
+/* The menu ends the row, just after the complexity dots when there are any. */
+.board-card__menu {
+  margin: -4px -6px -4px auto;
+}
+.board-card__dots + .board-card__menu {
+  margin-left: 0;
 }
 .board-card__dot {
   width: 5px;

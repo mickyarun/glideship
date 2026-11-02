@@ -36,12 +36,7 @@
     >
       <SidebarHead v-if="!compact" :collapsed="collapsed" />
 
-      <!-- role="none": the drawer is already a <nav> of links, and a list
-           role would need list items around each one. -->
-      <v-list density="compact" nav class="px-2" role="none">
-        <EngineeringNav v-if="canAccessEngineering" :rail="collapsed" />
-        <PeopleNav :rail="collapsed" :show-heading="canAccessEngineering" />
-      </v-list>
+      <SidebarNavList :rail="collapsed" />
 
       <template #append>
         <v-divider class="mb-2" />
@@ -84,27 +79,28 @@
     </v-main>
 
     <EngineeringOverlays v-if="authStore.user?.id && canAccessEngineering" />
+    <BoardSwitcherHost v-if="canViewBoards" />
   </v-app>
 </template>
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import EngineeringNav from '@/components/layout/EngineeringNav.vue'
+import BoardSwitcherHost from '@/components/boards/switcher/BoardSwitcherHost.vue'
 import EngineeringOverlays from '@/components/layout/EngineeringOverlays.vue'
 import DesktopTopBar from '@/components/layout/DesktopTopBar.vue'
 import MobileTopBar from '@/components/layout/MobileTopBar.vue'
-import PeopleNav from '@/components/layout/PeopleNav.vue'
 import SettingsNav from '@/components/layout/SettingsNav.vue'
 import SidebarFoot from '@/components/layout/SidebarFoot.vue'
 import SidebarHead from '@/components/layout/SidebarHead.vue'
+import SidebarNavList from '@/components/layout/SidebarNavList.vue'
 import { TOP_BAR_HEIGHT } from '@/constants/layout'
 import { useAppDrawer } from '@/composables/useAppDrawer'
 import { usePermissions } from '@/composables/usePermissions'
 import { useNavigationProgress } from '@/composables/useNavigationProgress'
 
 const authStore = useAuthStore()
-const { canAccessEngineering, canManageMembers } = usePermissions()
+const { canAccessEngineering, canManageMembers, canViewBoards } = usePermissions()
 
 // Driven by the router guards — true while any route navigation resolves.
 const { navigating } = useNavigationProgress()

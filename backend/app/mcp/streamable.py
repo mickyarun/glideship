@@ -49,8 +49,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.body_limit import BodyTooLargeError
 from app.core.deps import get_db
 from app.database import AsyncSessionLocal
-from app.mcp.audit import emit_audit
+from app.mcp.audit import emit_audit, tool_result_status
 from app.mcp.auth import MCPAuthResult, token_owner_still_allowed, verify_mcp_token
+from app.mcp.board_tool_schemas import REMOTE_BOARD_TOOLS, remote_board_tool_schemas
+from app.mcp.grant_tools import visible
 from app.mcp.handlers_prompts import CANONICAL_TASK_TYPES
 from app.mcp.rate_limit import enforce_rate_limit
 from app.repositories.user_mcp_token import UserMCPTokenRepository
@@ -80,6 +82,8 @@ REMOTE_TOOLS: frozenset[str] = frozenset(
         # todos (matching the takeover/complete family). See ``handlers_todo.py``.
         "create_todo",
         "update_todo",
+        # Board reads; each call checks the caller's role on the board.
+        *REMOTE_BOARD_TOOLS,
     }
 )
 
@@ -300,6 +304,8 @@ _REMOTE_TOOL_SCHEMAS: list[dict[str, Any]] = [
     },
 ]
 
+_REMOTE_TOOL_SCHEMAS += remote_board_tool_schemas()
+
 # JSON-RPC error codes (subset we use).
 _PARSE_ERROR = -32700
 _INVALID_REQUEST = -32600
@@ -320,8 +326,16 @@ async def _dispatch(
     params: dict[str, Any],
     db: AsyncSession,
     auth: MCPAuthResult,
-) -> Any:
-    """Dispatch a single MCP method to the underlying handler."""
+) -> tuple[Any, int]:
+    """Dispatch a single MCP method; its JSON-RPC result and the status to audit."""
+    if method == "tools/call":
+        raw = await _call_tool(params, db, auth)
+        return _tool_envelope(raw), tool_result_status(raw)
+    return await _protocol_method(method, auth), status.HTTP_200_OK
+
+
+async def _protocol_method(method: str, auth: MCPAuthResult) -> Any:
+    """``initialize`` and ``tools/list``."""
     if method == "initialize":
         return {
             "protocolVersion": "2025-03-26",
@@ -330,39 +344,51 @@ async def _dispatch(
         }
 
     if method == "tools/list":
-        return {"tools": _REMOTE_TOOL_SCHEMAS}
-
-    if method == "tools/call":
-        tool_name = params.get("name")
-        tool_args = params.get("arguments") or {}
-        if not isinstance(tool_name, str) or tool_name not in REMOTE_TOOLS:
-            raise _RPCError(_METHOD_NOT_FOUND, f"Tool not available remotely: {tool_name!r}")
-        # Import locally to avoid a circular import with server.py's
-        # TOOL_HANDLERS dict (server.py imports this module to mount it).
-        from app.mcp.server import AUTH_TOOL_HANDLERS, TOOL_HANDLERS
-
-        # Auth-aware handlers receive the full MCPAuthResult so they can
-        # enforce per-user guards (e.g. update_bud's assignee check).
-        auth_handler = AUTH_TOOL_HANDLERS.get(tool_name)
-        handler = TOOL_HANDLERS.get(tool_name)
-        if auth_handler is not None:
-            result = await auth_handler(db, auth, tool_args)
-        elif handler is not None:
-            result = await handler(db, auth.org, tool_args)
-        else:
-            raise _RPCError(_INTERNAL_ERROR, f"Handler missing for {tool_name!r}")
-        # Wrap raw handler output in the MCP tools/call response envelope.
-        # Handlers signal a soft failure (bad params, missing seed data) by
-        # returning a dict with an ``error`` key instead of raising — propagate
-        # that to ``isError: true`` so desktop clients route it through their
-        # error UI rather than feeding the error text into the LLM as a prompt.
-        is_error = isinstance(result, dict) and "error" in result
-        return {
-            "content": [{"type": "text", "text": json.dumps(result)}],
-            "isError": is_error,
-        }
+        # A scoped token (a board card run) is shown only what its grant allows.
+        shown = [t for t in _REMOTE_TOOL_SCHEMAS if visible(str(t["name"]), auth.grant)]
+        return {"tools": shown}
 
     raise _RPCError(_METHOD_NOT_FOUND, f"Unknown method: {method!r}")
+
+
+async def _call_tool(params: dict[str, Any], db: AsyncSession, auth: MCPAuthResult) -> Any:
+    """Run one remote tool call; the handler's raw result."""
+    tool_name = params.get("name")
+    tool_args = params.get("arguments") or {}
+    if not isinstance(tool_name, str) or tool_name not in REMOTE_TOOLS:
+        raise _RPCError(_METHOD_NOT_FOUND, f"Tool not available remotely: {tool_name!r}")
+    # A scoped server-minted token (a board card run) keeps its grant here too.
+    refused = None if auth.grant is None else auth.grant.refusal(tool_name, tool_args)
+    if refused is not None:
+        raise _RPCError(_METHOD_NOT_FOUND, f"Tool not in this token's grant: {refused}")
+    # Import locally to avoid a circular import with server.py's
+    # TOOL_HANDLERS dict (server.py imports this module to mount it).
+    from app.mcp.server import AUTH_TOOL_HANDLERS, TOOL_HANDLERS
+
+    # Auth-aware handlers receive the full MCPAuthResult so they can
+    # enforce per-user guards (e.g. update_bud's assignee check).
+    auth_handler = AUTH_TOOL_HANDLERS.get(tool_name)
+    handler = TOOL_HANDLERS.get(tool_name)
+    if auth_handler is not None:
+        return await auth_handler(db, auth, tool_args)
+    if handler is not None:
+        return await handler(db, auth.org, tool_args)
+    raise _RPCError(_INTERNAL_ERROR, f"Handler missing for {tool_name!r}")
+
+
+def _tool_envelope(result: Any) -> dict[str, Any]:
+    """Wrap raw handler output in the MCP tools/call response envelope.
+
+    Handlers signal a soft failure (bad params, missing seed data) by
+    returning a dict with an ``error`` key instead of raising — propagate
+    that to ``isError: true`` so desktop clients route it through their
+    error UI rather than feeding the error text into the LLM as a prompt.
+    """
+    is_error = isinstance(result, dict) and "error" in result
+    return {
+        "content": [{"type": "text", "text": json.dumps(result)}],
+        "isError": is_error,
+    }
 
 
 class _RPCError(Exception):
@@ -451,7 +477,7 @@ async def remote_mcp_post(
         )
 
     try:
-        result = await _dispatch(method, params, db, auth)
+        result, audited_status = await _dispatch(method, params, db, auth)
     except _RPCError as exc:
         emit_audit(
             request=request,
@@ -494,7 +520,7 @@ async def remote_mcp_post(
         tool_name=audit_tool,
         transport="sse",
         params=audit_params,
-        status_code=status.HTTP_200_OK,
+        status_code=audited_status,
     )
     return JSONResponse(_rpc_result(req_id, result))
 

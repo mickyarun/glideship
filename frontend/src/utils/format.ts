@@ -25,3 +25,9 @@ export function formatSP(sp: number): string {
 export function plural(n: number, word: string, many = `${word}s`): string {
   return `${n} ${n === 1 ? word : many}`
 }
+
+/** Words as a phrase: "a", "a and b", "a, b and c" (or ``or``). */
+export function wordList(words: string[], conjunction = 'and'): string {
+  if (words.length < 2) return words[0] ?? ''
+  return `${words.slice(0, -1).join(', ')} ${conjunction} ${words[words.length - 1]}`
+}

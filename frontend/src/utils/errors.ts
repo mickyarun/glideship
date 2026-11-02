@@ -64,10 +64,12 @@ function validationMessages(detail: unknown[]): string {
 
 /**
  * Coerce a FastAPI ``detail`` field to a string. Handles the legacy
- * shape (plain string) and the typed envelope used by the GitHub
- * credential validation (``{ error: "...", message: "..." }``) so
- * callers can pattern-match on the JSON shape downstream without
- * losing the structured payload to ``[object Object]`` coercion.
+ * shape (plain string), a coded refusal (``{ code, message }``, e.g.
+ * ``bud_stage_content_missing``), whose message is what people read, and
+ * the typed envelope used by the GitHub credential validation
+ * (``{ error: "...", message: "..." }``), kept as JSON so callers can
+ * pattern-match on its shape downstream without losing the structured
+ * payload to ``[object Object]`` coercion.
  */
 function stringifyDetail(detail: unknown): string {
   if (!detail) return ''
@@ -76,6 +78,8 @@ function stringifyDetail(detail: unknown): string {
     const messages = validationMessages(detail)
     if (messages) return messages
   }
+  const coded = codedMessage(detail)
+  if (coded) return coded
   if (typeof detail === 'object') {
     try {
       return JSON.stringify(detail)
@@ -84,4 +88,11 @@ function stringifyDetail(detail: unknown): string {
     }
   }
   return String(detail)
+}
+
+/** A coded refusal's ``message``, or null for any other shape. */
+function codedMessage(detail: unknown): string | null {
+  if (!detail || typeof detail !== 'object') return null
+  const { code, message } = detail as { code?: unknown; message?: unknown }
+  return typeof code === 'string' && typeof message === 'string' && message ? message : null
 }

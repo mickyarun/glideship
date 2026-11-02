@@ -118,7 +118,7 @@ describe('BUDSectionDiffDrawer — current-content baseline', () => {
   // against whatever ``fetchCurrentContent`` resolved to — which is what
   // makes the baseline observable from the DOM.
   async function openFirstVersion(wrapper: ReturnType<typeof mountDrawer>) {
-    await wrapper.findAll('.diff-rail__item')[0].trigger('click')
+    await wrapper.findAll('.version-rail__item')[0].trigger('click')
     await flushPromises()
     return wrapper.findAll('.diff-line').map((n) => n.text().replace(/\s+/g, ' ').trim())
   }
@@ -135,8 +135,8 @@ describe('BUDSectionDiffDrawer — current-content baseline', () => {
 
     // Baseline resolved to the BUD-level row, not the per-repo one.
     const lines = await openFirstVersion(wrapper)
-    expect(lines).toContain('−<p>old</p>')
-    expect(lines).toContain('+<p>current</p>')
+    expect(lines).toContain('−Removed: <p>old</p>')
+    expect(lines).toContain('+Added: <p>current</p>')
     expect(lines.join(' ')).not.toContain('per-repo')
   })
 
@@ -150,7 +150,7 @@ describe('BUDSectionDiffDrawer — current-content baseline', () => {
     expect(wrapper.text()).not.toContain('Cannot read properties')
 
     const lines = await openFirstVersion(wrapper)
-    expect(lines).toContain('−<p>old</p>')
+    expect(lines).toContain('−Removed: <p>old</p>')
     expect(lines.some((l) => l.startsWith('+'))).toBe(false)
   })
 
@@ -162,7 +162,7 @@ describe('BUDSectionDiffDrawer — current-content baseline', () => {
     const wrapper = mountDrawer('design')
     await flushPromises()
 
-    const rail = wrapper.findAll('.diff-rail__item')
+    const rail = wrapper.findAll('.version-rail__item')
     expect(rail).toHaveLength(1)
     expect(rail[0].text()).toContain('v1')
   })

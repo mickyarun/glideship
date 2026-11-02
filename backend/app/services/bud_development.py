@@ -26,31 +26,21 @@ asyncio task with its own DB session so the PATCH that triggered the
 transition returns immediately.
 """
 
-import asyncio
 import uuid
 
 import structlog
-from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session as SyncSession
 
-from app.database import AsyncSessionLocal
 from app.models.bud import BUDDocument
-from app.repositories.bud import BUDRepository
-from app.services.agent_activity_logger import log_agent_activity
-from app.services.bud_estimation import estimate_bud_dates
+from app.services import bud_estimate_after_commit
 from app.services.event_bus import publish
 from app.services.todo_assignment import assign_todos_per_repo_team
 from app.services.todo_sync import sync_todos_for_bud
 
 logger = structlog.get_logger(__name__)
 
-# Hold strong refs to in-flight PERT background tasks so the GC doesn't
-# eat them mid-await; tasks remove themselves on completion. Same pattern
-# documented in CLAUDE.md and used by github_app_slug._BACKGROUND_RETROFIT_TASKS.
-_BACKGROUND_ESTIMATION_TASKS: set[asyncio.Task[None]] = set()
-
-_ESTIMATOR_SLUG = "pert_estimator"
+# The estimate's trigger, as its snapshot records it.
+DEVELOPMENT_STARTED_TRIGGER = "bud_development_started"
 
 
 async def on_bud_development_started(
@@ -105,122 +95,11 @@ async def on_bud_development_started(
     # PERT runs on a fresh DB session; spawning right now would race the
     # caller's commit (the new session could read pre-transition state).
     # Defer the spawn until after the caller's transaction commits.
-    _schedule_estimation_after_commit(
+    bud_estimate_after_commit.schedule(
         db,
         org_id=org_id,
         bud_id=bud.id,
+        trigger=DEVELOPMENT_STARTED_TRIGGER,
         actor_id=actor_id,
         actor_name=actor_name,
-    )
-
-
-def _schedule_estimation_after_commit(
-    db: AsyncSession,
-    *,
-    org_id: uuid.UUID,
-    bud_id: uuid.UUID,
-    actor_id: uuid.UUID | None,
-    actor_name: str | None,
-) -> None:
-    """Defer the PERT estimator task to fire after the caller's commit.
-
-    Registers a ``after_commit`` listener on the underlying sync session
-    so the new DB session the task opens reads post-transition state
-    (new status, lead assignee, freshly-inserted TODOs). Without this
-    deferral the task races the caller's commit and may estimate on
-    stale data. Estimation is non-fatal — failures are logged and
-    surfaced to the activity log, never raised.
-    """
-
-    def _on_commit(_session: SyncSession) -> None:
-        task = asyncio.create_task(
-            _run_estimation(
-                org_id=org_id,
-                bud_id=bud_id,
-                actor_id=actor_id,
-                actor_name=actor_name,
-            ),
-            name=f"bg_estimate_bud_{bud_id}",
-        )
-        _BACKGROUND_ESTIMATION_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_ESTIMATION_TASKS.discard)
-
-    event.listen(db.sync_session, "after_commit", _on_commit, once=True)
-
-
-async def _run_estimation(
-    *,
-    org_id: uuid.UUID,
-    bud_id: uuid.UUID,
-    actor_id: uuid.UUID | None,
-    actor_name: str | None,
-) -> None:
-    """Background task: re-estimate phase dates with a fresh DB session.
-
-    Loads its own copy of the BUD because the caller's session is closed
-    by the time this runs (intentional — we returned the request).
-    """
-    async with AsyncSessionLocal() as db:
-        bud = await BUDRepository(db, org_id=org_id).get_by_id(bud_id)
-        if bud is None:
-            logger.warning("estimation_skipped_bud_missing", bud_id=str(bud_id))
-            return
-
-        await _emit_invoked(org_id, bud, "Re-estimating phase dates…")
-        try:
-            await estimate_bud_dates(
-                db,
-                org_id,
-                bud,
-                trigger="bud_development_started",
-                actor_id=actor_id,
-                actor_name=actor_name,
-            )
-            await db.commit()
-            await _emit_completed(org_id, bud, "Phase dates updated")
-        except Exception as exc:
-            await db.rollback()
-            logger.warning(
-                "estimation_failed_in_background",
-                bud_id=str(bud.id),
-                error=str(exc),
-            )
-            await log_agent_activity(
-                None,
-                org_id=org_id,
-                event_type="skill_failed",
-                skill_slug=_ESTIMATOR_SLUG,
-                message=f"Estimation failed: {exc}",
-                bud_id=bud.id,
-                bud_number=bud.bud_number,
-                bud_title=bud.title,
-                metadata_={"error": str(exc)},
-            )
-
-
-async def _emit_invoked(org_id: uuid.UUID, bud: BUDDocument, message: str) -> None:
-    """Publish a ``skill_invoked`` lifecycle event for the activity banner."""
-    await log_agent_activity(
-        None,
-        org_id=org_id,
-        event_type="skill_invoked",
-        skill_slug=_ESTIMATOR_SLUG,
-        message=message,
-        bud_id=bud.id,
-        bud_number=bud.bud_number,
-        bud_title=bud.title,
-    )
-
-
-async def _emit_completed(org_id: uuid.UUID, bud: BUDDocument, message: str) -> None:
-    """Publish a ``skill_completed`` lifecycle event for the activity banner."""
-    await log_agent_activity(
-        None,
-        org_id=org_id,
-        event_type="skill_completed",
-        skill_slug=_ESTIMATOR_SLUG,
-        message=message,
-        bud_id=bud.id,
-        bud_number=bud.bud_number,
-        bud_title=bud.title,
     )

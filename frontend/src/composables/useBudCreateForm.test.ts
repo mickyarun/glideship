@@ -12,75 +12,59 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** The New BUD form's stage-agent switches, while the skills are still loading. */
+/** The New BUD form sends what it always has to createBUD, with the shared agent options. */
+import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick, reactive, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 
-const h = vi.hoisted(() => ({
-  push: vi.fn(),
-  createBUD: vi.fn(),
-  release: (): void => undefined,
-}))
-const skills = reactive({
-  skills: [] as { id: string; agentType: string; isDefault: boolean; name: string }[],
-  loading: false,
-  fetchSkills: vi.fn(),
-})
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: h.push }) }))
-vi.mock('@/stores/bud', () => ({ useBUDStore: () => ({ createBUD: h.createBUD, error: '' }) }))
-vi.mock('@/stores/agentSkills', () => ({ useAgentSkillsStore: () => skills }))
+const push = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
-import { CREATE_STAGES, useBudCreateForm } from '@/composables/useBudCreateForm'
+import { CREATE_STAGES } from '@/composables/useBudAgentOptions'
+import { useBudCreateForm } from '@/composables/useBudCreateForm'
+import { useAgentSkillsStore, type AgentSkill } from '@/stores/agentSkills'
+import { useBUDStore } from '@/stores/bud'
+import type { BUDDocument } from '@/types'
 
-/** Skills arrive only when the test calls `h.release()`. */
-function slowSkills(): void {
-  skills.fetchSkills.mockImplementation(() => {
-    skills.loading = true
-    return new Promise<void>(resolve => {
-      h.release = () => {
-        skills.skills = CREATE_STAGES.map(s => ({ id: `${s.value}-skill`, agentType: s.agentType, isDefault: true, name: 'Default' }))
-        skills.loading = false
-        resolve()
-      }
-    })
-  })
-}
+const skill = (id: string, agentType: AgentSkill['agentType'], isDefault: boolean) =>
+  ({ id, agentType, isDefault, name: id, skillSlug: id }) as AgentSkill
 
-const flush = async (): Promise<void> => {
-  for (let i = 0; i < 3; i += 1) await nextTick()
-}
-
-beforeEach(() => {
-  vi.clearAllMocks()
-  skills.skills = []
-  skills.loading = false
-  h.createBUD.mockResolvedValue({ id: 'bud-1' })
-  slowSkills()
-})
-
-describe('useBudCreateForm stage agents', () => {
-  it('shows every agent on as soon as the dialog opens, before the skills load', async () => {
-    const open = ref(false)
-    const form = useBudCreateForm(open)
-    open.value = true
-    await flush()
-    for (const stage of CREATE_STAGES) expect(form.autoGenerate.value[stage.value]).toBe(true)
+describe('useBudCreateForm', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    push.mockReset()
   })
 
-  it('keeps an agent the person switched off while the skills were loading off', async () => {
-    const open = ref(false)
+  it('creates the BUD with its title, description, skill picks, phases and priority, then opens it', async () => {
+    useAgentSkillsStore().skills = [skill('d1', 'design', true), skill('d2', 'design', false)]
+    const store = useBUDStore()
+    const create = vi.spyOn(store, 'createBUD').mockResolvedValue({ id: 'new' } as BUDDocument)
+    const open = ref(true)
     const form = useBudCreateForm(open)
-    open.value = true
-    await flush()
-    form.autoGenerate.value.bud = false
-    h.release()
-    await flush()
-
-    expect(form.autoGenerate.value.bud).toBe(false)
-    expect(form.stageSkillPicks.value.bud).toBe('bud-skill')
-    form.title.value = 'Passkey sign-in'
+    await nextTick()
+    form.title.value = '  Saved filters '
+    form.description.value = ' Let triage save filters. '
+    form.priority.value = 'P1'
+    form.agents.stageSkillPicks.value.design = 'd2'
+    form.agents.autoGenerate.value.closed = false
     await form.submit()
-    const phases = h.createBUD.mock.calls[0][3] as Record<string, boolean>
-    expect(phases).toEqual({ bud: false, design: true, tech_arch: true, testing: true, closed: true })
+    const phases = { ...Object.fromEntries(CREATE_STAGES.map(s => [s.value, true])), closed: false }
+    expect(create).toHaveBeenCalledWith('Saved filters', 'Let triage save filters.', { design: 'd2' }, phases, 'P1')
+    expect(open.value).toBe(false)
+    expect(push).toHaveBeenCalledWith('/buds/new')
+    expect(form.title.value).toBe('')
+  })
+
+  it('stays open with the error when the BUD is not created', async () => {
+    const store = useBUDStore()
+    vi.spyOn(store, 'createBUD').mockResolvedValue(null)
+    store.error = 'Title taken'
+    const open = ref(true)
+    const form = useBudCreateForm(open)
+    form.title.value = 'Saved filters'
+    await form.submit()
+    expect(form.error.value).toBe('Title taken')
+    expect(open.value).toBe(true)
+    expect(push).not.toHaveBeenCalled()
   })
 })

@@ -29,8 +29,8 @@ from app.models.leave_request import LeaveRequest, LeaveStatus
 from app.models.notification import NotificationType
 from app.services.leave.messages import compose_change_message
 from app.services.leave.notify import Notice, stage_rows
-from app.services.leave.slack_blocks import escape
 from app.services.notifications import NotificationCategory
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 
 def stage_change(
@@ -47,7 +47,7 @@ def stage_change(
         org_id=org_id,
         user_ids={request.user_id},
         category=NotificationCategory.LEAVE_UPDATES,
-        slack_text=f"{escape(message)} <{settings.frontend_url}/leave|See details>",
+        slack_text=f"{escape_mrkdwn(message)} <{settings.frontend_url}/leave|See details>",
         refresh_request_id=request.id,
         sync_request_id=request.id,
     )

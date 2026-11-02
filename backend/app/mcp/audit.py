@@ -45,8 +45,10 @@ _audit_tasks: set[asyncio.Task[None]] = set()
 _MAX_INFLIGHT = 1000
 
 
-def _client_ip(request: Request) -> str | None:
+def _client_ip(request: Request | None) -> str | None:
     """Best-effort client IP. Trusts X-Forwarded-For only if Caddy set it."""
+    if request is None:
+        return None
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         # Caddy appends the originating IP first; trust only the leftmost.
@@ -130,10 +132,35 @@ _AUDITABLE_PARAM_KEYS: frozenset[str] = frozenset(
         "direction",
         "depth",
         "cluster_id",
+        # Board tools: which board, card, stage or document kind a call named,
+        # so a refused board call can be told apart from a working one.
+        "board_key",
+        "card_key",
+        "stage",
+        "kind",
     }
 )
 # Per-value cap so a runaway 50 KB "query" doesn't bloat the audit table.
 _AUDIT_PARAM_VALUE_MAX = 500
+# A tool result's own ``status`` is audited when it is an HTTP error status.
+_OK_STATUS = 200
+_MIN_ERROR_STATUS = 400
+_MAX_ERROR_STATUS = 599
+
+
+def tool_result_status(result: object) -> int:
+    """The status to audit for a tool call that returned ``result``.
+
+    A tool that refuses (a board tool's ``{success: false, status: 404}``)
+    still answers 200 on the wire; its own 4xx/5xx ``status`` is what the
+    audit row records, so refused calls show up as refused.
+    """
+    if not isinstance(result, dict) or result.get("success") is not False:
+        return _OK_STATUS
+    code = result.get("status")
+    if isinstance(code, bool) or not isinstance(code, int):
+        return _OK_STATUS
+    return code if _MIN_ERROR_STATUS <= code <= _MAX_ERROR_STATUS else _OK_STATUS
 
 
 def _fit_column[S: (str, str | None)](column: str, value: S) -> S:
@@ -172,7 +199,7 @@ def _sanitise_params(params: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def emit_audit(
     *,
-    request: Request,
+    request: Request | None,
     auth: MCPAuthResult | None,
     org_id: uuid.UUID,
     token_id: uuid.UUID | None,
@@ -186,13 +213,18 @@ def emit_audit(
     Safe to call from any handler — never raises, never blocks. ``auth``
     is optional so a 401 (before auth resolves) can still record an
     attempt against the resolved org if one is available later via the
-    bearer prefix; pass ``None`` when nothing is known.
+    bearer prefix; pass ``None`` when nothing is known. ``request`` is
+    ``None`` for an in-process call (the Ollama tool loop).
 
     ``params`` is filtered through :func:`_sanitise_params` so only
     allowlisted keys land in the audit row — never store free-form
     blobs that could contain secrets.
     """
     cleaned_params = _sanitise_params(params)
+    if auth is not None and auth.grant is not None:
+        # A scoped call (a board card run) names its run and card.
+        cleaned_params = {**(cleaned_params or {}), **auth.grant.audit_fields()} or None
+    user_agent = request.headers.get("user-agent") if request is not None else None
     if len(_audit_tasks) >= _MAX_INFLIGHT:
         # Compensating control is failing: rate-limit may be fail-open and
         # now audit is dropping. Emit ALL identifying context (the row we
@@ -208,7 +240,7 @@ def emit_audit(
             user_id=str(auth.user_id) if auth and auth.user_id else None,
             token_id=str(token_id) if token_id else None,
             ip=_client_ip(request),
-            user_agent=request.headers.get("user-agent"),
+            user_agent=user_agent,
             inflight=len(_audit_tasks),
         )
         return
@@ -220,7 +252,7 @@ def emit_audit(
             tool_name=_fit_column("tool_name", tool_name),
             transport=transport,
             ip=_fit_column("ip", _client_ip(request)),
-            user_agent=_fit_column("user_agent", request.headers.get("user-agent")),
+            user_agent=_fit_column("user_agent", user_agent),
             status_code=status_code,
             params=cleaned_params,
         )

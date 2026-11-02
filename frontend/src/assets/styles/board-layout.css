@@ -1,0 +1,63 @@
+/*
+ * Copyright 2025-2026 Arun Rajkumar
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * One board layout for the Delivery (BUD) board and team boards, so both
+ * read as the same product: page padding, the gap between the header,
+ * filters and columns, column width and gap, and card rhythm. Imported by
+ * both board pages; the values are the Delivery board's.
+ */
+:root {
+  --board-gutter: 36px;
+  --board-page-padding: 28px var(--board-gutter) 40px;
+  --board-section-gap: 20px;
+  --board-column-gap: 14px;
+  --board-column-width: 272px;
+  --board-column-padding: 10px;
+  --board-card-gap: 10px;
+  --board-card-padding: 12px 12px 10px;
+}
+@media (max-width: 600px) {
+  :root {
+    --board-gutter: 16px;
+    --board-page-padding: 20px var(--board-gutter) 32px;
+  }
+}
+
+/*
+ * The sideways scroller under a board's header and filters. It takes the
+ * rest of the page's height, so its scrollbar sits at the bottom of the
+ * page however short the columns are, and bleeds through the page padding
+ * (putting it back inside) so columns scroll to the window edge.
+ * Positioned, so screen-reader-only text inside stays inside it.
+ */
+.board-scroller {
+  position: relative;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  margin-inline: calc(-1 * var(--board-gutter));
+  padding: 0 var(--board-gutter) 8px;
+  scroll-padding-inline: var(--board-gutter);
+}
+
+/*
+ * A drag over a stage the card can't enter (useCardDrag): the landing slot
+ * SortableJS left in the last column passed through hides too, so no
+ * column looks like the drop.
+ */
+.board-scroller--blocked .drag-ghost {
+  display: none;
+}

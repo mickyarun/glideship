@@ -24,9 +24,9 @@ import uuid
 from datetime import datetime
 from typing import Any, get_args
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
-from app.models.bud import BUDPriority, BUDStatus
+from app.models.bud import BUDPriority, BUDStatus, has_text
 
 # Re-export design schemas so legacy imports keep working; new code
 # should import directly from :mod:`app.schemas.bud_design`.
@@ -46,6 +46,11 @@ from app.schemas.bud_release import ReleaseStage
 _FIGMA_URL_RE = re.compile(
     r"^https://(?:www\.)?figma\.com/(file|design|proto)/[A-Za-z0-9]+(/.*)?$"
 )
+
+
+def is_figma_url(value: str) -> bool:
+    """Whether ``value`` is a Figma file, design or prototype URL a BUD accepts."""
+    return _FIGMA_URL_RE.match(value) is not None
 
 
 def _validate_optional_figma_url(value: str | None) -> str | None:
@@ -206,7 +211,31 @@ class BUDAgentTaskRead(BaseModel):
         return data
 
 
-class BUDRead(BaseModel):
+class BUDSectionsWritten(BaseModel):
+    """Whether the PRD and the tech spec are written, read from the sections.
+
+    Sent with every BUD, listed or read alone, so a client's copy stays
+    current after any write. The stages they gate are in
+    :mod:`app.services.bud_stage_gates`.
+    """
+
+    has_prd: bool = Field(
+        default=False, validation_alias=AliasChoices("requirements_md", "has_prd")
+    )
+    has_tech_spec: bool = Field(
+        default=False, validation_alias=AliasChoices("tech_spec_md", "has_tech_spec")
+    )
+
+    @field_validator("has_prd", "has_tech_spec", mode="before")
+    @classmethod
+    def _written(cls, value: object) -> bool:
+        """A section's text says whether it's written; a flag given as such stands."""
+        if isinstance(value, bool):
+            return value
+        return has_text(value if isinstance(value, str) else None)
+
+
+class BUDRead(BUDSectionsWritten):
     """Schema for reading a single BUD with full content."""
 
     id: uuid.UUID
@@ -259,6 +288,9 @@ class BUDRead(BaseModel):
     # Full retrospective is fetched lazily via GET /buds/{id}/learning so
     # the BUD list payload stays small.
     has_learning: bool = False
+    # A card handed over straight to design, with design generation on and no
+    # design started yet: the BUD page starts generating for whoever opens it.
+    design_pending: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -296,8 +328,24 @@ class BUDLearningRead(BaseModel):
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
-class BUDListItem(BaseModel):
-    """Schema for BUD list view (no full content)."""
+class BUDListOrigin(BaseModel):
+    """The card a listed BUD was handed over from (its live origin), for the Delivery board.
+
+    Sent only to a caller who holds a role on the card's board, so
+    ``can_open`` is always true; anyone else gets ``origin: null``, the same
+    as a BUD that was never handed over, and learns nothing about the board.
+    """
+
+    card_key: str
+    board_key: str
+    can_open: bool = True
+
+
+class BUDListItem(BUDSectionsWritten):
+    """Schema for BUD list view (no full content).
+
+    ``origin`` is the BUD's live origin card when the caller can open its board.
+    """
 
     id: uuid.UUID
     bud_number: int
@@ -311,6 +359,7 @@ class BUDListItem(BaseModel):
     assignee_name: str | None = None
     assignee_avatar_url: str | None = None
     open_bug_count: int = 0
+    origin: BUDListOrigin | None = None
     created_at: datetime
     updated_at: datetime
 

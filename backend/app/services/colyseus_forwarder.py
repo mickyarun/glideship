@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Event-bus transport that forwards agent_activity events to the multiplayer server.
+
+"""Event-bus transport that forwards org activity events to the multiplayer server.
 
 Registered once at FastAPI startup (see `app.main.lifespan`). From there,
-every `event_bus.publish("agent_activity:<org_id>", ...)` call triggers
-this transport as a detached task, which fire-and-forgets an HTTP POST
-into the Colyseus bridge.
+every `event_bus.publish("agent_activity:<org_id>", ...)` or
+`event_bus.publish("board_activity:<org_id>", ...)` call triggers this
+transport as a detached task, which fire-and-forgets an HTTP POST into the
+Colyseus bridge under the topic's prefix as the event type.
 
 This module is intentionally small and pure: no side effects at import
 time, no state held between calls. One of potentially several external
@@ -28,7 +30,7 @@ adding new destinations (Slack, metrics exporters, SSE bridges, …).
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Final
 
 import structlog
 
@@ -36,14 +38,16 @@ from app.services.colyseus_bridge import publish_to_colyseus
 
 logger = structlog.get_logger(__name__)
 
-_AGENT_ACTIVITY_PREFIX = "agent_activity:"
+# Topic prefixes forwarded to the org's room; each is also the bridge event type.
+# ``board_activity`` comes from :mod:`app.services.boards.garden`.
+FORWARDED_TYPES: Final = ("agent_activity", "board_activity")
 
 
-async def forward_agent_activity_to_colyseus(
+async def forward_activity_to_colyseus(
     topic: str,
     payload: dict[str, Any],
 ) -> None:
-    """Forward an `agent_activity:<org_id>` publish to the Colyseus bridge.
+    """Forward an `agent_activity:<org_id>` or `board_activity:<org_id>` publish to Colyseus.
 
     Non-matching topics are silently ignored (the event bus fans out to
     every registered transport regardless of topic; each transport
@@ -53,10 +57,10 @@ async def forward_agent_activity_to_colyseus(
     the event bus swallows transport exceptions, but logging the reason
     here is cheaper than reconstructing it from a stack trace.
     """
-    if not topic.startswith(_AGENT_ACTIVITY_PREFIX):
+    event_type, sep, org_id_str = topic.partition(":")
+    if not sep or event_type not in FORWARDED_TYPES:
         return
 
-    org_id_str = topic[len(_AGENT_ACTIVITY_PREFIX) :]
     try:
         org_id = uuid.UUID(org_id_str)
     except ValueError:
@@ -67,4 +71,4 @@ async def forward_agent_activity_to_colyseus(
         )
         return
 
-    await publish_to_colyseus(org_id, "agent_activity", payload)
+    await publish_to_colyseus(org_id, event_type, payload)

@@ -14,8 +14,9 @@
  * limitations under the License.
  -->
 
-<!-- The BUD's priority tag. With edit rights it opens a P0–P3 menu;
-     otherwise it's a plain tag. -->
+<!-- A priority tag (a BUD's, a card's). With edit rights it opens a
+     P0–P3 menu; otherwise it's a plain tag. A card may have no priority:
+     ``clearable`` adds "No priority" to the menu, which emits ``clear``. -->
 <template>
   <v-menu v-if="editable" location="bottom start">
     <template #activator="{ props: menuProps }">
@@ -23,9 +24,10 @@
         v-bind="menuProps"
         type="button"
         class="priority-menu__btn"
-        :aria-label="`Priority ${priority}. Change priority`"
+        :aria-label="priority ? `Priority ${priority}. Change priority` : 'No priority. Set priority'"
       >
-        <BudPriorityChip :priority="priority" />
+        <BudPriorityChip v-if="priority" :priority="priority" />
+        <span v-else class="priority-menu__none">No priority</span>
         <v-icon icon="mdi-chevron-down" size="14" />
       </button>
     </template>
@@ -42,17 +44,22 @@
       >
         <v-list-item-title>{{ p }}</v-list-item-title>
       </v-list-item>
+      <v-list-item v-if="clearable && priority" @click="emit('clear')">
+        <v-list-item-title>No priority</v-list-item-title>
+      </v-list-item>
     </v-list>
   </v-menu>
-  <BudPriorityChip v-else :priority="priority" />
+  <BudPriorityChip v-else-if="priority" :priority="priority" />
 </template>
 
 <script setup lang="ts">
 import BudPriorityChip from '@/components/buds/BudPriorityChip.vue'
 import { BUD_PRIORITIES, type BUDPriority } from '@/types'
 
-defineProps<{ priority: BUDPriority; editable: boolean }>()
-const emit = defineEmits<{ change: [priority: BUDPriority] }>()
+withDefaults(defineProps<{ priority: BUDPriority | null; editable: boolean; clearable?: boolean }>(), {
+  clearable: false,
+})
+const emit = defineEmits<{ change: [priority: BUDPriority]; clear: [] }>()
 </script>
 
 <style scoped>
@@ -66,6 +73,9 @@ const emit = defineEmits<{ change: [priority: BUDPriority] }>()
   color: rgb(var(--v-theme-on-surface-variant));
   cursor: pointer;
   border-radius: 6px;
+}
+.priority-menu__none {
+  font-size: 12px;
 }
 .priority-menu__btn:focus-visible {
   outline: 2px solid var(--color-focus);

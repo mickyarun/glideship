@@ -18,9 +18,10 @@ The seeder creates one SYSTEM row per :class:`RoleDef` and keeps its
 permission mappings in sync (additions only).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.core.permissions import WORKSPACE_ENGINEERING, expand_permission_specs
+from app.core.permissions_boards import BOARD_ROLE_GRANTS
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,7 @@ class RoleDef:
         return expand_permission_specs(*self.permission_specs)
 
 
-DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
+_BASE_SYSTEM_ROLES: list[RoleDef] = [
     RoleDef(
         name="org_owner",
         description="Organization owner with full access",
@@ -187,9 +188,14 @@ DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
     ),
     RoleDef(
         name="sales",
-        description="Sales team member: leave, WFH and their own employee details only",
+        description="Sales team member: leave, WFH, boards and their own employee details",
         permission_specs=[],
     ),
+]
+
+DEFAULT_SYSTEM_ROLES: list[RoleDef] = [
+    replace(r, permission_specs=[*r.permission_specs, *BOARD_ROLE_GRANTS.get(r.name, ())])
+    for r in _BASE_SYSTEM_ROLES
 ]
 
 # A custom role may not reuse a system role's name: the permission bypass

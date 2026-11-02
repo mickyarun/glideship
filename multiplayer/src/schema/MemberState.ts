@@ -19,7 +19,10 @@
  * are synced to all clients in the OrgRoom at ~20Hz.
  *
  * Activity label shows what the member is currently doing (e.g., "Coding...")
- * when driven by dev_activity events. Empty string = no label.
+ * when driven by dev_activity events. Empty string = no label. The message
+ * can name repositories and files, so it is a `@view()` field: only
+ * engineering viewers receive it (`rooms/engineeringViews`); everyone else
+ * gets the name with an empty message.
  *
  * takeoverSessionId: when non-empty, this member is being controlled by a
  * real player client. The server suspends its NPC simulation for this member
@@ -29,9 +32,10 @@
  *   - "garden" → walking around or at an unknown location
  *   - "house_{memberId}" → inside their own house (desk or bed)
  *   - "break_{zone}" → at a break zone (coffee_bar | pool_resort)
- *   - "tree_{repoName}" → at a repo tree (dev activity, Phase 5)
+ *   - "tree" → at a repo tree (dev activity; which one isn't named, since
+ *     every viewer receives this field)
  */
-import { Schema, type } from "@colyseus/schema"
+import { Schema, type, view } from "@colyseus/schema"
 
 export class MemberState extends Schema {
   // Identity
@@ -53,7 +57,7 @@ export class MemberState extends Schema {
 
   // Activity label (dev_activity)
   @type("string") labelName = ""
-  @type("string") labelMessage = ""
+  @view() @type("string") labelMessage = ""
 
   // House tier (1=Hut, 2=Cottage, 3=Mansion)
   @type("number") houseLevel = 1

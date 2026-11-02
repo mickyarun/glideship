@@ -16,14 +16,14 @@
 
 import uuid
 
-from sqlalchemy import BigInteger, ForeignKey, Index, String
+from sqlalchemy import ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import BaseModel
+from app.models.thread_columns import AttachmentColumns
 
 
-class BugAttachment(BaseModel):
+class BugAttachment(AttachmentColumns):
     """Metadata for a screenshot, PDF or spreadsheet attached to a bug.
 
     The bytes live in object storage (local disk or S3) behind
@@ -47,15 +47,6 @@ class BugAttachment(BaseModel):
     )
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True
-    )
-    filename: Mapped[str] = mapped_column(String(500), nullable=False)
-    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    # BigInteger rather than Integer: the per-org cap is configurable and
-    # a future raise past 2 GB should not need a column migration.
-    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
-    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     def __repr__(self) -> str:

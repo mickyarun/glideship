@@ -14,8 +14,10 @@
 
 /**
  * Ask before throwing away unsaved edits: on leaving the route, on a query
- * change that would unmount the form (any of `queryKeys` changing), and on
- * closing the tab. Render a confirm dialog on `asking` and call `answer`.
+ * or path-param change that would unmount the form (any of `queryKeys` or
+ * `paramKeys` changing), and on closing the tab. Render a confirm dialog on
+ * `asking` and call `answer`. `ask` puts the same question before an
+ * in-page switch (a tab, a document) that would drop the edits.
  */
 import { onBeforeUnmount, onMounted, type Ref, ref } from 'vue'
 import {
@@ -24,7 +26,11 @@ import {
   type RouteLocationNormalized,
 } from 'vue-router'
 
-export function useUnsavedGuard(dirty: Ref<boolean>, queryKeys: readonly string[]) {
+export function useUnsavedGuard(
+  dirty: Ref<boolean>,
+  queryKeys: readonly string[],
+  paramKeys: readonly string[] = [],
+) {
   const asking = ref(false)
   let resolve: ((leave: boolean) => void) | null = null
 
@@ -43,7 +49,10 @@ export function useUnsavedGuard(dirty: Ref<boolean>, queryKeys: readonly string[
   }
 
   function unmountsForm(to: RouteLocationNormalized, from: RouteLocationNormalized): boolean {
-    return queryKeys.some(key => to.query[key] !== from.query[key])
+    return (
+      queryKeys.some(key => to.query[key] !== from.query[key]) ||
+      paramKeys.some(key => to.params[key] !== from.params[key])
+    )
   }
 
   onBeforeRouteLeave(() => (dirty.value ? ask() : true))
@@ -61,5 +70,5 @@ export function useUnsavedGuard(dirty: Ref<boolean>, queryKeys: readonly string[
     answer(false)
   })
 
-  return { asking, answer }
+  return { asking, answer, ask }
 }

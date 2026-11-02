@@ -21,6 +21,8 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app import instance_secrets
+from app.config_boards import BoardsConfig
+from app.config_bud_agents import BudAgentConfig
 
 
 class DatabaseConfig(BaseSettings):
@@ -185,6 +187,15 @@ class WebSocketConfig(BaseSettings):
     max_subscribe_queue: int = Field(
         default=32,
         description="Max queued events per event-bus subscriber before dropping.",
+    )
+    recheck_attempts: int = Field(
+        default=3, gt=0, description="Tries an access re-check gets before it revokes."
+    )
+    recheck_retry_delay_seconds: float = Field(
+        default=0.25, ge=0, description="Wait before the second try; doubles after each."
+    )
+    recheck_concurrency: int = Field(
+        default=4, gt=0, description="Access re-checks using the database at once."
     )
 
 
@@ -410,6 +421,8 @@ class Settings(BaseSettings):
     storage: StorageConfig = StorageConfig()
     file_storage: FileStorageConfig = FileStorageConfig()
     ws: WebSocketConfig = WebSocketConfig()
+    boards: BoardsConfig = BoardsConfig()
+    bud_agents: BudAgentConfig = BudAgentConfig()
     colyseus: ColyseusConfig = ColyseusConfig()
 
 

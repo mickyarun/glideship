@@ -31,7 +31,7 @@
       <v-btn color="primary" variant="tonal" prepend-icon="mdi-bookshelf" @click="picking = true">Add from library</v-btn>
     </template>
     <AppCallout v-if="store.typesError" variant="error" class="mb-4">{{ store.typesError }}</AppCallout>
-    <LeaveEmptyState
+    <AppEmptyState
       v-if="!store.types.length && !store.typesError"
       icon="mdi-shape-plus-outline"
       title="No leave types yet"
@@ -42,7 +42,7 @@
         <v-btn variant="text" prepend-icon="mdi-plus" @click="edit(null)">Add leave type</v-btn>
         <v-btn variant="text" prepend-icon="mdi-water-outline" @click="addPeriodLeave">Add period leave</v-btn>
       </template>
-    </LeaveEmptyState>
+    </AppEmptyState>
     <template v-else>
       <LeaveTypeTable v-if="groups.active.length" :types="groups.active" @edit="edit" />
       <div v-if="groups.inactive.length" class="mt-4">
@@ -75,7 +75,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import LeaveSectionCard from '@/components/leave/settings/LeaveSectionCard.vue'
 import LeaveTypeDialog from '@/components/leave/settings/LeaveTypeDialog.vue'
 import LeaveTypeTable from '@/components/leave/settings/LeaveTypeTable.vue'

@@ -12,39 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ref, type Ref } from 'vue'
-import { useBUDStore } from '@/stores/bud'
-import type { BUDDocument } from '@/types'
+import { ref } from 'vue'
 
 /**
- * Reusable composable for editing a single markdown section of a BUD.
- * Encapsulates the editing/editValue/toggle/save pattern shared by
- * requirements_md, tech_spec_md, and test_plan_md tabs.
+ * Edit one markdown text in place: the editing/editValue/toggle/save
+ * pattern behind the BUD's requirements and tech spec tabs, a card's
+ * description and its documents. ``current`` reads the saved text (null
+ * when there's nothing to save to yet); ``save`` writes a changed value
+ * and may resolve ``false`` to keep the editor open, e.g. after a failed
+ * save, so the draft isn't lost.
  */
 export function useMarkdownSection(
-  fieldName: keyof Pick<BUDDocument, 'requirements_md' | 'tech_spec_md' | 'test_plan_md'>,
-  bud: Ref<BUDDocument | null>,
+  current: () => string | null,
+  save: (value: string) => Promise<boolean | void>,
 ) {
-  const budStore = useBUDStore()
   const editing = ref(false)
   const editValue = ref('')
 
   function toggle(): void {
     if (editing.value) {
-      save()
+      void commit()
     } else {
-      editValue.value = bud.value?.[fieldName] || ''
+      editValue.value = current() ?? ''
       editing.value = true
     }
   }
 
-  async function save(): Promise<void> {
-    if (!bud.value) return
-    if (editValue.value !== (bud.value[fieldName] || '')) {
-      await budStore.updateBUD(bud.value.id, { [fieldName]: editValue.value })
-    }
+  async function commit(): Promise<void> {
+    const saved = current()
+    if (saved === null) return
+    if (editValue.value !== saved && (await save(editValue.value)) === false) return
     editing.value = false
   }
 
-  return { editing, editValue, toggle, save }
+  return { editing, editValue, toggle, save: commit }
 }

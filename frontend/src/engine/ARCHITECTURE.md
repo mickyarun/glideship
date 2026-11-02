@@ -152,7 +152,9 @@ frontend/src/engine/
 │   ├── ParticleEmitter.ts      # [Phase 6] Generic particles
 │   ├── SplashEffect.ts         # [Phase 6] Pool splashes
 │   ├── ZzzEffect.ts            # [Phase 6] Sleep particles
-│   └── SteamEffect.ts          # [Phase 6] Coffee/cooking steam
+│   ├── SteamEffect.ts          # [Phase 6] Coffee/cooking steam
+│   ├── CelebrationBurst.ts     # DOM toast + CSS confetti (SP rewards, board activity)
+│   └── BoardActivityEffects.ts # Org room `board_activity`: Cheer on card done, toast on handover/delivery
 │
 ├── assets/                     # [Phase 3] Asset loading
 │   ├── AssetLoader.ts          # GLTF/GLB load + cache + dedup
@@ -161,6 +163,7 @@ frontend/src/engine/
 ├── characters/                 # [Phase 3] Character system
 │   ├── CharacterFactory.ts     # Load, clone, proper PBR materials
 │   ├── AnimationController.ts  # State machine (idle/walk/run/swim/sit)
+│   ├── EmoteHolds.ts           # Client-side emote (cheer) that outlasts server snapshots
 │   ├── CharacterEntity.ts      # Mesh + animator + name label
 │   ├── PlayerController.ts     # WASD movement + swimming
 │   └── PropAttachment.ts       # Watering can, fertilizer, agent gear
@@ -396,6 +399,22 @@ application.updateIBL((dir) => {
 10. **Type-safe events** — `EventBus<EngineEvents>` enforces event names and payload types at compile time.
 
 ---
+
+## Board Activity
+
+The org room re-broadcasts `board_activity` messages (`{kind, actor_id, board_key?, card_key?}`,
+checked by `multiplayer/src/sim/BoardActivity.ts`, checked again by
+`src/multiplayer/boardActivity.ts`). `OrgRoomClient.onBoardActivity` hands each to
+`BoardActivityEffects`, wired in `GardenEngine.wireOrgRoomCallbacks`. It is ambience only:
+
+- `card_done` — the actor's character plays the `Cheer` state (KayKit track `Cheering`, via the
+  INTEGER `emote` parameter). A server-driven character cheers only while idle; `EmoteHolds`
+  keeps the emote through snapshots until it runs out or the server moves them. Under takeover the
+  local controller plays its own emote.
+- `handover` / `bud_delivered` — `CelebrationBurst` (DOM toast + CSS confetti), at most one per
+  `TOAST_GAP_MS`. Text names the card or board key only when the event carries one; never a title.
+
+No new assets, positions or materials: nothing here touches `shared/world/` or the PBR pipeline.
 
 ## How to Add a New Subsystem (Phase 2+)
 

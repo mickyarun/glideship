@@ -41,7 +41,7 @@ async def _permission_ids(factory: Factory, *resource_ids: str) -> list[str]:
 
 
 async def _sales_base(factory: Factory) -> str:
-    """A base role with no permissions, so a custom role holds only what it lists."""
+    """The sales base role; a custom role holds only the permissions it lists."""
     async with factory() as db:
         sales = await RoleRepository(db).get_by_name_system("sales")
         assert sales is not None

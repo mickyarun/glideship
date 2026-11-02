@@ -152,11 +152,13 @@
   border-radius: 999px;
   border: 1px dashed rgb(var(--v-theme-on-surface-variant));
 }
+/* Height and spacing come from the shared .bo-header-actions. */
 .bud-header__actions {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+}
+.bud-header__needs {
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 @media (max-width: 600px) {
   .bud-header__title {

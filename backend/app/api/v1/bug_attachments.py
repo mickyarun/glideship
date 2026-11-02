@@ -28,13 +28,13 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._attachment_response import attachment_response
 from app.core.deps import (
     get_current_user,
     get_db,
     get_user_permissions,
     require_permissions,
 )
-from app.core.paths import sanitize_filename
 from app.models.bug import Bug
 from app.models.bug_attachment import BugAttachment
 from app.models.user import User
@@ -46,11 +46,20 @@ from app.schemas.bug import (
     BugAttachmentListResponse,
     BugAttachmentRead,
 )
+from app.services.attachment_upload import UploadProblem, UploadRejectedError, precheck, store
 from app.services.file_storage import FileStorageError, get_file_storage
 from app.services.org_settings import get_bug_attachment_settings
-from app.services.upload_policy import UploadPolicy, UploadPolicyError, bug_attachment_policy
+from app.services.upload_policy import UploadPolicy, bug_attachment_policy
 
 logger = structlog.get_logger(__name__)
+
+_UPLOAD_STATUS = {
+    UploadProblem.COUNT: status.HTTP_409_CONFLICT,
+    UploadProblem.TYPE: status.HTTP_400_BAD_REQUEST,
+    UploadProblem.SIZE: status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+    UploadProblem.EMPTY: status.HTTP_400_BAD_REQUEST,
+    UploadProblem.STORAGE: status.HTTP_400_BAD_REQUEST,
+}
 
 router = APIRouter(tags=["bug-attachments"])
 
@@ -133,78 +142,39 @@ async def upload_bug_attachment(
     Validation runs in the order that keeps the most expensive work
     last: the per-bug count first (a cheap COUNT), then the type (from
     the filename alone), then the bytes — so a reporter at the file cap
-    is told immediately instead of after uploading 10 MB.
+    is told immediately instead of after uploading 10 MB. The steps are
+    shared with card attachments in ``services/attachment_upload``.
     """
     bug = await _ensure_bug_in_org(db, current_user.org_id, bug_id)
     policy = await _resolve_policy(db, current_user.org_id)
     attachment_repo = BugAttachmentRepository(db, org_id=current_user.org_id)
 
-    existing = await attachment_repo.count_for_bug(bug_id)
     try:
-        policy.check_count(existing)
-    except UploadPolicyError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-
-    # ASCII-safe for BOTH the storage path and the DB ``filename``
-    # column, so the download route's Content-Disposition header is
-    # latin-1 clean without further escaping.
-    safe_filename = sanitize_filename(file.filename, fallback="attachment")
-
-    # Canonical type from the extension, never the browser's
-    # Content-Type — see ``upload_policy`` for why that header can't be
-    # trusted for spreadsheets. Resolving against the sanitised name
-    # also means a rejected extension can't have survived sanitisation
-    # as something else.
-    try:
-        content_type = policy.resolve_mime(safe_filename)
-    except UploadPolicyError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-    # Read one byte past the cap so an oversized file is detected
-    # without buffering the whole of it in memory.
-    data = await file.read(policy.max_bytes + 1)
-    if len(data) > policy.max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"{policy.label} exceeds the {policy.max_mb} MB limit.",
-        )
-    if not data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{safe_filename} is empty.",
-        )
-
-    # Storage layout:
-    #
-    #   {org_id}/bug-attachments/BUG-{nnn}/{key}-{safe_name}
-    #
-    # ``BUG-{nnn}`` is the human-readable per-org bug number, so an
-    # operator browsing the bucket doesn't have to resolve UUIDs. The
-    # random key prefix keeps two files of the same name on one bug
-    # from clobbering each other.
-    storage = get_file_storage()
-    relative_path = (
-        f"bug-attachments/BUG-{bug.bug_number:03d}/{uuid.uuid4().hex[:12]}-{safe_filename}"
-    )
-    try:
-        storage_path = await storage.upload(
-            org_id=str(current_user.org_id),
-            relative_path=relative_path,
+        name = precheck(policy, file.filename, await attachment_repo.count_for_bug(bug_id))
+        # Read one byte past the cap so an oversized file is detected
+        # without buffering the whole of it in memory.
+        data = await file.read(policy.max_bytes + 1)
+        # ``BUG-{nnn}`` is the human-readable per-org bug number, so an
+        # operator browsing the bucket doesn't have to resolve UUIDs.
+        stored = await store(
+            policy,
+            get_file_storage(),
+            org_id=current_user.org_id,
+            folder=f"bug-attachments/BUG-{bug.bug_number:03d}",
+            name=name,
             data=data,
-            content_type=content_type,
-            policy=policy,
         )
-    except FileStorageError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except UploadRejectedError as exc:
+        raise HTTPException(status_code=_UPLOAD_STATUS[exc.problem], detail=str(exc)) from exc
 
     attachment = await attachment_repo.create(
         BugAttachment(
             org_id=current_user.org_id,
             bug_id=bug_id,
-            filename=safe_filename,
-            mime_type=content_type,
-            size_bytes=len(data),
-            storage_path=storage_path,
+            filename=stored.filename,
+            mime_type=stored.mime_type,
+            size_bytes=stored.size_bytes,
+            storage_path=stored.storage_path,
             uploaded_by=current_user.id,
         )
     )
@@ -214,8 +184,8 @@ async def upload_bug_attachment(
         "bug_attachment_uploaded",
         bug_id=str(bug_id),
         attachment_id=str(attachment.id),
-        mime_type=content_type,
-        size=len(data),
+        mime_type=stored.mime_type,
+        size=stored.size_bytes,
     )
     return BugAttachmentRead.model_validate(attachment)
 
@@ -237,35 +207,17 @@ async def download_bug_attachment(
     try:
         data, _stored_type = await storage.download(attachment.storage_path)
     except FileStorageError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        # The backend's message can name paths or buckets; log it, don't send it.
+        logger.error(
+            "bug_attachment_download_failed", attachment_id=str(attachment_id), error=str(exc)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
+        ) from exc
 
     # Serve the type recorded at upload, which we derived ourselves from
-    # the extension, rather than whatever the storage backend reports —
-    # the local backend guesses from the path and S3 echoes what was put.
-    #
-    # The filename is already ASCII-safe from upload-time sanitisation;
-    # re-running the sanitiser covers any row written before that
-    # guarantee existed, and keeps the header latin-1 clean.
-    safe_name = sanitize_filename(attachment.filename, fallback="attachment")
-    return Response(
-        content=data,
-        media_type=attachment.mime_type,
-        headers={
-            # ``attachment``, matching the QA evidence route. Nothing in
-            # the UI reads this header - tiles fetch the bytes over XHR
-            # and render a blob URL - so serving user content inline
-            # would buy nothing while leaving a same-origin browsing
-            # context available to a future cookie session or iframe
-            # preview. The two headers below hold that line regardless:
-            #   * nosniff stops a browser ignoring our declared type and
-            #     executing, say, a .png full of HTML;
-            #   * the sandbox CSP strips scripting and same-origin
-            #     access, which matters for PDFs (they can carry JS).
-            "Content-Disposition": f'attachment; filename="{safe_name}"',
-            "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "default-src 'none'; sandbox",
-        },
-    )
+    # the extension, rather than whatever the storage backend reports.
+    return attachment_response(data, attachment.filename, attachment.mime_type)
 
 
 @router.delete(

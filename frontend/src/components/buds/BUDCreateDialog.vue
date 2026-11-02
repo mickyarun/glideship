@@ -54,46 +54,7 @@
             Advanced settings
           </v-expansion-panel-title>
           <v-expansion-panel-text>
-            <p class="bud-create__hint mb-3">
-              Pick which phases our AI agent should auto-run. Anything left off, you drive
-              yourself via the section editors (typically using your local AI through
-              <strong>Settings → MCP Connect</strong>).
-            </p>
-            <div class="d-flex flex-column ga-2 mb-4">
-              <v-switch
-                v-for="stage in CREATE_STAGES"
-                :key="`gen-${stage.value}`"
-                v-model="form.autoGenerate.value[stage.value]"
-                :label="`Auto-generate ${stage.label}`"
-                density="compact"
-                hide-details
-              />
-            </div>
-            <AppCallout
-              v-if="form.autoGenerate.value.closed === false"
-              variant="warning"
-              eyebrow="Learning recap disabled"
-              class="mb-4"
-            >
-              Without the post-close recap, this BUD's per-phase actuals still feed the velocity
-              rollup that powers future estimates — but you lose the written retrospective and
-              the trend signal that recap embeddings provide to similar BUDs.
-            </AppCallout>
-            <v-progress-circular v-if="form.skillsLoading.value" indeterminate size="20" class="my-3" />
-            <div v-else class="d-flex flex-column ga-3">
-              <v-select
-                v-for="stage in CREATE_STAGES"
-                :key="stage.value"
-                v-model="form.stageSkillPicks.value[stage.value]"
-                :label="`${stage.label} skill`"
-                :items="form.skillsForStage(stage.agentType)"
-                item-title="label"
-                item-value="id"
-                density="compact"
-                hide-details
-                :disabled="!form.autoGenerate.value[stage.value]"
-              />
-            </div>
+            <BudAgentOptions :options="form.agents" />
           </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
@@ -118,9 +79,10 @@
 </template>
 
 <script setup lang="ts">
+import BudAgentOptions from '@/components/buds/BudAgentOptions.vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
-import { CREATE_STAGES, useBudCreateForm } from '@/composables/useBudCreateForm'
+import { useBudCreateForm } from '@/composables/useBudCreateForm'
 import { BUD_PRIORITIES } from '@/types'
 
 const PRIORITY_OPTIONS = BUD_PRIORITIES.map(p => ({ label: p, value: p }))
@@ -137,10 +99,6 @@ const form = useBudCreateForm(open)
 .bud-create__label {
   min-width: 70px;
   font-size: var(--text-sm);
-  color: rgb(var(--v-theme-on-surface-variant));
-}
-.bud-create__hint {
-  font-size: var(--text-xs);
   color: rgb(var(--v-theme-on-surface-variant));
 }
 </style>

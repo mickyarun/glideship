@@ -51,7 +51,7 @@
     </AppCallout>
     <HolidayAddRow v-if="adding" :policy-id="policy.id" :year="year" class="mb-4" @close="adding = false" />
     <v-progress-linear v-if="store.loading" indeterminate color="primary" />
-    <LeaveEmptyState
+    <AppEmptyState
       v-else-if="!store.holidays.length && !adding"
       icon="mdi-calendar-blank-outline"
       :title="`No holidays for ${year} yet`"
@@ -60,7 +60,7 @@
       <template #actions>
         <v-btn variant="flat" color="primary" prepend-icon="mdi-plus" @click="adding = true">Add holiday</v-btn>
       </template>
-    </LeaveEmptyState>
+    </AppEmptyState>
     <HolidayList v-else :holidays="store.holidays" @set-kind="setKind" @remove="remove" />
   </LeaveSectionCard>
 </template>
@@ -71,7 +71,7 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
 import HolidayAddRow from '@/components/leave/settings/HolidayAddRow.vue'
 import HolidayList from '@/components/leave/settings/HolidayList.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import LeaveSectionCard from '@/components/leave/settings/LeaveSectionCard.vue'
 import { useLeavePolicyConfigStore } from '@/stores/leavePolicyConfig'
 import type { HolidayKind } from '@/types/leave'

@@ -44,6 +44,14 @@ class NotificationType(StrEnum):
     LEAVE_REQUESTED = "leave_requested"
     LEAVE_DECIDED = "leave_decided"
     EMPLOYEE_RECORD_CHANGED = "employee_record_changed"
+    BOARD_CARD_ASSIGNED = "board_card_assigned"
+    BOARD_CARD_COMMENT = "board_card_comment"
+    BOARD_AI_DRAFT = "board_ai_draft"
+    BOARD_AI_FAILED = "board_ai_failed"
+    BOARD_HANDOVER = "board_handover"
+    BOARD_HANDOVER_RETURNED = "board_handover_returned"
+    BOARD_HANDOVER_DELIVERED = "board_handover_delivered"
+    BOARD_DUE = "board_due"
 
 
 class Notification(BaseModel):

@@ -64,6 +64,7 @@ from app.schemas.settings import (
     RepoInfo,
     RepoStatusRequest,
 )
+from app.services.boards.repo_service import unlink_retired_repo
 from app.services.directory_listing import in_clone_root, picker_roots
 from app.services.git_operations import get_github_repo_full_name
 from app.services.github_install_repos import (
@@ -310,6 +311,7 @@ async def remove_repo(
         )
 
     await repo_repo.set_status(repo.id, RepoStatus.REMOVED)
+    await unlink_retired_repo(db, org_id=org.id, repo_id=repo.id, actor_id=current_user.id)
 
     # Soft-delete every feature whose PRIMARY junction points at this
     # repo. The junction rows themselves stay (they cascade out only
@@ -360,6 +362,8 @@ async def update_repo_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Repository not found.",
         )
+    if repo.status is not RepoStatus.ACTIVE:
+        await unlink_retired_repo(db, org_id=org.id, repo_id=repo.id, actor_id=current_user.id)
     return build_repo_info(repo)
 
 

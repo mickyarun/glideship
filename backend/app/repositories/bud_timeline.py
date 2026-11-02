@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bud import BUDDocument, BUDTimelineEvent
@@ -30,6 +30,11 @@ class BUDTimelineRepository(BaseRepository[BUDTimelineEvent]):
 
     def __init__(self, db: AsyncSession, *, org_id: uuid.UUID) -> None:
         super().__init__(BUDTimelineEvent, db, org_id=org_id)
+
+    async def clock_now(self) -> datetime:
+        """``clock_timestamp()``: unlike ``now()``, it moves on within a transaction."""
+        stamp: datetime = (await self._db.execute(select(func.clock_timestamp()))).scalar_one()
+        return stamp
 
     async def list_for_bud(self, bud_id: uuid.UUID) -> list[BUDTimelineEvent]:
         """All events for a BUD, chronological order."""

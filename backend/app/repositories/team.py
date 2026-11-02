@@ -24,7 +24,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Final
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.team import Team, TeamMember, TeamRepo, TeamStatus
@@ -64,6 +64,20 @@ class TeamRepository(BaseRepository[Team]):
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_active_with_member_counts(self) -> list[tuple[Team, int]]:
+        """Active teams in the org, ordered by name, each with how many people are in it."""
+        stmt = (
+            self._scoped(select(Team, func.count(TeamMember.user_id)))
+            .outerjoin(
+                TeamMember, (TeamMember.team_id == Team.id) & (TeamMember.org_id == Team.org_id)
+            )
+            .where(Team.status == TeamStatus.ACTIVE)
+            .group_by(Team.id)
+            .order_by(Team.name)
+        )
+        result = await self._db.execute(stmt)
+        return [(team, int(count)) for team, count in result.all()]
 
     async def list_all_ordered(self) -> list[Team]:
         """All teams including archived, ordered by name."""
@@ -137,6 +151,13 @@ class TeamRepository(BaseRepository[Team]):
         self._db.add(member)
         await self._db.flush()
         return member
+
+    async def list_member_ids(self, team_id: uuid.UUID) -> set[uuid.UUID]:
+        """Everyone on the team."""
+        stmt = select(TeamMember.user_id).where(
+            TeamMember.team_id == team_id, TeamMember.org_id == self._org_id
+        )
+        return set((await self._db.execute(stmt)).scalars().all())
 
     async def remove_member(self, team_id: uuid.UUID, user_id: uuid.UUID) -> int:
         """Remove a user from a team. Returns rows deleted (0 or 1).

@@ -51,6 +51,7 @@ from app.models.dev_activity import DevActivityLog
 from app.models.organization import Organization
 from app.models.user import OrgToUser, User
 from app.repositories.role import RoleRepository
+from app.services.bud_stage_gates import StageContent, missing_content
 from app.services.embedding_service import embedding_service
 
 Factory = async_sessionmaker[AsyncSession]
@@ -116,7 +117,7 @@ def stub_externals(embedding: list[float] | None = None) -> Iterator[Externals]:
             stack.enter_context(patch(target, new=AsyncMock(side_effect=RuntimeError(_NO_MODEL))))
         bg_estimate = stack.enter_context(patch("app.api.v1.bud._bg_estimate", new=AsyncMock()))
         dev_estimate = stack.enter_context(
-            patch("app.services.bud_development._schedule_estimation_after_commit")
+            patch("app.services.bud_estimate_after_commit.schedule")
         )
         yield Externals(embed=embed, bg_estimate=bg_estimate, dev_estimate=dev_estimate)
 
@@ -168,6 +169,24 @@ async def add_member(
         return user.id
 
 
+# Stand-in sections for a BUD placed straight into a stage, so it looks
+# like one that got there (services/bud_stage_gates.py).
+_STAND_IN: dict[StageContent, tuple[str, str]] = {
+    StageContent.PRD: ("requirements_md", "## Problem\nStand-in PRD."),
+    StageContent.TECH_SPEC: ("tech_spec_md", "## Approach\nStand-in tech spec."),
+}
+
+
+def written_sections(
+    status: BUDStatus, *, requirements_md: str | None, tech_spec_md: str | None
+) -> dict[str, str]:
+    """The stand-in sections a BUD in ``status`` would have written by now."""
+    missing = missing_content(
+        BUDStatus.BUD, status, requirements_md=requirements_md, tech_spec_md=tech_spec_md
+    )
+    return dict(_STAND_IN[m] for m in missing)
+
+
 async def add_bud(
     factory: Factory,
     org_id: uuid.UUID,
@@ -176,7 +195,13 @@ async def add_bud(
     status: BUDStatus = BUDStatus.BUD,
     **fields: Any,
 ) -> uuid.UUID:
-    """Insert a BUD row directly in ``status`` and return its id."""
+    """Insert a BUD row directly in ``status`` and return its id.
+
+    Sections the stage needs are filled with stand-ins unless given
+    (pass ``None`` to leave one unwritten).
+    """
+    for name, text in written_sections(status, requirements_md=None, tech_spec_md=None).items():
+        fields.setdefault(name, text)
     async with factory() as db:
         bud = BUDDocument(
             org_id=org_id,

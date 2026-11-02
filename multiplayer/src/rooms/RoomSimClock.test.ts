@@ -120,7 +120,7 @@ describe("RaceRoom simulation loop", () => {
 
 describe("MinigameRoom simulation loop", () => {
   /** The verified identity onAuth hands to onJoin. */
-  const ALICE = { userId: "alice", name: "Alice", orgId: "org-a" }
+  const ALICE = { userId: "alice", name: "Alice", orgId: "org-a", engineering: false }
 
   function playingPollenPop(): MinigameRoom {
     const room = new MinigameRoom()

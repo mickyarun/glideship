@@ -25,39 +25,33 @@ even in a manager's DMs.
 """
 
 import uuid
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Any
+from dataclasses import dataclass
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.leave_request import LeaveKind, LeaveRequest, LeaveStatus
-from app.models.notification import Notification, NotificationType
+from app.models.notification import NotificationType
 from app.schemas.leave import HighLeave
 from app.services.background import spawn
-from app.services.event_bus import publish
 from app.services.leave.calendar_sync.sync import sync_request
 from app.services.leave.messages import compose_decision_message, compose_request_message
-from app.services.leave.slack_blocks import escape
 from app.services.leave.slack_prompts import refresh_prompts, send_prompts
 from app.services.leave.slack_status.apply import refresh_after_change
 from app.services.notifications import NotificationCategory
+from app.services.notifications.notice import Notice as BaseNotice
+from app.services.notifications.notice import add_notification_rows
 from app.services.slack_dm import send_dm
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 logger = structlog.get_logger(__name__)
 
 
 @dataclass
-class Notice:
-    """Notifications staged in a transaction, to send once it commits."""
+class Notice(BaseNotice):
+    """A leave notice: approval prompts, prompt refreshes and calendar sync on top of the DM."""
 
-    org_id: uuid.UUID
-    user_ids: set[uuid.UUID]
-    category: NotificationCategory
-    slack_text: str
-    events: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     # Send these approvers Approve / Reject buttons instead of a plain DM.
     prompt_request_id: uuid.UUID | None = None
     # Afterwards, swap earlier prompts for this request to its outcome.
@@ -65,10 +59,8 @@ class Notice:
     # Bring the requester's Google Calendar and Slack status in line with it.
     sync_request_id: uuid.UUID | None = None
 
-    def send(self) -> None:
-        """Push the in-app rows and start the Slack messages. Call after commit."""
-        for topic, payload in self.events:
-            publish(topic, payload)
+    def deliver(self) -> None:
+        """Start the prompts or DM, then the refresh and sync. Called by ``send``."""
         if self.user_ids and self.prompt_request_id:
             spawn(
                 send_prompts(self.org_id, self.prompt_request_id, self.user_ids, self.slack_text)
@@ -92,32 +84,17 @@ def stage_rows(
     link: str,
 ) -> Notice:
     """Add the in-app rows for ``notice`` to the caller's transaction (sent after commit)."""
-    for user_id in notice.user_ids:
-        note = Notification(
-            id=uuid.uuid4(),
+    notice.events.extend(
+        add_notification_rows(
+            db,
             org_id=notice.org_id,
-            user_id=user_id,
-            type=kind,
+            user_ids=notice.user_ids,
+            kind=kind,
             title=title,
             message=message,
-            deep_link=link,
+            link=link,
         )
-        db.add(note)
-        notice.events.append(
-            (
-                f"notifications:{user_id}",
-                {
-                    "id": str(note.id),
-                    "type": kind.value,
-                    "title": title,
-                    "message": message,
-                    "deepLink": link,
-                    "isRead": False,
-                    "isDismissed": False,
-                    "createdAt": datetime.now(UTC).isoformat(),
-                },
-            )
-        )
+    )
     return notice
 
 
@@ -149,7 +126,7 @@ def stage_new_request(
         slack_text=message
         if not auto_approved
         # Escaped: a name like "<https://evil|Open>" must not become a link.
-        else f"{escape(message)} <{settings.frontend_url}{link}|Open in Glideship>",
+        else f"{escape_mrkdwn(message)} <{settings.frontend_url}{link}|Open in Glideship>",
         prompt_request_id=None if auto_approved else request.id,
         # A pending request has nothing on the calendar yet.
         sync_request_id=request.id if auto_approved else None,
@@ -173,7 +150,7 @@ def stage_decision(
         org_id=org_id,
         user_ids={request.user_id},
         category=NotificationCategory.LEAVE_UPDATES,
-        slack_text=f"{escape(message)} <{settings.frontend_url}/leave|See details>",
+        slack_text=f"{escape_mrkdwn(message)} <{settings.frontend_url}/leave|See details>",
         refresh_request_id=request.id,
         # A rejected request never had events or a status to take off.
         sync_request_id=request.id if request.status == LeaveStatus.APPROVED else None,

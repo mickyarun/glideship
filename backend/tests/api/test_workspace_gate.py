@@ -24,6 +24,7 @@ engineering data by accident.
 from app.api.router import api_router
 from app.core.permissions import WORKSPACE_ENGINEERING
 from tests.api.route_walk import ServedRoute, depends_on, served_routes
+from tests.api.test_board_routes import BOARD_API_MODULES
 
 # Modules whose routes are open to any authenticated member, or that
 # authenticate with their own credential (webhook signature, MCP token,
@@ -73,6 +74,9 @@ SHARED_MODULES = frozenset(
         "app.api.v1.ws",
         "app.mcp.server",
         "app.mcp.streamable",
+        # Team boards: behind ``boards:view`` and a per-board role, open to
+        # people-only roles. ``test_board_routes`` pins that gate.
+        *(f"app.api.v1.boards.{part}" for part in BOARD_API_MODULES),
     }
 )
 

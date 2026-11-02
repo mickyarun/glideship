@@ -39,6 +39,10 @@ def test_remote_allowlist_is_exactly_the_documented_tools() -> None:
         # Plan editing — user-token gated; any org member may add/edit todos.
         "create_todo",
         "update_todo",
+        # Board reads — personal token, board role checked on every call.
+        "list_boards",
+        "get_board",
+        "get_card",
     }
     assert set(REMOTE_TOOLS) == expected
 

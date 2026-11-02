@@ -23,8 +23,10 @@ from zoneinfo import ZoneInfo
 
 from app.models.leave_request import HalfDay
 from app.services.leave.digest_compose import OutToday, compose
-from app.services.leave.digest_schedule import due_local_date
-from app.services.leave.slack_blocks import approval_blocks, escape
+from app.services.leave.digest_scheduler import POST_WINDOW
+from app.services.leave.slack_blocks import approval_blocks
+from app.services.scheduling.tick_loop import due_local_date
+from app.services.slack_mrkdwn import escape_mrkdwn
 from app.services.slack_verify import verify_slack_signature
 
 KOLKATA = ZoneInfo("Asia/Kolkata")
@@ -33,10 +35,14 @@ MON = date(2026, 10, 19)
 
 def test_post_is_due_from_post_time_for_three_hours() -> None:
     # 09:30 IST is 04:00 UTC.
-    assert due_local_date(datetime(2026, 10, 19, 3, 59, tzinfo=UTC), KOLKATA, "09:30") is None
-    assert due_local_date(datetime(2026, 10, 19, 4, 0, tzinfo=UTC), KOLKATA, "09:30") == MON
-    assert due_local_date(datetime(2026, 10, 19, 6, 59, tzinfo=UTC), KOLKATA, "09:30") == MON
-    assert due_local_date(datetime(2026, 10, 19, 7, 0, tzinfo=UTC), KOLKATA, "09:30") is None
+    def due(hour: int, minute: int) -> date | None:
+        at = datetime(2026, 10, 19, hour, minute, tzinfo=UTC)
+        return due_local_date(at, KOLKATA, "09:30", window=POST_WINDOW)
+
+    assert due(3, 59) is None
+    assert due(4, 0) == MON
+    assert due(6, 59) == MON
+    assert due(7, 0) is None
 
 
 def _out(name: str, back: date | None = None, half: HalfDay = HalfDay.NONE) -> OutToday:
@@ -76,7 +82,7 @@ def test_nothing_to_post_when_everyone_is_in() -> None:
 
 
 def test_names_cannot_inject_slack_markup() -> None:
-    assert escape("<!channel> & co") == "&lt;!channel&gt; &amp; co"
+    assert escape_mrkdwn("<!channel> & co") == "&lt;!channel&gt; &amp; co"
     blocks = approval_blocks("<@U1> requested leave", uuid.uuid4(), "https://app/leave")
     assert blocks[0]["text"]["text"] == "&lt;@U1&gt; requested leave"
     assert [e["action_id"] for e in blocks[1]["elements"]] == [

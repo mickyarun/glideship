@@ -17,9 +17,9 @@
 <!-- Asks before a BUD moves to Closed: closing runs the close-out (XP,
      SP, learning recap) and a closed BUD can't be reopened. -->
 <template>
-  <v-dialog v-model="open" max-width="440">
+  <v-dialog v-model="open" max-width="440" :aria-labelledby="titleId">
     <v-card color="surface" class="pa-6">
-      <h2 class="close-dialog__title">Close this BUD?</h2>
+      <h2 :id="titleId" class="close-dialog__title">Close this BUD?</h2>
       <p class="close-dialog__text">
         Closing runs the close-out: contributor XP, shipped SP and the learning recap. It can't be undone, and
         a closed BUD can't move to another stage.
@@ -34,8 +34,12 @@
 </template>
 
 <script setup lang="ts">
+import { useId } from 'vue'
+
 const open = defineModel<boolean>({ required: true })
 const emit = defineEmits<{ confirm: [] }>()
+// Named by its title, so a screen reader announces what it asks.
+const titleId = useId()
 </script>
 
 <style scoped>

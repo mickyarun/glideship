@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { CLIENT_ID_HEADER, clientId } from '@/services/clientId'
 import type { ApiError } from '@/types'
 import { rememberReturnTo } from '@/utils/returnTo'
 
@@ -47,6 +48,7 @@ export function applyRequestHeaders(
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  config.headers.set(CLIENT_ID_HEADER, clientId)
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
     config.headers.delete('Content-Type')
   }

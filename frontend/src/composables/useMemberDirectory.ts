@@ -32,6 +32,7 @@
 import { ref } from 'vue'
 import api from '@/services/api'
 import { latestCall } from '@/utils/latestCall'
+import { logFailure } from '@/utils/logFailure'
 
 export interface DirectoryEntry {
   id: string
@@ -71,7 +72,7 @@ async function ensureLoaded(force = false): Promise<void> {
     } catch (err) {
       // Try again on the next read rather than keep a roster known to be old.
       if (latest()) stale = true
-      console.error('[useMemberDirectory] directory fetch failed:', err)
+      logFailure('useMemberDirectory', 'directory fetch', err)
     } finally {
       if (latest()) {
         loading.value = false

@@ -30,6 +30,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.api.v1 import internal_colyseus as mod
+from app.core.permission_deps import PermissionSet
+from app.core.permissions import WORKSPACE_ENGINEERING
+from app.core.permissions_boards import BOARDS_VIEW
 
 ORG_ID = uuid.uuid4()
 USER_ID = uuid.uuid4()
@@ -41,8 +44,10 @@ def _patch(
     claims: dict[str, Any] | None,
     active: bool = True,
     engineering: bool = True,
+    boards: bool = False,
+    member: bool = True,
     must_change_password: bool = False,
-) -> None:
+) -> AsyncMock:
     monkeypatch.setattr(mod, "verify_token", MagicMock(return_value=claims))
     user = SimpleNamespace(
         id=USER_ID,
@@ -52,7 +57,12 @@ def _patch(
     )
     repo = MagicMock(get_by_id=AsyncMock(return_value=user))
     monkeypatch.setattr(mod, "UserRepository", MagicMock(return_value=repo))
-    monkeypatch.setattr(mod, "member_has_permission", AsyncMock(return_value=engineering))
+    held = {WORKSPACE_ENGINEERING} if engineering else set()
+    held |= {BOARDS_VIEW} if boards else set()
+    perms = PermissionSet(ids=frozenset(held), is_owner=False) if member else None
+    lookup = AsyncMock(return_value=perms)
+    monkeypatch.setattr(mod, "member_permission_set", lookup)
+    return lookup
 
 
 async def _verify(org_id: object = ORG_ID) -> dict[str, Any]:
@@ -68,6 +78,7 @@ async def test_answers_with_the_stored_display_name(monkeypatch: pytest.MonkeyPa
         "user_id": str(USER_ID),
         "org_id": str(ORG_ID),
         "name": "Alice Stored",
+        "engineering": True,
     }
 
 
@@ -96,10 +107,49 @@ async def test_refuses_a_deactivated_member(monkeypatch: pytest.MonkeyPatch) -> 
     assert await _verify() == {"valid": False}
 
 
-async def test_refuses_a_member_without_engineering_access(
+async def test_refuses_a_member_without_engineering_or_board_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch(monkeypatch, claims={"sub": str(USER_ID), "org_id": str(ORG_ID)}, engineering=False)
+
+    assert await _verify() == {"valid": False}
+
+
+async def test_lets_a_board_user_without_engineering_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``boards:view`` opens the Garden too, checked against the token's own org."""
+    lookup = _patch(
+        monkeypatch,
+        claims={"sub": str(USER_ID), "org_id": str(ORG_ID)},
+        engineering=False,
+        boards=True,
+    )
+
+    verified = await _verify()
+    assert (verified["valid"], verified["engineering"]) == (True, False)
+    lookup.assert_awaited_once()
+    assert lookup.await_args is not None
+    assert lookup.await_args.args[1:] == (USER_ID, ORG_ID)
+
+
+async def test_a_board_user_still_cant_join_another_orgs_room(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch(
+        monkeypatch,
+        claims={"sub": str(USER_ID), "org_id": str(ORG_ID)},
+        engineering=False,
+        boards=True,
+    )
+
+    assert await _verify(uuid.uuid4()) == {"valid": False}
+
+
+async def test_refuses_someone_who_isnt_a_member_of_the_org(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch(monkeypatch, claims={"sub": str(USER_ID), "org_id": str(ORG_ID)}, member=False)
 
     assert await _verify() == {"valid": False}
 

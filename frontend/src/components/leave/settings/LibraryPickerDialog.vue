@@ -29,7 +29,7 @@
       </div>
       <v-card-text class="px-6">
         <AppCallout v-if="library.error" variant="error" class="mb-4">{{ library.error }}</AppCallout>
-        <LeaveEmptyState
+        <AppEmptyState
           v-if="!library.loading && !choices.length && !library.error"
           icon="mdi-bookshelf"
           title="The library is empty"
@@ -38,7 +38,7 @@
           <template #actions>
             <v-btn color="primary" variant="flat" @click="openLibrary">Open the library</v-btn>
           </template>
-        </LeaveEmptyState>
+        </AppEmptyState>
         <v-radio-group v-else v-model="selectedId" hide-details aria-label="Library type">
           <v-radio v-for="c in choices" :key="c.entry.id" :value="c.entry.id" :disabled="c.onPolicy" class="mb-1">
             <template #label>
@@ -72,7 +72,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import AppCallout from '@/components/common/AppCallout.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import LinkedQuotaField from '@/components/leave/settings/LinkedQuotaField.vue'
 import { useLeaveLibraryStore } from '@/stores/leaveLibrary'
 import { useLeavePolicyConfigStore } from '@/stores/leavePolicyConfig'

@@ -15,16 +15,15 @@
 """Comment thread on a :class:`app.models.bug.Bug`."""
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Text
+from sqlalchemy import ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import BaseModel
+from app.models.thread_columns import CommentColumns
 
 
-class BugComment(BaseModel):
+class BugComment(CommentColumns):
     """A single comment on a bug.
 
     Soft-deleted via ``deleted_at`` (kept for audit + tombstone render in
@@ -47,9 +46,6 @@ class BugComment(BaseModel):
     author_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
-    body: Mapped[str] = mapped_column(Text, nullable=False)
-    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return f"<BugComment(id={self.id}, bug_id={self.bug_id})>"

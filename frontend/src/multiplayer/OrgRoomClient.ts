@@ -30,6 +30,7 @@
  */
 import { Client, getStateCallbacks, Room } from "@colyseus/sdk"
 import type { TrackShape } from "@shared/race/types"
+import { BOARD_ACTIVITY_MESSAGE, parseBoardActivity, type BoardActivityEvent } from "./boardActivity"
 import { resolveColyseusUrl } from "./colyseusUrl"
 
 /** Read-only snapshot of a member's state (mirrors server MemberState schema). */
@@ -224,6 +225,9 @@ export class OrgRoomClient {
   onAgentAdd:    ((agentId: string, data: AgentStateSnapshot) => void) | null = null
   onAgentUpdate: ((agentId: string, data: AgentStateSnapshot) => void) | null = null
   onAgentRemove: ((agentId: string) => void) | null = null
+
+  /** Board work to celebrate in the Garden; a message, not room state. */
+  onBoardActivity: ((event: BoardActivityEvent) => void) | null = null
 
   private constructor(serverUrl: string) {
     this.client = new Client(serverUrl)
@@ -691,6 +695,11 @@ export class OrgRoomClient {
 
     stateProxy.agents.onRemove((_agent, agentId) => {
       this.onAgentRemove?.(agentId)
+    })
+
+    room.onMessage(BOARD_ACTIVITY_MESSAGE, (raw: unknown) => {
+      const event = parseBoardActivity(raw)
+      if (event) this.onBoardActivity?.(event)
     })
 
     // Active-race map — drives the garden watch banner. One callback fires

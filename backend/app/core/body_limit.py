@@ -33,13 +33,20 @@ from typing import Any
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.schemas.settings import MAX_CONFIGURABLE_ATTACHMENT_MB
+from app.core.upload_limits import (
+    MAX_CONFIGURABLE_ATTACHMENT_MB,
+    MAX_REQUEST_BODY_BYTES,
+    MAX_REQUEST_BODY_MB,
+)
 
-# 1 MB above the largest attachment an org can allow, like the proxy:
-# multipart framing fits, and an at-the-limit upload still gets the
-# route's own clear message. Keep in step with nginx's client_max_body_size.
-MAX_REQUEST_BODY_MB = MAX_CONFIGURABLE_ATTACHMENT_MB + 1
-MAX_REQUEST_BODY_BYTES = MAX_REQUEST_BODY_MB * 1024 * 1024
+__all__ = [
+    "MAX_CONFIGURABLE_ATTACHMENT_MB",
+    "MAX_REQUEST_BODY_BYTES",
+    "MAX_REQUEST_BODY_MB",
+    "BodySizeLimitMiddleware",
+    "BodyTooLargeError",
+    "too_large",
+]
 
 
 def too_large(max_bytes: int) -> str:

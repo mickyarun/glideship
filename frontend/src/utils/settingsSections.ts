@@ -58,7 +58,7 @@ const GROUPS: SettingsGroup[] = [
     items: [
       { title: 'Code and repositories', to: '/settings/code', needs: 'code' },
       { title: 'Agent prompts', to: '/settings/agent-prompts', needs: 'agentPrompts' },
-      { title: 'QA automation', to: '/settings/qa-automation', needs: 'qa' },
+      { title: 'AI, QA & BUD stages', to: '/settings/qa-automation', needs: 'qa' },
       { title: 'Design systems', to: '/settings/design-systems', needs: 'designSystems' },
       { title: 'MCP connect', to: '/settings/mcp-connect', needs: 'engineering' },
     ],

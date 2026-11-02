@@ -18,6 +18,7 @@
  */
 
 import { mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { describe, expect, it } from 'vitest'
 import { createVuetify } from 'vuetify'
 import type { BUDDocument } from '@/types'
@@ -55,7 +56,7 @@ function mountHeader(assignee: { name: string | null; photo: string | null }, ag
       canEditBuds: false,
     },
     global: {
-      plugins: [createVuetify()],
+      plugins: [createVuetify(), createPinia()],
       stubs: {
         RouterLink: true,
         BUDPriorityMenu: true,

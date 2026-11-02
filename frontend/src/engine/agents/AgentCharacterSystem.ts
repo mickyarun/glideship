@@ -25,6 +25,7 @@ import * as pc from 'playcanvas'
 import type { Application } from '../core/Application'
 import type { AssetLoader } from '../assets/AssetLoader'
 import type { EngineAgentActivity } from '../types'
+import { agentActionText } from './AgentActionText'
 import { AgentCharacter } from './AgentCharacter'
 import { getAgentSlotAtTree, getAgentFallbackSlot } from '@shared/world/treePositions'
 import { countAgentsAtRepo } from '@shared/world/agentStacking'
@@ -191,7 +192,7 @@ export class AgentCharacterSystem {
     this.spawnGen.set(key, myGen)
 
     const character = new AgentCharacter(key, snapshot.skillSlug)
-    await character.spawn(this.parent, this.loader, this.app, snapshot.x, snapshot.z, snapshot.message)
+    await character.spawn(this.parent, this.loader, this.app, snapshot.x, snapshot.z, agentActionText(snapshot.message))
 
     // Another spawn/remove superseded us while awaiting asset load — discard.
     if (this.spawnGen.get(key) !== myGen) {
@@ -228,7 +229,8 @@ export class AgentCharacterSystem {
       wrapper.setPosition(snapshot.x, current.y, snapshot.z)
       wrapper.setEulerAngles(0, snapshot.yaw, 0)
     }
-    // Label text — update whenever the server sends a new message
+    // Label text — update whenever the server sends a new message (never
+    // for a viewer it sends none to: the bubble keeps its generic words).
     if (snapshot.message) character.updateAction(snapshot.message)
     // Completion signal
     if (snapshot.state === 'completing' || snapshot.state === 'done') {

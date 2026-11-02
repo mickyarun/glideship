@@ -56,7 +56,7 @@ test('a signed-out visit to a page goes to login, then back to that page', async
 test('a reload keeps the session, and a bad access token is refreshed', async ({ signedIn, stack }) => {
   const dev = await primaryMember(stack, 'Ria Refresh')
   const page = await signedIn(dev)
-  const board = page.getByRole('heading', { name: 'Board', level: 1 })
+  const board = page.getByRole('heading', { name: 'Delivery', level: 1 })
   await page.goto('/buds')
   await expect(board).toBeVisible()
   await page.reload()

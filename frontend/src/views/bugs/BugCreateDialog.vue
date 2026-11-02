@@ -69,7 +69,7 @@
       <!-- Staged until the bug exists: the upload endpoint is keyed on a
         bug id, so files picked here are held in memory and posted right
         after createBug() returns. -->
-      <BugAttachments ref="attachmentsRef" v-model="stagedFiles" :bug-id="null" />
+      <BugAttachments ref="attachmentsRef" v-model="stagedFiles" :base-url="null" />
 
       <v-card-actions class="pa-0 mt-4">
         <v-spacer />
@@ -135,7 +135,7 @@ async function submit(): Promise<void> {
   // Retry path: the bug already exists, so only the leftover files go.
   if (createdBug.value) {
     saving.value = true
-    const done = (await attachmentsRef.value?.flush(createdBug.value.id)) ?? true
+    const done = (await attachmentsRef.value?.flush(`/v1/bugs/${createdBug.value.id}`)) ?? true
     saving.value = false
     if (done) finish(createdBug.value)
     return
@@ -161,7 +161,7 @@ async function submit(): Promise<void> {
   // the new bug's id. If any fail we keep the dialog open rather than
   // closing over the error — a reporter who watched a screenshot
   // silently not attach is worse off than one asked to retry.
-  const allStored = (await attachmentsRef.value?.flush(bug.id)) ?? true
+  const allStored = (await attachmentsRef.value?.flush(`/v1/bugs/${bug.id}`)) ?? true
   saving.value = false
   if (!allStored) {
     createdBug.value = bug

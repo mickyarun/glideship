@@ -14,9 +14,10 @@
 
 """Turn leave domain errors into HTTP responses, in one place."""
 
-from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, status
 
+from app.api.v1._domain_errors import ErrorTable, register_domain_errors
+from app.api.v1._domain_errors import status_for as _status_for
 from app.services.leave.errors import (
     LeaveConflictError,
     LeaveError,
@@ -26,7 +27,7 @@ from app.services.leave.errors import (
     LeaveRateLimitedError,
 )
 
-_STATUS: tuple[tuple[type[LeaveError], int], ...] = (
+_STATUS: ErrorTable = (
     (LeaveNotFoundError, status.HTTP_404_NOT_FOUND),
     (LeaveForbiddenError, status.HTTP_403_FORBIDDEN),
     (LeaveConflictError, status.HTTP_409_CONFLICT),
@@ -37,20 +38,15 @@ _STATUS: tuple[tuple[type[LeaveError], int], ...] = (
 
 def status_for(exc: LeaveError) -> int:
     """The HTTP status for a leave error (400 for an unclassified one)."""
-    return next((code for kind, code in _STATUS if isinstance(exc, kind)), 400)
+    return _status_for(exc, _STATUS)
 
 
-async def _respond(_request: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, LeaveError):  # only ever registered for LeaveError
-        raise exc
-    headers = (
-        {"Retry-After": str(exc.retry_after_seconds)}
-        if isinstance(exc, LeaveRateLimitedError)
-        else None
-    )
-    return JSONResponse({"detail": str(exc)}, status_code=status_for(exc), headers=headers)
+def _headers(exc: Exception) -> dict[str, str] | None:
+    if isinstance(exc, LeaveRateLimitedError):
+        return {"Retry-After": str(exc.retry_after_seconds)}
+    return None
 
 
 def register_leave_errors(app: FastAPI) -> None:
     """Install the handler; call once wherever the API router is mounted."""
-    app.add_exception_handler(LeaveError, _respond)
+    register_domain_errors(app, LeaveError, _STATUS, headers=_headers)

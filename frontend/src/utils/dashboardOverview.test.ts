@@ -22,7 +22,7 @@ function bud(over: Partial<BUDListItem>): BUDListItem {
   return {
     id: `b${seq}`, bud_number: seq, title: `BUD ${seq}`, status: 'bud', priority: 'P2',
     complexity: null, prod_p70_date: null, current_phase_deadline: null,
-    assignee_id: null, assignee_name: null, open_bug_count: 0,
+    assignee_id: null, assignee_name: null, open_bug_count: 0, has_prd: false, has_tech_spec: false,
     created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
     ...over,
   }

@@ -22,7 +22,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.organization import Organization
-from app.models.user import User
+from app.models.user import OrgToUser, User
 from app.repositories.base import BaseRepository
 
 
@@ -56,6 +56,11 @@ class OrganizationRepository(BaseRepository[Organization]):
         """
         result = await self._db.execute(select(Organization.id))
         return [row[0] for row in result.all()]
+
+    async def ids_for_member(self, user_id: uuid.UUID) -> list[uuid.UUID]:
+        """Every org this user belongs to. Account state like ``is_active`` spans them all."""
+        stmt = select(OrgToUser.org_id).where(OrgToUser.user_id == user_id)
+        return list((await self._db.execute(stmt)).scalars().all())
 
     async def get_for_user(self, user: User) -> Organization:
         """Load the active organization for an authenticated user.
@@ -125,6 +130,14 @@ class OrganizationRepository(BaseRepository[Organization]):
             return
         # A new dict (not an in-place edit) so SQLAlchemy sees the change.
         org.config = {**(org.config or {}), key: value}
+        await self._db.flush()
+
+    async def remove_config_section(self, org_id: uuid.UUID, key: str) -> None:
+        """Drop one top-level section of the org's ``config`` JSONB, if present."""
+        org = await self._db.get(Organization, org_id)
+        if org is None or key not in (org.config or {}):
+            return
+        org.config = {k: v for k, v in (org.config or {}).items() if k != key}
         await self._db.flush()
 
     async def get_by_github_app_id(self, app_id: int) -> Organization | None:

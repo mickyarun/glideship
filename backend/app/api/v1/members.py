@@ -46,6 +46,7 @@ from app.schemas.members import (
     SetPasswordResponse,
     UpdateCharacterRequest,
 )
+from app.services.access_recheck import recheck_account, recheck_people
 from app.services.employees.merge import (
     EmployeeMergeConflictError,
     transfer_employee_record,
@@ -287,6 +288,7 @@ async def assign_role(
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found.")
     membership.role_id = body.role_id
+    recheck_people(db, org.id, {user_id})
     await db.flush()
     log_sensitive_grant(
         actor_id=current_user.id, org_id=org.id, granted=granted, target=f"user:{user_id}"
@@ -357,6 +359,7 @@ async def toggle_member_status(
     revoked_tokens = 0
     if not new_state:
         revoked_tokens = await UserMCPTokenRepository(db).delete_all_for_user(user.id)
+        await recheck_account(db, user.id)
     await db.flush()
     await db.refresh(user)
 
@@ -633,6 +636,7 @@ async def merge_members(
     # soft-delete; tokens would otherwise outlive the merge.
     source.is_active = False
     revoked_tokens = await UserMCPTokenRepository(db).delete_all_for_user(source.id)
+    await recheck_account(db, source.id)
     await db.flush()
 
     logger.info(

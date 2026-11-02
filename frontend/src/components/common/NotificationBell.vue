@@ -124,8 +124,9 @@ function loadYieldOffers(): void {
   if (canAccessEngineering.value) void yieldStore.fetchPending(yieldScope.value)
 }
 
+// The list loads when the socket subscription starts (useNotificationSocket),
+// once the user is known.
 onMounted(() => {
-  store.fetchAll()
   loadYieldOffers()
   loadMembersIfAdmin()
 })

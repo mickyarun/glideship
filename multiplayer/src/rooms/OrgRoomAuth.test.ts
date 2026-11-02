@@ -72,6 +72,7 @@ describe("OrgRoom.onAuth without a token", () => {
       userId: "dev:u1",
       name: "Ana",
       orgId: ORG,
+      engineering: false,
     })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -107,7 +108,12 @@ describe("OrgRoom.onAuth with a token", () => {
       token: "jwt",
     }))
 
-    expect(result).toEqual({ userId: "real-user", name: "Real Name", orgId: ORG })
+    expect(result).toEqual({
+      userId: "real-user",
+      name: "Real Name",
+      orgId: ORG,
+      engineering: false,
+    })
   })
 
   it("rejects a token issued for another org", async () => {

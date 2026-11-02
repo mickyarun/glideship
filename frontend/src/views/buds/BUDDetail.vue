@@ -34,7 +34,7 @@
 
         <BUDHeader
           v-model:chat-open="chatOpen"
-          :bud="bud" :status-items="statusItems" :next-status="nextStatus" :can-move-to="canMoveTo"
+          :bud="bud" :status-items="statusItems" :next-status="nextStatus" :next-needs="nextNeeds" :can-move-to="canMoveTo"
           :changing-status="changingStatus" :is-closed="isClosed" :agent-locked="agentLocked"
           :chatable="currentSectionChatable" :can-edit-priority="canEditBud" :can-edit-buds="canEditBud"
           :can-delete="hasPermission('backlog:delete')"
@@ -43,7 +43,7 @@
           @open-skill-settings="skillSettingsOpen = true" @open-history="openHistory"
         />
 
-        <BUDStageStepper :phase-order="phaseOrder" :status="bud.status" />
+        <BUDStageStepper v-bind="budStepper(phaseOrder, bud.status)" />
 
         <BUDExternalLlmCallout v-if="isExternalLlmMode && !isClosed" @open-skill-settings="skillSettingsOpen = true" />
         <BUDWorkflowActions
@@ -85,16 +85,15 @@
           </div>
           <aside class="bud-page__aside" aria-label="BUD details">
             <BUDDetailsPanel :bud="bud" @change-assignee="changeAssignee" />
+            <BUDOriginPanel :bud-id="bud.id" :status="bud.status" />
             <BUDActivitySection :events="timelineEvents" :loading="timelineLoading" />
           </aside>
         </div>
       </div>
 
       <BUDDetailDialogs
-        ref="dialogs"
-        v-model:skill-settings-open="skillSettingsOpen" v-model:history-open="sectionDiffOpen"
-        v-model:delete-open="confirmDelete"
-        :bud="bud" :controller="statusController" :history-section="sectionDiffSection"
+        ref="dialogs" v-model:skill-settings-open="skillSettingsOpen" v-model:history-open="sectionDiffOpen"
+        v-model:delete-open="confirmDelete" :bud="bud" :controller="statusController" :history-section="sectionDiffSection"
         @restored="loadTimeline" @settings-saved="refreshAfterSettingsSave"
         @reverted="refreshBudAndTimeline" @confirm-delete="deleteBud"
       />
@@ -127,6 +126,7 @@ import BUDDetailTabBar from '@/components/buds/detail/BUDDetailTabBar.vue'
 import BUDDetailTabPanels from '@/components/buds/detail/BUDDetailTabPanels.vue'
 import BUDExternalLlmCallout from '@/components/buds/detail/BUDExternalLlmCallout.vue'
 import BUDStageStepper from '@/components/buds/detail/BUDStageStepper.vue'
+import BUDOriginPanel from '@/components/buds/origin/BUDOriginPanel.vue'
 import { useBudAgentTracking } from '@/composables/useBudAgentTracking'
 import { useBudDetailActions } from '@/composables/useBudDetailActions'
 import { useBudDetailChat } from '@/composables/useBudDetailChat'
@@ -143,7 +143,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useBUDStore } from '@/stores/bud'
 import { useBudLinkedFeaturesStore } from '@/stores/budLinkedFeatures'
 import { BUD_STATUS_LABELS, type BUDStatus } from '@/types'
-import { STATUS_TAB_MAP, canMoveBud, nextStage } from '@/utils/budDetail'
+import { STATUS_TAB_MAP, budStepper, canMoveBud, nextBudStage } from '@/utils/budDetail'
+import { needsFirst, writtenNow } from '@/utils/budStageGates'
 
 const budStore = useBUDStore()
 const linkedFeaturesStore = useBudLinkedFeaturesStore()
@@ -189,17 +190,28 @@ const { downloadSection, importSection } = useBudSectionFiles(bud, () => designP
 
 const statusController = useBudStatusTransitions({
   getBud: () => bud.value,
+  refreshBud: async id => {
+    await budStore.refreshBUDIfCurrent(id)
+    return bud.value?.id === id ? bud.value : null
+  },
   setActiveTab: (tab) => { activeTab.value = tab },
   getStatusTabMap: () => STATUS_TAB_MAP,
-  triggerDesignGeneration: () => designPanel.value?.triggerDesignGeneration(),
-  reloadTimeline: () => loadTimeline(),
+  onStatusChanged: () => loadTimeline(),
 })
 const { updateStatus, changingStatus, cancelRunningAgent, cancellingAgent, cancelDesign, cancellingDesignId } =
   statusController
 
 const statusItems = computed(() => phaseOrder.value.map(s => ({ title: BUD_STATUS_LABELS[s], value: s })))
-const nextStatus = computed(() => (bud.value ? nextStage(phaseOrder.value, bud.value.status) : null))
-const canMoveTo = (to: BUDStatus): boolean => !!bud.value && canMoveBud(hasPermission, bud.value.status, to)
+const nextStatus = computed(() => (bud.value ? nextBudStage(phaseOrder.value, bud.value.status) : null))
+// A stage the BUD can't enter until a section is written (utils/budStageGates):
+// the menu disables it, and the Move button stays, disabled, saying why.
+const mayMoveTo = (to: BUDStatus): boolean => !!bud.value && canMoveBud(hasPermission, bud.value.status, to)
+const canMoveTo = (to: BUDStatus): boolean => !!bud.value && mayMoveTo(to) && !needsFirst(writtenNow(bud.value), to)
+const nextNeeds = computed(() =>
+  bud.value && nextStatus.value && mayMoveTo(nextStatus.value)
+    ? needsFirst(writtenNow(bud.value), nextStatus.value)
+    : null,
+)
 
 const { requirements, techSpec, isEditing, toggleEdit, syncEditor } =
   useBudSectionEditors(bud, activeTab, currentSectionEditable, () => designPanel.value)

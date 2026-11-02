@@ -19,9 +19,8 @@ pass, so it's DST-correct and catches up after a restart. The unique
 (org, day) claim row makes it post at most once per day.
 """
 
-import asyncio
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -32,12 +31,14 @@ from app.models.leave_digest_post import DigestStatus
 from app.repositories.leave_digest_post import LeaveDigestPostRepository
 from app.repositories.organization import OrganizationRepository
 from app.services.leave.digest_build import build_digest
-from app.services.leave.digest_schedule import due_local_date
 from app.services.leave.digest_settings import digest_settings, digest_zone
+from app.services.scheduling.tick_loop import due_local_date, run_tick_loop
 from app.services.slack_interactive import post_message
 
 logger = structlog.get_logger(__name__)
 TICK_SECONDS = 60
+# How long after its post time the day's post still goes out.
+POST_WINDOW = timedelta(hours=3)
 
 
 async def tick_once(now_utc: datetime | None = None) -> None:
@@ -59,7 +60,8 @@ async def _org_pass(
     if not settings.enabled or not settings.channel_id:
         return
     async with AsyncSessionLocal() as db:
-        day = due_local_date(now, await digest_zone(db, org_id, settings), settings.post_time)
+        zone = await digest_zone(db, org_id, settings)
+        day = due_local_date(now, zone, settings.post_time, window=POST_WINDOW)
         if day is None:
             return
         posts = LeaveDigestPostRepository(db, org_id=org_id)
@@ -96,11 +98,4 @@ async def _org_pass(
 
 async def run_forever() -> None:
     """Tick every minute until cancelled."""
-    while True:
-        try:
-            await tick_once()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("leave_digest_tick_failed")
-        await asyncio.sleep(TICK_SECONDS)
+    await run_tick_loop("leave_digest", TICK_SECONDS, tick_once)

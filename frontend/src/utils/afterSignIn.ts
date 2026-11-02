@@ -22,7 +22,7 @@ import type { User } from '@/types'
 import { takeReturnTo } from '@/utils/returnTo'
 import { canOpenWorkspace, homeRouteFor } from '@/utils/workspace'
 
-type SignedIn = Pick<User, 'permissions' | 'character_model'> | null | undefined
+type SignedIn = Pick<User, 'permissions' | 'character_model' | 'has_boards'> | null | undefined
 
 export function afterSignIn(user: SignedIn): RouteLocationRaw {
   const permissions = user?.permissions
@@ -33,5 +33,5 @@ export function afterSignIn(user: SignedIn): RouteLocationRaw {
   }
   // No profile (it didn't load): let the router guard retry it rather than
   // guessing a workspace from an empty permission list.
-  return takeReturnTo() ?? (permissions ? homeRouteFor(permissions) : '/')
+  return takeReturnTo() ?? (permissions ? homeRouteFor(permissions, user?.has_boards) : '/')
 }

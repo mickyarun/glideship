@@ -74,6 +74,13 @@ class BUDTimelineEventType(StrEnum):
     STATUS_OVERRIDE = "status_override"
     CODE_REVIEW_RERUN = "code_review_rerun"
     LEARNING_RECORDED = "learning_recorded"
+    HANDED_OVER_FROM_BOARD = "handed_over_from_board"
+    RETURNED_TO_BOARD = "returned_to_board"
+
+
+def has_text(markdown: str | None) -> bool:
+    """Whether a BUD section has anything written in it: whitespace isn't writing."""
+    return bool(markdown and markdown.strip())
 
 
 class BUDStatus(StrEnum):

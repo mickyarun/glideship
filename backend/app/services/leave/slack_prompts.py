@@ -32,12 +32,13 @@ from app.repositories.leave_request import LeaveRequestRepository
 from app.repositories.leave_slack_prompt import LeaveSlackPromptRepository
 from app.repositories.user import UserRepository
 from app.services.leave.messages import compose_request_message
-from app.services.leave.slack_blocks import approval_blocks, escape, outcome_blocks
+from app.services.leave.slack_blocks import approval_blocks, outcome_blocks
 from app.services.leave.slack_context import prompt_context
 from app.services.notifications import NotificationCategory, category_default
 from app.services.slack_client import conversations_open
 from app.services.slack_dm import bot_token
 from app.services.slack_interactive import post_message, update_message
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 logger = structlog.get_logger(__name__)
 
@@ -68,7 +69,7 @@ async def send_prompts(
                 dm = await conversations_open(token, slack_id)
                 if not dm:
                     continue
-                channel, ts, error = await post_message(token, dm, escape(text), blocks)
+                channel, ts, error = await post_message(token, dm, escape_mrkdwn(text), blocks)
             except Exception:
                 # One approver's DM failing mustn't stop the others.
                 logger.warning("leave_slack_prompt_failed", org_id=str(org_id), exc_info=True)
@@ -128,7 +129,7 @@ async def refresh_prompts(org_id: uuid.UUID, request_id: uuid.UUID) -> None:
     )
     blocks = outcome_blocks(text, outcome_line(request, names))
     for prompt in prompts:
-        await update_message(token, prompt.channel, prompt.ts, escape(text), blocks)
+        await update_message(token, prompt.channel, prompt.ts, escape_mrkdwn(text), blocks)
 
 
 def outcome_line(request: LeaveRequest, names: dict[uuid.UUID, str]) -> str:

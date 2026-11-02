@@ -69,8 +69,11 @@ const REGION_MESH_PATTERNS: Record<BodyRegion, string[]> = {
   skin:  ['Head', 'ArmLeft', 'ArmRight'],
 }
 
-/** Animation track names from KayKit GLBs mapped to state graph states. */
-const ANIM_TRACK_MAP: Record<string, string> = {
+/**
+ * Animation track names from KayKit GLBs mapped to state graph states.
+ * Exact names: `findAnimTrack` matches substrings and takes the first hit.
+ */
+export const ANIM_TRACK_MAP: Readonly<Record<string, string>> = {
   'Idle':     'Idle_A',
   'Walk':     'Walking_A',
   'Sit':      'Sit_Chair_Idle',

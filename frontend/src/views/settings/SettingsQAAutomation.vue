@@ -16,8 +16,8 @@
 
 <template>
   <SettingsPageShell
-    title="QA Automation & BUD Stages"
-    subtitle="Configure the test automation framework and BUD lifecycle stages for your organization"
+    title="AI, QA & BUD stages"
+    subtitle="Configure the Delivery board's AI, the test automation framework and BUD lifecycle stages for your organization"
     :loading="settingsStore.loading"
     :saving="settingsStore.saving"
     :valid="isValid"
@@ -26,6 +26,8 @@
     @save="save"
     @success-close="settingsStore.saveSuccess = false"
   >
+        <DeliveryAiSection />
+
         <!-- ─── QA AUTOMATION CARD ───────────────────────────── -->
         <v-card class="pa-6 mb-6" color="surface" border>
           <div class="d-flex align-center ga-3 mb-4">
@@ -223,6 +225,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
+import DeliveryAiSection from '@/components/settings/DeliveryAiSection.vue'
 import SettingsPageShell from '@/components/settings/SettingsPageShell.vue'
 import { useSettingsStore } from '@/stores/settings'
 

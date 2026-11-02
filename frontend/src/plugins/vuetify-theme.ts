@@ -19,6 +19,7 @@
 // keep the two in sync.
 
 import type { ThemeDefinition } from 'vuetify'
+import { boardColorsDark, boardColorsLight } from './boardThemeColors'
 
 export const glideshipDark: ThemeDefinition = {
   dark: true,
@@ -76,12 +77,16 @@ export const glideshipDark: ThemeDefinition = {
     'swatch-5': '#E879F9',
     'swatch-6': '#C4A484',
     'swatch-7': '#D1D5DB',
+    // Board stage categories and card labels (boardThemeColors.ts).
+    ...boardColorsDark,
   },
   variables: {
     'border-color': '#E5E9F0',
     'border-opacity': 0.09,
     'high-emphasis-opacity': 0.95,
     'medium-emphasis-opacity': 0.68,
+    // The one drop shadow: a card lifted off the board while it's dragged.
+    'lift-shadow': '0 12px 28px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3)',
   },
 }
 
@@ -131,12 +136,14 @@ export const glideshipLight: ThemeDefinition = {
     'swatch-5': '#A21CAF',
     'swatch-6': '#7C5A43',
     'swatch-7': '#4B5563',
+    ...boardColorsLight,
   },
   variables: {
     'border-color': '#0F172A',
     'border-opacity': 0.12,
     'high-emphasis-opacity': 0.95,
     'medium-emphasis-opacity': 0.66,
+    'lift-shadow': '0 12px 28px rgb(15 23 42 / 0.14), 0 2px 6px rgb(15 23 42 / 0.08)',
   },
 }
 
@@ -163,6 +170,8 @@ export const vuetifyDefaults = {
     },
   },
   VBtn: {
+    // Flat by default: filled buttons sit on the surface, no drop shadow.
+    variant: 'flat',
     rounded: 'lg',
     // Roman, not uppercase; weight carries emphasis (Hallmark typography).
     class: 'text-none font-weight-medium',
@@ -173,6 +182,11 @@ export const vuetifyDefaults = {
     color: 'primary',
   },
   VSelect: {
+    variant: 'outlined',
+    density: 'comfortable',
+    color: 'primary',
+  },
+  VAutocomplete: {
     variant: 'outlined',
     density: 'comfortable',
     color: 'primary',

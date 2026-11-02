@@ -31,6 +31,7 @@ from typing import Any
 
 from app.repositories.employee_profile import Celebrant
 from app.services.avatars import absolute_avatar_url
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 __all__ = [
     "MAX_PERSON_BLOCKS",
@@ -71,17 +72,6 @@ _ALLOWED_SCHEMES = ("http://", "https://")
 MAX_PERSON_BLOCKS = 40
 # Slack's limit on a section's text; the overflow list is clipped to it.
 _SECTION_TEXT_LIMIT = 3000
-
-
-def escape_mrkdwn(text: str) -> str:
-    """Neutralise Slack's control characters in user-supplied text.
-
-    Slack parses ``<!channel>``, ``<@U123>`` and ``<url|label>`` in both
-    ``mrkdwn`` blocks and the top-level ``text``. A name containing them
-    would ping the channel or render a disguised link, so ``& < >`` are
-    escaped exactly as Slack's formatting guide prescribes.
-    """
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def ordinal(n: int) -> str:

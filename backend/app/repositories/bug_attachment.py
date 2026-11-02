@@ -16,18 +16,17 @@
 
 import uuid
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bug_attachment import BugAttachment
-from app.repositories.base import BaseRepository
+from app.repositories.thread import ThreadRepository
 
 
-class BugAttachmentRepository(BaseRepository[BugAttachment]):
+class BugAttachmentRepository(ThreadRepository[BugAttachment]):
     """Tenant-scoped repository for files attached to bugs."""
 
     def __init__(self, db: AsyncSession, *, org_id: uuid.UUID) -> None:
-        super().__init__(BugAttachment, db, org_id=org_id)
+        super().__init__(BugAttachment, BugAttachment.bug_id, db, org_id=org_id)
 
     async def list_for_bug(self, bug_id: uuid.UUID) -> list[BugAttachment]:
         """List a bug's attachments, oldest first.
@@ -36,18 +35,8 @@ class BugAttachmentRepository(BaseRepository[BugAttachment]):
         them — for a reproduction sequence of screenshots that order
         carries meaning, unlike the newest-first evidence list.
         """
-        stmt = self._scoped(
-            select(BugAttachment)
-            .where(BugAttachment.bug_id == bug_id)
-            .order_by(BugAttachment.created_at.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        return await self.list_for_parent(bug_id)
 
     async def count_for_bug(self, bug_id: uuid.UUID) -> int:
         """Count a bug's attachments, for the per-org max-files gate."""
-        stmt = self._scoped(
-            select(func.count()).select_from(BugAttachment).where(BugAttachment.bug_id == bug_id)
-        )
-        result = await self._db.execute(stmt)
-        return result.scalar_one()
+        return await self.count_for_parent(bug_id)

@@ -36,7 +36,28 @@ export function canOpenWorkspace(
   return permissions?.includes(WORKSPACE_PERMISSION[workspace]) ?? false
 }
 
-/** Landing route for a signed-in user, based on what they can open. */
-export function homeRouteFor(permissions: readonly string[] | null | undefined): RouteLocationRaw {
-  return canOpenWorkspace(permissions, 'engineering') ? { name: 'dashboard' } : { name: 'leave' }
+export const BOARDS_VIEW = 'boards:view'
+export const BOARDS_CREATE = 'boards:create'
+
+/**
+ * Who may enter the Garden and pick a character: engineers, and anyone
+ * holding ``boards:view`` (board work shows up there). Any one is enough,
+ * the same rule the backend applies to room joins.
+ */
+export const GARDEN_PERMISSIONS: readonly string[] = [WORKSPACE_ENGINEERING, BOARDS_VIEW]
+
+/**
+ * Landing route for a signed-in user, based on what they can open:
+ * engineers get the dashboard, anyone else who can open a team board gets
+ * the boards, and everyone else their leave. Boards need both the
+ * permission (the route's own gate) and a board, or the boards route would
+ * send them straight back here.
+ */
+export function homeRouteFor(
+  permissions: readonly string[] | null | undefined,
+  hasBoards = false,
+): RouteLocationRaw {
+  if (canOpenWorkspace(permissions, 'engineering')) return { name: 'dashboard' }
+  const boards = hasBoards && (permissions?.includes(BOARDS_VIEW) ?? false)
+  return boards ? { name: 'boards' } : { name: 'leave' }
 }

@@ -51,3 +51,17 @@ describe('extractApiError', () => {
     expect(extractApiError(err, 'fallback')).toBe('[{"code":1}]')
   })
 })
+
+describe('coded refusals', () => {
+  const refused = (detail: unknown) => ({ response: { status: 409, data: { detail } } })
+
+  it("reads as the refusal's message", () => {
+    expect(extractApiError(refused({ code: 'bud_stage_content_missing', message: 'A BUD needs a PRD.' }), 'Failed'))
+      .toBe('A BUD needs a PRD.')
+  })
+
+  it('keeps the GitHub envelope as JSON for its form to read', () => {
+    const detail = { error: 'bad_key', message: 'The key is not valid.' }
+    expect(extractApiError(refused(detail), 'Failed')).toBe(JSON.stringify(detail))
+  })
+})

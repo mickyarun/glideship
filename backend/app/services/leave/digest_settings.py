@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.organization import OrganizationRepository
 from app.schemas.leave_digest import LeaveDigestSettings
 from app.services.leave.policies import ensure_default_policy
+from app.services.org_settings import get_presence_settings
 from app.services.quiz_schedule_math import resolve_zone
 
 logger = structlog.get_logger(__name__)
@@ -67,3 +68,21 @@ async def digest_zone(
     """The post's timezone: its own, else the default leave policy's."""
     name = settings.timezone or (await ensure_default_policy(db, org_id)).timezone
     return resolve_zone(name)
+
+
+def org_zone(
+    org_config: dict[str, Any] | None, policy_timezone: str | None, org_id: uuid.UUID | None = None
+) -> tzinfo:
+    """The zone :func:`digest_zone` resolves, without creating the default policy (no I/O).
+
+    For other daily messages (board due reminders) that follow the same
+    timezone but mustn't set up leave for an org that doesn't use it.
+    ``policy_timezone`` is the default leave policy's, when there is one;
+    without it, the presence timezone the default would start from.
+    """
+    name = (
+        digest_settings(org_config, org_id).timezone
+        or policy_timezone
+        or get_presence_settings(org_config).timezone
+    )
+    return resolve_zone(name or "UTC")

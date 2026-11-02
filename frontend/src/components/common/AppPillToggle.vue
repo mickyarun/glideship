@@ -22,9 +22,10 @@
      v-model is the value of the selected option. ``mandatory`` (the
      default) prevents clicks on the active option from deselecting
      it — useful when the parent assumes a non-null mode at all
-     times. -->
+     times. An option with ``disabled: true`` stays in view but can't be
+     picked (click or arrow keys); say why beside the toggle. -->
 <template>
-  <div class="app-pill-toggle" :class="`app-pill-toggle--${size}`" role="radiogroup">
+  <div ref="root" class="app-pill-toggle" :class="`app-pill-toggle--${size}`" role="radiogroup" @keydown="onKey">
     <button
       v-for="opt in options"
       :key="String(opt.value)"
@@ -33,6 +34,9 @@
       class="app-pill-toggle__option"
       :class="{ 'app-pill-toggle__option--active': opt.value === modelValue }"
       :aria-checked="opt.value === modelValue"
+      :aria-disabled="opt.disabled || undefined"
+      :disabled="opt.disabled"
+      :tabindex="opt.value === focusValue ? 0 : -1"
       @click="select(opt.value)"
     >
       {{ opt.label }}
@@ -41,9 +45,13 @@
 </template>
 
 <script setup lang="ts" generic="T extends string | number">
+import { computed, nextTick, ref } from 'vue'
+
 interface PillOption<V extends string | number> {
   label: string
   value: V
+  /** Shown but not pickable. */
+  disabled?: boolean
 }
 
 interface Props {
@@ -53,8 +61,10 @@ interface Props {
   // nothing — the parent always sees a non-null model value.
   mandatory?: boolean
   // ``md`` (default) matches the v-tabs density="compact" height
-  // (34px). ``sm`` is for tight chrome (e.g. card headers).
-  size?: 'sm' | 'md'
+  // (34px). ``sm`` is for tight chrome (e.g. card headers). ``touch``
+  // is for a row of many options that scrolls sideways (phone tabs):
+  // separate 44px pills, the picked one filled, rather than one track.
+  size?: 'sm' | 'md' | 'touch'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -64,78 +74,46 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<(e: 'update:modelValue', value: T) => void>()
 
+const root = ref<HTMLElement | null>(null)
+// One tab stop for the group (the checked option, else the first); arrow
+// keys move between options and pick them, as radio groups do.
+const focusValue = computed(() =>
+  props.options.some(o => o.value === props.modelValue) ? props.modelValue : props.options[0]?.value,
+)
+
+const STEPS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
+
+const enabled = (index: number) => !props.options[index]?.disabled
+
+/** The next pickable option from ``from`` in ``step`` direction, or -1 when there's none. */
+function nextEnabled(from: number, step: number): number {
+  const count = props.options.length
+  for (let i = 1; i <= count; i++) {
+    const at = (from + step * i + count * count) % count
+    if (enabled(at)) return at
+  }
+  return -1
+}
+
+function onKey(event: KeyboardEvent): void {
+  const count = props.options.length
+  const at = props.options.findIndex(o => o.value === focusValue.value)
+  let next: number
+  if (event.key in STEPS) next = nextEnabled(at, STEPS[event.key])
+  else if (event.key === 'Home') next = nextEnabled(count - 1, 1)
+  else if (event.key === 'End') next = nextEnabled(0, -1)
+  else return
+  event.preventDefault()
+  if (next < 0) return
+  select(props.options[next].value)
+  void nextTick(() => root.value?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus())
+}
+
 function select(value: T): void {
+  if (props.options.find(o => o.value === value)?.disabled) return
   if (props.mandatory && value === props.modelValue) return
   emit('update:modelValue', value)
 }
 </script>
 
-<style scoped>
-.app-pill-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  background: rgb(var(--v-theme-primary));
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-.app-pill-toggle--sm {
-  height: 28px;
-}
-.app-pill-toggle--sm .app-pill-toggle__option {
-  height: 22px;
-  font-size: 11px;
-  padding: 0 12px;
-  min-width: 64px;
-}
-.app-pill-toggle--md {
-  height: 34px;
-}
-.app-pill-toggle--md .app-pill-toggle__option {
-  height: 28px;
-  font-size: 12px;
-  padding: 0 18px;
-  min-width: 84px;
-}
-.app-pill-toggle__option {
-  /* Reset the user-agent <button> styles, then drive everything from
-     here. Labels use the theme's on-primary ink (white on the light
-     theme's blue, near-black on the dark theme's lighter blue) so both
-     clear 4.5:1 on the track. */
-  appearance: none;
-  -webkit-appearance: none;
-  border: none;
-  background: transparent;
-  color: rgb(var(--v-theme-on-primary));
-  font-family: inherit;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition:
-    background-color var(--dur-short, 150ms) ease,
-    color var(--dur-short, 150ms) ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-/* Hover shades the track towards the surface ink, which keeps the label
-   at about 6.0:1 on the light theme and 8.1:1 on the dark one. */
-.app-pill-toggle__option:hover:not(.app-pill-toggle__option--active) {
-  background: rgba(var(--v-theme-on-surface), 0.12);
-}
-/* The active pill is a surface-coloured cut-out showing the primary ink:
-   5.2:1 on the light theme, 7.0:1 on the dark theme. */
-.app-pill-toggle__option--active {
-  background: rgb(var(--v-theme-surface));
-  color: rgb(var(--v-theme-primary));
-  cursor: default;
-}
-.app-pill-toggle__option:focus-visible {
-  /* No offset, so the whole ring sits on the track rather than past it. */
-  outline: 2px solid rgb(var(--v-theme-on-primary));
-  outline-offset: 0;
-}
-</style>
+<style scoped src="./app-pill-toggle.css"></style>

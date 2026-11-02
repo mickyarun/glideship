@@ -21,7 +21,7 @@ test('a PM creates a BUD from the board and lands on its requirements', async ({
   const org = await stack.seedOrg({ members: [{ key: 'pm', role: 'pm' }] })
   const page = await signedIn(org.members.pm)
   await page.goto('/buds')
-  await expect(page.getByRole('heading', { name: 'Board', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Delivery', level: 1 })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'No BUDs yet' })).toBeVisible()
 
   await createBudFromBoard(page, 'Export invoices as CSV', 'P1')
@@ -33,19 +33,27 @@ test('a PM creates a BUD from the board and lands on its requirements', async ({
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('BUD-001')
   await expectSection(page, 'Requirements')
 
-  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Board' }).click()
+  await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Delivery' }).click()
   await expect(budCard(page, 'Export invoices as CSV')).toBeVisible()
 })
 
 test('moving a BUD through its stages opens each stage tab', async ({ signedIn, stack }) => {
   const org = await stack.seedOrg({ members: [{ key: 'pm', role: 'pm' }] })
-  const bud = await createBud(await stack.api(org.members.pm), 'Rate limit the public API')
+  const api = await stack.api(org.members.pm)
+  const bud = await createBud(api, 'Rate limit the public API', { requirements_md: '## Problem\nScrapers hit the API.' })
 
   const page = await signedIn(org.members.pm)
   await page.goto(`/buds/${bud.id}`)
   await expectSection(page, 'Requirements')
   await moveBudTo(page, 'Design', 'Design')
   await moveBudTo(page, 'Tech Architecture', 'Tech spec')
+
+  // Development needs the tech spec written first.
+  const toDevelopment = page.getByRole('button', { name: 'Move to Development' })
+  await expect(toDevelopment).toBeDisabled()
+  await expect(toDevelopment).toHaveAccessibleDescription('Development needs a tech spec first.')
+  await api.patch(`buds/${bud.id}`, { tech_spec_md: '## Approach\nA token bucket per key.' })
+  await page.reload()
   await moveBudTo(page, 'Development', 'Development')
 
   // A section deep link survives a reload; an unknown one is ignored.

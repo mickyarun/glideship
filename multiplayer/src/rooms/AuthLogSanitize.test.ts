@@ -75,7 +75,7 @@ describe("join check warnings", () => {
 
   it("escape a forged room org when the room-level check refuses", () => {
     expect(() =>
-      requireRoomIdentity({ userId: "bob", name: "Bob", orgId: ORG }, FORGED_ORG),
+      requireRoomIdentity({ userId: "bob", name: "Bob", orgId: ORG, engineering: false }, FORGED_ORG),
     ).toThrow("join org is not this room's org")
     expect(warnings().some((w) => w.includes("org\\nforged"))).toBe(true)
     expect(warnings().every((w) => !w.includes("\n"))).toBe(true)

@@ -1,0 +1,53 @@
+/*
+ * Copyright 2025-2026 Arun Rajkumar
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * Styles for BoardView.vue (loaded as its scoped stylesheet): the page
+ * fills the window, the columns scroll sideways in the shared board
+ * scroller (board-layout.css) and each column scrolls its own cards.
+ */
+.board-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--board-section-gap);
+  height: 100%;
+  min-width: 0;
+  padding: var(--board-page-padding);
+  background: rgb(var(--v-theme-background));
+}
+.board-page__columns {
+  min-height: 320px;
+  display: flex;
+  align-items: stretch;
+  gap: var(--board-column-gap);
+}
+.board-page__hint {
+  margin: 0;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+/* Phones: the page scrolls and the one shown column takes its own height. */
+@media (max-width: 600px) {
+  .board-page {
+    height: auto;
+    min-height: 100%;
+  }
+  .board-page__columns {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow-x: visible;
+  }
+}

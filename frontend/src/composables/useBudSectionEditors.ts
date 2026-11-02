@@ -17,6 +17,7 @@
 
 import { computed, type ComputedRef, type Ref } from 'vue'
 import { useMarkdownSection } from '@/composables/useMarkdownSection'
+import { useBUDStore } from '@/stores/bud'
 import type { BUDDocument } from '@/types'
 
 export interface DesignEditor {
@@ -30,8 +31,16 @@ export function useBudSectionEditors(
   editable: ComputedRef<boolean>,
   getDesignEditor: () => DesignEditor | null,
 ) {
-  const requirements = useMarkdownSection('requirements_md', bud)
-  const techSpec = useMarkdownSection('tech_spec_md', bud)
+  const budStore = useBUDStore()
+  const section = (field: 'requirements_md' | 'tech_spec_md') =>
+    useMarkdownSection(
+      () => (bud.value ? bud.value[field] || '' : null),
+      async value => {
+        if (bud.value) await budStore.updateBUD(bud.value.id, { [field]: value })
+      },
+    )
+  const requirements = section('requirements_md')
+  const techSpec = section('tech_spec_md')
 
   const isEditing = computed(() => {
     if (activeTab.value === 'tech-spec') return techSpec.editing.value

@@ -14,6 +14,7 @@
 
 """BUD CRUD endpoints and sub-router aggregation."""
 
+import asyncio
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -34,6 +35,8 @@ from app.api.v1.bud_qa import router as qa_router
 from app.api.v1.bud_todos import router as todos_router
 from app.api.v1.bud_versions import router as versions_router
 from app.api.v1.bud_workflows import router as workflows_router
+from app.config import settings
+from app.core.board_deps import board_caller
 from app.core.deps import get_current_user, get_db, get_user_permissions, require_permissions
 from app.database import AsyncSessionLocal
 from app.models.bud import (
@@ -53,6 +56,7 @@ from app.repositories import bud_version as bud_version_repo
 from app.repositories.agent_skill import AgentSkillRepository
 from app.repositories.bud import BUDDesignRepository, BUDRepository
 from app.repositories.bud_agent_task import BUDAgentTaskRepository
+from app.repositories.bud_search import SEARCH_MAX_CHARS, BUDSearchRepository
 from app.repositories.bud_section_session import BUDSectionSessionRepository
 from app.repositories.bud_timeline import BUDTimelineRepository
 from app.repositories.bug import BugRepository
@@ -94,16 +98,27 @@ from app.services.agent_task_cancel import (
     cancel_task,
     is_task_terminal,
 )
+from app.services.boards.access import BoardCaller
+from app.services.boards.bud_list_origins import list_origins
 from app.services.bud_agent_trigger import (
     create_agent_task_for_stage,
     should_auto_generate_phase,
 )
 from app.services.bud_assignment_actions import assign_bud, unassign_bud
+from app.services.bud_create import create_bud as create_bud_from_input
 from app.services.bud_edit_policy import assert_section_editable
 from app.services.bud_estimation import estimate_bud_dates
 from app.services.bud_learning_alias_resolver import resolve_aliased_contributors
 from app.services.bud_metrics import compute_and_persist as compute_bud_metrics
+from app.services.bud_stage_gates import assert_stage_content
+from app.services.bud_stage_jobs import run_stage_jobs
+from app.services.bud_stage_overrides import (
+    StageSkillOverrideError,
+    persist_stage_skill_overrides,
+)
+from app.services.bud_status_change import apply_status_change
 from app.services.bud_timeline import record_event
+from app.services.delivery_settings import DELIVERY_AI_OFF, delivery_ai_enabled, no_agent_reason
 from app.services.job_queue import JOB_BUD_AGENT, create_job
 from app.services.org_members import assert_new_assignee_in_org
 
@@ -116,46 +131,11 @@ async def _persist_stage_skill_overrides(
     bud_id: uuid.UUID,
     overrides: dict[BUDStatus, uuid.UUID],
 ) -> None:
-    """Validate then store per-stage skill picks for one BUD.
-
-    Each ``skill_id`` must (a) belong to the caller's org and (b) have
-    the correct ``agent_type`` for the stage it's being assigned to —
-    e.g. picking a ``design`` skill for the ``testing`` stage is
-    rejected with 400.
-    """
-    from app.agents.skill_mapping import BUD_STAGE_AGENT_TYPE
-    from app.repositories.agent_skill import AgentSkillRepository
-    from app.repositories.bud_stage_skill_override import (
-        BUDStageSkillOverrideRepository,
-    )
-
-    skill_repo = AgentSkillRepository(db, org_id=org_id)
-
-    for stage, skill_id in overrides.items():
-        expected_agent_type = BUD_STAGE_AGENT_TYPE.get(stage)
-        if expected_agent_type is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Stage '{stage.value}' is not configurable",
-            )
-        skill = await skill_repo.get_by_id(skill_id)
-        if skill is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Skill {skill_id} not found for stage {stage.value}",
-            )
-        if skill.agent_type != expected_agent_type:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Skill {skill.skill_slug!r} (agent_type={skill.agent_type.value}) "
-                    f"cannot be assigned to stage {stage.value}; that stage runs the "
-                    f"{expected_agent_type.value} agent."
-                ),
-            )
-
-    override_repo = BUDStageSkillOverrideRepository(db, org_id=org_id)
-    await override_repo.bulk_set_for_bud(bud_id, overrides)
+    """Store per-stage skill picks for one BUD; a pick that doesn't fit is a 400."""
+    try:
+        await persist_stage_skill_overrides(db, org_id, bud_id, overrides)
+    except StageSkillOverrideError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 router = APIRouter(tags=["buds"])
@@ -189,10 +169,18 @@ async def list_buds(
     order_by: Literal["priority"] | None = Query(
         None, description="Sort key. Omit for default (bud_number desc)."
     ),
+    q: str | None = Query(
+        None,
+        min_length=1,
+        max_length=SEARCH_MAX_CHARS,
+        description="Open BUDs whose title or key contains this, newest first, capped by "
+        "BOARDS_HANDOVER_LINK_SEARCH_LIMIT; order_by is ignored.",
+    ),
     current_user: User = Depends(get_current_user),
+    caller: BoardCaller = Depends(board_caller),
     db: AsyncSession = Depends(get_db),
 ) -> list[BUDDocument]:
-    """List BUDs for the current user's organization."""
+    """List BUDs for the current user's organization, each with its visible origin card."""
     if status_filter:
         try:
             BUDStatus(status_filter)
@@ -202,20 +190,29 @@ async def list_buds(
                 detail=f"Invalid status: {status_filter}",
             ) from None
 
-    bud_repo = BUDRepository(db, org_id=current_user.org_id)
-    buds = await bud_repo.list_buds(
-        status_filter=status_filter,
-        order_by_priority=order_by == "priority",
-    )
+    if q is not None and q.strip():
+        buds = await BUDSearchRepository(db, org_id=current_user.org_id).search_open(
+            q,
+            limit=settings.boards.handover_link_search_limit,
+            status=BUDStatus(status_filter) if status_filter else None,
+        )
+    else:
+        buds = await BUDRepository(db, org_id=current_user.org_id).list_buds(
+            status_filter=status_filter,
+            order_by_priority=order_by == "priority",
+        )
 
     # Batch-fetch open bug counts for all BUDs in one query
     bug_repo = BugRepository(db, org_id=current_user.org_id)
-    bug_counts = await bug_repo.open_bug_counts_by_bud([b.id for b in buds])
+    bud_ids = [b.id for b in buds]
+    bug_counts = await bug_repo.open_bug_counts_by_bud(bud_ids)
+    origins = await list_origins(db, caller, bud_ids)
 
-    # Inject open_bug_count as a transient attribute so Pydantic's
-    # from_attributes picks it up alongside the ORM columns.
+    # Inject open_bug_count and origin as transient attributes so Pydantic's
+    # from_attributes picks them up alongside the ORM columns.
     for b in buds:
         b.open_bug_count = bug_counts.get(b.id, 0)  # type: ignore[attr-defined]
+        b.origin = origins.get(b.id)  # type: ignore[attr-defined]
     return buds
 
 
@@ -231,107 +228,16 @@ async def create_bud(
     db: AsyncSession = Depends(get_db),
 ) -> BUDRead:
     """Create a new BUD with auto-incremented bud_number."""
-    bud_repo = BUDRepository(db, org_id=current_user.org_id)
-    next_number = await bud_repo.next_bud_number()
-
-    # Empty dict from the schema default = all phases skip. Stored as
-    # the JSONB literal (not NULL) so the frontend can distinguish a
-    # freshly-created opt-out from a never-explicitly-set legacy row.
-    auto_generate_phases = body.auto_generate_phases
-    bud = BUDDocument(
-        org_id=current_user.org_id,
-        bud_number=next_number,
-        title=body.title,
-        status=BUDStatus.BUD,
-        priority=body.priority,
-        requirements_md=body.requirements_md,
-        figma_url=body.figma_url,
-        metadata_=body.metadata_,
-        auto_generate_phases=auto_generate_phases,
-    )
-    await bud_repo.create(bud)
-
-    # Persist per-BUD stage skill overrides (Advanced settings on create).
-    # Validates that each (stage, skill_id) pair points at a skill whose
-    # agent_type matches the stage's expected agent — wrong picks get a
-    # 400 instead of silently routing to the wrong skill at run-time.
-    if body.stage_skill_overrides:
-        await _persist_stage_skill_overrides(
-            db,
-            current_user.org_id,
-            bud.id,
-            body.stage_skill_overrides,
-        )
-
-    # Generate embedding so the bug linker can match bugs to this BUD.
-    # Fast (~50ms) and done inline so the embedding is available immediately.
     try:
-        from app.services.embedding_service import embedding_service
-
-        embed_text = body.title
-        if body.requirements_md:
-            embed_text = f"{body.title} {body.requirements_md[:500]}"
-        bud.embedding = await embedding_service.embed(embed_text)
-        await db.flush()
-    except Exception:
-        logger.warning("bud_embedding_failed", bud_number=next_number, exc_info=True)
-
-    from app.services.feature_lifecycle import create_planned_feature
-
-    await create_planned_feature(
-        db,
-        current_user.org_id,
-        next_number,
-        body.title,
-        body.requirements_md or "",
-    )
-
-    # Record timeline + auto-assign
-    from app.services.bud_assignment import auto_assign_for_phase
-    from app.services.bud_timeline import record_event
-
-    await record_event(
-        db,
-        current_user.org_id,
-        bud.id,
-        "created",
-        actor_id=current_user.id,
-        actor_name=current_user.name,
-        detail={"source": "web"},
-    )
-    await auto_assign_for_phase(
-        db,
-        current_user.org_id,
-        bud,
-        BUDStatus.BUD,
-        actor_id=current_user.id,
-        actor_name=current_user.name,
-    )
-
-    logger.info(
-        "bud_created",
-        bud_id=str(bud.id),
-        bud_number=next_number,
-        org_id=str(bud.org_id),
-        auto_generate_phases=auto_generate_phases,
-    )
-
-    # External-LLM mode: each phase is opt-in. Only fire the PM/bud
-    # agent if the user explicitly enabled the "bud" phase. Missing key
-    # or False = skip; user supplies the PRD via the section editor
-    # (typically driven by their local AI through the remote MCP).
-    if should_auto_generate_phase(auto_generate_phases, "bud"):
-        await create_agent_task_for_stage(
-            bud,
-            "bud",
-            current_user.org_id,
+        bud = await create_bud_from_input(
             db,
-            triggered_by=current_user.id,
-            force=True,
+            org_id=current_user.org_id,
+            body=body,
+            actor_id=current_user.id,
+            actor_name=current_user.name,
         )
-
-    # Estimation deferred — triggers after PRD agent completes (via agent_result_handlers)
-
+    except StageSkillOverrideError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return await build_bud_response(bud, current_user.org_id, db)
 
 
@@ -563,7 +469,11 @@ async def regenerate_learning(
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No Learning Agent is configured for the closed stage in this org",
+            detail=await no_agent_reason(
+                db,
+                current_user.org_id,
+                "No Learning Agent is configured for the closed stage in this org",
+            ),
         )
     return {"status": "accepted", "bud_id": str(bud_id), "task_id": str(task.id)}
 
@@ -703,6 +613,17 @@ async def update_bud(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot change status of a {bud.status.value} BUD. {remedy}",
+        )
+
+    # Guard: moving on into design or later needs the PRD written, into
+    # development or later the tech spec. A PATCH may write the section and
+    # move in one go, so its own text counts.
+    if "status" in update_data and update_data["status"] != bud.status:
+        assert_stage_content(
+            bud.status,
+            update_data["status"],
+            requirements_md=update_data.get("requirements_md", bud.requirements_md),
+            tech_spec_md=update_data.get("tech_spec_md", bud.tech_spec_md),
         )
 
     # Guard: leaving the design phase while wireframe generation is still
@@ -881,49 +802,15 @@ async def update_bud(
                     },
                 )
 
-        from app.services.bud_assignment import auto_assign_for_phase
-
-        await record_event(
-            db,
-            current_user.org_id,
-            bud.id,
-            "status_change",
-            actor_id=current_user.id,
-            actor_name=current_user.name,
-            detail={"from": old_status.value, "to": new_status.value},
-        )
-
-        # Apply the status before the side effects so downstream hooks
-        # and assignment policy see the correct phase.
-        if old_status != BUDStatus.DEVELOPMENT and new_status == BUDStatus.DEVELOPMENT:
-            bud.status = new_status
-
-        # auto_assign_for_phase sets ``bud.assignee_id`` — must run before
-        # the dev-transition hook so the hook can assign newly-synced
-        # TODOs to that lead in the same transaction.
-        await auto_assign_for_phase(
+        await apply_status_change(
             db,
             current_user.org_id,
             bud,
+            old_status,
             new_status,
             actor_id=current_user.id,
             actor_name=current_user.name,
         )
-
-        # Same dev-transition side effects fired by approve_tech_arch — see
-        # backend/app/services/bud_development.py. Synchronously parses
-        # the tech spec into BUDTodo rows + assigns to the lead; spawns
-        # a background task for PERT estimation.
-        if old_status != BUDStatus.DEVELOPMENT and new_status == BUDStatus.DEVELOPMENT:
-            from app.services.bud_development import on_bud_development_started
-
-            await on_bud_development_started(
-                db,
-                current_user.org_id,
-                bud,
-                actor_id=current_user.id,
-                actor_name=current_user.name,
-            )
 
     # Record title change
     if "title" in update_data and update_data["title"] != old_title:
@@ -1139,149 +1026,33 @@ async def _trigger_status_jobs(
     current_user: User,
     db: AsyncSession,
 ) -> None:
-    """Enqueue agent jobs for status transitions using stage mappings.
+    """Start the new status's agent work, then re-estimate on UAT/Prod.
 
-    Looks up the agent_skill_bud_stages table to find which agent
-    should run for the new status. Creates a BUDAgentTask row and
-    enqueues a JOB_BUD_AGENT job with a standardized payload.
+    The agent work is :func:`run_stage_jobs`. Re-estimation runs in the
+    background with its own session so the request returns at once; the
+    frontend polls estimates through ``useEstimates``.
     """
     if "status" not in update_data:
         return
-
     new_status = update_data["status"]
+    outcome = await run_stage_jobs(
+        db, current_user.org_id, bud, old_status, new_status, triggered_by=current_user.id
+    )
+    if outcome.design_available:
+        response.headers["X-Design-Available"] = "true"
+    if outcome.stopped:
+        return
 
-    # Compute the per-phase opt-in BEFORE any side-effect-producing
-    # header or task spawn. Earlier this gate was checked AFTER the
-    # ``X-Design-Available`` header was set — the FE's design panel
-    # interprets that header as "auto-fire generation" and POSTs to
-    # ``/designs/generate`` even when ``auto_generate_phases.design``
-    # is off. Compute once, gate everything that follows.
-    #
-    # Use ``.value`` rather than ``str(new_status)`` for explicit
-    # decoupling: today BUDStatus is a StrEnum so ``str(...)`` happens
-    # to yield ``"bud"`` etc., but if the base class ever changes the
-    # str-cast becomes ``"BUDStatus.BUD"`` and every lookup silently
-    # misses with no enum-related test failure.
-    phase_key = new_status.value if hasattr(new_status, "value") else str(new_status)
-    phases = bud.auto_generate_phases or {}
-    phase_auto_generate = should_auto_generate_phase(phases, phase_key)
-
-    # Design phase: only prompt for generation if (a) no designs
-    # exist yet AND (b) the user has design auto-generation enabled.
-    # Without the second condition the FE fires the design job
-    # straight after the status PATCH, defeating the External-LLM
-    # mode banner's "you're driving this BUD" contract.
-    #
-    # Count via the repo rather than accessing ``bud.designs`` — the
-    # relationship is ``lazy="selectin"`` today but the explicit query
-    # is greenlet-safe whatever the eager-load policy ends up being,
-    # and avoids the surprise MissingGreenlet failure mode the
-    # backend CLAUDE.md warns about.
-    if new_status == BUDStatus.DESIGN and old_status != BUDStatus.DESIGN and phase_auto_generate:
-        design_repo = BUDDesignRepository(db, org_id=current_user.org_id)
-        ready_count = await design_repo.count_by_status(bud.id, BUDDesignStatus.READY)
-        if ready_count == 0:
-            response.headers["X-Design-Available"] = "true"
-
-    # Data-driven agent triggering via stage mappings
-    if new_status != old_status:
-        if not phase_auto_generate:
-            logger.info(
-                "stage_agent_skip_auto_generate_off",
-                bud_id=str(bud.id),
-                from_status=str(old_status),
-                to_status=str(new_status),
-                phase_key=phase_key,
-                phases=phases,
-            )
-            return
-
-        # Skip the code review agent if there are no open PRs. The agent's
-        # only purpose is to post automated feedback to open PRs — if every
-        # impacted repo has a merged PR (tester rejected from testing) or no
-        # PR raised yet (developer hasn't pushed), there's nothing to post to.
-        # The BUD still transitions to code_review status; the agent just
-        # doesn't run until a PR appears (webhook-driven).
-        if new_status == BUDStatus.CODE_REVIEW:
-            from app.services.bud_code_review_status import get_pr_status_summary
-
-            repo_statuses = await get_pr_status_summary(db, current_user.org_id, bud)
-            has_open_pr = any(r["pr_state"] == "open" for r in repo_statuses)
-            if not has_open_pr:
-                logger.info(
-                    "code_review_agent_skip_no_open_prs",
-                    bud_id=str(bud.id),
-                    from_status=str(old_status),
-                    pr_states=[r["pr_state"] for r in repo_statuses],
-                )
-                return
-
-        # When entering testing: if test cases already exist from a previous
-        # run, skip the QA agent (no need to regenerate). If they're empty
-        # (previous run failed or produced nothing), force-run the agent
-        # despite test_plan_md being populated (test_plan_md is just a
-        # summary string like "0 automation + 0 manual" which the content-
-        # exists guard in create_agent_task_for_stage would treat as "done").
-        if new_status == BUDStatus.TESTING:
-            has_cases = bool(bud.qa_automation_cases or bud.qa_manual_cases)
-            if has_cases:
-                logger.info(
-                    "testing_agent_skip_cases_exist",
-                    bud_id=str(bud.id),
-                    auto_count=len(bud.qa_automation_cases or []),
-                    manual_count=len(bud.qa_manual_cases or []),
-                )
-                return
-            # No test cases yet — force the agent to run even if
-            # test_plan_md has stale content from a previous empty run.
-            await create_agent_task_for_stage(
-                bud,
-                str(new_status),
-                current_user.org_id,
-                db,
-                triggered_by=current_user.id,
-                force=True,
-            )
-            return
-
-        # Force re-run when going back to code_review from a later stage.
-        # The list of valid "later stages" depends on whether this org uses
-        # UAT — if UAT is disabled, the transition code_review → uat is
-        # impossible, so including UAT here would be dead code. We gate it
-        # with an explicit is_uat_enabled() check so the intent is visible
-        # in the source (rather than silently relying on unreachability).
-        from app.repositories.organization import OrganizationRepository
-        from app.services.org_settings import is_uat_enabled
-
-        org = await OrganizationRepository(db).get_by_id(current_user.org_id)
-        force_from_stages: list[BUDStatus] = [BUDStatus.TESTING]
-        if is_uat_enabled(org.config if org else None):
-            force_from_stages.append(BUDStatus.UAT)
-        force = new_status == BUDStatus.CODE_REVIEW and old_status in force_from_stages
-        await create_agent_task_for_stage(
-            bud,
-            str(new_status),
-            current_user.org_id,
-            db,
-            triggered_by=current_user.id,
-            force=force,
-        )
-
-    # Re-estimate delivery dates in the background on UAT/Prod transitions.
-    # Uses its own DB session so the request can return immediately — the
-    # frontend polls estimates via the existing useEstimates composable.
-    if "status" in update_data and update_data["status"] in (BUDStatus.UAT, BUDStatus.PROD):
-        import asyncio
-
+    if new_status in (BUDStatus.UAT, BUDStatus.PROD):
         task = asyncio.create_task(
             _bg_estimate(
                 bud.id,
                 current_user.org_id,
-                update_data["status"].value,
+                new_status.value,
                 current_user.id,
                 current_user.name,
             ),
-            name=f"bg_estimate_{bud.id}_{update_data['status'].value}",
+            name=f"bg_estimate_{bud.id}_{new_status.value}",
         )
         task.add_done_callback(
             lambda t: t.result() if not t.cancelled() and not t.exception() else None,
@@ -1442,7 +1213,9 @@ async def select_code_review_repos(
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="No code-review agent is configured for this org",
+            detail=await no_agent_reason(
+                db, current_user.org_id, "No code-review agent is configured for this org"
+            ),
         )
     return {
         "status": "accepted",
@@ -1615,6 +1388,8 @@ async def regenerate_code_review(
             status_code=409,
             detail="Cannot re-review while an agent task is running",
         )
+    if not await delivery_ai_enabled(db, current_user.org_id):
+        raise HTTPException(status_code=409, detail=DELIVERY_AI_OFF)
 
     # Snapshot the prior comments before clearing them. If ``create_job``
     # later fails (Redis down, queue full, etc.) we put them back so the

@@ -25,7 +25,7 @@
       <strong>{{ store.defaultPolicy.name }}</strong> is the default policy. Anyone you haven't
       assigned follows it.
     </AppCallout>
-    <LeaveEmptyState
+    <AppEmptyState
       v-if="!store.loading && !store.policies.length && !store.error"
       icon="mdi-file-document-outline"
       title="No policies yet"
@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
-import LeaveEmptyState from '@/components/leave/settings/LeaveEmptyState.vue'
+import AppEmptyState from '@/components/common/AppEmptyState.vue'
 import PolicyCard from '@/components/leave/settings/PolicyCard.vue'
 import SlackLeaveCard from '@/components/leave/settings/SlackLeaveCard.vue'
 import GoogleCalendarCard from '@/components/leave/settings/GoogleCalendarCard.vue'

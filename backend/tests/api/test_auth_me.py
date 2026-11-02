@@ -24,6 +24,7 @@ from typing import Any
 import pytest
 
 from app.api.v1 import auth as routes
+from app.core.permission_deps import PermissionSet
 from app.models.user import UserRole
 
 
@@ -62,5 +63,10 @@ def _no_permissions(monkeypatch: pytest.MonkeyPatch) -> None:
     ],
 )
 async def test_me_returns_the_stored_photo(stored: str | None) -> None:
-    result = await routes.get_me(current_user=_me(stored), db=None)  # type: ignore[arg-type]
+    result = await routes.get_me(
+        current_user=_me(stored),
+        db=None,  # type: ignore[arg-type]
+        perms=PermissionSet(ids=frozenset(), is_owner=False),
+        has_boards=False,
+    )
     assert result.avatar_url == stored

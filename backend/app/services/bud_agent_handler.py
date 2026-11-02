@@ -16,601 +16,183 @@
 
 Single handler for all BUD-level agent tasks (PRD, tech arch, code review).
 Dispatches to per-type prompt builders and result handlers via an extensible
-registry. Adding a new agent type = add a builder + handler entry.
+registry (`bud_agent_registry`). Adding a new agent type = add a builder + handler entry.
+
+The run itself goes through the shared executor
+(:func:`app.services.agents.executor.execute_agent_run`); this module is the
+BUD side of it, :class:`BudAgentSubject`.
 """
 
-import asyncio
-import uuid as uuid_mod
-from typing import Any, Protocol
+from typing import Any
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.prompts.learning_prompt import build_learning_prompt
-from app.models.bud import BUDDocument
-from app.models.bud_agent_task import AgentTaskStatus, BUDAgentTask
-from app.models.tracked_repository import TrackedRepository
-from app.repositories.organization import OrganizationRepository
-from app.schemas.bud_constants import BUD_AGENT_SECTIONS
-from app.schemas.jobs import BUDAgentTaskPayload, JobState
+from app.config import settings
+from app.models.bud_agent_task import AgentTaskStatus
+from app.repositories.tracked_repository import TrackedRepoRepository
+from app.schemas.jobs import BUDAgentTaskPayload
 from app.services.agent_activity_logger import log_agent_activity
 from app.services.agent_phase_support import PHASES_NAVIGABLE_BY_GRAPH
-from app.services.agent_prompts import (
-    build_code_review_prompt,
-    build_prd_prompt,
-    build_tech_arch_prompt,
-    build_testing_prompt,
+from app.services.agents.executor import execute_agent_run
+from app.services.agents.subject import AgentLaunch, AgentPrompt, AgentRunRef
+from app.services.bud_agent_loading import BudAgentLoader
+from app.services.bud_agent_registry import (
+    PROMPT_BUILDERS,
+    RESULT_HANDLERS,
+    provider_reads_files,
 )
-from app.services.agent_result_handlers import (
-    handle_code_review_result,
-    handle_learning_result,
-    handle_prd_result,
-    handle_tech_arch_result,
-    handle_testing_result,
-)
-from app.services.ai_runner import run_agent_for_org_id
-from app.services.ai_runner.capabilities import capabilities_for
 from app.services.bud_agent_retry import maybe_retry_on_git_auth_failure
 from app.services.bud_repo_paths import confirmed_repo_paths
-from app.services.claude_runner import NO_REPO_CONTEXT, ClaudeRunnerConfig
+from app.services.claude_runner import (
+    NO_REPO_CONTEXT,
+    ClaudeRunnerConfig,
+    ClaudeRunResult,
+    MCPServerConfig,
+    ProgressCallback,
+)
 from app.services.github_remote_refresh import refresh_origin_tokens
-from app.services.job_queue import update_job
-from app.services.job_utils import build_mcp_config, make_progress_callback, record_agent_timeline
-from app.services.section_session import mint_session_id, record_originating_session
-from app.services.skill_loader import Skill
+from app.services.job_utils import build_mcp_config
 
 logger = structlog.get_logger(__name__)
 
-
-# ── Protocol for per-type prompt builders ─────────────────────────
-
-
-class PromptBuilder(Protocol):
-    """Protocol for building an agent prompt from BUD state."""
-
-    async def __call__(
-        self, bud: BUDDocument, skill: Skill, org_id: uuid_mod.UUID, db: Any
-    ) -> tuple[str, str | None]:
-        """Build the prompt and optional working directory.
-
-        Args:
-            bud: The BUD document.
-            skill: The loaded skill config.
-            org_id: Organization UUID.
-            db: Async database session.
-
-        Returns:
-            Tuple of (prompt_string, optional_working_dir).
-        """
-        ...
+__all__ = ["PROMPT_BUILDERS", "RESULT_HANDLERS", "BudAgentSubject", "handle_bud_agent_job"]
 
 
-class ResultHandler(Protocol):
-    """Protocol for handling agent output after Claude completes."""
+class BudAgentSubject(BudAgentLoader):
+    """A BUD stage agent task, run through the shared executor."""
 
-    async def __call__(
+    def log_phase(self, phase: str, **fields: Any) -> None:
+        """Log one step under ``bud_agent_phase``."""
+        logger.info("bud_agent_phase", phase=phase, **fields)
+
+    async def build_prompt(self, db: AsyncSession) -> AgentPrompt:
+        """Dispatch to the task type's prompt builder."""
+        builder = PROMPT_BUILDERS[self.task_type]
+        text, working_dir = await builder(self.bud, self.skill, self.org_id, db)
+        return AgentPrompt(text=text, working_dir=working_dir)
+
+    def mcp_grant(self) -> MCPServerConfig | None:
+        """An org-wide internal token advertising the skill's MCP tools."""
+        mcp: MCPServerConfig | None = build_mcp_config(
+            org_id=str(self.org_id),
+            tool_names=self.skill.mcp_tools if self.skill.mcp_tools else None,
+        )
+        return mcp
+
+    async def prepare(
+        self, db: AsyncSession, prompt: AgentPrompt, mcp: MCPServerConfig | None
+    ) -> AgentLaunch:
+        """Build the runner config, log the invocation and mark the task running."""
+        self.session_id, is_resume = self.session_for_run()
+        config = ClaudeRunnerConfig(
+            max_turns=max(self.skill.max_turns, 0),
+            timeout_seconds=settings.bud_agents.timeout_seconds,
+            mcp=mcp,
+            model=self.skill.model or None,
+            effort=self.skill.effort or None,
+            cli_session_id=str(self.session_id) if self.session_id is not None else None,
+            is_resume=is_resume,
+        )
+        # Code review needs JSON output
+        if self.task_type == "code_review":
+            config.output_format = "json"
+
+        working_dir = prompt.working_dir
+        if working_dir:
+            repo = await TrackedRepoRepository(db, org_id=self.org_id).get_by_path(working_dir)
+            self.repo_id = None if repo is None else repo.id
+
+        # A separate session, so the row is visible now rather than after
+        # the run (which can take minutes) commits.
+        await log_agent_activity(
+            None,
+            org_id=self.org_id,
+            event_type="skill_invoked",
+            skill_slug=self.skill_slug,
+            message=f"Skill '{self.skill_slug}' invoked for {self.task_type}",
+            bud_id=self.bud_id,
+            skill_id=self.task.skill_id,
+            task_id=self.task_id,
+            repo_id=self.repo_id,
+            bud_number=self.bud_number,
+            bud_title=self.bud_title,
+        )
+        self.task.status = AgentTaskStatus.RUNNING
+        await db.commit()
+        self.log_phase(
+            "claude_invoked",
+            task_id=str(self.task_id),
+            task_type=self.task_type,
+            bud_id=str(self.bud_id),
+            skill_slug=self.skill_slug,
+        )
+
+        # Re-stamp every confirmed repo's ``origin`` with a fresh
+        # installation token right before spawn (App tokens expire after an
+        # hour). Best-effort: the agent may surface an auth error itself.
+        self.repo_paths = confirmed_repo_paths(self.bud, fallback=working_dir)
+        if self.repo_paths:
+            await refresh_origin_tokens(working_dirs=self.repo_paths, org_id=self.org_id, db=db)
+
+        # Builders that run purely against the LLM return no working dir;
+        # map it to the explicit no-repo sentinel.
+        spawn_cwd: str = working_dir if working_dir else NO_REPO_CONTEXT
+        if (
+            working_dir
+            and self.task_type in PHASES_NAVIGABLE_BY_GRAPH
+            and not await provider_reads_files(db, self.org_id)
+        ):
+            spawn_cwd = NO_REPO_CONTEXT
+        return AgentLaunch(config=config, spawn_cwd=spawn_cwd)
+
+    async def review(
         self,
-        bud_id: uuid_mod.UUID,
-        org_id: uuid_mod.UUID,
-        output: str,
-        task: BUDAgentTask,
-        db: Any,
-    ) -> dict[str, Any] | None:
-        """Process agent output and persist results.
+        db: AsyncSession,
+        result: ClaudeRunResult,
+        prompt: AgentPrompt,
+        launch: AgentLaunch,
+        progress: ProgressCallback,
+    ) -> ClaudeRunResult:
+        """One automatic retry when git/gh returned an auth rejection."""
+        return await maybe_retry_on_git_auth_failure(
+            result=result,
+            prompt=prompt.text,
+            spawn_cwd=launch.spawn_cwd,
+            working_dir=prompt.working_dir,
+            repo_paths=self.repo_paths,
+            config=launch.config,
+            progress_callback=progress,
+            org_id=self.org_id,
+            bud_id=self.bud_id,
+            task_id=self.task_id,
+            skill_id=self.task.skill_id,
+            skill_slug=self.skill_slug,
+            repo_id=self.repo_id,
+            db=db,
+        )
 
-        Args:
-            bud_id: The BUD UUID.
-            org_id: The org UUID.
-            output: Raw Claude output text.
-            task: The agent task row.
-            db: Async database session.
+    async def handle_output(self, db: AsyncSession, output: str) -> dict[str, Any] | None:
+        """Refresh the BUD, then dispatch to the task type's result handler.
 
-        Returns:
-            Optional result_summary dict for the task row.
+        The agent may have written the BUD through MCP in other sessions, and
+        this session's instance is stale (``expire_on_commit=False``); one
+        refresh here covers every result handler and downstream step.
         """
-        ...
-
-
-# ── Registry ──────────────────────────────────────────────────────
-
-PROMPT_BUILDERS: dict[str, PromptBuilder] = {
-    "bud": build_prd_prompt,
-    "tech_arch": build_tech_arch_prompt,
-    "code_review": build_code_review_prompt,
-    "testing": build_testing_prompt,
-    "closed": build_learning_prompt,
-}
-
-
-async def _provider_reads_files(db: AsyncSession, org_id: uuid_mod.UUID) -> bool:
-    """Whether this org's provider has filesystem access."""
-    org = await OrganizationRepository(db).get_by_id(org_id)
-    if org is None:
-        return True  # unknown org: keep today's behaviour, run_agent still guards
-    return capabilities_for(org.ai_provider).supports_files
-
-
-RESULT_HANDLERS: dict[str, ResultHandler] = {
-    "bud": handle_prd_result,
-    "tech_arch": handle_tech_arch_result,
-    "code_review": handle_code_review_result,
-    "testing": handle_testing_result,
-    "closed": handle_learning_result,
-}
-
-
-async def _fail_designs_for_bud(
-    db: Any,
-    bud_id: uuid_mod.UUID,
-) -> None:
-    """Mark all 'generating' design rows for a BUD as 'failed'."""
-    from sqlalchemy import update as sql_update
-
-    from app.models.bud import BUDDesign
-
-    await db.execute(
-        sql_update(BUDDesign)
-        .where(BUDDesign.bud_id == bud_id, BUDDesign.status == "generating")
-        .values(status="failed")
-    )
-
-
-# ── Unified handler ───────────────────────────────────────────────
+        await db.refresh(self.bud)
+        handler = RESULT_HANDLERS.get(self.task_type)
+        if handler is None:
+            return None
+        return await handler(self.bud_id, self.org_id, output, self.task, db)
 
 
 async def handle_bud_agent_job(job_id: str, raw_payload: dict[str, Any]) -> None:
     """Unified handler for all BUD-level agent tasks.
 
-
     Loads the task from DB, dispatches to the appropriate prompt builder,
-    runs Claude, then dispatches to the result handler.
+    runs the agent, then dispatches to the result handler.
     """
     payload = BUDAgentTaskPayload(**raw_payload)
-    task_id = uuid_mod.UUID(payload.task_id)
-    org_id = uuid_mod.UUID(payload.org_id)
-    bud_id = uuid_mod.UUID(payload.bud_id)
-
-    from app.database import AsyncSessionLocal
-    from app.repositories.bud import BUDRepository
-
-    update_job(job_id, status_message="Loading task...", progress_pct=5)
-
-    # Pre-set so the ``except`` branches below can always log / write
-    # activity rows even if we fail before resolving the real skill/task
-    # type (e.g. task row not yet visible, DB down).
-    _skill_slug: str = "bud_agent"
-    _task_type: str = "unknown"
-
-    async with AsyncSessionLocal() as db:
-        try:
-            task = await db.get(BUDAgentTask, task_id)
-            if not task:
-                logger.error(
-                    "bud_agent_task_not_found",
-                    task_id=str(task_id),
-                    job_id=job_id,
-                    org_id=str(org_id),
-                )
-                update_job(job_id, state=JobState.FAILED, error="Agent task not found")
-                return
-
-            # Defense-in-depth: verify task belongs to the expected org
-            if task.org_id != org_id:
-                update_job(job_id, state=JobState.FAILED, error="Org mismatch")
-                return
-
-            bud_repo = BUDRepository(db, org_id=org_id)
-            bud = await bud_repo.get_by_id(bud_id)
-            if not bud:
-                task.status = AgentTaskStatus.FAILED
-                task.error_message = "BUD not found"
-                await db.commit()
-                update_job(job_id, state=JobState.FAILED, error="BUD not found")
-                return
-
-            # Get skill from joined relationship
-            skill_row = task.skill
-            if not skill_row:
-                task.status = AgentTaskStatus.FAILED
-                task.error_message = "Skill not found"
-                await db.commit()
-                update_job(job_id, state=JobState.FAILED, error="Skill not found")
-                return
-
-            # Capture scalar values for use after session closes
-            _skill_slug = skill_row.skill_slug
-            _task_type = task.task_type
-            _bud_number = bud.bud_number if bud else None
-            _bud_title = bud.title if bud else None
-
-            logger.info(
-                "bud_agent_phase",
-                phase="task_loaded",
-                task_id=str(task_id),
-                task_type=_task_type,
-                bud_id=str(bud_id),
-                skill_slug=_skill_slug,
-            )
-
-            skill = Skill(
-                name=skill_row.name,
-                slug=skill_row.skill_slug,
-                description=skill_row.description,
-                tools=skill_row.tools,
-                mcp_tools=skill_row.mcp_tools,
-                prompt=skill_row.prompt,
-                max_turns=skill_row.max_turns or 0,
-                model=skill_row.model or "",
-                effort=skill_row.effort or "",
-            )
-
-            # Dispatch to prompt builder
-            builder = PROMPT_BUILDERS.get(task.task_type)
-            if not builder:
-                task.status = AgentTaskStatus.FAILED
-                task.error_message = f"No prompt builder for task type: {task.task_type}"
-                # Mark any associated design rows as failed so the UI stops spinning
-                if task.task_type == "design":
-                    await _fail_designs_for_bud(db, bud_id)
-                await db.commit()
-                update_job(job_id, state=JobState.FAILED, error=task.error_message)
-                return
-
-            update_job(job_id, status_message="Building prompt...", progress_pct=10)
-            prompt, working_dir = await builder(bud, skill, org_id, db)
-
-            logger.info(
-                "bud_agent_phase",
-                phase="prompt_built",
-                task_id=str(task_id),
-                prompt_length=len(prompt),
-                working_dir=working_dir,
-            )
-
-            # Run Claude
-            update_job(job_id, status_message="Running agent...", progress_pct=20)
-
-            mcp = build_mcp_config(
-                org_id=str(org_id),
-                tool_names=skill.mcp_tools if skill.mcp_tools else None,
-            )
-
-            # Mint a CLI session id for this run when the agent owns a BUD
-            # section that chat will resume against. Sections not in
-            # ``BUD_AGENT_SECTIONS`` (e.g. ad-hoc tasks) get no session id
-            # and behave as before. When ``task.resume_session_id`` is set
-            # (re-run / regenerate endpoints), resume that session instead
-            # of minting a fresh one — keeps the prompt cache warm and the
-            # repo working tree already indexed.
-            section_for_session = BUD_AGENT_SECTIONS.get(task.task_type)
-            if section_for_session is None:
-                originating_session_id = None
-                is_resume_flag = False
-            elif task.resume_session_id is not None:
-                originating_session_id = task.resume_session_id
-                is_resume_flag = True
-            else:
-                originating_session_id = mint_session_id()
-                is_resume_flag = False
-
-            config = ClaudeRunnerConfig(
-                max_turns=max(skill.max_turns, 0),
-                timeout_seconds=600,
-                mcp=mcp,
-                model=skill.model or None,
-                effort=skill.effort or None,
-                cli_session_id=(
-                    str(originating_session_id) if originating_session_id is not None else None
-                ),
-                is_resume=is_resume_flag,
-            )
-
-            # Code review needs JSON output
-            if task.task_type == "code_review":
-                config.output_format = "json"
-
-            # Resolve repo_id from working_dir for activity tracking
-            _repo_id = None
-            if working_dir:
-                repo_row = await db.execute(
-                    select(TrackedRepository.id).where(
-                        TrackedRepository.path == working_dir,
-                        TrackedRepository.org_id == org_id,
-                    )
-                )
-                _repo_id = repo_row.scalar_one_or_none()
-
-            # Log skill_invoked in a SEPARATE session so it commits immediately
-            # (the main db session commits only after the agent run completes,
-            #  which can take 30-120 seconds — the row must be visible NOW)
-            await log_agent_activity(
-                None,
-                org_id=org_id,
-                event_type="skill_invoked",
-                skill_slug=_skill_slug,
-                message=f"Skill '{_skill_slug}' invoked for {_task_type}",
-                bud_id=bud_id,
-                skill_id=task.skill_id,
-                task_id=task_id,
-                repo_id=_repo_id,
-                bud_number=bud.bud_number if bud else None,
-                bud_title=bud.title if bud else None,
-            )
-
-            # Mark task as RUNNING — commit immediately so it's visible
-            task.status = AgentTaskStatus.RUNNING
-            await db.commit()
-
-            logger.info(
-                "bud_agent_phase",
-                phase="claude_invoked",
-                task_id=str(task_id),
-                task_type=_task_type,
-                bud_id=str(bud_id),
-                skill_slug=_skill_slug,
-            )
-
-            # Re-stamp ``origin`` with a freshly-minted installation
-            # token right before spawn. GitHub-App tokens expire after
-            # 1 hour and the URL baked into ``.git/config`` at clone
-            # time can be hours/days old. Best-effort: a failure here
-            # is logged but does not block the run — the agent may then
-            # surface the auth error itself, classified as
-            # ``git_auth_failed`` by the result parser.
-            #
-            # Multi-repo BUDs (code-review, testing) ``git fetch`` against
-            # every confirmed repo; refreshing only ``working_dir`` (the
-            # first one) leaves the rest on stale tokens. Pass the full
-            # list so all of them are re-stamped before spawn.
-            repo_paths_for_refresh = confirmed_repo_paths(bud, fallback=working_dir)
-            if repo_paths_for_refresh:
-                await refresh_origin_tokens(
-                    working_dirs=repo_paths_for_refresh,
-                    org_id=org_id,
-                    db=db,
-                )
-
-            # Some prompt builders (e.g. PRD) return ``working_dir=None``
-            # because the agent runs purely against the LLM — map to the
-            # explicit no-repo sentinel so ``_validate_working_dir`` never
-            # has to fall back to the worker cwd.
-            spawn_cwd: str = working_dir if working_dir else NO_REPO_CONTEXT
-            if (
-                working_dir
-                and task.task_type in PHASES_NAVIGABLE_BY_GRAPH
-                and not await _provider_reads_files(db, org_id)
-            ):
-                spawn_cwd = NO_REPO_CONTEXT
-            result = await run_agent_for_org_id(
-                org_id,
-                prompt=prompt,
-                working_dir=spawn_cwd,
-                config=config,
-                progress_callback=make_progress_callback(job_id),
-            )
-
-            # One automatic retry when the agent's git/gh subprocess
-            # returned an auth rejection — see ``bud_agent_retry`` for
-            # the contract (fresh session id, activity log row, etc.).
-            result = await maybe_retry_on_git_auth_failure(
-                result=result,
-                prompt=prompt,
-                spawn_cwd=spawn_cwd,
-                working_dir=working_dir,
-                repo_paths=repo_paths_for_refresh,
-                config=config,
-                progress_callback=make_progress_callback(job_id),
-                org_id=org_id,
-                bud_id=bud_id,
-                task_id=task_id,
-                skill_id=task.skill_id,
-                skill_slug=_skill_slug,
-                repo_id=_repo_id,
-                db=db,
-            )
-
-            logger.info(
-                "bud_agent_phase",
-                phase="claude_completed",
-                task_id=str(task_id),
-                success=result.success,
-                output_length=len(result.output or ""),
-                cost_usd=result.cost_usd,
-                turns_used=result.turns_used,
-            )
-
-            if not result.success:
-                error_msg = result.error or "Agent execution failed"
-                await log_agent_activity(
-                    db,
-                    org_id=org_id,
-                    event_type="skill_failed",
-                    skill_slug=_skill_slug,
-                    message=error_msg,
-                    bud_id=bud_id,
-                    skill_id=task.skill_id,
-                    task_id=task_id,
-                    repo_id=_repo_id,
-                    bud_number=bud.bud_number if bud else None,
-                    bud_title=bud.title if bud else None,
-                )
-                task.status = AgentTaskStatus.FAILED
-                task.error_message = error_msg[:500]
-                await db.commit()
-                update_job(
-                    job_id,
-                    state=JobState.FAILED,
-                    error=error_msg,
-                    error_code=result.error_code,
-                )
-                return
-
-            # Dispatch to result handler
-            update_job(job_id, status_message="Saving results...", progress_pct=90)
-
-            # Refresh the ``bud`` ORM instance before dispatching. The agent
-            # may have written to the BUD via MCP tools (``write_bud``) and
-            # those writes committed in *separate* HTTP-request sessions.
-            # ``AsyncSessionLocal`` uses ``expire_on_commit=False``, so our
-            # cached instance is stale — and because SQLAlchemy's identity
-            # map keys on primary key, any ``get_by_id`` a result handler
-            # does on this same session returns the same stale instance
-            # rather than re-reading from the DB. One refresh here inoculates
-            # every current and future result handler + downstream service
-            # (estimator prompt, todo sync, notifications).
-            # Note: ``refresh`` reloads scalar columns only. If a future agent
-            # writes to a relationship via MCP and a downstream step reads
-            # it, pass ``attribute_names=["designs", ...]`` for that field.
-            await db.refresh(bud)
-
-            handler = RESULT_HANDLERS.get(task.task_type)
-            result_summary = None
-            if handler:
-                result_summary = await handler(bud_id, org_id, result.output or "", task, db)
-
-            await log_agent_activity(
-                db,
-                org_id=org_id,
-                event_type="skill_completed",
-                skill_slug=_skill_slug,
-                message=f"Skill '{_skill_slug}' completed for {_task_type}",
-                bud_id=bud_id,
-                skill_id=task.skill_id,
-                task_id=task_id,
-                repo_id=_repo_id,
-                metadata_=result_summary,
-                bud_number=bud.bud_number if bud else None,
-                bud_title=bud.title if bud else None,
-            )
-
-            # Mark task completed
-            task.status = AgentTaskStatus.COMPLETED
-            task.result_summary = result_summary
-            task.error_message = None
-            await db.commit()
-
-            # Persist the originating-agent CLI session id so subsequent
-            # user chats on the same section can ``--resume`` against it
-            # and warm the prompt cache.
-            if section_for_session is not None and originating_session_id is not None:
-                await record_originating_session(
-                    org_id=org_id,
-                    bud_id=bud_id,
-                    section=section_for_session,
-                    session_id=originating_session_id,
-                )
-
-            logger.info(
-                "bud_agent_phase",
-                phase="result_saved",
-                task_id=str(task_id),
-                task_type=_task_type,
-            )
-
-        except asyncio.CancelledError:
-            # The API/worker signalled cancel via ``cancel_job``. Claude's
-            # subprocess (if still running) was killed when the await was
-            # interrupted — see the CancelledError branch in
-            # ``claude_runner.run_claude_code``. We own the task row's
-            # terminal state: flip it to FAILED with the user-supplied
-            # reason and leave WS publication + JobState.CANCELLED to the
-            # worker's own CancelledError handler.
-            await db.rollback()
-            # ``cancel_job`` stashes the cancel reason on the job's
-            # ``status_message`` before it cancels the asyncio.Task, so
-            # we can recover it via the public accessor without reaching
-            # into job_queue internals.
-            from app.services.job_queue import get_job  # noqa: PLC0415
-
-            job = get_job(job_id)
-            reason = (job.status_message if job else None) or "Cancelled by user"
-            async with AsyncSessionLocal() as err_db:
-                err_task = await err_db.get(BUDAgentTask, task_id)
-                if err_task and err_task.status in (
-                    AgentTaskStatus.PENDING,
-                    AgentTaskStatus.RUNNING,
-                ):
-                    err_task.status = AgentTaskStatus.FAILED
-                    err_task.error_message = reason[:500]
-                await err_db.commit()
-            await log_agent_activity(
-                None,
-                org_id=org_id,
-                event_type="skill_failed",
-                skill_slug=_skill_slug,
-                message=reason,
-                bud_id=bud_id,
-                task_id=task_id,
-            )
-            logger.info("bud_agent_job_cancelled", task_id=str(task_id), reason=reason)
-            raise  # Let the worker's CancelledError branch emit the WS terminal event
-
-        except Exception as exc:
-            await db.rollback()
-            # Mark task failed in a fresh session (main session was rolled back)
-            async with AsyncSessionLocal() as err_db:
-                err_task = await err_db.get(BUDAgentTask, task_id)
-                if err_task:
-                    err_task.status = AgentTaskStatus.FAILED
-                    err_task.error_message = str(exc)[:500]
-                await err_db.commit()
-            await log_agent_activity(
-                None,
-                org_id=org_id,
-                event_type="skill_failed",
-                skill_slug=_skill_slug,
-                message=str(exc)[:2000],
-                bud_id=bud_id,
-                task_id=task_id,
-            )
-            update_job(job_id, state=JobState.FAILED, error=str(exc)[:200])
-            logger.exception("bud_agent_job_failed", task_id=str(task_id))
-            return
-
-    # Record timeline event (using captured scalars — safe after session close)
-    await record_agent_timeline(
-        payload.org_id,
-        payload.bud_id,
-        "ai_agent_completed",
-        skill_name=_skill_slug,
-        section=_task_type,
-        job_id=job_id,
-    )
-
-    update_job(
-        job_id,
-        state=JobState.COMPLETED,
-        status_message="Done",
-        progress_pct=100,
-    )
-
-    # Re-publish skill_completed as a resilience measure.
-    # The first publish (inside log_agent_activity) can be lost if the WS
-    # connection briefly dropped during the long-running Claude task.
-    # By this point update_job already published to job:{id}, proving the
-    # WS is alive — so this second attempt is very likely to be delivered.
-    # character.complete() on the frontend is idempotent, so duplicates are safe.
-    from app.services.event_bus import publish as _eb_publish
-
-    logger.info(
-        "agent_activity_republish",
-        topic=f"agent_activity:{org_id}",
-        task_id=str(task_id),
-    )
-    _eb_publish(
-        f"agent_activity:{org_id}",
-        {
-            "event_type": "skill_completed",
-            "status": "completed",
-            "message": f"Skill '{_skill_slug}' completed for {_task_type}",
-            "skill_slug": _skill_slug,
-            "actor_name": _skill_slug,
-            "task_id": str(task_id),
-            "repo_name": None,
-            "bud_number": _bud_number,
-            "bud_title": _bud_title,
-            "impacted_repo_names": [],
-            "created_at": "",
-        },
-    )
+    subject = BudAgentSubject(job_id, payload)
+    run = AgentRunRef(org_id=subject.org_id, run_id=subject.task_id)
+    await execute_agent_run(job_id, run, subject)

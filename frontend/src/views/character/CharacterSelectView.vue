@@ -109,7 +109,7 @@
           <v-tab value="loadout">
             <v-icon start size="18">mdi-sword-cross</v-icon>Loadout
           </v-tab>
-          <v-tab value="upgrades">
+          <v-tab v-if="canAccessEngineering" value="upgrades">
             <v-icon start size="18">mdi-treasure-chest</v-icon>Upgrades
           </v-tab>
         </v-tabs>
@@ -136,7 +136,7 @@
               @update="onAccessoryUpdate"
             />
           </v-tabs-window-item>
-          <v-tabs-window-item value="upgrades">
+          <v-tabs-window-item v-if="canAccessEngineering" value="upgrades">
             <UpgradeShopPanel />
           </v-tabs-window-item>
         </v-tabs-window>
@@ -206,6 +206,7 @@ import {
   DEFAULT_SKIN_COLOR,
 } from '@/engine/characters/CharacterConfig'
 import { getCharacterDef, getAccessoryDef } from '@/engine/characters/KayKitManifest'
+import { usePermissions } from '@/composables/usePermissions'
 import { useMembersStore } from '@/stores/members'
 import { useAuthStore } from '@/stores/auth'
 import { useXPStore } from '@/stores/xp'
@@ -219,7 +220,10 @@ const xpStore = useXPStore()
 const saving = ref(false)
 const tab = ref<'character' | 'colors' | 'loadout' | 'upgrades'>('character')
 
-onMounted(() => { xpStore.fetchProfile() })
+// XP, levels and upgrades are engineering-workspace features; a board
+// user picks a character without them.
+const { canAccessEngineering } = usePermissions()
+onMounted(() => { if (canAccessEngineering.value) void xpStore.fetchProfile() })
 
 const existing = parseCharacterModel(authStore.user?.character_model ?? null)
 const config = reactive<CharacterConfig>({
@@ -296,7 +300,7 @@ async function handleSave(): Promise<void> {
     const serialized = serializeCharacterConfig(config)
     await membersStore.updateCharacter(userId, serialized)
     await authStore.fetchUser()
-    router.push((signingIn && takeReturnTo()) || { name: 'dashboard' })
+    router.push((signingIn && takeReturnTo()) || { name: canAccessEngineering.value ? 'dashboard' : 'garden' })
   } catch (err) {
     console.error('[CharacterSelect] Failed to save:', err)
   } finally {

@@ -45,6 +45,14 @@ const VISUALS: Record<NotificationType, NotificationVisual> = {
   leave_requested: { icon: 'mdi-calendar-account-outline', tone: 'warning' },
   leave_decided: { icon: 'mdi-calendar-check-outline', tone: 'neutral' },
   employee_record_changed: { icon: 'mdi-card-account-details-outline', tone: 'neutral' },
+  board_card_assigned: { icon: 'mdi-account-arrow-right-outline', tone: 'info' },
+  board_card_comment: { icon: 'mdi-comment-text-outline', tone: 'neutral' },
+  board_ai_draft: { icon: 'mdi-file-document-edit-outline', tone: 'warning' },
+  board_ai_failed: { icon: 'mdi-alert-circle-outline', tone: 'error' },
+  board_handover: { icon: 'mdi-truck-delivery-outline', tone: 'info' },
+  board_handover_returned: { icon: 'mdi-keyboard-return', tone: 'warning' },
+  board_handover_delivered: { icon: 'mdi-check-all', tone: 'success' },
+  board_due: { icon: 'mdi-calendar-clock-outline', tone: 'warning' },
 }
 
 const FALLBACK: NotificationVisual = { icon: 'mdi-bell-outline', tone: 'neutral' }

@@ -114,10 +114,12 @@ import { GardenEngine } from '@/engine/index'
 import type { EngineData, RepoHealth, ThreatSeverity, BUDStatus, RelType, SceneState } from '@/engine/types'
 import { useAuthStore } from '@/stores/auth'
 import { useXPStore } from '@/stores/xp'
+import { canOpenWorkspace } from '@/utils/workspace'
 import api from '@/services/api'
 import TouchControls, { type TouchContext } from '@/components/touch/TouchControls.vue'
 import EngineLoadingOverlay, { type LoadingPhase } from '@/components/tree/EngineLoadingOverlay.vue'
 import { useTouchDevice } from '@/composables/useTouchDevice'
+import { useSuspendPageShortcuts } from '@/composables/usePageShortcuts'
 import { OrgRoomClient, type ConnectionStatus } from '@/multiplayer'
 
 const authStore = useAuthStore()
@@ -452,7 +454,9 @@ async function initEngine(): Promise<void> {
   // Fetch XP profile to get vehicle unlocks for the engine. Non-fatal —
   // the 3D scene is fully built at this point; a network blip on the XP
   // endpoint shouldn't surface as "Failed to load 3D scene." (which it
-  // would if this throw bubbled to onMounted's outer catch).
+  // would if this throw bubbled to onMounted's outer catch). XP is an
+  // engineering-workspace feature: a board user's garden has no unlocks.
+  if (!canOpenWorkspace(authStore.user?.permissions, 'engineering')) return
   try {
     const xpStore = useXPStore()
     await xpStore.fetchProfile()
@@ -522,6 +526,9 @@ function onResize(): void {
 }
 
 const initError = ref<string | null>(null)
+
+// The garden takes the keyboard (WASD, E…), so page shortcuts stand down.
+useSuspendPageShortcuts()
 
 onMounted(async () => {
   // Subscribe to OrgRoom connection-status BEFORE initEngine so the very

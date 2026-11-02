@@ -141,6 +141,17 @@ export const useBUDStore = defineStore('bud', () => {
     }
   }
 
+  /** One BUD's latest read without opening it (the board's stage-change guards); null on failure. */
+  async function peekBUD(id: string): Promise<BUDDocument | null> {
+    await replyOrder.settled(id)
+    try {
+      const { data } = await api.get(`/v1/buds/${id}`)
+      return data
+    } catch {
+      return null
+    }
+  }
+
   async function createBUD(
     title: string,
     requirements_md?: string,
@@ -172,21 +183,31 @@ export const useBUDStore = defineStore('bud', () => {
     }
   }
 
-  // Signal that design phase was entered (frontend should show repo selection)
-  const designAvailable = ref(false)
+  // The BUD that just entered the design phase: its design panel starts
+  // generation (repo selection) once opened, here or later from the board.
+  const designAvailableFor = ref<string | null>(null)
+
+  /**
+   * Write a BUD's latest read into its list row. Merged, not swapped: the
+   * row carries fields one BUD's read doesn't (bug count, origin card).
+   */
+  function mergeListRow(id: string, data: BUDDocument): void {
+    const idx = buds.value.findIndex(p => p.id === id)
+    if (idx !== -1) buds.value[idx] = { ...buds.value[idx], ...data }
+  }
 
   async function updateBUD(id: string, updates: Partial<BUDDocument>): Promise<BUDDocument | null> {
     error.value = ''
-    designAvailable.value = false
+    // A later write (moved out of design again) cancels the signal.
+    if (designAvailableFor.value === id) designAvailableFor.value = null
     try {
       const resp = await replyOrder.track(id, () => api.patch(`/v1/buds/${id}`, updates))
       const data = resp.data
-      const idx = buds.value.findIndex(p => p.id === id)
-      if (idx !== -1) buds.value[idx] = data
+      mergeListRow(id, data)
       showWriteReply(id, data)
       // Check if backend signals design phase transition
       if (resp.headers['x-design-available'] === 'true') {
-        designAvailable.value = true
+        designAvailableFor.value = id
       }
       return data
     } catch (err) {
@@ -213,13 +234,7 @@ export const useBUDStore = defineStore('bud', () => {
     error.value = ''
     try {
       const { data } = await replyOrder.track(id, () => api.post(`/v1/buds/${id}/restore`))
-      const idx = buds.value.findIndex(p => p.id === id)
-      if (idx !== -1) {
-        // BUDRead carries no ``open_bug_count`` (it's a transient the list
-        // endpoint injects), so a verbatim swap would blank the bug badge
-        // on the restored card until the next full fetch. Carry it over.
-        buds.value[idx] = { ...data, open_bug_count: buds.value[idx].open_bug_count }
-      }
+      mergeListRow(id, data)
       showWriteReply(id, data)
       return data
     } catch (err) {
@@ -552,8 +567,7 @@ export const useBUDStore = defineStore('bud', () => {
         budId, () => api.post(`/v1/buds/${budId}/code-review/override`, { reason }),
       )
       showWriteReply(budId, data)
-      const idx = buds.value.findIndex(p => p.id === budId)
-      if (idx !== -1) buds.value[idx] = data
+      mergeListRow(budId, data)
       return data
     } catch (err) {
       const axiosErr = err as AxiosError<{ detail?: string }>
@@ -609,8 +623,7 @@ export const useBUDStore = defineStore('bud', () => {
         budId, () => api.post(`/v1/buds/${budId}/request-reassignment`, { reason }),
       )
       showWriteReply(budId, data)
-      const idx = buds.value.findIndex(p => p.id === budId)
-      if (idx !== -1) buds.value[idx] = data
+      mergeListRow(budId, data)
       return data
     } catch {
       error.value = 'Failed to request reassignment'
@@ -713,11 +726,12 @@ export const useBUDStore = defineStore('bud', () => {
     currentBUD,
     loading,
     error,
-    designAvailable,
+    designAvailableFor,
     budsByStatus,
     fetchBUDs,
     fetchBUD,
     refreshBUDIfCurrent,
+    peekBUD,
     createBUD,
     updateBUD,
     restoreBUD,

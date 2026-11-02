@@ -77,13 +77,18 @@ async function pick(value: V | null): Promise<void> {
 </script>
 
 <style scoped>
+/* As tall as the compact search field beside it. */
 .board-filter {
-  height: 38px;
+  height: 40px;
   padding: 0 10px 0 12px;
   font-weight: 500;
   color: rgb(var(--v-theme-ink-2));
   border-color: rgb(var(--v-theme-rule));
   background: rgb(var(--v-theme-surface));
+}
+.board-filter:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 .board-filter--set {
   color: var(--color-accent-text);

@@ -41,6 +41,8 @@ export interface User {
   character_model: string | null
   /** As stored: a Slack CDN URL or a root-relative upload path. Load via resolveAvatarUrl. */
   avatar_url: string | null
+  /** Whether the user can open at least one team board (drives the landing page). */
+  has_boards?: boolean
 }
 
 export interface Organization {
@@ -209,8 +211,23 @@ export interface BUDListItem {
   assignee_name: string | null
   assignee_avatar_url?: string | null
   open_bug_count: number
+  /**
+   * The board card this BUD was handed over from, when I can open that
+   * board; null otherwise. Sent on the BUD list only, not on one BUD's read.
+   */
+  origin?: BUDListOrigin | null
+  /** Whether the PRD and tech spec are written; they gate later stages (utils/budStageGates). */
+  has_prd: boolean
+  has_tech_spec: boolean
   created_at: string
   updated_at: string
+}
+
+/** A listed BUD's live origin card (``BUDListOrigin``). */
+export interface BUDListOrigin {
+  card_key: string
+  board_key: string
+  can_open: boolean
 }
 
 export interface BUDAgentTask {
@@ -283,6 +300,9 @@ export interface BUDDocument extends BUDListItem {
   // empty placeholder for BUDs that haven't been closed (or that
   // closed with the Learning Agent opted out).
   has_learning?: boolean
+  // Handed over straight to design with design generation on and no
+  // design yet: whoever opens the BUD starts generating them.
+  design_pending: boolean
 }
 
 export type AutoGeneratePhases = Record<string, boolean>
@@ -1020,6 +1040,14 @@ export type NotificationType =
   | 'leave_requested'
   | 'leave_decided'
   | 'employee_record_changed'
+  | 'board_card_assigned'
+  | 'board_card_comment'
+  | 'board_ai_draft'
+  | 'board_ai_failed'
+  | 'board_handover'
+  | 'board_handover_returned'
+  | 'board_handover_delivered'
+  | 'board_due'
 
 /**
  * Structured payload attached to a race-invite notification.

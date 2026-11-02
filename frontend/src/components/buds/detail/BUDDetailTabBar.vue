@@ -14,13 +14,13 @@
  * limitations under the License.
  -->
 
-<!-- The BUD section tabs, underlined, with the section toolbar (the
+<!-- A detail page's section tabs (a BUD's, a card's), underlined, with the section toolbar (the
      default slot) at the end of the row. Sticks to the top while a long
      section scrolls. Tab values must match the v-tabs-window-item values
      on the page. -->
 <template>
   <div class="detail-tabs">
-    <v-tabs v-model="tab" color="primary" density="comfortable" show-arrows class="detail-tabs__tabs" aria-label="BUD sections">
+    <v-tabs v-model="tab" color="primary" density="comfortable" show-arrows class="detail-tabs__tabs" :aria-label="label">
       <v-tab v-for="t in tabs" :key="t.value" :value="t.value" class="detail-tabs__tab">{{ t.label }}</v-tab>
     </v-tabs>
     <div class="detail-tabs__tools"><slot /></div>
@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import type { DetailTab } from '@/utils/budDetail'
 
-defineProps<{ tabs: DetailTab[] }>()
+withDefaults(defineProps<{ tabs: DetailTab[]; label?: string }>(), { label: 'BUD sections' })
 const tab = defineModel<string>({ required: true })
 </script>
 

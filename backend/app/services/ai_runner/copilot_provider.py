@@ -32,6 +32,7 @@ from app.services.ai_runner.cli_exec import resolve_working_dir, run_cli, run_cl
 from app.services.ai_runner.mcp_config import build_copilot_mcp
 from app.services.ai_runner.model_resolution import resolve_model
 from app.services.ai_runner.subprocess_env import build_provider_env
+from app.services.claude_guard.tool_scope import copilot_tool_scope_args
 from app.services.claude_runner import (
     ClaudeRunnerConfig,
     ClaudeRunResult,
@@ -154,6 +155,9 @@ class CopilotProvider:
 
         mcp = build_copilot_mcp(config.mcp)
         cmd += mcp.args
+        cmd += copilot_tool_scope_args(
+            config.builtin_tools, config.mcp.tool_names if config.mcp else []
+        )
 
         env = build_provider_env(AIProvider.copilot, config.env_extra)
         logger.info(

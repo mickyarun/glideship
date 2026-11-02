@@ -83,7 +83,7 @@ describe("mini-game rooms per player, through the matchmaker", () => {
   it("gives the slot back when the player's room is disposed", async () => {
     const [firstRoomId] = await openAll("cara")
     const room = matchMaker.getLocalRoomById(firstRoomId!) as MinigameRoom
-    const identity: JoinIdentity = { userId: "cara", name: "cara", orgId: ORG }
+    const identity: JoinIdentity = { userId: "cara", name: "cara", orgId: ORG, engineering: false }
     room.onJoin(fakeClient(), {}, identity)
     expect(openMinigameSlots("cara")).toBe(MAX_OPEN_MINIGAMES_PER_USER)
 

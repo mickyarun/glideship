@@ -18,8 +18,9 @@
   Self-service Slack notification preferences. Lists every category the
   backend registry exposes, grouped, with a per-category switch. Each toggle
   saves on its own (optimistic + revert on error) so there is no explicit
-  Save button — turning a switch off muts that category's Slack DMs for the
-  signed-in member only.
+  Save button. Turning a switch off mutes that category's Slack DMs for the
+  signed-in member only; notifications under the bell in the app aren't
+  affected by these switches.
 -->
 <template>
   <v-card color="surface" border class="pa-6">
@@ -30,14 +31,15 @@
       <div>
         <div class="text-body-1 font-weight-medium">Notifications</div>
         <div class="text-caption text-medium-emphasis">
-          Choose which Slack messages you want to receive
+          Choose which Slack messages you get. The bell here in the app isn't affected.
         </div>
       </div>
     </div>
 
     <AppCallout variant="info" icon="mdi-slack" class="mb-4">
-      These control the direct messages our Slack bot sends you. Turning one off
-      affects only your account — your teammates keep getting them.
+      These switches control only the direct messages our Slack bot sends you, not
+      the notifications under the bell. Turning one off affects only your account:
+      your teammates keep getting them.
     </AppCallout>
 
     <div v-if="loading" class="d-flex justify-center py-6">

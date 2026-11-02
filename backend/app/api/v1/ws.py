@@ -28,6 +28,7 @@ Protocol:
         {"topic": "job:abc-123", "data": {...}}
         {"type": "pong"}
         {"error": "unauthorized"}
+        {"topic": "board:abc-123", "error": "revoked"}   (access was lost)
 """
 
 import asyncio
@@ -38,15 +39,15 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.api.v1.ws_scope_checks import passes_scope_check
+from app.api.v1.ws_subscriptions import ConnectionSubscriptions
 from app.config import settings
-from app.core.deps import member_has_permission
-from app.core.permissions import WORKSPACE_ENGINEERING
+from app.core.permission_deps import member_permission_set
+from app.core.permissions import ALL_PERMISSION_IDS, WORKSPACE_ENGINEERING
 from app.core.security import verify_token
 from app.database import AsyncSessionLocal
-from app.repositories.bud import BUDRepository
 from app.repositories.user import UserRepository
-from app.services.event_bus import subscribe, unsubscribe
-from app.services.ws_topic_policy import Subscriber, bud_id_of, may_subscribe
+from app.services.ws_topic_policy import Subscriber, may_subscribe
 
 logger = structlog.get_logger(__name__)
 
@@ -56,8 +57,8 @@ router = APIRouter()
 async def _resolve_subscriber(payload: dict[str, Any]) -> Subscriber | None:
     """Resolve the JWT to an active org member, or None to reject the socket.
 
-    Membership and engineering access are read once at connect; a role
-    change takes effect on the client's next reconnect.
+    Membership and permissions are read once at connect; a role change
+    takes effect on the client's next reconnect.
     """
     try:
         user_id = uuid.UUID(str(payload.get("sub")))
@@ -71,21 +72,15 @@ async def _resolve_subscriber(payload: dict[str, Any]) -> Subscriber | None:
             return None
         if not await repo.is_member_of_org(user_id, org_id):
             return None
-        has_engineering = await member_has_permission(db, user_id, org_id, WORKSPACE_ENGINEERING)
-    return Subscriber(user_id=str(user_id), org_id=str(org_id), has_engineering=has_engineering)
-
-
-async def _owns_topic_bud(topic: str, who: Subscriber) -> bool:
-    """For BUD-scoped topics, confirm the BUD belongs to the caller's org."""
-    raw = bud_id_of(topic)
-    if raw is None:
-        return True
-    try:
-        bud_id = uuid.UUID(raw)
-    except ValueError:
-        return False
-    async with AsyncSessionLocal() as db:
-        return await BUDRepository(db, org_id=uuid.UUID(who.org_id)).exists(bud_id)
+        perms = await member_permission_set(db, user_id, org_id)
+    if perms is None:
+        return None
+    return Subscriber(
+        user_id=str(user_id),
+        org_id=str(org_id),
+        has_engineering=perms.has(WORKSPACE_ENGINEERING),
+        permissions=frozenset(ALL_PERMISSION_IDS) if perms.is_owner else perms.ids,
+    )
 
 
 @router.websocket("/ws")
@@ -115,24 +110,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     logger.debug("ws_connected", user_id=user_id, org_id=who.org_id)
 
     # ── State per connection ──────────────────────────────
-    # topic → (event_bus queue, reader task)
-    subscriptions: dict[str, tuple[asyncio.Queue[dict[str, Any]], asyncio.Task[None]]] = {}
     send_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=settings.ws.max_send_queue)
-
-    async def _topic_reader(topic: str, bus_queue: asyncio.Queue[dict[str, Any]]) -> None:
-        """Read from an event bus queue and forward into the send queue."""
-        try:
-            while True:
-                envelope = await bus_queue.get()
-                if "agent_activity" in topic:
-                    evt = envelope.get("data", {}).get("event_type", "")
-                    logger.info("ws_forwarding_agent_event", topic=topic, event_type=evt)
-                try:
-                    send_queue.put_nowait(envelope)
-                except asyncio.QueueFull:
-                    logger.warning("ws_send_queue_full", user_id=user_id, topic=topic)
-        except asyncio.CancelledError:
-            pass
+    subscriptions = ConnectionSubscriptions(who, send_queue)
 
     async def _receiver() -> None:
         """Read client messages and handle subscribe/unsubscribe/ping."""
@@ -148,25 +127,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 topic = msg.get("topic", "")
 
                 if action == "subscribe" and topic:
-                    if not may_subscribe(topic, who) or not await _owns_topic_bud(topic, who):
+                    allowed = may_subscribe(topic, who) and await passes_scope_check(topic, who)
+                    if not allowed or not await subscriptions.add(topic):
                         await websocket.send_json({"error": "forbidden", "topic": topic})
-                        continue
-
-                    if topic not in subscriptions:
-                        bus_queue = subscribe(topic)
-                        task = asyncio.create_task(
-                            _topic_reader(topic, bus_queue),
-                            name=f"ws-reader-{topic}",
-                        )
-                        subscriptions[topic] = (bus_queue, task)
-                        # Subscription logged at trace level only (too verbose for debug)
 
                 elif action == "unsubscribe" and topic:
-                    sub = subscriptions.pop(topic, None)
-                    if sub:
-                        bus_queue, task = sub
-                        task.cancel()
-                        unsubscribe(topic, bus_queue)
+                    if subscriptions.remove(topic):
                         logger.debug("ws_unsubscribed", user_id=user_id, topic=topic)
 
                 elif action == "ping":
@@ -197,10 +163,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             sender_task.cancel()
         if receiver_task and not receiver_task.done():
             receiver_task.cancel()
-        for topic, (bus_queue, task) in subscriptions.items():
-            task.cancel()
-            unsubscribe(topic, bus_queue)
-        subscriptions.clear()
+        subscriptions.close()
         logger.info("ws_disconnected", user_id=user_id)
 
 
