@@ -54,7 +54,7 @@ export function useBoardFeedback() {
   /** Focus a card's title link once it has rendered where it landed. */
   async function focusCard(cardId: string): Promise<boolean> {
     await nextTick()
-    const link = document.querySelector<HTMLElement>(`[data-card-id="${cardId}"] .card-tile__link`)
+    const link = document.querySelector<HTMLElement>(`[data-card-id="${cardId}"] [data-card-link]`)
     link?.focus()
     return !!link
   }

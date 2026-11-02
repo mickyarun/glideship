@@ -53,6 +53,8 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
 
   // The BUD the last drop asked to move; the guards take it once, through getBud.
   let dropped: BUDListItem | null = null
+  // A BUD moved from its menu: focus follows it to its new column.
+  let focusAfter: string | null = null
   const openBud = (id: string, tab?: string) =>
     void router.push({ path: `/buds/${id}`, query: tab ? { tab } : undefined })
 
@@ -68,6 +70,8 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
       if (budStore.designAvailableFor === bud.id) budStore.designAvailableFor = null
       const moved = find(bud.id)
       if (moved) feedback.announce(`Moved ${budRef(moved.bud_number)} to ${BUD_STATUS_LABELS[to as BUDStatus]}`)
+      if (focusAfter === bud.id) void feedback.focusCard(bud.id)
+      focusAfter = null
     },
   })
 
@@ -93,6 +97,16 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
     void status.updateStatus(to)
   }
 
+  /** The stage picked in a card's ⋯ menu: the same rules and checks as a drop. */
+  function menuMove(bud: BUDListItem, to: BUDStatus): void {
+    focusAfter = bud.id
+    drop({ cardId: bud.id, stageId: to, index: 0 })
+  }
+
+  /** Why a BUD can't go to a stage yet (its menu's lock), or null. */
+  const blockFor = (bud: BUDListItem, to: BUDStatus) =>
+    budDropBlock(bud, to, phaseOrder.value, hasPermission)?.note ?? null
+
   /** A drag let go over a stage the BUD can't enter. */
   function blocked(budId: string, to: string): void {
     const bud = find(budId)
@@ -100,5 +114,5 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
     if (bud && block) refuse(bud, block)
   }
 
-  return { canDrag, blocks, status, drop, blocked }
+  return { canDrag, blocks, status, drop, blocked, menuMove, blockFor }
 }

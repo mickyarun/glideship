@@ -25,7 +25,7 @@ const BUD: BUDListItem = {
   created_at: '2026-10-30T10:00:00Z', updated_at: '2026-10-31T10:00:00Z',
 }
 const mountCard = (bud: BUDListItem) =>
-  mount(BoardCard, { props: { bud, now: new Date('2026-10-31T12:00:00Z'), canRestore: false }, global: { plugins: boardTestPlugins().plugins as never[] } })
+  mount(BoardCard, { props: { bud, now: new Date('2026-10-31T12:00:00Z'), canRestore: false, stages: [], canMove: false, blockFor: () => null }, global: { plugins: boardTestPlugins().plugins as never[] } })
 
 describe('Delivery board card origin', () => {
   it('links the origin card by its key', () => {

@@ -71,15 +71,20 @@
             :filtering="filtering"
             :can-restore="canEditBuds"
             :can-drag="dragOn"
+            :can-move="canDrag"
+            :stages="menuStages"
+            :block-for="blockFor"
             :drop-block="blocks[status] ?? null"
             @restore="restoreDialog?.open($event)"
             @drop="drop"
             @blocked="blocked"
+            @move="menuMove"
+            @copied="feedback.announce('Link copied')"
           />
         </div>
       </div>
       <p v-if="dragOn" class="board-page__hint">
-        Drag a BUD one stage forward or back. To move it further, open it.
+        Drag a BUD one stage forward or back, or use its ⋯ menu. To move it further, open it.
       </p>
     </template>
 
@@ -117,7 +122,9 @@ const {
 const { canViewQAAutomation, canCreateBuds, canEditBuds, canManageMembers } = usePermissions()
 
 const feedback = useBoardFeedback()
-const { canDrag, blocks, status: statusController, drop, blocked } = useBudBoardDrag(columns, feedback)
+const { canDrag, blocks, status: statusController, drop, blocked, menuMove, blockFor } = useBudBoardDrag(columns, feedback)
+// A card's menu offers the lifecycle; discarding goes through the BUD page.
+const menuStages = computed(() => columns.value.filter(s => s !== 'discarded'))
 const { xs } = useDisplay()
 const dragOn = computed(() => canDrag.value && !xs.value)
 

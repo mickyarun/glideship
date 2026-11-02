@@ -216,6 +216,29 @@ describe('a drop', () => {
   })
 })
 
+describe('the card menu', () => {
+  it('moves the BUD like a drop, then puts focus on it in its new column', async () => {
+    const { drag, feedback } = board(bud('design'))
+    const focus = vi.spyOn(feedback, 'focusCard').mockResolvedValue(true)
+    drag.menuMove(bud('design'), 'tech_arch')
+    await vi.waitFor(() => expect(store.updateBUD).toHaveBeenCalledWith('b2', { status: 'tech_arch' }))
+    await vi.waitFor(() => expect(focus).toHaveBeenCalledWith('b2'))
+  })
+
+  it('explains a locked stage, as a refused drop does', () => {
+    const { drag, feedback } = board(bud('design'))
+    drag.menuMove(bud('design'), 'development')
+    expect(store.updateBUD).not.toHaveBeenCalled()
+    expect(feedback.toast.value?.text).toBe('BUD-002 moves one stage at a time. Open it to move it to Development.')
+  })
+
+  it('gives each locked stage its note', () => {
+    const { drag } = board(bud('bud', { has_prd: false }))
+    expect(drag.blockFor(bud('bud', { has_prd: false }), 'design')).toBe('Needs a PRD')
+    expect(drag.blockFor(bud('bud'), 'design')).toBeNull()
+  })
+})
+
 describe('who can drag', () => {
   it('is anyone who can edit BUDs, or QA', () => {
     expect(board(bud('bud')).drag.canDrag.value).toBe(true)

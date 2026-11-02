@@ -138,8 +138,8 @@ export function dragOptions(boardId: string, enabled: boolean) {
     delay: DRAG_TOUCH_DELAY_MS,
     delayOnTouchOnly: true,
     draggable: '[data-card-id]',
-    // The ⋯ menu and the quick-edit buttons (due date, assignees) click; they never drag.
-    filter: '.card-tile__menu, .card-tile__quick',
+    // The ⋯ menus and the quick-edit buttons (due date, assignees) click; they never drag.
+    filter: '.card-tile__menu, .card-tile__quick, [data-no-drag]',
     preventOnFilter: false,
     // The slot the card will land in, the card picked up, and the copy
     // that follows the pointer (styled in drag-states.css).

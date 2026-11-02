@@ -46,7 +46,7 @@
     </div>
 
     <h3 class="card-tile__title">
-      <router-link :to="cardRoute" class="card-tile__link" draggable="false">{{ card.title }}</router-link>
+      <router-link :to="cardRoute" class="card-tile__link" draggable="false" data-card-link>{{ card.title }}</router-link>
     </h3>
 
     <div v-if="labels.length || repo || handedOver" class="card-tile__labels">

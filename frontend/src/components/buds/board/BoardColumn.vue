@@ -16,7 +16,8 @@
 
 <!-- One lifecycle stage on the Delivery board: a stage-coloured dot, the
      name and count, then its cards. With ``canDrag`` the cards drag between
-     stages through the same list team boards use (StageDragList); a stage
+     stages through the same list team boards use (StageDragList), and each
+     card's ⋯ menu moves it from the keyboard or a phone; a stage
      the dragged BUD can't enter (``dropBlock``) is muted with its reason
      and takes no drop. The board announces the reasons once per drag. -->
 <template>
@@ -47,9 +48,14 @@
         :key="bud.id"
         :bud="bud"
         :now="now"
-        :draggable="canDrag && canDragBud(bud)"
+        :draggable="canDragBud(bud)"
+        :stages="stages"
+        :can-move="canMove"
+        :block-for="to => blockFor(bud, to)"
         :can-restore="canRestore"
         @restore="emit('restore', $event)"
+        @move="(b, to) => emit('move', b, to)"
+        @copied="emit('copied', $event)"
       />
     </StageDragList>
     <p v-if="!buds.length && !dropTarget" class="board-column__empty">{{ filtering ? 'No matches' : 'Nothing here' }}</p>
@@ -73,6 +79,12 @@ const props = defineProps<{
   canRestore: boolean
   /** Drag is off on phones and without buds:edit or buds:test. */
   canDrag: boolean
+  /** The viewer may move BUDs: the cards' menus offer the stages. */
+  canMove: boolean
+  /** The stages a card's menu offers. */
+  stages: readonly BUDStatus[]
+  /** Why a BUD can't go to a stage yet, or null. */
+  blockFor: (bud: BUDListItem, stage: BUDStatus) => string | null
   /** Why the BUD being dragged can't enter this stage, or null. */
   dropBlock?: string | null
 }>()
@@ -81,6 +93,8 @@ const emit = defineEmits<{
   restore: [bud: BUDListItem]
   drop: [drop: CardDrop]
   blocked: [budId: string, status: string]
+  move: [bud: BUDListItem, stage: BUDStatus]
+  copied: [bud: BUDListItem]
 }>()
 
 const label = computed(() => BUD_STATUS_LABELS[props.status])
