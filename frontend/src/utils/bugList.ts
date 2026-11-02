@@ -152,3 +152,26 @@ export function budFilterLabel(
   const n = bugs.find(b => b.budId === budId && b.budNumber !== null)?.budNumber
   return n != null ? budRef(n) : 'one BUD'
 }
+
+export interface OwnerOption {
+  title: string
+  value: string
+  props?: { disabled: boolean }
+}
+
+/**
+ * The bug's Owner choices: everyone in the member directory, plus the
+ * current owner if they aren't in it. The directory lists active members
+ * only, so a deactivated owner would otherwise show as a bare id. They
+ * stay named but can't be picked again.
+ */
+export function ownerOptions(
+  members: Array<{ id: string; name: string; email: string }>,
+  bug: { assigneeId: string | null; assigneeName: string | null },
+): OwnerOption[] {
+  const options: OwnerOption[] = members.map(m => ({ title: m.name || m.email, value: m.id }))
+  if (bug.assigneeId && !options.some(o => o.value === bug.assigneeId)) {
+    options.push({ title: bug.assigneeName || 'Former member', value: bug.assigneeId, props: { disabled: true } })
+  }
+  return options
+}

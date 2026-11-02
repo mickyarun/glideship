@@ -22,6 +22,7 @@ import {
   flattenBoard,
   isScope,
   openCount,
+  ownerOptions,
   severityLabel,
   statusConfirm,
   statusGroupOf,
@@ -102,5 +103,25 @@ describe('bugList', () => {
     expect(truncationNote(40, 40, 100)).toBeNull()
     expect(truncationNote(500, null, 500)).toBe("Showing the newest 500 bugs; older ones aren't listed.")
     expect(truncationNote(20, null, 500)).toBeNull()
+  })
+})
+
+describe('ownerOptions', () => {
+  const members = [{ id: 'u1', name: 'Dana', email: 'dana@x.io' }, { id: 'u2', name: '', email: 'eli@x.io' }]
+
+  it('lists the directory, by name or else email', () => {
+    expect(ownerOptions(members, { assigneeId: 'u1', assigneeName: 'Dana' })).toEqual([
+      { title: 'Dana', value: 'u1' },
+      { title: 'eli@x.io', value: 'u2' },
+    ])
+  })
+
+  it('keeps an owner who left the directory named, but not pickable', () => {
+    expect(ownerOptions(members, { assigneeId: 'u9', assigneeName: 'Fern' }).at(-1))
+      .toEqual({ title: 'Fern', value: 'u9', props: { disabled: true } })
+  })
+
+  it('adds nothing for an unowned bug', () => {
+    expect(ownerOptions(members, { assigneeId: null, assigneeName: null })).toHaveLength(2)
   })
 })

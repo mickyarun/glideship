@@ -42,9 +42,13 @@
             class="bud-header__title-btn"
             :disabled="agentLocked"
             :title="agentLocked ? undefined : 'Rename'"
+            :aria-label="agentLocked ? bud.title : `${bud.title}, rename`"
             @click="startEditTitle"
           >
-            {{ bud.title }}<span class="d-sr-only">, rename</span>
+            <!-- Named by aria-label: hidden text after the title read as
+                 "<title> , rename", because the hidden span is a block.
+                 While an agent holds the BUD there is no rename to offer. -->
+            {{ bud.title }}
             <v-icon v-if="!agentLocked" icon="mdi-pencil-outline" size="18" class="bud-header__title-icon" />
           </button>
         </h1>
