@@ -17,6 +17,8 @@
  * the server, plus each stage's open-card count. Pages merge by id. Every
  * stage request belongs to a generation (a reload starts one; Load more
  * joins it), and replies from an older generation or board are dropped.
+ * A load waits for my card writes still on their way, so opening the
+ * archived view right after archiving reads the board after it.
  * Moves, creates and archives live in stores/boardCardActions.ts.
  */
 import { defineStore } from 'pinia'
@@ -38,6 +40,14 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
   const filters = ref<CardFilters>({ ...NO_FILTERS })
   const generation = new Map<string, number>()
   let requestSeq = 0
+  const writes = new Set<Promise<unknown>>()
+
+  function track<T>(write: Promise<T>): Promise<T> {
+    writes.add(write)
+    const done = () => void writes.delete(write)
+    write.then(done, done)
+    return write
+  }
 
   /** Start on a board: no cards loaded, counts from its stages. */
   function reset(key: string, id: string, stages: StageRead[], initial: CardFilters = NO_FILTERS): void {
@@ -88,6 +98,7 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
     column.loading = true
     column.error = ''
     try {
+      if (writes.size) await Promise.allSettled([...writes])
       const got = await fetchPages(key, stageId, more ? column.cursor : null, atLeast)
       const live = columns.value[stageId]
       if (!current() || !live) return
@@ -142,6 +153,7 @@ export const useBoardCardsStore = defineStore('boardCards', () => {
     filters,
     bump: (stageId, by) => bumpCount(counts.value, stageId, by),
     reload: stageId => loadStage(stageId, { keep: true }),
+    track,
   })
 
   return {

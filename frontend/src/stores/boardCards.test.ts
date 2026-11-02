@@ -20,7 +20,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/services/boardsApi', () => ({ boardsApi: { cards: vi.fn() } }))
+vi.mock('@/services/boardsApi', () => ({ boardsApi: { cards: vi.fn(), archiveCard: vi.fn() } }))
 
 import { makeCard, makeStage } from '@/components/boards/__tests__/fixtures'
 import { boardsApi } from '@/services/boardsApi'
@@ -131,5 +131,24 @@ describe('boardCards loading', () => {
     store.clear()
     expect(store.boardKey).toBe('')
     expect(store.columns).toEqual({})
+  })
+
+  it('waits for my archive still on its way, so the archived view reads after it', async () => {
+    const store = fresh()
+    api.cards.mockResolvedValueOnce(page([A]))
+    await store.loadStage('s1')
+    const archive = deferred<void>()
+    api.archiveCard.mockReturnValueOnce(archive.promise as never)
+    const archiving = store.archiveCard(A.id)
+
+    api.cards.mockResolvedValueOnce(page([A]))
+    const loading = store.loadStage('s1')
+    await Promise.resolve()
+    expect(api.cards).toHaveBeenCalledTimes(1)
+
+    archive.resolve()
+    await archiving
+    await loading
+    expect(api.cards).toHaveBeenCalledTimes(2)
   })
 })

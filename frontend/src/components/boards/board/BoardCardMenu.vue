@@ -34,47 +34,56 @@
         :aria-label="`Actions for ${card.key}`"
       />
     </template>
-    <v-list density="compact" min-width="220" :aria-label="`Actions for ${card.key}`">
+    <!-- A menu: the stages are a group of radio items, the current one
+         checked; the rest are menu items. -->
+    <v-list density="compact" min-width="220" role="menu" :aria-label="`Actions for ${card.key}`">
       <template v-if="canMove && !card.archived_at && stages.length > 1">
-        <v-list-subheader>Move to stage</v-list-subheader>
-        <v-list-item
-          v-for="stage in stages"
-          :key="stage.id"
-          :title="stage.id === card.stage_id ? `${stage.name} (current)` : stage.name"
-          :subtitle="stage.id === card.stage_id ? undefined : blockReason(card, stage)"
-          :disabled="stage.id === card.stage_id"
-          @click="emit('move', stage.id)"
-        >
-          <!-- The stage's category dot, in the icon column, so every item's
-               text starts at the same edge as Copy link and Archive. -->
-          <template #prepend>
-            <v-icon icon="mdi-circle-medium" :color="CATEGORY_COLORS[stage.category]" aria-hidden="true" />
-          </template>
-          <template v-if="stage.id !== card.stage_id && blockReason(card, stage)" #append>
-            <v-icon icon="mdi-lock-outline" size="16" aria-hidden="true" />
-          </template>
-        </v-list-item>
+        <div role="group" aria-label="Move to stage">
+          <v-list-subheader aria-hidden="true">Move to stage</v-list-subheader>
+          <v-list-item
+            v-for="stage in stages"
+            :key="stage.id"
+            role="menuitemradio"
+            :aria-checked="stage.id === card.stage_id"
+            :aria-disabled="stage.id === card.stage_id"
+            :title="stage.id === card.stage_id ? `${stage.name} (current)` : stage.name"
+            :subtitle="stage.id === card.stage_id ? undefined : blockReason(card, stage)"
+            :disabled="stage.id === card.stage_id"
+            @click="emit('move', stage.id)"
+          >
+            <!-- The stage's category dot, in the icon column, so every item's
+                 text starts at the same edge as Copy link and Archive. -->
+            <template #prepend>
+              <v-icon icon="mdi-circle-medium" :color="CATEGORY_COLORS[stage.category]" aria-hidden="true" />
+            </template>
+            <template v-if="stage.id !== card.stage_id && blockReason(card, stage)" #append>
+              <v-icon icon="mdi-lock-outline" size="16" aria-hidden="true" />
+            </template>
+          </v-list-item>
+        </div>
         <v-divider class="my-1" />
       </template>
       <v-list-item
         v-if="canMove && !card.archived_at"
+        role="menuitem"
         prepend-icon="mdi-arrow-right-bold-box-outline"
         title="Move to another board…"
         @click="emit('move-board')"
       />
       <v-list-item
-        v-if="canHandOver" prepend-icon="mdi-truck-delivery-outline"
+        v-if="canHandOver" role="menuitem" prepend-icon="mdi-truck-delivery-outline"
         :title="card.handovers.some(isLive) ? 'Hand over another…' : 'Hand over to Delivery…'" @click="handOver"
       />
-      <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
+      <v-list-item role="menuitem" prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
       <template v-if="canArchive">
         <v-list-item
           v-if="card.archived_at"
+          role="menuitem"
           prepend-icon="mdi-archive-arrow-up-outline"
           title="Restore"
           @click="emit('restore')"
         />
-        <v-list-item v-else prepend-icon="mdi-archive-outline" title="Archive" @click="emit('archive')" />
+        <v-list-item v-else role="menuitem" prepend-icon="mdi-archive-outline" title="Archive" @click="emit('archive')" />
       </template>
     </v-list>
   </v-menu>

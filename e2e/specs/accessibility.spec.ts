@@ -19,8 +19,10 @@
  */
 import type { Page } from '@playwright/test'
 import { createBud } from '../fixtures/api.ts'
+import { addCard, addChecklistItem, createBoard } from '../fixtures/boards.ts'
 import { expect, test } from '../fixtures/test.ts'
 import { expectAccessible } from '../screens/a11y.ts'
+import { openCardMenu } from '../screens/boards.ts'
 import { openAccountMenu } from '../screens/shell.ts'
 
 async function check(page: Page, path: string, heading: string | RegExp): Promise<void> {
@@ -67,4 +69,29 @@ test('the people screens', async ({ signedIn, stack }) => {
   await check(page, '/leave/team', 'Team calendar')
   await check(page, '/people', 'Employees')
   await check(page, `/people/${org.members.emp.id}`, 'Eli Employee')
+})
+
+test('the board screens', async ({ signedIn, stack }) => {
+  const org = await stack.seedOrg({ members: [{ key: 'owner', role: 'org_owner', name: 'Olu Owner' }] })
+  const api = await stack.api(org.members.owner)
+  const board = await createBoard(api, 'content-seo', 'Accessible content')
+  const card = await addCard(api, board, 'Accessible card', 'Writing', { description_md: 'Some **notes**.' })
+  await addChecklistItem(api, board, card, 'Check the headings')
+  await createBud(api, 'Accessible BUD')
+  const page = await signedIn(org.members.owner)
+
+  await check(page, '/boards', 'Boards')
+  await check(page, `/boards/${board.key}`, 'Accessible content')
+  // A card's menu, open: its stages with their locks.
+  await openCardMenu(page, card.key)
+  await expectAccessible(page, 'a card menu')
+  await page.keyboard.press('Escape')
+  await check(page, `/boards/${board.key}/cards/${card.number}`, 'Accessible card')
+  await check(page, `/boards/${board.key}/settings`, 'Board settings')
+  await check(page, `/boards/${board.key}/metrics`, 'Metrics')
+  await check(page, '/boards/imports/trello', 'Import from Trello')
+  // Delivery's card menu too.
+  await check(page, '/buds', 'Delivery')
+  await openCardMenu(page, 'BUD-001')
+  await expectAccessible(page, 'a Delivery card menu')
 })

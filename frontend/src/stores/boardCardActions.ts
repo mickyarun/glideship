@@ -40,6 +40,8 @@ export interface CardActionContext {
   filters: Ref<CardFilters>
   bump: (stageId: string, by: number) => void
   reload: (stageId: string) => Promise<void>
+  /** Hold a write until it lands, so a load started meanwhile reads after it. */
+  track: <T>(write: Promise<T>) => Promise<T>
 }
 
 /** ``shown``: the card is in view where it landed (false: it's past the loaded pages). */
@@ -94,7 +96,7 @@ export function cardActions(ctx: CardActionContext) {
     }
     try {
       const confirm = opts.confirmOpenChecklist ? { confirm_open_checklist: true } : {}
-      const detail = await boardsApi.moveCard(key, found.card.number, { stage_id: toStageId, ...n, ...confirm })
+      const detail = await ctx.track(boardsApi.moveCard(key, found.card.number, { stage_id: toStageId, ...n, ...confirm }))
       if (latest()) shown = place(detail) === 'shown'
       return { error: null, shown, neighbours: n }
     } catch (err) {
@@ -147,7 +149,7 @@ export function cardActions(ctx: CardActionContext) {
   /** Add a card at the bottom of a stage, with whatever its entry rules ask for. */
   async function createCard(stageId: string, title: string, extras: CardCreateExtras = {}): Promise<ActionResult> {
     try {
-      const card = await boardsApi.createCard(ctx.boardKey.value, { ...extras, title, stage_id: stageId })
+      const card = await ctx.track(boardsApi.createCard(ctx.boardKey.value, { ...extras, title, stage_id: stageId }))
       ctx.bump(stageId, 1)
       return { error: null, shown: place(card) === 'shown' }
     } catch (err) {
@@ -162,7 +164,7 @@ export function cardActions(ctx: CardActionContext) {
     removeCard(ctx.columns.value, cardId)
     ctx.bump(found.stageId, -1)
     try {
-      await boardsApi.archiveCard(ctx.boardKey.value, found.card.number)
+      await ctx.track(boardsApi.archiveCard(ctx.boardKey.value, found.card.number))
       return { error: null, card: found.card }
     } catch (err) {
       place(found.card)
@@ -173,7 +175,7 @@ export function cardActions(ctx: CardActionContext) {
 
   async function restoreCard(card: CardSummary): Promise<string | null> {
     try {
-      const restored = await boardsApi.restoreCard(ctx.boardKey.value, card.number)
+      const restored = await ctx.track(boardsApi.restoreCard(ctx.boardKey.value, card.number))
       ctx.bump(restored.stage_id, 1)
       removeCard(ctx.columns.value, card.id)
       upsertCard(ctx.columns.value, restored, ctx.filters.value)

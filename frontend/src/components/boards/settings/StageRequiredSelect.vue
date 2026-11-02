@@ -28,6 +28,7 @@
     size="small"
     prepend-icon="mdi-plus"
     class="required__add"
+    :aria-label="`Required to enter ${stageName}`"
     @click="start"
   >
     Required to enter

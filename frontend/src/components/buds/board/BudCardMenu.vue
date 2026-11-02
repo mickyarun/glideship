@@ -33,27 +33,34 @@
         :aria-label="`Actions for ${ref}`"
       />
     </template>
-    <v-list density="compact" min-width="220" :aria-label="`Actions for ${ref}`">
+    <!-- A menu: the stages are a group of radio items, the current one
+         checked; Copy link is a menu item. -->
+    <v-list density="compact" min-width="220" role="menu" :aria-label="`Actions for ${ref}`">
       <template v-if="canMove">
-        <v-list-subheader>Move to stage</v-list-subheader>
-        <v-list-item
-          v-for="stage in stages"
-          :key="stage"
-          :title="stage === bud.status ? `${BUD_STATUS_LABELS[stage]} (current)` : BUD_STATUS_LABELS[stage]"
-          :subtitle="stage === bud.status ? undefined : (blockFor(stage) ?? undefined)"
-          :disabled="stage === bud.status"
-          @click="emit('move', stage)"
-        >
-          <template #prepend>
-            <v-icon icon="mdi-circle-medium" :color="BUD_STATUS_COLORS[stage]" aria-hidden="true" />
-          </template>
-          <template v-if="stage !== bud.status && blockFor(stage)" #append>
-            <v-icon icon="mdi-lock-outline" size="16" aria-hidden="true" />
-          </template>
-        </v-list-item>
+        <div role="group" aria-label="Move to stage">
+          <v-list-subheader aria-hidden="true">Move to stage</v-list-subheader>
+          <v-list-item
+            v-for="stage in stages"
+            :key="stage"
+            role="menuitemradio"
+            :aria-checked="stage === bud.status"
+            :aria-disabled="stage === bud.status"
+            :title="stage === bud.status ? `${BUD_STATUS_LABELS[stage]} (current)` : BUD_STATUS_LABELS[stage]"
+            :subtitle="stage === bud.status ? undefined : (blockFor(stage) ?? undefined)"
+            :disabled="stage === bud.status"
+            @click="emit('move', stage)"
+          >
+            <template #prepend>
+              <v-icon icon="mdi-circle-medium" :color="BUD_STATUS_COLORS[stage]" aria-hidden="true" />
+            </template>
+            <template v-if="stage !== bud.status && blockFor(stage)" #append>
+              <v-icon icon="mdi-lock-outline" size="16" aria-hidden="true" />
+            </template>
+          </v-list-item>
+        </div>
         <v-divider class="my-1" />
       </template>
-      <v-list-item prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
+      <v-list-item role="menuitem" prepend-icon="mdi-link-variant" title="Copy link" @click="copy" />
     </v-list>
   </v-menu>
 </template>

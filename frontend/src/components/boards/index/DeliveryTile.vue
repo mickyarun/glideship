@@ -114,11 +114,23 @@ const STAGES: BUDStatus[] = ['bud', 'design', 'tech_arch', 'development', 'code_
   padding: 0;
   list-style: none;
 }
+/* The stage's colour is its dot and tint; the text stays the regular
+   colour, as the stage colours are too light to read at this size. */
 .delivery-tile__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 3px 9px;
   border-radius: 999px;
   font-size: 12px;
-  color: rgb(var(--stage));
+  color: rgb(var(--v-theme-on-surface));
   background: rgba(var(--stage), 0.12);
+}
+.delivery-tile__stage::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--stage));
 }
 </style>
