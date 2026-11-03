@@ -145,3 +145,9 @@ async def test_opted_in_people_get_cards_here_not_in_the_card_reminder(
     # Saturday: weekdays-only follow-ups don't go out, so the card DM does.
     await due_reminders.org_pass(config, datetime(2030, 3, 9, 3, 0, tzinfo=UTC))
     assert len(dms.to(ids[ed.id])) == 1
+
+    # A weekday on leave: the follow-ups skip them, so the card DM goes as before.
+    tuesday = date(2030, 3, 12)
+    await add_request(pg_session_factory, org, ed.id, tuesday, tuesday, "1")
+    await due_reminders.org_pass(config, datetime(2030, 3, 12, 3, 0, tzinfo=UTC))
+    assert len(dms.to(ids[ed.id])) == 2

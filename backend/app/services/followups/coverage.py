@@ -19,6 +19,7 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.repositories.followup_away import AwayRepository
 from app.repositories.followup_settings import FollowupSettingsRepository
 from app.repositories.user import UserRepository
 from app.services.followups.schedule import skips_day
@@ -36,8 +37,8 @@ async def covered_by_followups(
 ) -> set[uuid.UUID]:
     """Those of ``user_ids`` whose follow-ups DM goes out on ``day`` and would reach them.
 
-    A weekdays-only schedule doesn't cover weekends, so those people keep
-    the card reminder then.
+    A weekdays-only schedule doesn't cover weekends, and the follow-ups skip
+    people away that day, so those people keep the card reminder then.
     """
     if not user_ids:
         return set()
@@ -50,4 +51,5 @@ async def covered_by_followups(
     )
     opted = {user_id for user_id, _slack_id in pairs}
     weekdays = await FollowupSettingsRepository(db, org_id=org_id).weekdays_only(opted)
-    return {user_id for user_id, only in weekdays.items() if not skips_day(only, day)}
+    sending = {user_id for user_id, only in weekdays.items() if not skips_day(only, day)}
+    return sending - await AwayRepository(db, org_id=org_id).away_on(sending, day)
