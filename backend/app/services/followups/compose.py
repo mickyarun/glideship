@@ -16,8 +16,9 @@
 
 Overdue items come first, oldest first, then today's, then the ones
 coming up; up to ``max_items`` in all, the rest counted as "and N more".
-Every item is a section (linked key and title, stage, due state) and,
-when it has one, a context line with its last comment.
+Every item is a section (linked key and title, stage, due state, and a
+"Mark done" button for cards) and, when it has one, a context line with
+its last comment. The button's value is the card's key.
 """
 
 from collections.abc import Sequence
@@ -29,6 +30,7 @@ from app.services.followups.items import FollowupItem
 from app.services.slack_mrkdwn import escape_mrkdwn
 
 SETTINGS_PATH = "/profile/notifications"
+MARK_DONE_ACTION = "followups_mark_done"
 # Keeps a section well inside Slack's 3000 characters even after escaping.
 TITLE_CHARS = 200
 _ORDER = (DueBucket.OVERDUE, DueBucket.TODAY, DueBucket.SOON)
@@ -67,7 +69,15 @@ def _item_blocks(
     title = escape_mrkdwn(_excerpt(item.title, TITLE_CHARS))
     link = f"<{base_url}{item.path}|{item.key} {title}>"
     text = f"*{link}*  ·  _{escape_mrkdwn(item.stage)}_\n{label}  ·  {state}"
-    blocks: list[dict[str, Any]] = [{"type": "section", "text": _mrkdwn(text)}]
+    section: dict[str, Any] = {"type": "section", "text": _mrkdwn(text)}
+    if item.can_mark_done:
+        section["accessory"] = {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Mark done"},
+            "action_id": MARK_DONE_ACTION,
+            "value": item.key,
+        }
+    blocks: list[dict[str, Any]] = [section]
     if item.comment is not None:
         said = item.comment.created_at.astimezone(local.zone)
         line = (

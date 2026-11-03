@@ -45,6 +45,8 @@ class FollowupItem:
 
     ``is_target`` marks a BUD's phase target, a forecast rather than a
     promised date, which the message words as "Target" instead of "Due".
+    ``can_mark_done`` is for cards, whose due date can be ticked done from
+    the message; a BUD's target can't.
     """
 
     key: str
@@ -53,6 +55,7 @@ class FollowupItem:
     stage: str
     due_at: datetime
     is_target: bool
+    can_mark_done: bool
     comment: LastComment | None
 
 
@@ -65,6 +68,7 @@ def card_item(card: DueCard, comment: LastComment | None) -> FollowupItem:
         stage=f"{card.board_name} › {card.stage_name}",
         due_at=card.due_at,
         is_target=False,
+        can_mark_done=True,
         comment=comment,
     )
 
@@ -78,5 +82,6 @@ def bud_item(bud: TargetBud) -> FollowupItem:
         stage=BUD_STAGE_LABELS.get(bud.status, bud.status.value),
         due_at=bud.target_at,
         is_target=True,
+        can_mark_done=False,
         comment=None,
     )

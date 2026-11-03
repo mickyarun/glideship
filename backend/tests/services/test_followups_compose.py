@@ -21,7 +21,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.repositories.followup_items import LastComment
-from app.services.followups.compose import compose_followups
+from app.services.followups.compose import MARK_DONE_ACTION, compose_followups
+from app.services.followups.done_blocks import marked_done
 from app.services.followups.due_state import DueBucket, LocalDay, bucket, due_words
 from app.services.followups.items import FollowupItem
 
@@ -40,6 +41,7 @@ def _item(key: str, due_at: datetime, **kw: object) -> FollowupItem:
         "stage": "Ops › Doing",
         "due_at": due_at,
         "is_target": False,
+        "can_mark_done": True,
         "comment": None,
     }
     fields.update(kw)
@@ -88,9 +90,27 @@ def test_each_item_links_back_with_its_stage_and_due_state() -> None:
 
 
 def test_a_bud_target_is_worded_as_a_target_without_a_time() -> None:
-    bud = _item("BUD-007", NOON, is_target=True, path="/buds/7", stage="Development")
-    (text,) = _sections(_compose([bud]))
+    bud = _item(
+        "BUD-007", NOON, is_target=True, can_mark_done=False, path="/buds/7", stage="Development"
+    )
+    blocks = _compose([bud])
+    (text,) = _sections(blocks)
     assert "Target Tue 5 Mar" in text and "Due" not in text and "12:00" not in text
+    assert all("accessory" not in b for b in blocks)
+
+
+def test_a_card_carries_a_mark_done_button_keyed_by_the_card() -> None:
+    (section,) = [b for b in _compose([_item("OPS-1", NOON)]) if b["type"] == "section"]
+    assert section["accessory"] == {
+        "type": "button",
+        "text": {"type": "plain_text", "text": "Mark done"},
+        "action_id": MARK_DONE_ACTION,
+        "value": "OPS-1",
+    }
+    done = marked_done(_compose([_item("OPS-1", NOON), _item("OPS-2", NOON)]), "OPS-1")
+    first, second = [b for b in done if b["type"] == "section"]
+    assert "accessory" not in first and first["text"]["text"].endswith(":white_check_mark: Done")  # type: ignore[index]
+    assert second["accessory"]["value"] == "OPS-2"  # type: ignore[index]
 
 
 def test_the_last_comment_is_escaped_and_trimmed() -> None:
@@ -124,7 +144,7 @@ def test_rendered_payload_is_valid_block_kit_json() -> None:
     """Writes the payload for a manual look in Slack's Block Kit Builder when asked."""
     items = [
         _item("OPS-12", NOON - timedelta(days=1), comment=LastComment("Sam", "Sent it", NOON)),
-        _item("BUD-042", NOON, is_target=True, path="/buds/42", stage="Development"),
+        _item("BUD-042", NOON, is_target=True, can_mark_done=False, path="/buds/42"),
         _item("SEO-3", NOON + timedelta(days=2), stage="SEO › Review"),
     ]
     blocks = _compose(items)
