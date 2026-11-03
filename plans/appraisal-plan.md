@@ -64,7 +64,7 @@ Manager feedback         │           Manager + employee: growth conversation,
 |---|---|---|
 | 0 | Review period | **Org setting: quarterly, half-yearly or yearly**, default quarterly, which is how you run today. Goals, self-score, manager review, calibration and the growth conversation all happen once per period. |
 | 1 | Check-in cadence | **Monthly.** The org can set it to quarterly. A missed check-in is shown as missed and never blocks anything. |
-| 1b | Manager feedback cadence | **Org setting: monthly, quarterly or off.** It must come more often than reviews and no more often than check-ins, so with quarterly reviews it is monthly (the default) or off. |
+| 1b | Manager feedback cadence | **Org setting: monthly, quarterly, or quarterly in the review.** It must come more often than reviews and no more often than check-ins, so with quarterly reviews it is monthly (the default) or "quarterly, in the review". |
 | 2 | Band scale | **Keep your 1–5 labels**, 1 = Always exceeds and 5 = Does not meet, so HR's pay mapping still works. Show the label first and the number second. |
 | 3 | Must the manager give a reason when they change a score? | **Yes**, one line. The employee sees it once the review is shared. |
 | 4 | Must a band 1 or 2 cite evidence? | **Yes**, for both the employee and the manager. Band 5 from the manager needs evidence or a written reason too. |
@@ -160,7 +160,7 @@ What this fixes: by the end of the period, the review has every month of linked,
 the employee's own words. The record holds the detail, so nobody needs to remember it, and
 "Doing my best" has no room to appear.
 
-## Manager feedback: monthly, quarterly or off
+## Manager feedback: monthly, quarterly, or in the review
 
 The org picks one cadence per cycle (decision 1b).
 
@@ -170,10 +170,14 @@ The org picks one cadence per cycle (decision 1b).
   an optional note. There is no band. A feedback period that ends on the review period's last
   day is covered by the review instead. With half-yearly reviews that means one quarterly
   feedback and one review per period.
-- **Off:** only allowed with quarterly reviews, where the review itself comes every quarter.
+- **Quarterly, in the review:** only with quarterly reviews. There is no separate feedback item;
+  the quarterly review (reading the check-ins, agree or change with reasons, the growth
+  conversation) is the manager's quarterly feedback. This is how to run monthly check-ins with
+  quarterly manager input when reviews are quarterly.
 
-Feedback must come more often than reviews: with quarterly reviews it is monthly or off; with
-half-yearly or yearly reviews it is monthly or quarterly.
+Feedback must come more often than reviews: with quarterly reviews it is monthly or "quarterly, in the review"; with
+half-yearly or yearly reviews it is monthly or quarterly. The setting never says "off", because
+the manager always responds at least once a period.
 
 Either way, the feedback item opens on the first working day after the period ends and is due a
 set number of days later (default 10). The employee sees it as soon as the manager saves it. A
@@ -229,7 +233,7 @@ cycle copies them, so changing a setting never moves a running cycle.
 |---|---|---|
 | Review period | quarterly, half-yearly, yearly | quarterly |
 | Check-ins | monthly, quarterly (quarterly only with half-yearly or yearly reviews) | monthly |
-| Manager feedback | monthly, quarterly, off (see the feedback rules above) | monthly |
+| Manager feedback | monthly, quarterly, or quarterly in the review (see the feedback rules above) | monthly |
 | AI drafting | on, off | on if a provider is connected |
 | Reminder offsets and HR overdue list | as in the reminder table | -3, 0, +2, HR at +3 |
 | Due days | self-score and manager review, days after the period ends | 7 and 14 |
@@ -293,6 +297,21 @@ Employees can always write their own goals; suggestions are a starting point, no
   on a full period.
 - **Managers can add goals too,** in the growth conversation or mid-period, labelled as theirs;
   the employee sees who added each goal.
+
+### Managing one person's goals (manager)
+
+From **Team → [person] → Goals**, any time in the period, the manager can:
+
+- **Confirm, ask to reword, or not add** a goal the employee wrote. Asking and declining need a
+  line the employee sees.
+- **Edit** any goal's wording or measure. A reason is required and sent to the employee; the old
+  version is kept and shown under the goal ("Changed by Ravi on Dec 8, from ...").
+- **Add** a goal for the person, with a "why now" line the employee sees.
+- **Remove** a goal they added, before the review opens.
+
+Goals lock when the self-review opens, so nobody moves the target while it's being scored. The
+review shows when each goal was added or last changed. Employees can't edit a confirmed goal
+directly; they use "Suggest a change", which the manager confirms the same way.
 
 ### Suggested goals for every role
 
@@ -632,10 +651,10 @@ Eight tables. Every status and option is a Postgres enum.
 **`appraisal_cycles`**
 `id, org_id, name, period_start, period_end, self_due, manager_due,
 status (draft → active → reviewing → closed), review_period (quarterly | half_yearly | yearly),
-checkin_cadence (monthly | quarterly), feedback_cadence (monthly | quarterly | off), feedback_due_days, reminder_offsets (int[]),
+checkin_cadence (monthly | quarterly), feedback_cadence (monthly | quarterly | in_review), feedback_due_days, reminder_offsets (int[]),
 overdue_nudge (bool), hr_overdue_list (bool), suggest_goals_on_open (bool), ai_drafting (bool),
 enrolment_cutoff (date), intro_note (bytes), created_by`. All copied from the org settings at creation. Check constraints keep feedback no more
-often than check-ins and more often than reviews, and allow `off` only with quarterly reviews.
+often than check-ins and more often than reviews, and allow `in_review` only with quarterly reviews.
 
 **`appraisal_check_ins`**: unique `(profile_id, period_start)`
 `id, org_id, profile_id, cycle_id, period_start, period_end, working_days, available_days,
@@ -669,6 +688,11 @@ Only accepted goals count towards the three-per-period limit and appear in the r
 `id, org_id, cycle_id, profile_id, manager_user_id (snapshot; moves to a new manager while open),
 period_start, period_end, cadence (monthly | quarterly), due_on, keep_note (bytes), try_note (bytes), goal_status (JSONB: goal id →
 on_track | at_risk | off_track, plus a note in bytes), status (open → done), done_at`
+
+**`appraisal_goal_revisions`**
+`id, org_id, goal_id, changed_by, changed_at, kind (created | edited | confirmed | reword_asked |
+declined | removed), before (bytes), after (bytes), reason (bytes)`. Append-only; the history line
+under each goal reads from here.
 
 **`appraisal_evidence_links`**
 `id, org_id, profile_id, check_in_id, url (bytes), title (bytes), heading (enum), goal_id
@@ -730,6 +754,8 @@ using partial unique indexes only (the local database is Postgres 14).
 | `GET /cycles/{id}/progress` (who's done, who's overdue) | HR |
 | `POST /{id}/goals` (own goal, any time in the period → `proposed`) | employee or manager |
 | `POST /goals/{id}/accept`, `/dismiss`, `PATCH /goals/{id}` | employee picks; manager confirms or skips with a reason |
+| `PATCH /goals/{id}` with `reason` (required once confirmed), `POST /goals/{id}/ask-reword`, `DELETE /goals/{id}` (manager-added, before review) | primary manager; locked once the self-review opens |
+| `POST /goals/{id}/suggest-change` | employee, on a confirmed goal |
 | `GET/POST /role-templates`, `PATCH/DELETE /role-templates/{id}` | HR |
 | `POST /role-templates/{id}/trends/draft` → `202` (AI mode), `POST /role-templates/{id}/trends/approve` | HR |
 | `GET /mine`, `GET /team`, `GET /{id}` | per access table |
@@ -901,7 +927,7 @@ the band and goal choices. Evidence chips open their source in a new tab.
   leave policy's holidays; nothing is sent once an item is done; one reminder per user per key; one DM covers
   all of a manager's reports; HR's overdue list only after its offset.
 - Cadence rules: feedback ending on the review's last day is skipped; feedback must be more
-  frequent than reviews and no more frequent than check-ins; "off" only with quarterly reviews;
+  frequent than reviews and no more frequent than check-ins; "in the review" only with quarterly reviews;
   a running cycle keeps its copied settings when the org settings change.
 - Trends: items without a source link are dropped; unapproved drafts never reach suggestions;
   each suggestion records the trends version; at-risk goals and the "try next" line from the
