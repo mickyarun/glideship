@@ -89,15 +89,21 @@ export function formatDayRange(start: string, end: string): string {
   return `${from} – ${dayLabel(end, true, !sameYear)}`
 }
 
-function shortDate(iso: string, withYear: boolean): string {
+/** "14 Apr", or "14 Apr 2026" with the year. */
+export function shortDate(iso: string, withYear: boolean): string {
   const date = parseIsoDate(iso)
   const label = `${date.getDate()} ${MONTH_SHORT[date.getMonth()]}`
   return withYear ? `${label} ${date.getFullYear()}` : label
 }
 
+/** True for a leave year like April 2026 – March 2027. */
+export function spansTwoYears(year: LeaveYear): boolean {
+  return year.start.slice(0, 4) !== year.end.slice(0, 4)
+}
+
 /** "1 Jan – 31 Dec 2026", or "1 Apr 2026 – 31 Mar 2027". */
 export function formatLeaveYear(year: LeaveYear): string {
-  const sameYear = year.start.slice(0, 4) === year.end.slice(0, 4)
+  const sameYear = !spansTwoYears(year)
   return `${shortDate(year.start, !sameYear)} – ${shortDate(year.end, true)}`
 }
 
