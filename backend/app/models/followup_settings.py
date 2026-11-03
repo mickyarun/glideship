@@ -14,12 +14,9 @@
 
 """When one person wants their daily follow-ups DM.
 
-Whether it's on at all lives with the other notification choices
-(``users.notification_prefs``, category ``daily_followups``, off by
-default), so the recipient filter treats it like any other DM. This row
-holds only the schedule; a person who turned it on without one gets the
-defaults (``FollowupsConfig.default_time``, their leave policy's timezone,
-weekdays only).
+Whether it's on is per org, here in ``enabled``. The person's
+``daily_followups`` notification choice (opt-in) mirrors whether it's on
+in any of their orgs, so the shared recipient filter lets the DM through.
 """
 
 import uuid
@@ -56,4 +53,7 @@ class FollowupSettings(BaseModel):
     timezone: Mapped[str] = mapped_column(String(TIMEZONE_LENGTH), nullable=False)
     weekdays_only: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )

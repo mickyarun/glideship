@@ -50,6 +50,9 @@ async def test_off_by_default_then_saved_and_read_back(
 
     ok(await client.put(URL, json={**body, "enabled": False}, headers=me.headers))
     assert ok(await client.get(URL, headers=me.headers))["enabled"] is False
+    # A time with an offset contradicts the zone, so it's refused too.
+    offset = {**body, "timezone": "Europe/London", "send_time": "08:00+05:30"}
+    assert (await client.put(URL, json=offset, headers=me.headers)).status_code == 422
 
 
 async def test_an_unknown_timezone_is_refused(
@@ -60,3 +63,6 @@ async def test_an_unknown_timezone_is_refused(
     response = await client.put(URL, json=body, headers=me.headers)
     assert response.status_code == 422
     assert ok(await client.get(URL, headers=me.headers))["enabled"] is False
+    # A time with an offset contradicts the zone, so it's refused too.
+    offset = {**body, "timezone": "Europe/London", "send_time": "08:00+05:30"}
+    assert (await client.put(URL, json=offset, headers=me.headers)).status_code == 422

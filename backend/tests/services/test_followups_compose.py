@@ -24,7 +24,7 @@ from app.repositories.followup_items import LastComment
 from app.services.followups.compose import MARK_DONE_ACTION, compose_followups
 from app.services.followups.done_blocks import marked_done
 from app.services.followups.due_state import DueBucket, LocalDay, bucket, due_words
-from app.services.followups.items import FollowupItem
+from app.services.followups.items import FollowupItem, ItemKind
 
 ZONE = ZoneInfo("Europe/London")
 # Tuesday 5 March 2030, London (GMT).
@@ -40,8 +40,7 @@ def _item(key: str, due_at: datetime, **kw: object) -> FollowupItem:
         "path": f"/boards/OPS/cards/{key}",
         "stage": "Ops › Doing",
         "due_at": due_at,
-        "is_target": False,
-        "can_mark_done": True,
+        "kind": ItemKind.CARD,
         "comment": None,
     }
     fields.update(kw)
@@ -90,9 +89,7 @@ def test_each_item_links_back_with_its_stage_and_due_state() -> None:
 
 
 def test_a_bud_target_is_worded_as_a_target_without_a_time() -> None:
-    bud = _item(
-        "BUD-007", NOON, is_target=True, can_mark_done=False, path="/buds/7", stage="Development"
-    )
+    bud = _item("BUD-007", NOON, kind=ItemKind.BUD_TARGET, path="/buds/7", stage="Development")
     blocks = _compose([bud])
     (text,) = _sections(blocks)
     assert "Target Tue 5 Mar" in text and "Due" not in text and "12:00" not in text
@@ -144,7 +141,7 @@ def test_rendered_payload_is_valid_block_kit_json() -> None:
     """Writes the payload for a manual look in Slack's Block Kit Builder when asked."""
     items = [
         _item("OPS-12", NOON - timedelta(days=1), comment=LastComment("Sam", "Sent it", NOON)),
-        _item("BUD-042", NOON, is_target=True, can_mark_done=False, path="/buds/42"),
+        _item("BUD-042", NOON, kind=ItemKind.BUD_TARGET, path="/buds/42"),
         _item("SEO-3", NOON + timedelta(days=2), stage="SEO › Review"),
     ]
     blocks = _compose(items)

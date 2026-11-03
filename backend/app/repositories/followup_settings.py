@@ -46,9 +46,9 @@ async def followup_subscribers(db: AsyncSession, category: str) -> list[Subscrib
     """Everyone across all orgs who turned ``category`` on and is linked to Slack.
 
     The scheduler's starting point: it works out who is due from this one
-    read before opening a session for any org. ``category`` is opt-in, so
-    only an explicit ``true`` counts, and only in orgs where the person
-    saved a schedule: the switch is one per person, the schedule one per org.
+    read before opening a session for any org. Only orgs where they turned
+    it on count, and ``category`` (opt-in) must be on too, as the sender
+    checks it.
     """
     rows = await db.execute(
         select(
@@ -64,12 +64,23 @@ async def followup_subscribers(db: AsyncSession, category: str) -> list[Subscrib
             and_(OrgToUser.user_id == User.id, OrgToUser.org_id == FollowupSettings.org_id),
         )
         .where(
+            FollowupSettings.enabled.is_(True),
             User.is_active.is_(True),
             User.slack_id.is_not(None),
             User.notification_prefs[category].astext == "true",
         )
     )
     return [Subscriber(*row) for row in rows.all()]
+
+
+async def enabled_anywhere(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Whether the person has the follow-ups on in any of their orgs."""
+    found = await db.execute(
+        select(FollowupSettings.id)
+        .where(FollowupSettings.user_id == user_id, FollowupSettings.enabled.is_(True))
+        .limit(1)
+    )
+    return found.first() is not None
 
 
 class FollowupSettingsRepository:
@@ -90,22 +101,34 @@ class FollowupSettingsRepository:
         return row.scalar_one_or_none()
 
     async def weekdays_only(self, user_ids: Collection[uuid.UUID]) -> dict[uuid.UUID, bool]:
-        """Each of ``user_ids`` with a saved schedule, and whether it's weekdays only."""
+        """Each of ``user_ids`` with the follow-ups on here, and whether it's weekdays only."""
         if not user_ids:
             return {}
         rows = await self._db.execute(
             select(FollowupSettings.user_id, FollowupSettings.weekdays_only).where(
                 FollowupSettings.org_id == self._org,
                 FollowupSettings.user_id.in_(list(user_ids)),
+                FollowupSettings.enabled.is_(True),
             )
         )
         return {row[0]: row[1] for row in rows.all()}
 
     async def upsert(
-        self, user_id: uuid.UUID, *, send_time: time, timezone: str, weekdays_only: bool
+        self,
+        user_id: uuid.UUID,
+        *,
+        enabled: bool,
+        send_time: time,
+        timezone: str,
+        weekdays_only: bool,
     ) -> None:
-        """Save the person's schedule, replacing any earlier one."""
-        values = {"send_time": send_time, "timezone": timezone, "weekdays_only": weekdays_only}
+        """Save whether it's on here and the schedule, replacing any earlier row."""
+        values = {
+            "enabled": enabled,
+            "send_time": send_time,
+            "timezone": timezone,
+            "weekdays_only": weekdays_only,
+        }
         await self._db.execute(
             insert(FollowupSettings)
             .values(id=uuid.uuid4(), org_id=self._org, user_id=user_id, **values)

@@ -24,12 +24,13 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.board_card_detail import BoardCardComment
 from app.models.bud import BUDDocument, BUDStatus
-from app.models.user import User
+from app.models.user import OrgToUser, User
+from app.repositories.membership_predicates import membership_holds
 
 FINISHED_BUD_STATUSES = (BUDStatus.CLOSED, BUDStatus.DISCARDED)
 
@@ -63,9 +64,13 @@ class FollowupItemsRepository:
         self._org = org_id
 
     async def bud_targets(
-        self, user_ids: Collection[uuid.UUID], before: datetime
+        self, user_ids: Collection[uuid.UUID], before: datetime, *, permission: str
     ) -> list[TargetBud]:
-        """Open BUDs assigned to ``user_ids`` whose phase target is before ``before``."""
+        """Open BUDs assigned to ``user_ids`` whose phase target is before ``before``.
+
+        Only for assignees whose role still grants ``permission`` (the one
+        that opens BUDs), so nobody is sent a BUD they can't open.
+        """
         if not user_ids:
             return []
         rows = await self._db.execute(
@@ -76,7 +81,15 @@ class FollowupItemsRepository:
                 BUDDocument.status,
                 BUDDocument.current_phase_deadline,
             )
+            .join(
+                OrgToUser,
+                and_(
+                    OrgToUser.user_id == BUDDocument.assignee_id,
+                    OrgToUser.org_id == self._org,
+                ),
+            )
             .where(
+                membership_holds(permission),
                 BUDDocument.org_id == self._org,
                 BUDDocument.assignee_id.in_(list(user_ids)),
                 BUDDocument.status.not_in(FINISHED_BUD_STATUSES),

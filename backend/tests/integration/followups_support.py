@@ -95,6 +95,7 @@ async def opt_in(
                 send_time=at,
                 timezone=zone,
                 weekdays_only=weekdays_only,
+                enabled=True,
             )
         )
         await db.commit()

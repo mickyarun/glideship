@@ -16,6 +16,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 
 from app.models.bud import BUDStatus
 from app.repositories.board_due import DueCard
@@ -39,23 +40,25 @@ BUD_STAGE_LABELS: dict[BUDStatus, str] = {
 }
 
 
+class ItemKind(StrEnum):
+    """What an item is, which decides how it's worded and what it offers."""
+
+    # A card's due date: worded "Due", with a "Mark done" button.
+    CARD = "card"
+    # A BUD's phase target, a forecast rather than a promise: worded "Target".
+    BUD_TARGET = "bud_target"
+
+
 @dataclass(frozen=True)
 class FollowupItem:
-    """A card or BUD as one block of the message.
-
-    ``is_target`` marks a BUD's phase target, a forecast rather than a
-    promised date, which the message words as "Target" instead of "Due".
-    ``can_mark_done`` is for cards, whose due date can be ticked done from
-    the message; a BUD's target can't.
-    """
+    """A card or BUD as one block of the message."""
 
     key: str
     title: str
     path: str
     stage: str
     due_at: datetime
-    is_target: bool
-    can_mark_done: bool
+    kind: ItemKind
     comment: LastComment | None
 
 
@@ -67,8 +70,7 @@ def card_item(card: DueCard, comment: LastComment | None) -> FollowupItem:
         path=card_path(card.board_key, card.number),
         stage=f"{card.board_name} › {card.stage_name}",
         due_at=card.due_at,
-        is_target=False,
-        can_mark_done=True,
+        kind=ItemKind.CARD,
         comment=comment,
     )
 
@@ -81,7 +83,6 @@ def bud_item(bud: TargetBud) -> FollowupItem:
         path=bud_number_path(bud.bud_number),
         stage=BUD_STAGE_LABELS.get(bud.status, bud.status.value),
         due_at=bud.target_at,
-        is_target=True,
-        can_mark_done=False,
+        kind=ItemKind.BUD_TARGET,
         comment=None,
     )

@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.services.followups.due_state import DueBucket, LocalDay, bucket, due_words
-from app.services.followups.items import FollowupItem
+from app.services.followups.items import FollowupItem, ItemKind
 from app.services.slack_mrkdwn import escape_mrkdwn
 
 SETTINGS_PATH = "/profile/notifications"
@@ -64,13 +64,14 @@ def _item_blocks(
     when = item.due_at.astimezone(local.zone)
     words = due_words(item.due_at, local)
     late = bucket(item.due_at, local) is DueBucket.OVERDUE
-    label = f"Target {when:%a %-d %b}" if item.is_target else f"Due {when:%a %-d %b, %H:%M}"
+    target = item.kind is ItemKind.BUD_TARGET
+    label = f"Target {when:%a %-d %b}" if target else f"Due {when:%a %-d %b, %H:%M}"
     state = f":rotating_light: *{words}*" if late else f":hourglass_flowing_sand: {words}"
     title = escape_mrkdwn(_excerpt(item.title, TITLE_CHARS))
     link = f"<{base_url}{item.path}|{item.key} {title}>"
     text = f"*{link}*  ·  _{escape_mrkdwn(item.stage)}_\n{label}  ·  {state}"
     section: dict[str, Any] = {"type": "section", "text": _mrkdwn(text)}
-    if item.can_mark_done:
+    if item.kind is ItemKind.CARD:
         section["accessory"] = {
             "type": "button",
             "text": {"type": "plain_text", "text": "Mark done"},

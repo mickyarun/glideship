@@ -1,8 +1,8 @@
 """daily followups settings
 
-Revision ID: e9eb2a92071e
+Revision ID: a1e8aeee2202
 Revises: 7423710e7da2
-Create Date: 2026-11-03 18:14:57.369870
+Create Date: 2026-11-03 18:49:42.610819
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "e9eb2a92071e"
+revision: str = "a1e8aeee2202"
 down_revision: str | None = "7423710e7da2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -31,6 +31,7 @@ def upgrade() -> None:
         sa.Column("send_time", sa.Time(), nullable=False),
         sa.Column("timezone", sa.String(length=64), nullable=False),
         sa.Column("weekdays_only", sa.Boolean(), server_default=sa.text("true"), nullable=False),
+        sa.Column("enabled", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
             "created_at",

@@ -55,4 +55,7 @@ class FollowupSettingsUpdate(BaseModel):
     @field_validator("send_time")
     @classmethod
     def _whole_minutes(cls, value: time) -> time:
-        return value.replace(second=0, microsecond=0, tzinfo=None)
+        # A local wall-clock time in ``timezone``; an offset would contradict it.
+        if value.tzinfo is not None:
+            raise ValueError("send_time is a local time; give the zone in timezone")
+        return value.replace(second=0, microsecond=0)

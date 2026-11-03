@@ -14,7 +14,8 @@
 
 """Each person's follow-up items for their own local day, read in a few queries.
 
-Cards they're assigned (on boards they can still open) and BUDs they own,
+Cards they're assigned (on boards they can still open) and BUDs they own
+(when they can still open the engineering workspace),
 due before the end of their day plus ``FollowupsConfig.soon_days``. One
 read per kind covers everyone, using the latest cutoff; each person's list
 is then trimmed to their own.
@@ -27,6 +28,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.permissions import WORKSPACE_ENGINEERING
 from app.repositories.board_access import BoardAccessRepository
 from app.repositories.board_due import BoardDueRepository
 from app.repositories.followup_items import FollowupItemsRepository
@@ -57,7 +59,7 @@ async def gather_items(
     found: dict[uuid.UUID, list[FollowupItem]] = defaultdict(list)
     for card in cards:
         found[card.user_id].append(card_item(card, comments.get(card.card_id)))
-    for bud in await repo.bud_targets(people, latest):
+    for bud in await repo.bud_targets(people, latest, permission=WORKSPACE_ENGINEERING):
         found[bud.user_id].append(bud_item(bud))
     mine = {
         user_id: [i for i in items if i.due_at < cutoff(days[user_id])]
