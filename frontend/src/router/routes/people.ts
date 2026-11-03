@@ -30,6 +30,12 @@ export const peopleRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/leave/TeamCalendarView.vue'),
   },
   {
+    // Everyone sees their office's holidays; HR can switch offices.
+    path: 'leave/holidays',
+    name: 'leave-holidays',
+    component: () => import('@/views/leave/HolidaysView.vue'),
+  },
+  {
     // Managers see their reports' requests; holders of leave:approve see
     // everyone's. The API decides what's in the queue.
     path: 'leave/approvals',
