@@ -277,6 +277,23 @@ last period's goals. While the cycle runs, each monthly
 summary tags the facts that relate to a goal, and the employee records a value for any goal with
 a number in its measure.
 
+### Employees' own goals
+
+Employees can always write their own goals; suggestions are a starting point, not the only source.
+
+- **When:** while picking next period's goals, and at any time during a period ("Add my own goal"
+  on the check-in's goals panel), for something new that came up.
+- **What they write:** the goal as an outcome, and how they'll know (a number or a clear yes or
+  no, and where it comes from). The form says "an outcome, not a task list".
+- **Confirming:** an own goal is labelled "Your own goal" and shows "Waiting for Ravi to confirm"
+  until the manager includes it. The manager can include it, ask for a rewording, or skip it
+  with a reason the employee sees. Only confirmed goals appear in the review.
+- **Limit:** own goals count towards the same three per period. A goal added mid-period is
+  reviewed like any other; the review shows the date it was added so a late goal isn't judged
+  on a full period.
+- **Managers can add goals too,** in the growth conversation or mid-period, labelled as theirs;
+  the employee sees who added each goal.
+
 ### Suggested goals for every role
 
 When a cycle opens (or on request, for one person or everyone), a job suggests three to five goals
@@ -641,8 +658,8 @@ self_submitted_at, manager_submitted_at, shared_at, acknowledged_at`
 `id, org_id, profile_id, cycle_id (nullable: a goal set in the growth conversation before the
 next cycle exists attaches when that cycle opens), target_period_start, position, title (bytes), measure (bytes),
 self_result (achieved | partly | not_yet), self_reason (bytes), self_evidence (JSONB),
-final_result, manager_reason (bytes), origin (manual | ai_suggested | role_library),
-status (suggested → accepted | dismissed), suggestion_basis (enum: feedback | last_period | blocker |
+final_result, manager_reason (bytes), origin (employee_own | manager_added | ai_suggested | role_library), proposed_by, added_mid_period (bool),
+status (suggested | proposed → accepted | dismissed), suggestion_basis (enum: feedback | last_period | blocker |
 trend | role_library), suggestion_refs (JSONB, including the trends version), original (JSONB: the
 suggestion before edits), dismiss_reason (bytes), accepted_by, accepted_at`. Partial unique index
 on `(profile_id, cycle_id, position) WHERE status = 'accepted'`.
@@ -711,7 +728,8 @@ using partial unique indexes only (the local database is Postgres 14).
 | `GET /{id}/goal-options` (role library + carry-over, no AI) | manager or employee |
 | `GET /cycles/{id}/readiness` (AI status, people without a primary manager or template, identity check) | HR |
 | `GET /cycles/{id}/progress` (who's done, who's overdue) | HR |
-| `POST /goals/{id}/accept`, `/dismiss`, `PATCH /goals/{id}` | employee or manager |
+| `POST /{id}/goals` (own goal, any time in the period → `proposed`) | employee or manager |
+| `POST /goals/{id}/accept`, `/dismiss`, `PATCH /goals/{id}` | employee picks; manager confirms or skips with a reason |
 | `GET/POST /role-templates`, `PATCH/DELETE /role-templates/{id}` | HR |
 | `POST /role-templates/{id}/trends/draft` → `202` (AI mode), `POST /role-templates/{id}/trends/approve` | HR |
 | `GET /mine`, `GET /team`, `GET /{id}` | per access table |
