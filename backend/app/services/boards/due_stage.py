@@ -21,7 +21,8 @@ Slack message failed, or whose claim was left unfinished longer than
 ``BoardsConfig.due_reminder_stale_minutes``, are re-claimed (up to
 ``due_reminder_max_retries`` times) and get the DM again, composed from
 their cards as they are now, but no second in-app row. Only boards the
-person can still open count.
+person can still open count. People whose daily follow-ups go out that day
+get their cards there instead, so they keep the in-app row but no DM here.
 """
 
 import uuid
@@ -39,10 +40,12 @@ from app.repositories.board_due import BoardDueRepository, DueCard
 from app.repositories.digest_claim import DigestClaimRepository
 from app.services.after_commit import publish_after_commit
 from app.services.boards.due_compose import BOARDS_PATH, DueMessage, compose_due
+from app.services.followups.coverage import covered_by_followups
 from app.services.notifications.notice import add_notification_rows
 
 KIND = DigestClaimKind.BOARD_DUE
 NOTHING_DUE = "nothing_due"
+IN_FOLLOWUPS = "in_followups"
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,9 @@ async def stage_day(
         texts[user_id] = message.slack_text
     for user_id in sorted(retry - set(mine)):
         await claims.finish(KIND, user_id, window.day, DigestClaimStatus.SKIPPED, NOTHING_DUE)
+    for user_id in sorted(await covered_by_followups(db, org_id, set(texts), window.day)):
+        await claims.finish(KIND, user_id, window.day, DigestClaimStatus.SKIPPED, IN_FOLLOWUPS)
+        del texts[user_id]
     return texts
 
 

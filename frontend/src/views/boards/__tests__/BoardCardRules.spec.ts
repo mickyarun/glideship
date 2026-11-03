@@ -44,6 +44,9 @@ const later = (s: number) => new Date(Date.parse(CARD.updated_at) + s * 1000).to
 // Vuetify mounts a menu's items once it activates, which on a loaded CI
 // runner can take longer than vi.waitFor's 1 s default.
 const MENU_OPENS = { timeout: 5_000 }
+// A test that opens the menu twice needs room for both waits, which the
+// 5 s default test timeout alone doesn't leave.
+const TWO_MENUS = 3 * MENU_OPENS.timeout
 const menuItem = (text: string) =>
   [...document.querySelectorAll<HTMLElement>('.v-overlay--active .v-list-item')].find(i => i.textContent?.includes(text))
 const buttonNamed = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)
@@ -105,7 +108,7 @@ describe('BoardCardView stage rules and repository', () => {
     await vi.waitFor(() => menuItem('No repository')!.click(), MENU_OPENS)
     await flushPromises()
     expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { repo_id: null })
-  })
+  }, TWO_MENUS)
 
   it('reads None once the repository is unlinked elsewhere', async () => {
     start({ repo_id: 'r1' })

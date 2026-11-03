@@ -16,7 +16,8 @@
 
 <!-- Self-service notification settings page. Reached from the account menu
      (My Profile → Notification Settings); reuses NotificationPreferencesCard
-     so the profile and this page can never drift. -->
+     so the profile and this page can never drift. The daily follow-ups have
+     a schedule as well as a switch, so they get their own card above. -->
 <template>
   <v-container class="py-6" style="max-width: 760px;">
     <div class="d-flex align-center ga-2 mb-5">
@@ -37,10 +38,12 @@
       </div>
     </div>
 
+    <DailyFollowupsCard class="mb-4" />
     <NotificationPreferencesCard />
   </v-container>
 </template>
 
 <script setup lang="ts">
+import DailyFollowupsCard from '@/components/profile/DailyFollowupsCard.vue'
 import NotificationPreferencesCard from '@/components/profile/NotificationPreferencesCard.vue'
 </script>

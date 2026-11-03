@@ -1226,3 +1226,12 @@ export interface NotificationPreferenceItem {
   group: string
   enabled: boolean
 }
+
+// Mirrors the backend FollowupSettingsRead schema (GET/PUT /v1/me/followups).
+// ``timezone`` is null when nothing is saved and no leave policy has one.
+export interface FollowupSettings {
+  enabled: boolean
+  send_time: string
+  timezone: string | null
+  weekdays_only: boolean
+}

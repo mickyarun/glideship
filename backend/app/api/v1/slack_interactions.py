@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
+from app.services.followups.mark_done import handle_mark_done, is_mark_done
 from app.services.leave.slack_actions import handle_interaction
 from app.services.slack_verify import verified_org
 
@@ -55,5 +56,8 @@ async def slack_interactions(request: Request, db: AsyncSession = Depends(get_db
     )
     if org is None:
         return Response(status_code=401)
+    if is_mark_done(payload):
+        await handle_mark_done(db, org, payload)
+        return Response(status_code=200)
     body = await handle_interaction(db, org, payload)
     return JSONResponse(body) if body else Response(status_code=200)

@@ -76,6 +76,7 @@ from app.api.v1.leave_reports_export import router as leave_reports_export_route
 from app.api.v1.leave_slack_status import router as leave_slack_status_router
 from app.api.v1.leave_types import router as leave_types_router
 from app.api.v1.me import router as me_router
+from app.api.v1.me_followups import router as me_followups_router
 from app.api.v1.members import router as members_router
 from app.api.v1.minigames import router as minigames_router
 from app.api.v1.notifications import router as notifications_router
@@ -124,6 +125,7 @@ api_router.include_router(orgs_router, prefix="/api/v1/organizations")
 api_router.include_router(roles_router, prefix="/api/v1")
 api_router.include_router(members_router, prefix="/api/v1")
 api_router.include_router(me_router, prefix="/api/v1")
+api_router.include_router(me_followups_router, prefix="/api/v1")
 api_router.include_router(notifications_router, prefix="/api/v1/notifications")
 api_router.include_router(ws_router, prefix="/api/v1")
 api_router.include_router(public_router, prefix="/api/v1/public")

@@ -62,6 +62,8 @@ SHARED_MODULES = frozenset(
         "app.api.v1.internal_colyseus",
         "app.api.v1.members",
         "app.api.v1.me",
+        # Each member's own follow-ups schedule; what it lists is filtered per board.
+        "app.api.v1.me_followups",
         "app.api.v1.offices",
         "app.api.v1.notifications",
         "app.api.v1.organizations",
