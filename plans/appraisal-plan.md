@@ -148,8 +148,8 @@ person adds it in place instead of hunting for a box further down the page.
   and an optional heading or goal. These show as "added by you", not "from Glideship".
 - Goal values: for each goal with a number in its measure, this month's value and where it came
   from (for example "CSAT 4.6 · helpdesk report link").
-- "Counts towards": each fact or link has one picker listing the goals first, then "No goal ·
-  <heading>". Work that isn't for a goal still counts, under its heading. (This replaces the
+- "Which goal it helped": each fact or link has one picker listing the goals first, then "No
+  goal · <section>". Work that isn't for a goal still counts, under its heading. (This replaces the
   separate tag field.) In manual mode this is how the
   evidence timeline groups things; in AI mode it overrides the AI's grouping.
 
@@ -520,6 +520,21 @@ A role template is an org-level record that HR edits:
 Ten templates are seeded (decision 12). A person with no matching template gets a general one, and
 the identity check lists them so HR can pick one.
 
+## Screen clarity rules
+
+Every screen answers three things at a glance: what this is, what to do here, what happens next.
+
+- A small label over the title gives the step and due date ("Monthly check-in · due Fri 2 Jan");
+  the title is the task ("Check your December work and share it with Ravi"); one line under it
+  says what happens next; a line with an eye icon says who can see the page.
+- One primary action per screen. Saving a draft is secondary; the primary action names the person
+  it goes to ("Share with Ravi", "Share with Priya", "Submit to HR").
+- AI-written text carries an "AI draft" marker; anything a person wrote is labelled with who.
+- Source chips say their type (Spec, PR, Card) instead of internal ids alone.
+- Bands always show their label with the number, and the scale says "1 is the highest".
+- Goal statuses in feedback are badges with a key and the note that they are not a score.
+- Acknowledging a result says it is not the same as agreeing.
+
 ## Intro guide
 
 The first time someone opens **People → Appraisals**, they get a one-page guide. After that it is
@@ -782,7 +797,7 @@ added lines, feedback due date and status, and any identity warning. For quarter
 │ ── Vikram S. ───────────────────────────────────────────────────── │
 │ Goal 1 Organic clicks +25%   (•)On track ( )At risk ( )Off track   │
 │ Goal 2 12 articles           ( )On track (•)At risk ( )Off track   │
-│ Keep [ … ]   Try [ … ]                              [Mark done]    │
+│ Keep [ … ]   Try [ … ]                     [Share with Vikram]     │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
