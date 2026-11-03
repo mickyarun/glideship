@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 
@@ -78,5 +78,42 @@ describe('HolidayYearList', () => {
     const april = { label: 2029, start: '2029-04-01', end: '2030-03-31' }
     const first = mountList('2029-05-01', april).find('.holiday__date')
     expect(first.text()).toBe('14 Jan 2030')
+  })
+
+  describe('scrolling to the next holiday', () => {
+    // jsdom has no scrollIntoView, so each test plants a spy and removes it.
+    afterEach(() => {
+      vi.restoreAllMocks()
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    })
+
+    function stubRowsAt(top: number) {
+      const scroll = vi.fn()
+      Element.prototype.scrollIntoView = scroll
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+        { top, bottom: top + 48 } as DOMRect,
+      )
+      return scroll
+    }
+
+    it('scrolls the next holiday into view when it is below the fold', () => {
+      const scroll = stubRowsAt(window.innerHeight + 200)
+      mountList('2030-05-01')
+      expect(scroll).toHaveBeenCalledTimes(1)
+      expect(scroll.mock.contexts[0]).toHaveProperty('textContent', expect.stringContaining('Founders day'))
+      expect(scroll).toHaveBeenCalledWith({ block: 'center' })
+    })
+
+    it('leaves the page alone when the next holiday is already on screen', () => {
+      const scroll = stubRowsAt(100)
+      mountList('2030-05-01')
+      expect(scroll).not.toHaveBeenCalled()
+    })
+
+    it('does not scroll when there is no next holiday', () => {
+      const scroll = stubRowsAt(window.innerHeight + 200)
+      mountList('2031-01-05')
+      expect(scroll).not.toHaveBeenCalled()
+    })
   })
 })

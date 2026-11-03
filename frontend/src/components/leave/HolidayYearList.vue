@@ -16,9 +16,10 @@
 
 <!-- A leave year of holidays, read-only: date, weekday, name, and whether
      it's optional. Upcoming ones stand out and the next one is marked;
-     past ones are muted. Stacks into two lines per holiday on a phone. -->
+     past ones are muted. Stacks into two lines per holiday on a phone.
+     When the next holiday is off screen, the list scrolls it into view. -->
 <template>
-  <ol class="holidays" aria-label="Holidays">
+  <ol ref="listEl" class="holidays" aria-label="Holidays">
     <li
       v-for="row in rows"
       :key="row.id"
@@ -41,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { HolidayRead, LeaveYear } from '@/types/leave'
 import { holidayRows } from '@/utils/holidayList'
 
@@ -54,6 +55,18 @@ const props = defineProps<{
 }>()
 
 const rows = computed(() => holidayRows(props.holidays, props.today, props.leaveYear))
+const listEl = ref<HTMLOListElement | null>(null)
+
+// Bring the next holiday into view when a list arrives, but only when it's
+// off screen, so a list that already fits never jumps.
+function revealNext() {
+  const next = listEl.value?.querySelector<HTMLElement>('.holiday--next')
+  if (!next) return
+  const { top, bottom } = next.getBoundingClientRect()
+  if (top < 0 || bottom > window.innerHeight) next.scrollIntoView({ block: 'center' })
+}
+onMounted(revealNext)
+watch(rows, revealNext, { flush: 'post' })
 </script>
 
 <style scoped>
