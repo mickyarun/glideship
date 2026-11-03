@@ -1,471 +1,491 @@
-# Appraisals: evidence from real work, decided by the manager
+# Appraisals: monthly check-ins, self-scoring, manager confirms
 
 This document is a plan only. Nothing here has been built.
 
 ## The problem
 
-Appraisals run in a spreadsheet today. There is one tab per quarter, and from the second half of
-2025 one tab per half-year. Each row is an area with a weight:
+Appraisals run in a spreadsheet. It has five weighted areas, and each area gets a goal, a
+self-evaluation, manager feedback and a score out of 100. The total maps to a band from 1 to 5.
 
-| Area | Weight |
+It goes wrong in three ways:
+
+- Self-evaluations are thin ("Doing my best", "Trying").
+- Both sides work from memory, so the last few weeks count most.
+- Five scores out of 100 look precise but mostly reflect who is scoring.
+
+Meanwhile Glideship already records most of the work: BUDs, PRs, reviews, bugs, retrospectives,
+board cards and leave.
+
+This plan replaces the spreadsheet format. It does not copy it.
+
+## What the research says, and what we take from it
+
+| Finding | So we |
 |---|---|
-| Product Goals & Quality | 25% |
-| Proactiveness & Innovation | 25% |
-| Team work | 15% |
-| Skill upgrade | 15% |
-| Role Effectiveness | 20% |
+| 62% of the variation in ratings comes from the person rating, and only 21% from the performance itself (Scullen, Mount and Goff, cited by Deloitte). | Ask for one overall band with plain descriptors, not five scores out of 100. |
+| Performance fell about 10% at companies that dropped ratings (CEB, about 10,000 employees). | Keep one clear outcome: the band. |
+| Self-ratings run higher than manager ratings (d = 0.32). They agree more when both sides look at the same performance indicators that don't depend on judgement (Heidemeier and Moser, 128 samples). | The employee self-scores, but has to point at evidence, and the manager sees the same evidence. |
+| Over a third of feedback interventions lowered performance, mostly when the feedback was about the person and not the task (Kluger and DeNisi, 607 effects). | Feedback is about the work and what to do next. |
+| Criticism in an appraisal made people defensive, and their performance dropped (General Electric, 1965). Deloitte keeps pay decisions apart from coaching. | Keep the decision and the growth conversation separate. |
+| 14% of employees say reviews inspire them to improve (Gallup). Adobe's ongoing check-ins came with lower voluntary attrition (Adobe's own figures). | Talk briefly every month instead of once a half from memory. |
+| People forget their own work, which is why people keep brag documents. | Glideship keeps that record for them automatically. |
+| No single metric captures productivity (SPACE). Engineering-metrics vendors refuse to show per-person PR counts. | Show the work, never counts or scores. |
+| Using AI to evaluate workers is high-risk under the EU AI Act. The GDPR requires a human decision, and a right to have a say and to contest. | The AI writes summaries only. People score. |
 
-For each area there is a goal set for the person, a self-evaluation, manager feedback and a score
-out of 100. Net score is weight × score, and the net scores add up to a total. A rubric maps the
-score to a band:
+## The system in one paragraph
 
-| Band | Score | Meaning |
-|---|---|---|
-| 1 | above 95 | Always exceeds |
-| 2 | 81 to 95 | Exceeds most times |
-| 3 | 61 to 80 | Meets always |
-| 4 | 41 to 60 | Meets sometimes |
-| 5 | 40 or less | Does not meet |
+Every month the AI drafts "your month" from Glideship, with a link on every line. The employee
+adds a few lines and the manager replies with one. At the end of the half, the employee scores
+themself: each goal as achieved, partly or not yet, plus an overall band, each with a reason and
+evidence. The manager agrees with each score in one click, or changes it and writes why. HR checks
+the spread across managers and shares the results. Then the manager and the employee have a
+separate growth conversation and set next half's goals.
 
-Two things go wrong. Self-evaluations are thin ("Doing my best", "Trying"). And both sides work
-from memory, so the last few weeks count for more than the first few. Meanwhile Glideship already
-records most of what people did in the period: BUDs, PRs, reviews, bugs, retrospectives, board
-cards and leave.
-
-## The idea in one paragraph
-
-HR opens a cycle with the five areas and their weights. For each person, Glideship collects the
-work it can see in the period and the AI writes a short evidence summary per area. Every sentence
-links to the BUD, PR, bug or card behind it. The employee reads it, adds what the system missed,
-and writes a short note. The manager reads both, picks a score per area against the rubric and
-writes feedback. The total and band are calculated. HR checks the spread across managers and
-shares the result. The employee acknowledges it and can reply. The AI never scores anyone.
+```
+Every month                          End of each half
+───────────                          ────────────────
+AI drafts "your month"  ─┐           Employee: score each goal + overall band, with evidence
+Employee adds 2–3 lines  ├─ record ─► Manager: agree, or change it and say why
+Manager replies 1 line  ─┘           HR: calibrate, share
+                                     Manager + employee: growth conversation, next half's goals
+```
 
 ## Decisions for you
 
-These change the build. Each has a recommendation.
-
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Should the AI suggest a score or band? | **No.** It writes evidence only. A suggested number anchors the manager, and the main product in this space that drafts reviews also leaves the rating to the manager. Makes the "AI suggests, manager decides" line literal. |
-| 2 | Who scores when someone has several managers? | The **primary** manager, snapshotted when the cycle opens. Other managers can read and leave a comment, but don't score. |
-| 3 | Can the employee see the AI evidence before writing their self-note? | **Yes.** It is their work, and it turns the self-note from "Doing my best" into "add what's missing". |
-| 4 | Encrypt goals, notes and feedback with the HR key? | **Yes**, same AES-GCM scheme as bank details, bound to `profile_id`. Scores stay plain numbers so totals and the spread view work. |
-| 5 | Who can see everyone's results? | A new `appraisals:manage` permission (HR). Owners don't get it implicitly beyond the usual owner rule. |
-| 6 | Import past spreadsheet tabs? | **Not now.** Start with the next cycle. Can add a CSV import later if people want history in one place. |
-| 7 | Default cadence? | Half-yearly, matching the current sheet. Quarterly stays available per cycle. |
+| 1 | Check-in cadence | **Monthly.** The org can set it to fortnightly or quarterly. A missed check-in is shown as missed and never blocks anything. |
+| 2 | Band scale | **Keep your 1–5 labels**, 1 = Always exceeds and 5 = Does not meet, so HR's pay mapping still works. Show the label first and the number second. |
+| 3 | Must the manager give a reason when they change a score? | **Yes**, one line. The employee sees it once the review is shared. |
+| 4 | Must a band 1 or 2 cite evidence? | **Yes**, for both the employee and the manager. Band 5 from the manager needs evidence or a written reason too. |
+| 5 | Who scores when someone has several managers? | The **primary** manager, snapshotted when the cycle opens. The others can read. |
+| 6 | Encryption | **Yes.** Notes, reasons and AI text use the HR key, bound to `profile_id`. Bands and goal results stay plain, so the spread view works. |
+| 7 | Does HR still need a number out of 100 for pay? | **No**, use the band. If you must have one, map each band to a fixed number rather than asking anyone to type one in. |
+| 8 | What happens to the five areas? | They become **four headings** that group the monthly summary: Delivery & quality, Initiative, Team, Growth. Nobody scores them and they have no weights. |
 
-## How a cycle runs
+## Monthly check-in
 
-```
-HR: create cycle (draft) ─► set period, areas, weights, people, goals ─► Open
-        │
-        ▼
-System: resolve identities ─► gather facts ─► AI evidence per person (async job)
-        │
-        ▼
-Employee: read evidence, add what's missing, write self-note ─► Submit
-        │
-        ▼
-Manager: read evidence + self-note, score each area, write feedback ─► Submit
-        │
-        ▼
-HR: spread view across managers, send back if needed ─► Share
-        │
-        ▼
-Employee: read result, acknowledge, optional reply ─► Cycle closed by HR
-```
+**What the AI drafts** (first working day of the month, for the month before):
 
-Per-person status (Postgres enum `appraisal_status`):
-`self_review → manager_review → hr_review → shared → acknowledged`.
+- Up to six lines under the four headings. Every line links to a BUD, PR, review, bug or card.
+- A line for availability, such as "17 of 21 working days (4 on leave)", worked out from approved
+  leave and the office's holidays.
+- Under any heading with nothing in it: "Glideship can't see this. Add it below if it matters."
 
-Cycle status (enum `appraisal_cycle_status`): `draft → open → closed`.
+**What the employee adds** (three short boxes, all optional):
 
-Deadlines are dates on the cycle: self-note due and manager due. When a deadline passes, the
-appraisal moves on anyway. A missing self-note is shown as "No self-note", and it doesn't block
-the manager.
+- Wins the system missed
+- What's blocking me
+- Next month
 
-## Cycle setup (HR)
+**What the manager replies:** one line to keep doing and one to try next. They can also add a
+quick reaction.
 
-- **Period.** Start and end date, and a cadence enum (`quarterly`, `half_yearly`). The cadence
-  only names the cycle ("H1 2026"). The dates drive everything.
-- **Areas and weights.** The five areas above are the default template, stored as a code constant.
-  HR can rename, add or remove areas and change weights while the cycle is a draft. Weights must
-  add up to 100; the API refuses anything else. When the cycle opens, the areas are copied onto
-  each appraisal, so editing next cycle's template never changes a closed one.
-- **Rubric.** The five bands above are fixed thresholds in code. Each area carries a one-line
-  descriptor per band, taken from today's rubric tab and editable in draft. The manager sees the
-  descriptors next to the score field.
-- **People.** By default everyone with an `active` employee profile who joined before the period
-  ends. HR can remove people (for example someone on notice) or add them.
-- **Goals.** Per person, per area, free text. HR or the person's manager can set them before or
-  during the cycle. A "copy last cycle's goals" button saves retyping.
+The check-in closes when the next one opens. Nothing is ever scored.
 
-## Evidence: what the AI sees and how it writes
+What this fixes: by the end of the half, the review has six months of linked, dated evidence plus
+the employee's own words. The record holds the detail, so nobody needs to remember it, and
+"Doing my best" has no room to appear.
 
-### 1. Resolve the person to all of their accounts
+## Half-year review
 
-This step has to come first. In production, most engineers have two or three `users` rows. The
-work-email account holds their BUDs, and a GitHub noreply account holds their merged PRs. Few
-people have `github_username` set. Without this step, the busiest engineers would look idle.
+### Goals
 
-- The identity set for a profile is `profile.user_id`, plus every user that
-  `walk_to_active_user` resolves to it (merged-away rows), plus any users matched through
+Two or three goals per person per half. Each goal is an outcome plus how you'll know you hit it,
+for example "UAT automation coverage 80% · measured from the test report".
+
+Goals are set in the growth conversation at the end of the previous half, or by the manager when a
+cycle opens. While the cycle runs, each monthly summary tags the facts that relate to a goal.
+
+### Employee self-score
+
+The employee fills in:
+
+- **Each goal:** Achieved, Partly or Not yet, plus a one-line reason. They can attach evidence by
+  picking items from their check-ins.
+- **Overall band:** pick 1 to 5 from the descriptors, write why in up to three lines, and attach
+  evidence. Bands 1 and 2 need at least two pieces of evidence.
+
+The AI's six-month summary (below) is shown above the form. The employee writes after reading it.
+
+### Manager: agree or change
+
+The manager sees the same evidence first, then the employee's scores. For each goal and for the
+band there are two buttons:
+
+- **Agree.** One click.
+- **Change.** Pick the new value and give a required one-line reason. Evidence is required when
+  moving to band 1, 2 or 5.
+
+The manager also answers two questions for themself. The employee never sees these.
+
+- Ready for the next level now? Yes or No
+- Any concern about their performance? Yes or No, plus a note
+
+The final band is the manager's: the employee's score when they agree, the manager's when they
+change it. If the employee skips the self-score, the manager scores from scratch, under the same
+evidence rules.
+
+### HR calibration
+
+HR sees:
+
+- the bands for each manager's team,
+- each manager's agreement rate (how often they kept the employee's score), and the people where
+  self and manager differ by two or more bands,
+- flags for a manager who agreed with every score, or changed nearly all of them.
+
+HR can send a review back to the manager with a note. HR never changes a band itself. Then HR
+shares the results, one at a time or in bulk.
+
+### Shared result and growth conversation
+
+The employee sees the final band and goal results, and for each change the manager made, the old
+value, the new value and the reason. They acknowledge, and can write a reply that HR also sees.
+
+The growth conversation is a separate section, opened after sharing:
+
+- one strength to use more,
+- one thing to work on,
+- next half's two or three goals.
+
+No band is shown on this screen.
+
+## The AI's six-month summary
+
+When the self-review opens, a job writes a short summary from the six check-ins:
+
+- what got done and how it went, per heading,
+- per goal: evidence found, partial or none in Glideship,
+- what the employee said was blocking them, and whether it got better.
+
+Every sentence cites facts from the check-ins. The AI never suggests a band or a goal result.
+
+## Evidence: getting it right
+
+### Resolve every account to the person
+
+In production, one engineer often has two or three accounts: a work email holding their BUDs, and
+a GitHub noreply address holding their PRs.
+
+- The identity set is the profile's user, plus users merged into it (`walk_to_active_user`), plus
   `user_email_aliases`.
-- PR and review attribution goes through `resolve_canonical_user`
-  (`services/identity_resolution.py`). It tries the GitHub login first, then the email or alias.
-- **Opening a cycle runs an identity check first.** It lists accounts that look like an
-  unmerged twin of someone in scope (same display name, or a noreply address with no owner), plus
-  PRs in the period whose author resolves to nobody. HR fixes them with the existing member merge
-  (`POST /members/{target}/merge`), which already moves aliases and the employee record. The
-  cycle can still open with warnings, but each affected appraisal shows "Some work may be missing:
-  unlinked GitHub account `login`".
+- PR and review authors are resolved with `resolve_canonical_user`.
+- Opening a cycle, or the monthly job, runs an identity check. It flags accounts that look like an
+  unmerged twin, and PRs in the period whose author resolves to nobody. HR fixes them with the
+  existing member merge.
+- Until then, the check-in shows "Some work may be missing: unlinked GitHub account `x`".
 
-### 2. Gather facts (plain SQL, no AI)
+### Fact sources (SQL in repositories only)
 
-One repository method per source, all filtered by `org_id`, the identity set and the period. Each
-fact is a small record: `{id, kind, title, date, url, detail}`.
-
-| Source | Facts | Table and owner column |
+| Source | Facts | Columns |
 |---|---|---|
-| BUDs | assigned, moved stages, shipped, closed | `bud_documents.assignee_id`, stage history, `bud_versions.edited_by` (authorship) |
-| PRs | authored and merged, linked BUD | `pull_requests.author_user_id`, `merged_at` |
-| Code reviews | valid reviews given (not rubber-stamps) | `reward_events` with source `sp_review` |
-| Bugs | reported, fixed, bugs later linked to their shipped work | `bugs.reporter_id`, `assignee_id`, `resolved_at` |
-| Board cards | completed cards on team boards | `board_card_assignees`, `board_cards.completed_at` |
-| Learnings | retrospectives and learnings on BUDs they worked on | `feature_learnings.retrospective_md` |
-| Estimation | estimated vs actual on closed BUDs | `feature_learnings.estimated_days`, `cycle_time_days` |
-| Skills | modules and languages touched for the first time this period | `skill_profiles` |
-| QA evidence | test evidence uploaded | `qa_test_evidence.uploaded_by` |
+| BUDs | assigned, stage moves, shipped, created | `bud_documents.assignee_id`, stage history, `bud_versions.edited_by` |
+| PRs | merged, with BUD link if any | `pull_requests.author_user_id`, `merged_at` |
+| Reviews | valid code reviews given | `reward_events` source `sp_review` |
+| Bugs | reported, fixed, later found in their shipped work | `bugs.reporter_id`, `assignee_id`, `resolved_at` |
+| Board cards | completed on team boards | `board_card_assignees`, `board_cards.completed_at` |
+| Learnings | retrospectives on BUDs they worked on | `feature_learnings.retrospective_md` |
+| Estimates | estimate vs actual on closed BUDs | `feature_learnings.estimated_days`, `cycle_time_days` |
+| Skills | modules or languages touched for the first time | `skill_profiles` |
+| QA | test evidence uploaded | `qa_test_evidence.uploaded_by` |
 
-SP and XP are **not** used as evidence. They are game currency with their own rules (XP is for
-dev work, SP depends on role), and showing them would turn the review into a points contest.
+Only about a third of PRs carry a BUD link, so PRs are read directly. SP and XP are never used,
+because they are game currency, not performance.
 
-Only about a third of merged PRs carry a `bud_id`, so PRs are gathered directly, not through
-BUDs.
+### Writing rules for the AI
 
-### 3. Availability: leave never counts against anyone
+- The prompt gets facts, the heading definitions, the goals and the availability line. It gets no
+  name, gender, age, photo or office.
+- It returns JSON: lines, each with fact ids. The code drops any line with no ids or an unknown
+  id. Links are built from our own fact records, never from the AI's text.
+- Lines describe work, not counts. They never compare the person with colleagues.
+- Each run stores its prompt, model id, fact ids and output, so anyone can see what the AI saw.
+- Jobs use the async pattern (handler, `202`, `useJobSocket`) through `run_claude_code`, following
+  the org's `claude_auth_mode`. The monthly run is scheduled the same way as the leave digest.
 
-- Working days in the period = days minus weekends and the office's holidays, using the leave
-  module's `calendar_math.count_days`.
-- Available days = working days minus approved leave (all leave kinds except WFH), and minus any
-  time before `date_of_joining` or after `date_of_exit`.
-- The evidence header shows it: "Available 98 of 124 working days (26 on leave)". The AI is given
-  the same figure and told not to mention volume relative to other people. Leave reasons are never
-  read or passed to the AI; only dates and counts are used.
+### Leave and quiet roles
 
-### 4. The AI writes the summary, with checks
-
-- Facts go to the model with the area definitions, the person's goals and the availability line.
-  The model receives no name, gender, age, photo or office. The person is "the employee".
-- The model returns JSON: per area, up to five short claims. Each claim lists the fact ids it rests
-  on. It also returns, per goal, "evidence found / partial / none in Glideship".
-- **Citation check, in code.** A claim with no fact ids, or with an id that isn't in the fact set,
-  is dropped. Links are built from our own fact records, never from model text, so a link can't
-  point anywhere made up.
-- **Words, not counts.** Claims describe work ("Shipped BUD-041 checkout retries, two bugs found
-  in UAT, both fixed within a day"). Raw totals such as "23 PRs" are left out of claims, and there
-  is no ranking or comparison with colleagues.
-- Runs as an async job (register handler, `202`, track with `useJobSocket`) through the existing
-  `run_claude_code` path, so it follows the org's `claude_auth_mode`. The prompt, model id, fact
-  ids and output are stored with the appraisal, so anyone can see exactly what the AI was given.
-- HR or the manager can regenerate it until the manager submits. After that it is frozen.
-
-### 5. Say what the AI couldn't see
-
-Each area shows a coverage line:
-
-- **Good:** several facts across the period.
-- **Thin:** a few facts, or all of them in one month.
-- **Not visible in Glideship:** no facts at all.
-
-Areas such as Team work (mentoring, unblocking people in calls) and much of Proactiveness are
-mostly invisible to any system. For those, the panel says so plainly: "Glideship can't see this.
-Rely on the self-note and your own view." Non-engineering roles (SEO, design, sales) often have
-only board cards. Their panel says the same thing instead of an empty list, so it is clear that
-missing data is a coverage gap, not a performance gap.
-
-### Default area mapping
-
-Facts map to areas through a small table in code. The model may move a fact to another area if the
-fact's text clearly fits there, and it must say so.
-
-| Area | Default facts |
-|---|---|
-| Product Goals & Quality | shipped BUDs, merged PRs, bugs found in their shipped work and how fast they were fixed, QA evidence |
-| Proactiveness & Innovation | BUDs they created, bugs they reported, retrospectives and learnings written |
-| Team work | valid code reviews given, cards completed on shared boards, BUDs with several contributors |
-| Skill upgrade | new modules or languages from `skill_profiles` |
-| Role Effectiveness | estimate vs actual, stage moves on time, completed board cards |
+- Every check-in shows availability. Leave reasons are never read.
+- A heading with no facts says "Glideship can't see this", not "nothing done". People whose work
+  is mostly outside the system (sales, some design, HR) get a summary of their board cards, and
+  the rest comes from their own lines. The scoring rules are the same for everyone, because people
+  score and the AI doesn't.
 
 ## Fairness and bias
 
 | Risk | What we do |
 |---|---|
-| Recency bias | Evidence covers the whole period and is shown month by month. The employee can add items from any date, like a running brag document. |
-| AI decides people's pay | The AI produces no score and no band. The manager scores every area, and the submit button stays disabled until every area has a score and at least one line of feedback. |
-| Claims nobody can check | Every claim links to its source. Uncited claims are dropped in code. |
-| Volume equals value | No counts in claims, no leaderboards, no SP/XP, and no comparison with colleagues. |
-| Low-activity roles look bad | Coverage line and "Not visible in Glideship" panels. The AI never treats missing data as low performance. |
-| Leave looks like low output | Availability is calculated from approved leave and shown; the prompt is told about it. |
-| Split identities make people look idle | Identity check at cycle open; warnings on the appraisal. |
-| Name or gender colours the summary | The model gets no personal attributes. |
-| One harsh or lenient manager | HR spread view: band distribution per manager, and per area. HR can send an appraisal back to the manager with a note. There's no forced distribution. |
-| No way to disagree | The employee can reply to the shared result. The reply is stored with the appraisal and HR sees it. |
+| Recency | Six monthly records. The summary covers all of them. |
+| Memory and thin self-evaluations | The AI draft comes first, and the employee adds to it. |
+| Self-ratings run high | Self-scores must cite evidence, and the manager sees the same evidence first. |
+| Manager rubber-stamps the self-score | Agreement rate per manager in calibration, with a flag at 100%. |
+| Manager overrules without saying why | A reason is required on every change, and the employee sees it. |
+| Rater bias | One band instead of five scores, plus a calibration view across managers. |
+| AI decides | The AI never proposes a band or a goal result. |
+| Claims you can't check | A link on every line. Uncited lines are dropped in code. |
+| Volume equals value | No counts, leaderboards, SP or XP. |
+| Leave or quiet roles | Availability and "can't see this" notes. |
+| Split accounts | Identity check and warnings. |
+| Feedback that hurts | The growth conversation is separate from the band and covers one strength and one thing to work on. |
 
 ## Privacy and access
 
-| Who | Evidence | Goals | Self-note | Manager scores and feedback | Spread view |
+| Who | Check-ins | Self-score | Manager's scores and reasons | Manager-only questions | Calibration |
 |---|---|---|---|---|---|
-| Employee | own, always | own | own | own, **after it is shared** | no |
-| Primary manager | direct reports | edit | read after submit | write | own reports only |
-| Other managers of the person | read | read | read after submit | read and comment, after manager submit | no |
-| HR (`appraisals:manage`) | all | edit | read after submit | read; send back; share | all |
+| Employee | own | own | own, **after sharing** | never | no |
+| Primary manager | reports | after submit | write | write | own team |
+| Other managers of the person | reports, read | after submit | after submit | no | no |
+| HR (`appraisals:manage`) | all | after submit | read; send back | read | all |
 | Anyone else | no | no | no | no | no |
 
-- Access is a pure function like `services/employees/access.py:access_for`, so it can be tested in
-  isolation. Not allowed means `404`, not `403`, so the API doesn't reveal that an appraisal exists.
-- Nobody scores their own appraisal, including HR and the owner.
-- **Encryption.** Goals, self-note, the employee's added items, manager feedback, comments and the
-  reply are encrypted with `core/hr_crypto.py`. The associated data is
-  `(org_id, profile_id, "appraisal", appraisal_id, area_key, field)`, so ciphertext copied to
-  another row fails to decrypt. The AI evidence is encrypted too: it is a written judgement about
-  a person, even though the facts behind it are visible in the app. Scores, statuses and dates
-  stay plain.
-- **Audit.** Reuse the append-only `employee_audit_events`, which is keyed on `profile_id` and so
-  survives account merges. Add enum values: `appraisal_viewed` (anyone other than the employee),
-  `appraisal_scored`, `appraisal_sent_back`, `appraisal_shared`, `appraisal_evidence_generated`.
-  The People "Access log" tab shows them with the rest.
-- **AI rules.** Using AI to evaluate workers is listed as high-risk under the EU AI Act, and the
-  GDPR gives people a right not to face solely automated decisions with significant effects. The
-  design keeps a human making every decision. It tells the employee that the evidence was drafted
-  by AI, stores the AI's inputs and outputs, and lets the employee add to and reply to it. This is
-  not legal advice; have counsel confirm before rolling out in the EU or UK.
-- Leave reasons, HR documents and bank or ID details are never read by this feature.
+- Access is a pure function, in the style of `services/employees/access.py:access_for`. Anything
+  denied returns `404`, so the response doesn't reveal that the record exists. Nobody scores their
+  own review, including HR and the owner.
+- **Encryption** with `core/hr_crypto.py`. Associated data is
+  `(org_id, profile_id, "appraisal", record_id, field)`. It covers AI text, employee notes,
+  manager notes, reasons, goals, manager-only notes and the reply.
+- **Audit** goes to the append-only `employee_audit_events`, which follows the profile across
+  merges. New actions: `appraisal_viewed` (anyone but the subject), `appraisal_scored`,
+  `appraisal_changed`, `appraisal_sent_back`, `appraisal_shared`, `appraisal_ai_generated`.
+- Every AI-drafted section is labelled as AI-drafted. Before rolling out in the EU or UK, have
+  counsel confirm the setup. This plan is not legal advice.
 
 ## Data model
 
-Four new tables. Area data lives in rows rather than JSON so scores can be queried for the spread
-view.
+Four tables. Every status is a Postgres enum.
 
 **`appraisal_cycles`**
-`id, org_id, name, cadence (enum), period_start, period_end, self_due, manager_due,
-status (enum appraisal_cycle_status), areas (JSONB template: key, name, weight, band
-descriptors), created_by, opened_at, closed_at`
+`id, org_id, name, period_start, period_end, self_due, manager_due,
+status (draft → active → reviewing → closed), checkin_cadence (monthly | fortnightly |
+quarterly), created_by`
 
-**`appraisals`**: one per person per cycle; unique `(cycle_id, profile_id)`
-`id, org_id, cycle_id, profile_id, manager_user_id (snapshot), status (enum appraisal_status),
-available_days, working_days, identity_warnings (JSONB), evidence_job_id,
-evidence_generated_at, evidence_model, total_score (numeric 5,2), band (smallint),
-self_submitted_at, manager_submitted_at, shared_at, acknowledged_at, reply (bytes)`
+**`appraisal_check_ins`**: unique `(profile_id, period_start)`
+`id, org_id, profile_id, cycle_id, period_start, period_end, working_days, available_days,
+identity_warnings (JSONB), ai_summary (bytes), ai_fact_refs (JSONB), ai_model, ai_generated_at,
+employee_note (bytes), manager_note (bytes), manager_user_id, status (drafted →
+employee_added → manager_replied | missed)`
 
-**`appraisal_areas`**: one per area per appraisal; unique `(appraisal_id, area_key)`
-`id, org_id, appraisal_id, area_key, name, weight (smallint), goals (bytes), evidence (bytes:
-claims + fact refs + coverage), self_note (bytes), manager_feedback (bytes), score (smallint
-0-100, nullable)`
+**`appraisals`**: unique `(cycle_id, profile_id)`
+`id, org_id, cycle_id, profile_id, manager_user_id, status (self_review → manager_review →
+calibration → shared → acknowledged), ai_half_summary (bytes), self_band, self_reason (bytes),
+self_evidence (JSONB fact refs), manager_band, manager_reason (bytes), manager_evidence (JSONB),
+final_band, ready_next_level (bool), performance_concern (bool), concern_note (bytes),
+send_back_note (bytes), growth_strength (bytes), growth_focus (bytes), reply (bytes),
+self_submitted_at, manager_submitted_at, shared_at, acknowledged_at`
 
-**`appraisal_comments`**: other managers' comments, and HR's send-back notes
-`id, org_id, appraisal_id, author_id, kind (enum: comment, send_back), body (bytes)`
+**`appraisal_goals`**
+`id, org_id, profile_id, cycle_id (nullable: a goal set in the growth conversation before the
+next cycle exists attaches when that cycle opens), position, title (bytes), measure (bytes),
+self_result (achieved | partly | not_yet), self_reason (bytes), self_evidence (JSONB),
+final_result, manager_reason (bytes)`
 
-The employee's own added items ("things Glideship missed") are part of `self_note` per area.
-They don't need their own table.
-
-Total and band are calculated in one pure function
-(`total = Σ weight × score / 100`; band from the thresholds) and stored when the manager submits,
-so later changes to the code can't change a shared result.
-
-Migrations are generated with `alembic revision --autogenerate` against a scratch database, using
-partial unique indexes only (the local Postgres is version 14).
+`final_band` and `final_result` are stored when the manager submits, so a later code change can't
+move a shared result. Migrations come from `alembic revision --autogenerate` on a scratch database,
+using partial unique indexes only (the local database is Postgres 14).
 
 ## API
 
-All routes are under `/api/v1/appraisals`, org-scoped and permission-checked in the service.
+**`/api/v1/check-ins`**
 
-| Method and path | Who | What |
-|---|---|---|
-| `GET/POST /cycles`, `PATCH /cycles/{id}` | HR | list, create, edit in draft (weights must add to 100) |
-| `GET /cycles/{id}/identity-check` | HR | unmerged accounts and unattributed PRs for people in scope |
-| `POST /cycles/{id}/open` | HR | creates appraisals, starts evidence jobs → `202` |
-| `POST /cycles/{id}/close` | HR | locks everything |
-| `GET /cycles/{id}/spread` | HR | bands per manager and per area |
-| `GET /mine`, `GET /team` | employee, manager | my appraisals; my reports' appraisals with status |
-| `GET /{id}` | per access table | the appraisal, with fields filtered by role |
-| `PUT /{id}/areas/{key}/goals` | HR, manager | set goals |
-| `POST /{id}/evidence` | HR, manager | regenerate evidence → `202` (refused after manager submit) |
-| `PUT /{id}/areas/{key}/self` and `POST /{id}/self/submit` | employee | self-note and submit |
-| `PUT /{id}/areas/{key}/score` and `POST /{id}/manager/submit` | primary manager | score, feedback, submit |
-| `POST /{id}/comments` | other managers, HR | comment or send back |
-| `POST /{id}/share`, `POST /{id}/acknowledge` | HR, employee | share; acknowledge with optional reply |
+| Route | Who |
+|---|---|
+| `GET /mine`, `GET /team` | employee, manager |
+| `GET /{id}` | per access table |
+| `PUT /{id}/employee` | employee (until it closes) |
+| `PUT /{id}/manager` | primary manager |
+| `POST /{id}/regenerate` → `202` | employee or manager, before the employee adds lines |
 
-**Notifications.** Slack DMs for "self-note open", "ready for your review", "sent back" and
-"your appraisal is shared". Each one registers a `NotificationCategory` and goes through
-`list_slack_recipients`, so people can opt out. The DM says something is waiting and never
-includes scores or text.
+**`/api/v1/appraisals`**
 
-## Backend layout
+| Route | Who |
+|---|---|
+| `GET/POST /cycles`, `PATCH /cycles/{id}` | HR |
+| `GET /cycles/{id}/identity-check` | HR |
+| `POST /cycles/{id}/activate`, `/start-review` (→ `202` summaries), `/close` | HR |
+| `GET /cycles/{id}/calibration` | HR |
+| `GET /mine`, `GET /team`, `GET /{id}` | per access table |
+| `PUT /{id}/goals` | manager, or employee and manager together in the growth conversation |
+| `PUT /{id}/self`, `POST /{id}/self/submit` | employee |
+| `PUT /{id}/manager`, `POST /{id}/manager/submit` | primary manager |
+| `POST /{id}/send-back`, `POST /{id}/share` (also bulk on the cycle) | HR |
+| `POST /{id}/acknowledge`, `PUT /{id}/growth` | employee; manager and employee |
 
-Each file stays at about 200 lines or fewer.
+**Slack DMs:** "your month is ready", "review is open", "ready for your review", "sent back" and
+"shared". Each one registers a `NotificationCategory` and goes through `list_slack_recipients`.
+DMs never include content.
+
+## Backend layout (each file about 200 lines or fewer)
 
 ```
-models/appraisal_cycle.py           cycle + enums
-models/appraisal.py                 appraisal, area, comment
-repositories/appraisal_cycle.py
-repositories/appraisal.py
-repositories/appraisal_facts.py     one query per fact source, all SQL here
-services/appraisals/template.py     default five areas, band thresholds, descriptors
-services/appraisals/access.py       pure access function
-services/appraisals/scoring.py      pure total + band
-services/appraisals/crypto.py       field encrypt/decrypt with the AAD above
-services/appraisals/identity.py     identity set + identity check
-services/appraisals/availability.py working and available days
-services/appraisals/facts.py        gather + map to areas
-services/appraisals/evidence.py     prompt, call, citation check
-services/appraisals/evidence_job.py async job handler
-services/appraisals/lifecycle.py    open, submit, send back, share, close
-services/appraisals/notify.py
-api/v1/appraisal_cycles.py
-api/v1/appraisals.py
-schemas/appraisal.py
-core/permissions_people.py          + APPRAISALS category, appraisals:manage (sensitive)
+models/appraisal_cycle.py          models/appraisal_check_in.py
+models/appraisal.py                models/appraisal_goal.py
+repositories/appraisal_cycle.py    repositories/appraisal_check_in.py
+repositories/appraisal.py          repositories/appraisal_goal.py
+repositories/work_facts.py         one query per fact source
+services/appraisals/template.py    bands, descriptors, headings
+services/appraisals/access.py      pure access function
+services/appraisals/crypto.py      field encryption with the AAD above
+services/appraisals/identity.py    identity set + identity check
+services/appraisals/availability.py
+services/appraisals/facts.py       gather + tag by heading and goal
+services/appraisals/summarise.py   prompt, call, citation check
+services/appraisals/check_in_job.py, check_in_scheduler.py, half_summary_job.py
+services/appraisals/self_review.py, manager_review.py, calibration.py, lifecycle.py, notify.py
+api/v1/check_ins.py, appraisal_cycles.py, appraisals.py
+schemas/check_in.py, schemas/appraisal.py
+core/permissions_people.py         + APPRAISALS category, appraisals:manage (sensitive)
 ```
 
 ## Screens
 
-These sit in the People workspace, next to Leave. There are four screens.
+The full mock is in the design artifact, and the outlines below match it. Everything sits under
+**People → Appraisals**, with tabs for My month, Team, Review and (for HR) Cycles.
 
-**1. Cycle setup (HR)**
-
+**1. My month (employee)**
 ```
-┌ Appraisal cycles ─────────────────────────────── [+ New cycle] ┐
-│ H2 2026   Jul 1 – Dec 31   Draft    0/27                       │
-│ H1 2026   Jan 1 – Jun 30   Closed   27/27 shared               │
-└────────────────────────────────────────────────────────────────┘
-┌ H2 2026 · Draft ───────────────────────────────────────────────┐
-│ Period [2026-07-01]–[2026-12-31]  Self-note due [01-07]        │
-│ Manager due [01-14]                                            │
-│ Area                         Weight                            │
-│ Product Goals & Quality      [25]                              │
-│ Proactiveness & Innovation   [25]                              │
-│ Team work                    [15]                              │
-│ Skill upgrade                [15]                              │
-│ Role Effectiveness           [20]       Total 100 ✓            │
-│ People 27 [edit]   Goals set 19/27 [set goals]                 │
-│ ⚠ Identity check: 3 unlinked GitHub accounts [review]          │
-│                                              [Open cycle]      │
-└────────────────────────────────────────────────────────────────┘
+┌ October 2026 · AI-drafted from Glideship · 17 of 21 days (4 leave) ┐
+│ Delivery & quality                                                 │
+│  • Shipped checkout retries to prod  [BUD-041] [PR #812]           │
+│  • Fixed 2 UAT bugs on it within a day  [BUG-310] [BUG-311]        │
+│ Team                                                               │
+│  • 5 useful reviews on payments PRs  [PR #820] [PR #826] …         │
+│ Initiative · Growth   Glideship can't see this. Add it below.      │
+├────────────────────────────────────────────────────────────────────┤
+│ Wins the system missed  [ Ran the daily suite; caught 3 regressions]│
+│ What's blocking me      [ Flaky staging DB                        ] │
+│ Next month              [ UAT automation for refunds              ] │
+│                                                         [Save]     │
+│ Ravi · Keep: catching regressions early. Try: pair on refunds UAT. │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-**2. The appraisal** (one page; the employee, the manager and HR see different parts of it)
+**2. Team (manager):** one row per report, showing the month, whether the employee added lines,
+"Reply", and any identity warning.
 
+**3. Self-review (employee)**
 ```
-┌ H2 2026 · Priya S. · Manager: Ravi K.   Status: Manager review ┐
-│ Available 98 of 124 working days (26 on leave)                 │
-│ Evidence drafted by AI from Glideship activity. It may be      │
-│ incomplete.                                                    │
-├ Product Goals & Quality · 25% ──────────── coverage: Good ─────┤
-│ Goal: automation coverage 100% dev, 80% uat/prod               │
-│   Evidence for this goal: partial                              │
-│ AI evidence                                                    │
-│  • Shipped checkout retries end to end [BUD-041] [PR #812]     │
-│  • Two UAT bugs on it, both fixed within a day [BUG-310][311]  │
-│  • Added payment-report test suite [PR #845]                   │
-│ Self-note: "Coverage is ~85% dev, 60% uat. Also ran the daily  │
-│   suite since Sept (not in Glideship)."                        │
-│ Score [ 75 ]  Band 3 · Meets always: "Delivery on time with…"  │
-│ Feedback [ Focused and dependable; push uat coverage next… ]   │
-├ Team work · 15% ─────────────── coverage: Not visible ─────────┤
-│ Glideship can't see this. Rely on the self-note and your own   │
-│ view.                                                          │
-│ …                                                              │
-├────────────────────────────────────────────────────────────────┤
-│ Total 73.0 · Band 3                    [Submit to HR]          │
-└────────────────────────────────────────────────────────────────┘
+┌ H2 2026 review · due Jan 7 ────────────────────────────────────────┐
+│ Six-month summary (AI-drafted, linked)                    [expand] │
+│ Goal 1  UAT automation 80% · test report                           │
+│   (•) Achieved ( ) Partly ( ) Not yet                              │
+│   Why [ 82% on Dec report ]   Evidence [PR #845] [+ add]           │
+│ Goal 2 …                                                           │
+│ Overall band                                                       │
+│   ( )1 Always exceeds (•)2 Exceeds most times ( )3 ( )4 ( )5       │
+│   Why [ Shipped checkout + refunds, led UAT automation… ]          │
+│   Evidence (2 needed for band 1–2)  [BUD-041] [PR #845] [+ add]    │
+│                                                      [Submit]      │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-**3. My team (manager)**: name, status, deadline, total once submitted, and a "Review" button.
+**4. Manager review**
+```
+┌ Priya S. · H2 2026 ────────────────────────────────────────────────┐
+│ Six-month summary · 6/6 check-ins · 98 of 124 days                 │
+│ Goal 1 UAT automation 80%   Priya: Achieved   [Agree] [Change]     │
+│ Goal 2 Refunds to prod      Priya: Partly     [Agree] [Change▾]    │
+│        → Achieved · Reason [ Shipped Dec 12, BUD-052 ] required    │
+│ Overall   Priya: 2 Exceeds most times         [Agree] [Change]     │
+│ Only you: Ready for next level? (Yes)(No)   Concern? (Yes)(No)     │
+│                                              [Submit to HR]        │
+└────────────────────────────────────────────────────────────────────┘
+```
 
-**4. Spread (HR)**: a table of managers × bands (counts), an average score per area, and the list
-of appraisals with "Send back" and "Share" actions.
+**5. Calibration (HR):** bands for each manager, agreement rate, list of large gaps, "Send back",
+and "Share".
 
-The UI uses `AppCallout` for the "AI-drafted" and coverage notices and `AppPillToggle` for the
-role tabs. Source chips open the BUD, PR, bug or card in a new tab.
+**6. Shared result (employee):** final band, any changes with their reason, Acknowledge with an
+optional reply, then the growth section (strength, focus, next goals).
+
+**7. Cycle setup (HR):** period, due dates, cadence, people, identity check, Activate.
+
+The UI uses `AppCallout` for the AI-drafted and "can't see this" notices and `AppPillToggle` for
+the band and goal choices. Evidence chips open their source in a new tab.
 
 ## Tests
 
 **pytest (unit)**
-- `scoring`: the spreadsheet example (75/70/75/70/75 at 25/25/15/15/20) gives 73.0 and band 3.
-  Also test the edges at 40, 41, 60, 61, 80, 81, 95 and 96, and refusal when weights don't add to
-  100.
-- `access`: the full matrix in the privacy table. Feedback is hidden from the employee before
-  share, there is no self-scoring, and a non-manager gets `404`.
-- `evidence` citation check: drops uncited claims and unknown ids; links come only from facts.
-- `availability`: holidays, half days, WFH not counted, joining or exit inside the period.
-- `crypto`: a round trip works; a blob moved to another profile or area fails to decrypt.
+- Access matrix. Manager-only questions are never returned to the employee, and manager reasons
+  are hidden until sharing.
+- Agree/change rules: a reason is required on change, and evidence is required for bands 1, 2 and
+  5. The final band is the manager's.
+- Citation check: drops uncited lines and unknown ids. Links come from facts only.
+- Availability across holidays, half days, WFH, and joining or exit mid-period.
+- Crypto: round trip works, and a blob moved to another profile or field fails.
+- Calibration maths: agreement rate, gaps of two or more bands, and the 100%-agree flag.
 
 **pytest (integration, testcontainers)**
-- Identity: a noreply account merged into a work account has its PRs show up in the evidence;
-  an unmerged one shows up in the identity check.
-- Opening a cycle creates rows only for active, in-period profiles, and starts the job (with a
-  stubbed AI provider).
-- Facts are filtered by org and period, and no other org's PRs leak in.
-- The lifecycle runs end to end, and each step writes its audit event.
+- A merged noreply account's PRs appear in the check-in. An unmerged one appears in the identity
+  check.
+- The monthly scheduler creates one check-in per active profile. It is idempotent per month, and
+  the AI is stubbed.
+- Facts stay within the org and the period.
+- The full cycle, from activation to acknowledgement, writes audit events. A goal set during the
+  growth conversation attaches to the next cycle.
 
 **Vitest**
-- The weights editor shows the total and blocks saving when it isn't 100.
-- The total and band update live as scores change.
-- Claim chips render one link per fact; "Not visible" panel for an area with no facts.
-- Manager submit stays disabled until every area has a score and feedback.
+- The check-in renders a chip per fact and the "can't see this" heading.
+- Self-review: submit is blocked for band 1 or 2 with fewer than two pieces of evidence.
+- Manager review: Change requires a reason, and Agree copies the value.
+- Calibration table: agreement rate and flags.
 
-**Playwright (`e2e/specs/appraisals.spec.ts`, plus `e2e/screens/appraisals.ts`)**
-- HR creates and opens a cycle → the employee sees the evidence and submits a self-note → the
-  manager scores and submits → HR shares → the employee sees the result and acknowledges.
-- Access: another employee and another manager get "not found" on the appraisal URL.
-- The AI provider is stubbed in the e2e stack so the run is deterministic and makes no real model
-  call.
+**Playwright (`e2e/specs/appraisals.spec.ts`, `e2e/screens/appraisals.ts`)**
+- Employee adds check-in lines → manager replies.
+- HR starts the review → employee self-scores → manager agrees with one goal and changes
+  another → HR shares → employee sees the reason and acknowledges → growth goals are set.
+- Access: another employee and another manager get "not found" on the URL.
+- The AI provider is stubbed in the e2e stack.
 
 ## Delivery
 
-One PR, built in four milestones, with a review after each:
+One PR in four milestones, with a review after each:
 
-1. Tables, cycle setup, the access function, permission, encryption and audit.
-2. Identity check, fact gathering, availability, the AI evidence job and citation check.
-3. Self-note, manager scoring, totals, send back, share, acknowledge, and notifications.
-4. Spread view, then a full walkthrough in the browser, then Playwright and a green rerun of all
-   suites.
+1. Tables, access function, permission, encryption and audit.
+2. Identity check, fact gathering, availability, the monthly AI job and the check-in screens.
+3. Cycles, goals, self-review, manager agree or change, calibration and sharing.
+4. Growth conversation and notifications, then a full browser walkthrough, Playwright, and a green
+   rerun of all suites.
 
 ## Deliberately left out
 
-- **AI scores or bands.** The AI writes evidence only (decision 1).
-- **Peer and 360 feedback.** It's a whole workflow of its own. Code reviews and shared board work
-  already give some team signal.
-- **Continuous check-ins and 1:1 notes.** The employee's "add what's missing" covers the recall
-  problem at review time.
-- **Goal tracking with progress bars or OKRs.** Goals stay free text per area.
-- **Calibration meetings and forced distribution.** HR gets a spread view and a send-back button,
-  nothing more.
-- **Pay, increments and promotions.** The band is the output; what HR does with it stays outside.
-- **Wording or tone checks on feedback.** Possibly useful later. Not needed to start.
-- **PDF export and history import.** Can follow if people ask.
-- **SP and XP as evidence.** They are game currency, not performance.
-- **Multiple scorers per person.** Only the primary manager scores.
+- **AI scores.** The AI only summarises.
+- **Weighted areas and scores out of 100.** One band plus goals is enough.
+- **Peer and 360 feedback.** Code reviews and shared board work already give some team signal.
+- **Forced distribution and stack ranking.** Calibration flags outliers and never changes bands.
+- **Pay and promotion workflow.** The band and the "ready for next level" answer go to HR, and
+  nothing else happens automatically.
+- **Wording checks on feedback, PDF export and importing the old spreadsheet.** Can follow later.
+- **SP and XP as evidence.**
+- **More than one manager scoring.**
 
 ## Sources
 
-- AI review drafting that cites in-platform evidence, leaves the rating to the manager and
-  doesn't suggest a rating:
-  https://support.cultureamp.com/en/articles/12331162-ai-coach-in-performance
-- A product in the engineering-metrics space that refuses to show individual LOC or PR throughput
-  because those metrics are "too situational":
+- Rater effects (62% rater vs 21% performance) and Deloitte's redesign, which separates pay from
+  coaching and asks leaders about their own intended actions:
+  https://edisciplinas.usp.br/pluginfile.php/4211618/mod_resource/content/1/11.%20Reinventing%20Performance%20Management%20-%20HBR.pdf
+  · https://td.org/insights/reinventing-performance-management-at-deloitte
+- Performance dropped about 10% without ratings (CEB 2016):
+  https://www.e-reward.co.uk/news/don-t-get-rid-of-the-ratings-ceb
+- Self-ratings are more lenient (d = 0.32), and agreement rises with indicators that don't depend
+  on judgement (Heidemeier and Moser, 2009):
+  https://kris.kl.ac.at/en/publications/self-other-agreement-in-job-performance-ratings-a-meta-analytic-t/
+- Over a third of feedback interventions lowered performance (Kluger and DeNisi, 1996):
+  https://cris.huji.ac.il/en/publications/the-effects-of-feedback-interventions-on-performance-a-historical/
+- Criticism, defensiveness and split roles (General Electric, 1965, via Gallup):
+  https://news.gallup.com/businessjournal/730/scrap-your-performance-appraisal-system.aspx
+- 14% say reviews inspire them to improve:
+  https://www.gallup.com/workplace/236135/why-your-performance-management-broken.aspx
+- Adobe Check-in (self-reported results):
+  https://blog.adobe.com/en/publish/2014/03/10/lessons-learned-with-check-in
+- Brag documents: https://jvns.ca/blog/brag-documents/
+- SPACE: https://queue.acm.org/detail.cfm?id=3454124 · no per-person code metrics:
   https://www.swarmia.com/blog/bringing-visibility-into-a-developers-work
-- Critique of measuring developers by effort and output, and of how measurement changes
-  behaviour: https://newsletter.pragmaticengineer.com/p/measuring-developer-productivity
-- Brag documents as a counter to forgetting your own work at review time:
-  https://jvns.ca/blog/brag-documents/
-- EU AI Act Annex III 4(b): AI used to evaluate workers' performance is high-risk:
-  https://artificialintelligenceact.eu/annex/3/
-- GDPR Article 22: human intervention, the right to express a view, and the right to contest
-  automated decisions: https://gdpr-info.eu/art-22-gdpr/
-- Calibration across managers and documented rationale (from a search summary; the page itself
-  was not opened): https://handbook.gitlab.com/handbook/people-group/talent-assessment
-- Gendered critical feedback in reviews (a small, self-selected study, reported second-hand):
-  https://www.hrreporter.com/news/hr-news/performance-review-or-personal-attack/280373
+- AI review drafting that leaves the rating to the manager:
+  https://support.cultureamp.com/en/articles/12331162-ai-coach-in-performance
+- EU AI Act Annex III: https://artificialintelligenceact.eu/annex/3/ · GDPR Article 22:
+  https://gdpr-info.eu/art-22-gdpr/
+
+Some figures come from search summaries and secondary reporting rather than the original papers:
+the 62% and 10% numbers, Adobe's attrition, and the 1965 study. Check the originals before quoting
+them outside the team.
