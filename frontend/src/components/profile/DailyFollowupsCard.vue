@@ -15,8 +15,8 @@
  -->
 
 <!--
-  The opt-in daily follow-ups DM: one Slack message a day listing the
-  signed-in person's overdue and due-soon cards and BUDs. Off by default.
+  The daily follow-ups DM: one Slack message a day listing the
+  signed-in person's overdue and due-soon cards and BUDs. On by default.
   Every change saves the whole schedule at once (optimistic, reverted on
   error), like the notification switches below it.
 -->
@@ -94,17 +94,15 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
 import type { FollowupSettings } from '@/types'
 
-type Saved = FollowupSettings & { timezone: string }
-
 const URL = '/v1/me/followups'
 const DAYS = [
   { label: 'Weekdays', value: 'weekdays' },
   { label: 'Every day', value: 'every' },
 ]
-// The browser's IANA zone, offered when nothing is saved or it differs.
+// The browser's IANA zone, offered when it differs from the one in use.
 const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 
-const form = ref<Saved | null>(null)
+const form = ref<FollowupSettings | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
@@ -118,7 +116,7 @@ const hhmm = computed(() => form.value?.send_time.slice(0, 5) ?? '')
 async function load(): Promise<void> {
   try {
     const { data } = await api.get<FollowupSettings>(URL)
-    form.value = { ...data, timezone: data.timezone ?? deviceZone }
+    form.value = data
   } catch {
     error.value = 'Could not load your follow-ups settings. Try refreshing.'
   } finally {
@@ -126,7 +124,7 @@ async function load(): Promise<void> {
   }
 }
 
-async function save(change: Partial<Saved>): Promise<void> {
+async function save(change: Partial<FollowupSettings>): Promise<void> {
   if (!form.value || saving.value) return
   const previous = form.value
   form.value = { ...previous, ...change } // optimistic
@@ -134,7 +132,7 @@ async function save(change: Partial<Saved>): Promise<void> {
   error.value = ''
   try {
     const { data } = await api.put<FollowupSettings>(URL, form.value)
-    form.value = { ...data, timezone: data.timezone ?? form.value.timezone }
+    form.value = data
   } catch {
     form.value = previous // revert
     error.value = 'Could not save that change. Please try again.'

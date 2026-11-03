@@ -25,6 +25,7 @@ from httpx import AsyncClient
 from app.models.bud import BUDStatus
 from app.models.digest_claim import DigestClaimStatus
 from app.services.followups import scheduler
+from app.services.leave.policies import ensure_default_policy
 from tests.integration.board_api_support import card_team, ok, org_of
 from tests.integration.board_notify_support import link_slack
 from tests.integration.followups_support import (
@@ -32,7 +33,7 @@ from tests.integration.followups_support import (
     capture_dms,
     due_card,
     followup_claims,
-    opt_in,
+    save_schedule,
     sections,
     target_bud,
 )
@@ -56,7 +57,7 @@ async def test_lists_overdue_today_and_coming_up_cards_and_bud_targets(
     org = await org_of(pg_session_factory, team.admin)
     ids = await link_slack(pg_session_factory, org, team.editor.id, team.viewer.id)
     ed, key = team.editor, team.key
-    await opt_in(pg_session_factory, org, ed.id)
+    await save_schedule(pg_session_factory, org, ed.id)
     late = await due_card(client, team.admin, key, "Partner link flow", "2030-03-11T08:00:00Z", ed)
     await due_card(client, team.admin, key, "Pricing page", "2030-03-13T15:00:00Z", ed)
     await due_card(client, team.admin, key, "Launch post", "2030-03-15T10:00:00Z", ed)
@@ -80,8 +81,33 @@ async def test_lists_overdue_today_and_coming_up_cards_and_bud_targets(
     assert len(texts) == 4
     context = blocks[3]["elements"][0]["text"]
     assert "Last comment" in context and "detailed email" in context
-    # The viewer didn't opt in; nothing is sent to them.
+    # The viewer has nothing due, so nothing is sent to them.
     assert dms.to(ids[team.viewer.id]) == []
+
+
+async def test_on_by_default_at_nine_in_the_leave_policy_timezone(
+    client: AsyncClient, pg_session_factory: Factory, dms: Dms
+) -> None:
+    team = await card_team(client, pg_session_factory)
+    org = await org_of(pg_session_factory, team.admin)
+    ids = await link_slack(pg_session_factory, org, team.editor.id)
+    async with pg_session_factory() as db:
+        (await ensure_default_policy(db, org)).timezone = "Asia/Kolkata"
+        await db.commit()
+    await due_card(
+        client, team.admin, team.key, "Never opened settings", AT.isoformat(), team.editor
+    )
+
+    # The settings page shows the zone it really goes out in.
+    shown = ok(await client.get("/api/v1/me/followups", headers=team.editor.headers))
+    assert shown["timezone"] == "Asia/Kolkata" and shown["send_time"] == "09:00:00"
+
+    # 09:00 UTC is 14:30 in Kolkata, past their window; 03:30 UTC is 09:00 there.
+    await scheduler.tick_once(AT)
+    assert dms.to(ids[team.editor.id]) == []
+    await scheduler.tick_once(datetime(2030, 3, 13, 3, 30, tzinfo=UTC))
+    (blocks,) = dms.to(ids[team.editor.id])
+    assert "Never opened settings" in sections(blocks)[0]
 
 
 async def test_one_dm_per_person_per_day_across_ticks_and_workers(
@@ -90,7 +116,7 @@ async def test_one_dm_per_person_per_day_across_ticks_and_workers(
     team = await card_team(client, pg_session_factory)
     org = await org_of(pg_session_factory, team.admin)
     ids = await link_slack(pg_session_factory, org, team.editor.id)
-    await opt_in(pg_session_factory, org, team.editor.id)
+    await save_schedule(pg_session_factory, org, team.editor.id)
     await due_card(client, team.admin, team.key, "Thu", "2030-03-14T12:00:00Z", team.editor)
     day = datetime(2030, 3, 14, 9, 0, tzinfo=UTC)
 
@@ -110,7 +136,7 @@ async def test_nothing_due_sends_nothing_and_is_recorded(
     team = await card_team(client, pg_session_factory)
     org = await org_of(pg_session_factory, team.admin)
     ids = await link_slack(pg_session_factory, org, team.editor.id)
-    await opt_in(pg_session_factory, org, team.editor.id)
+    await save_schedule(pg_session_factory, org, team.editor.id)
     friday = datetime(2030, 3, 15, 9, 0, tzinfo=UTC)
 
     await scheduler.tick_once(friday)
@@ -126,7 +152,7 @@ async def test_a_failed_send_is_retried_by_a_later_tick(
     team = await card_team(client, pg_session_factory)
     org = await org_of(pg_session_factory, team.admin)
     ids = await link_slack(pg_session_factory, org, team.editor.id)
-    await opt_in(pg_session_factory, org, team.editor.id)
+    await save_schedule(pg_session_factory, org, team.editor.id)
     monday = datetime(2030, 3, 18, 9, 0, tzinfo=UTC)
     await due_card(client, team.admin, team.key, "Mon", "2030-03-18T12:00:00Z", team.editor)
 

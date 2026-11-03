@@ -1228,10 +1228,10 @@ export interface NotificationPreferenceItem {
 }
 
 // Mirrors the backend FollowupSettingsRead schema (GET/PUT /v1/me/followups).
-// ``timezone`` is null when nothing is saved and no leave policy has one.
+// ``timezone`` is the saved zone, else the one the DM goes out in until one is picked.
 export interface FollowupSettings {
   enabled: boolean
   send_time: string
-  timezone: string | null
+  timezone: string
   weekdays_only: boolean
 }

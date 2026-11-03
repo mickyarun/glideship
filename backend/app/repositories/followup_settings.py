@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Who gets the daily follow-ups DM, and when each person asked for it."""
+"""Who gets the daily follow-ups DM, and when each person wants it.
+
+It's on in every org a person belongs to until they turn it off there, so a
+missing ``followup_settings`` row means on, with the default schedule.
+"""
 
 import uuid
 from collections.abc import Collection
@@ -22,65 +26,86 @@ from datetime import time
 from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
-from app.models.employee_profile import EmployeeProfile
 from app.models.followup_settings import FollowupSettings
-from app.models.leave_policy import LeavePolicy
 from app.models.organization import Organization
 from app.models.user import OrgToUser, User
+from app.repositories.followup_zone import ZoneParts, with_zone_parts
 
 
 @dataclass(frozen=True)
-class Subscriber:
-    """One opted-in, Slack-linked person and their saved schedule in one org."""
+class SubscriberRow:
+    """One Slack-linked person with the follow-ups on in one org.
+
+    ``saved_zone`` is None when they never saved a schedule there; the
+    service then works the zone out from ``zone``.
+    """
 
     org_id: uuid.UUID
     user_id: uuid.UUID
     send_time: time
-    timezone: str
     weekdays_only: bool
+    saved_zone: str | None
+    zone: ZoneParts
 
 
-async def followup_subscribers(db: AsyncSession, category: str) -> list[Subscriber]:
-    """Everyone across all orgs who turned ``category`` on and is linked to Slack.
+async def followup_subscribers(
+    db: AsyncSession, category: str, *, default_time: time
+) -> list[SubscriberRow]:
+    """Everyone across all orgs with the follow-ups on, linked to Slack.
 
     The scheduler's starting point: it works out who is due from this one
-    read before opening a session for any org. Only orgs where they turned
-    it on count, and ``category`` (opt-in) must be on too, as the sender
-    checks it.
+    read before opening a session for any org. Without a saved schedule a
+    person gets ``default_time``, weekdays only. An explicit "false" for
+    ``category`` mutes it too, as the sender checks it.
     """
-    rows = await db.execute(
+    base = (
         select(
-            FollowupSettings.org_id,
-            FollowupSettings.user_id,
-            FollowupSettings.send_time,
+            OrgToUser.org_id,
+            OrgToUser.user_id,
+            func.coalesce(FollowupSettings.send_time, default_time),
+            func.coalesce(FollowupSettings.weekdays_only, True),
             FollowupSettings.timezone,
-            FollowupSettings.weekdays_only,
         )
-        .join(User, User.id == FollowupSettings.user_id)
-        .join(
-            OrgToUser,
-            and_(OrgToUser.user_id == User.id, OrgToUser.org_id == FollowupSettings.org_id),
+        .join(User, User.id == OrgToUser.user_id)
+        .join(Organization, Organization.id == OrgToUser.org_id)
+        .outerjoin(
+            FollowupSettings,
+            and_(
+                FollowupSettings.org_id == OrgToUser.org_id,
+                FollowupSettings.user_id == OrgToUser.user_id,
+            ),
         )
-        .where(
-            FollowupSettings.enabled.is_(True),
+    )
+    stmt, zone_columns = with_zone_parts(base, OrgToUser.org_id, OrgToUser.user_id)
+    rows = await db.execute(
+        stmt.add_columns(*zone_columns).where(
+            func.coalesce(FollowupSettings.enabled, True).is_(True),
             User.is_active.is_(True),
             User.slack_id.is_not(None),
-            User.notification_prefs[category].astext == "true",
+            func.coalesce(User.notification_prefs[category].astext, "true") != "false",
         )
     )
-    return [Subscriber(*row) for row in rows.all()]
-
-
-async def enabled_anywhere(db: AsyncSession, user_id: uuid.UUID) -> bool:
-    """Whether the person has the follow-ups on in any of their orgs."""
-    found = await db.execute(
-        select(FollowupSettings.id)
-        .where(FollowupSettings.user_id == user_id, FollowupSettings.enabled.is_(True))
-        .limit(1)
-    )
-    return found.first() is not None
+    return [
+        SubscriberRow(
+            org_id=org_id,
+            user_id=user_id,
+            send_time=send_time,
+            weekdays_only=weekdays_only,
+            saved_zone=saved_zone,
+            zone=ZoneParts(own_policy, default_policy, org_config),
+        )
+        for (
+            org_id,
+            user_id,
+            send_time,
+            weekdays_only,
+            saved_zone,
+            own_policy,
+            default_policy,
+            org_config,
+        ) in rows.all()
+    ]
 
 
 class FollowupSettingsRepository:
@@ -101,17 +126,27 @@ class FollowupSettingsRepository:
         return row.scalar_one_or_none()
 
     async def weekdays_only(self, user_ids: Collection[uuid.UUID]) -> dict[uuid.UUID, bool]:
-        """Each of ``user_ids`` with the follow-ups on here, and whether it's weekdays only."""
+        """Each of ``user_ids`` with the follow-ups on here, and whether it's weekdays only.
+
+        People who never saved a schedule are on, weekdays only.
+        """
         if not user_ids:
             return {}
         rows = await self._db.execute(
-            select(FollowupSettings.user_id, FollowupSettings.weekdays_only).where(
+            select(
+                FollowupSettings.user_id, FollowupSettings.enabled, FollowupSettings.weekdays_only
+            ).where(
                 FollowupSettings.org_id == self._org,
                 FollowupSettings.user_id.in_(list(user_ids)),
-                FollowupSettings.enabled.is_(True),
             )
         )
-        return {row[0]: row[1] for row in rows.all()}
+        result = dict.fromkeys(user_ids, True)
+        for user_id, enabled, only in rows.all():
+            if enabled:
+                result[user_id] = only
+            else:
+                del result[user_id]
+        return result
 
     async def upsert(
         self,
@@ -138,20 +173,10 @@ class FollowupSettingsRepository:
             )
         )
 
-    async def policy_timezone(self, user_id: uuid.UUID) -> str | None:
-        """The person's leave policy's timezone, else the org default policy's."""
-        own = aliased(LeavePolicy)
-        default = aliased(LeavePolicy)
-        row = await self._db.execute(
-            select(own.timezone, default.timezone)
-            .select_from(Organization)
-            .outerjoin(
-                EmployeeProfile,
-                and_(EmployeeProfile.org_id == self._org, EmployeeProfile.user_id == user_id),
-            )
-            .outerjoin(own, own.id == EmployeeProfile.leave_policy_id)
-            .outerjoin(default, and_(default.org_id == self._org, default.is_default.is_(True)))
-            .where(Organization.id == self._org)
-        )
+    async def zone_parts(self, user_id: uuid.UUID) -> ZoneParts:
+        """What the person's default zone in this org is worked out from."""
+        base = select().select_from(Organization).where(Organization.id == self._org)
+        stmt, zone_columns = with_zone_parts(base, self._org, user_id)
+        row = await self._db.execute(stmt.add_columns(*zone_columns))
         found = row.first()
-        return (found[0] or found[1]) if found else None
+        return ZoneParts(*found) if found else ZoneParts(None, None, None)

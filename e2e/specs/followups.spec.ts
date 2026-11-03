@@ -20,20 +20,16 @@ function savedSchedule(page: Page) {
   return page.waitForResponse((r) => r.url().endsWith('/api/v1/me/followups') && r.request().method() === 'PUT')
 }
 
-test('the daily follow-ups start off, and a schedule set on the page is kept', async ({ signedIn, stack }) => {
+test('the daily follow-ups start on, and a schedule set on the page is kept', async ({ signedIn, stack }) => {
   const org = await stack.seedOrg({ members: [{ key: 'dev', role: 'developer' }] })
   const page = await signedIn(org.members.dev)
   await page.goto('/profile/notifications')
   const followups = page.getByRole('checkbox', { name: 'Daily follow-ups' })
-  await expect(followups).not.toBeChecked()
-  await expect(page.getByLabel('Send at')).toHaveCount(0)
-
-  let saved = savedSchedule(page)
-  await followups.check()
-  expect((await saved).ok()).toBe(true)
+  await expect(followups).toBeChecked()
 
   const sendAt = page.getByLabel('Send at')
-  saved = savedSchedule(page)
+  await expect(sendAt).toHaveValue('09:00')
+  let saved = savedSchedule(page)
   await sendAt.fill('07:30')
   await sendAt.blur()
   expect((await saved).ok()).toBe(true)
@@ -48,4 +44,11 @@ test('the daily follow-ups start off, and a schedule set on the page is kept', a
   await expect(page.getByRole('radio', { name: 'Every day' })).toHaveAttribute('aria-checked', 'true')
   // Its switch lives on its own card, not again in the list below.
   await expect(page.getByRole('checkbox', { name: 'Daily follow-ups' })).toHaveCount(1)
+
+  saved = savedSchedule(page)
+  await followups.uncheck()
+  expect((await saved).ok()).toBe(true)
+  await page.reload()
+  await expect(followups).not.toBeChecked()
+  await expect(page.getByLabel('Send at')).toHaveCount(0)
 })

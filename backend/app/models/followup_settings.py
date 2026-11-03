@@ -14,9 +14,10 @@
 
 """When one person wants their daily follow-ups DM.
 
-Whether it's on is per org, here in ``enabled``. The person's
-``daily_followups`` notification choice (opt-in) mirrors whether it's on
-in any of their orgs, so the shared recipient filter lets the DM through.
+Whether it's on is per org, here in ``enabled``. It's on by default: a
+person with no row in an org gets the DM there on the default schedule,
+so a row is only written once they change something. The column default
+is never relied on; every save writes ``enabled``.
 """
 
 import uuid

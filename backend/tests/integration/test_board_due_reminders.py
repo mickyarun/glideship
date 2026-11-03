@@ -40,7 +40,14 @@ from tests.integration.board_api_support import (
     put_role,
     stage_id,
 )
-from tests.integration.board_notify_support import Slack, fake_slack, link_slack, mute, notes
+from tests.integration.board_notify_support import (
+    Slack,
+    fake_slack,
+    link_slack,
+    mute,
+    notes,
+    without_followups,
+)
 from tests.integration.scan_features_bugs_support import Factory
 
 pytestmark = pytest.mark.integration
@@ -55,6 +62,7 @@ LATER = datetime(2030, 3, 4, 3, 1, tzinfo=UTC)
 @pytest.fixture
 def slack(monkeypatch: pytest.MonkeyPatch, pg_session_factory: Factory) -> Slack:
     monkeypatch.setattr(due_reminders, "AsyncSessionLocal", pg_session_factory)
+    without_followups(monkeypatch)
     return fake_slack(monkeypatch, pg_session_factory)
 
 

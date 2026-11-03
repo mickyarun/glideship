@@ -14,15 +14,40 @@
 
 """Whose follow-ups are due now, each in their own timezone (pure, no I/O)."""
 
-from datetime import date, datetime, timedelta
+import uuid
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 
 from app.config import settings
-from app.repositories.followup_settings import Subscriber
+from app.repositories.followup_settings import SubscriberRow
 from app.services.followups.due_state import LocalDay
+from app.services.followups.zone import default_zone
 from app.services.quiz_schedule_math import resolve_zone
 from app.services.scheduling.tick_loop import due_local_date
 
 SATURDAY = 5
+
+
+@dataclass(frozen=True)
+class Subscriber:
+    """One person with the follow-ups on in one org, and when they go out."""
+
+    org_id: uuid.UUID
+    user_id: uuid.UUID
+    send_time: time
+    timezone: str
+    weekdays_only: bool
+
+    @classmethod
+    def of(cls, row: SubscriberRow) -> "Subscriber":
+        """Their saved schedule, with the default zone where they never chose one."""
+        return cls(
+            org_id=row.org_id,
+            user_id=row.user_id,
+            send_time=row.send_time,
+            timezone=row.saved_zone or default_zone(row.zone, row.org_id),
+            weekdays_only=row.weekdays_only,
+        )
 
 
 def skips_day(weekdays_only: bool, day: date) -> bool:

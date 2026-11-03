@@ -25,13 +25,13 @@ from app.models.followup_settings import TIMEZONE_LENGTH
 class FollowupSettingsRead(BaseModel):
     """Whether the DM is on, and when it goes out.
 
-    ``timezone`` is the saved one, else the person's leave policy's; None
-    when neither exists, so the browser's own zone can be offered instead.
+    ``timezone`` is the saved one, else the one the DM goes out in until they
+    pick: their leave policy's, else the org's.
     """
 
     enabled: bool
     send_time: time
-    timezone: str | None
+    timezone: str
     weekdays_only: bool
 
 

@@ -36,7 +36,7 @@ from tests.integration.followups_support import (
     due_card,
     followup_claims,
     mandatory_holiday,
-    opt_in,
+    save_schedule,
 )
 from tests.integration.leave_support import add_request
 from tests.integration.scan_features_bugs_support import Factory
@@ -81,8 +81,8 @@ async def test_each_person_gets_it_at_their_own_local_time(
     org = await org_of(pg_session_factory, team.admin)
     ed, vw = team.editor, team.viewer
     ids = await link_slack(pg_session_factory, org, ed.id, vw.id)
-    await opt_in(pg_session_factory, org, ed.id, at=time(9, 0), zone="Asia/Kolkata")
-    await opt_in(pg_session_factory, org, vw.id, at=time(9, 0), zone="Europe/London")
+    await save_schedule(pg_session_factory, org, ed.id, at=time(9, 0), zone="Asia/Kolkata")
+    await save_schedule(pg_session_factory, org, vw.id, at=time(9, 0), zone="Europe/London")
     await due_card(client, team.admin, team.key, "Shared", "2030-03-19T20:00:00Z", ed, vw)
 
     # Tuesday 19 March, 03:30 UTC: 09:00 in Kolkata, 03:30 in London.
@@ -101,7 +101,7 @@ async def test_people_on_leave_or_a_holiday_are_skipped_but_wfh_is_not(
     ed, vw, admin = team.editor, team.viewer, team.admin
     ids = await link_slack(pg_session_factory, org, ed.id, vw.id, admin.id)
     for who in (ed, vw, admin):
-        await opt_in(pg_session_factory, org, who.id)
+        await save_schedule(pg_session_factory, org, who.id)
     await due_card(client, admin, team.key, "Everyone", "2030-03-20T12:00:00Z", ed, vw, admin)
     wednesday = date(2030, 3, 20)
     await add_request(pg_session_factory, org, ed.id, wednesday, wednesday, "1")
@@ -127,7 +127,7 @@ async def test_people_on_leave_or_a_holiday_are_skipped_but_wfh_is_not(
     assert len(dms.to(ids[vw.id])) == 2 and len(dms.to(ids[admin.id])) == 2
 
 
-async def test_opted_in_people_get_cards_here_not_in_the_card_reminder(
+async def test_cards_go_in_the_followups_not_the_card_reminder_unless_turned_off(
     client: AsyncClient, pg_session_factory: Factory, dms: Dms
 ) -> None:
     team = await card_team(client, pg_session_factory)
@@ -135,10 +135,11 @@ async def test_opted_in_people_get_cards_here_not_in_the_card_reminder(
     config = await _card_reminder_org(pg_session_factory, org)
     ed, vw = team.editor, team.viewer
     ids = await link_slack(pg_session_factory, org, ed.id, vw.id)
-    await opt_in(pg_session_factory, org, ed.id)
+    await save_schedule(pg_session_factory, org, vw.id, enabled=False)
     await due_card(client, team.admin, team.key, "Overdue", "2030-03-01T10:00:00Z", ed, vw)
 
-    # Monday 08:30 in Kolkata: follow-ups go out today, so no card DM for the editor.
+    # Monday 08:30 in Kolkata: the editor's follow-ups (on by default) go out
+    # today, so no card DM for them; the viewer turned them off, so they get one.
     await due_reminders.org_pass(config, datetime(2030, 3, 4, 3, 0, tzinfo=UTC))
     assert dms.to(ids[ed.id]) == [] and len(dms.to(ids[vw.id])) == 1
 
