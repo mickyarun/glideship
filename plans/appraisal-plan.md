@@ -27,7 +27,7 @@ This plan replaces the spreadsheet format. It does not copy it.
 | Self-ratings run higher than manager ratings (d = 0.32). They agree more when both sides look at the same performance indicators that don't depend on judgement (Heidemeier and Moser, 128 samples). | The employee self-scores, but has to point at evidence, and the manager sees the same evidence. |
 | Over a third of feedback interventions lowered performance, mostly when the feedback was about the person and not the task (Kluger and DeNisi, 607 effects). | Feedback is about the work and what to do next. |
 | Criticism in an appraisal made people defensive, and their performance dropped (General Electric, 1965). Deloitte keeps pay decisions apart from coaching. | Keep the decision and the growth conversation separate. |
-| 14% of employees say reviews inspire them to improve (Gallup). Adobe's ongoing check-ins came with lower voluntary attrition (Adobe's own figures). | Talk briefly every month instead of once a half from memory. |
+| 14% of employees say reviews inspire them to improve (Gallup). Adobe's ongoing check-ins came with lower voluntary attrition (Adobe's own figures). | Talk briefly every month instead of once a half or a year from memory. |
 | Specific, measurable goals lead to better performance than "do your best" (Locke and Latham, 35 years of studies). | Every goal, including AI suggestions, is an outcome plus a measure and where the measure comes from. |
 | People forget their own work, which is why people keep brag documents. | Glideship keeps that record for them automatically. |
 | No single metric captures productivity (SPACE). Engineering-metrics vendors refuse to show per-person PR counts. | Show the work, never counts or scores. |
@@ -39,21 +39,22 @@ Every month the AI drafts "your month" from Glideship, with a link on every line
 adds a few lines and links. The manager gives feedback every month or every quarter, as the org
 chooses, with a due date and Slack reminders. People outside engineering (HR, support, SEO,
 compliance and others) are tracked through their board work, their own linked evidence, and a
-monthly value for each goal's measure. At the end of the half, the employee scores
+monthly value for each goal's measure. At the end of each review period (a quarter, half or
+year, set in org settings), the employee scores
 themself: each goal as achieved, partly or not yet, plus an overall band, each with a reason and
 evidence. The manager agrees with each score in one click, or changes it and writes why. HR checks
 the spread across managers and shares the results. Then the manager and the employee have a
-separate growth conversation and set next half's goals, starting from AI-suggested goals for
+separate growth conversation and set next period's goals, starting from AI-suggested goals for
 their role. A short guide explains the whole thing the first time anyone opens it.
 
 ```
-Every month                          End of each half
+Every month                          End of each review period (quarter, half or year)
 ───────────                          ────────────────
 AI drafts "your month"  ─┐           Employee: score each goal + overall band, with evidence
 Employee adds lines,     │           Manager: agree, or change it and say why
   links, goal values     ├─ record ─► HR: calibrate, share
 Manager feedback         │           Manager + employee: growth conversation,
-  (monthly or quarterly, ┘             next half's goals from AI suggestions
+  (monthly or quarterly, ┘             next period's goals from AI suggestions
    due date + reminders)
 ```
 
@@ -61,8 +62,9 @@ Manager feedback         │           Manager + employee: growth conversation,
 
 | # | Question | Recommendation |
 |---|---|---|
+| 0 | Review period | **Org setting: quarterly, half-yearly or yearly**, default quarterly, which is how you run today. Goals, self-score, manager review, calibration and the growth conversation all happen once per period. |
 | 1 | Check-in cadence | **Monthly.** The org can set it to quarterly. A missed check-in is shown as missed and never blocks anything. |
-| 1b | Manager feedback cadence | **Org setting: monthly or quarterly**, default quarterly. Quarterly suits managers with large teams; monthly suits small ones. It can't be more often than check-ins. |
+| 1b | Manager feedback cadence | **Org setting: monthly, quarterly or off.** It must come more often than reviews and no more often than check-ins, so with quarterly reviews it is monthly (the default) or off. |
 | 2 | Band scale | **Keep your 1–5 labels**, 1 = Always exceeds and 5 = Does not meet, so HR's pay mapping still works. Show the label first and the number second. |
 | 3 | Must the manager give a reason when they change a score? | **Yes**, one line. The employee sees it once the review is shared. |
 | 4 | Must a band 1 or 2 cite evidence? | **Yes**, for both the employee and the manager. Band 5 from the manager needs evidence or a written reason too. |
@@ -105,8 +107,8 @@ the switch is not on teams.
 | Step | With AI | Manual |
 |---|---|---|
 | Monthly check-in | AI lines on top of the fact list | "Your work in Glideship": the fact list as plain chips grouped by source. The employee tags each to a heading or goal. Text boxes, links and goal values are the same. |
-| Self-review summary | AI six-month summary | An evidence timeline: each month's facts, the employee's lines, goal values, and per goal "N items you tagged". |
-| Goals | AI suggestions plus the role library | Pick from the role library, carry over last half's goals, or write your own. |
+| Self-review summary | AI period summary | An evidence timeline: each month's facts, the employee's lines, goal values, and per goal "N items you tagged". |
+| Goals | AI suggestions plus the role library | Pick from the role library, carry over last period's goals, or write your own. |
 | Feedback, scoring, calibration, sharing | Already manual | No change |
 
 **When the AI fails partway through a cycle.** The check-in row and its fact list are written in
@@ -117,6 +119,11 @@ summary is in.
 
 ## Monthly check-in
 
+**The period's goals sit at the top** of every check-in: each goal, how you'll know, when and
+with whom it was agreed (in the last growth conversation), a box for this month's value where the
+goal has a number, and a link to how goals are set. So nothing later on the page refers to a goal
+the person hasn't just seen.
+
 **What Glideship lists** (first working day of the month, for the month before; in every mode):
 
 - The fact list: cards completed, bugs reported or fixed, BUDs and PRs, as chips grouped by
@@ -126,8 +133,11 @@ summary is in.
   leave and the holidays and working days on the person's leave policy (the org default if none).
 
 **What the AI adds** (AI mode only): up to six lines under the four headings, each citing facts
-from the list. Under any heading with nothing in it: "Glideship can't see this. Add it below if
-it matters."
+from the list.
+
+**Empty headings** (every mode): a heading with nothing in it says "Glideship has nothing here this
+month. Anything worth recording?" with **Add a line** and **Add a link** right under it, so the
+person adds it in place instead of hunting for a box further down the page.
 
 **What the employee adds** (all optional):
 
@@ -138,41 +148,48 @@ it matters."
   and an optional heading or goal. These show as "added by you", not "from Glideship".
 - Goal values: for each goal with a number in its measure, this month's value and where it came
   from (for example "CSAT 4.6 · helpdesk report link").
-- Tags: any fact or link can be tagged to a heading or goal. In manual mode this is how the
+- "Counts towards": each fact or link has one picker listing the goals first, then "No goal ·
+  <heading>". Work that isn't for a goal still counts, under its heading. (This replaces the
+  separate tag field.) In manual mode this is how the
   evidence timeline groups things; in AI mode it overrides the AI's grouping.
 
 The manager's reply is no longer part of the check-in. It moves to manager feedback (below), which
 runs monthly or quarterly. The check-in closes when the next one opens. Nothing is ever scored.
 
-What this fixes: by the end of the half, the review has six months of linked, dated evidence plus
+What this fixes: by the end of the period, the review has every month of linked, dated evidence plus
 the employee's own words. The record holds the detail, so nobody needs to remember it, and
 "Doing my best" has no room to appear.
 
-## Manager feedback: monthly or quarterly
+## Manager feedback: monthly, quarterly or off
 
 The org picks one cadence per cycle (decision 1b).
 
 - **Monthly:** for each check-in, the manager writes one line to keep doing and one to try next.
 - **Quarterly:** at the end of each quarter, the manager reads that quarter's three check-ins and
   writes the keep and try lines, plus a status for each goal: On track, At risk or Off track, with
-  an optional note. There is no band. The quarter that ends a half is covered by the half-year
-  review instead, so a half has one quarterly feedback and one review.
+  an optional note. There is no band. A feedback period that ends on the review period's last
+  day is covered by the review instead. With half-yearly reviews that means one quarterly
+  feedback and one review per period.
+- **Off:** only allowed with quarterly reviews, where the review itself comes every quarter.
+
+Feedback must come more often than reviews: with quarterly reviews it is monthly or off; with
+half-yearly or yearly reviews it is monthly or quarterly.
 
 Either way, the feedback item opens on the first working day after the period ends and is due a
 set number of days later (default 10). The employee sees it as soon as the manager saves it. A
 feedback item the manager never writes stays "not done" in the Team tab and in calibration, and
-it never blocks the half-year review.
+it never blocks the period review.
 
 Each feedback item snapshots its manager. If the primary manager changes mid-cycle, open items
 move to the new manager and finished ones stay with the old one.
 
-Goal statuses are the manager's view only during the half. They don't decide the goal result at
+Goal statuses are the manager's view only during the period. They don't decide the goal result at
 the end; the employee still self-scores and the manager agrees or changes.
 
 ## Due dates and Slack reminders
 
 Every piece of work with an owner has a due date: the employee's self-score, the manager's
-feedback, the manager's half-year review, and the acknowledgement. One reminder engine handles
+feedback, the manager's period review, and the acknowledgement. One reminder engine handles
 all of them.
 
 **Default schedule** (org settings, in working days on the recipient's leave policy):
@@ -191,7 +208,7 @@ all of them.
   unique per org, kind, user and day), which already handles retries, restarts and a second
   instance.
 - The same schedule runs for the employee's self-score ("Your H2 review is due Wed 7 Jan") and
-  the manager's half-year review.
+  the manager's period review.
 - DMs carry counts and dates only, never names of reports, bands or notes.
 - Two separate ticks. The **creation tick** (check-ins, feedback items, fact lists) runs for every
   org, because the leave digest scheduler only visits orgs with Slack connected and appraisals
@@ -204,11 +221,26 @@ all of them.
 
 ## Configuration
 
-HR sets these when creating a cycle. Defaults come from the org's last cycle.
+**Org settings** (People → Settings → Appraisals, `appraisals:manage`). Stored in
+`config["appraisals"]` and read and written only by `services/appraisals/settings.py`. Each new
+cycle copies them, so changing a setting never moves a running cycle.
 
 | Setting | Options | Default |
 |---|---|---|
-| Period | start and end date | the next half |
+| Review period | quarterly, half-yearly, yearly | quarterly |
+| Check-ins | monthly, quarterly (quarterly only with half-yearly or yearly reviews) | monthly |
+| Manager feedback | monthly, quarterly, off (see the feedback rules above) | monthly |
+| AI drafting | on, off | on if a provider is connected |
+| Reminder offsets and HR overdue list | as in the reminder table | -3, 0, +2, HR at +3 |
+| Due days | self-score and manager review, days after the period ends | 7 and 14 |
+| Suggested goals when a cycle opens | on, off | off |
+
+**Cycle settings.** HR sets these when creating a cycle; everything above is prefilled from the
+org settings and can be changed for that one cycle.
+
+| Setting | Options | Default |
+|---|---|---|
+| Period | start and end date | the next quarter, half or year after the last cycle |
 | Check-ins | monthly, quarterly | monthly |
 | Manager feedback | monthly, quarterly (not more often than check-ins) | quarterly |
 | Feedback due | days after the period ends | 10 |
@@ -224,7 +256,7 @@ HR sets these when creating a cycle. Defaults come from the org's last cycle.
 - Activating a cycle creates an `appraisals` row with status `enrolled` for every active profile
   in scope that has a primary manager.
 - Someone who joins mid-cycle is enrolled if they join before the cycle's enrolment cut-off
-  (default: two months before the end). After that they start in the next cycle.
+  (default: a third of the way through the period, so about a month into a quarter). After that they start in the next cycle.
 - Someone who moves to `on_notice` or `exited` is set to `withdrawn`. Their check-ins stay.
 - A person can't be in two overlapping cycles. The service checks this under a row lock, because
   an exclusion constraint on date ranges would need the `btree_gist` extension.
@@ -232,16 +264,16 @@ HR sets these when creating a cycle. Defaults come from the org's last cycle.
   that holds a user id: `manager_user_id`, `accepted_by`, `added_by`, `reported_by`, and the
   reminder claims.
 
-## Half-year review
+## End-of-period review
 
 ### Goals
 
-Two or three goals per person per half. Each goal is an outcome plus how you'll know you hit it,
+Two or three goals per person per period. Each goal is an outcome plus how you'll know you hit it,
 for example "UAT automation coverage 80% · measured from the test report".
 
-Goals are set in the growth conversation at the end of the previous half, or by the manager when a
+Goals are set in the growth conversation at the end of the previous period, or by the manager when a
 cycle opens, starting from the AI suggestions below or, in manual mode, from the role library and
-last half's goals. While the cycle runs, each monthly
+last period's goals. While the cycle runs, each monthly
 summary tags the facts that relate to a goal, and the employee records a value for any goal with
 a number in its measure.
 
@@ -251,13 +283,13 @@ When a cycle opens (or on request, for one person or everyone), a job suggests t
 per person. The input is:
 
 - the person's role template: its goal library and what counts as evidence for that role,
-- last half's goals and results, and the "one thing to work on" from the growth conversation,
+- last period's goals and results, and the "one thing to work on" from the growth conversation,
 - the latest manager feedback: the "try next" line, and any goal marked At risk or Off track,
-- the person's own check-ins from last half, including what was blocking them,
+- the person's own check-ins from last period, including what was blocking them,
 - the role template's market trends (below).
 
 Each suggestion carries a badge for where it came from: **From your feedback**, **From last
-half**, **From what's blocking you**, **Market trend** or **Role library**, and a "why" line
+period**, **From what's blocking you**, **Market trend** or **Role library**, and a "why" line
 that cites the check-in, feedback item or trend it rests on.
 
 ### Market trends per role
@@ -265,7 +297,7 @@ that cites the check-in, feedback item or trend it rests on.
 Each role template has a short "What's changing in this role" list: three to six items, each a
 sentence, a source link and a date (for QA, something like "teams are moving routine regression
 checks to AI-assisted test generation"). Suggestions may cite them, so a goal can point
-somewhere new instead of only repeating last half.
+somewhere new instead of only repeating last period.
 
 - **Refreshing them.** Once per cycle, HR can ask the AI to draft an updated list for a template.
   The run uses the provider's web search where the org's provider has it, and every item must
@@ -282,12 +314,12 @@ response under 4 hours on 90% of tickets · helpdesk weekly report". Rules:
 
 - Suggestions are labelled AI-suggested and stay suggestions until the employee or the manager
   accepts one, edits it or dismisses it. Accepting is a person's act and is audited.
-- At most three goals can be accepted per half.
+- At most three goals can be accepted per period.
 - The prompt gets no name, age, gender or office, and never compares the person with colleagues.
-- A suggestion built on last half's facts cites them, using the same citation check as the
+- A suggestion built on last period's facts cites them, using the same citation check as the
   summaries. A suggestion taken straight from the role library says so.
 - If the person has no history (a new joiner), suggestions come from the role library only.
-- In manual mode there are no suggestions. The goal picker offers the role library, last half's
+- In manual mode there are no suggestions. The goal picker offers the role library, last period's
   goals to carry over, and "Write my own".
 - Suggesting for everyone runs as a database-backed sweep, not through the in-memory job queue
   (see "Running the AI").
@@ -304,7 +336,7 @@ The employee fills in:
 - **Overall band:** pick 1 to 5 from the descriptors, write why in up to three lines, and attach
   evidence. Bands 1 and 2 need at least two pieces of evidence.
 
-The six-month summary (AI) or evidence timeline (manual) is shown above the form. The employee writes after reading it.
+The period summary (AI) or evidence timeline (manual) is shown above the form. The employee writes after reading it.
 
 ### Manager: agree or change
 
@@ -345,11 +377,11 @@ The growth conversation is a separate section, opened after sharing:
 
 - one strength to use more,
 - one thing to work on,
-- next half's two or three goals.
+- next period's two or three goals.
 
 No band is shown on this screen.
 
-## The six-month summary
+## The period summary
 
 **Evidence timeline (every mode).** Each month's fact list, the employee's lines, links and goal
 values, in order, with a section per goal listing what was tagged to it. This is built without AI
@@ -418,7 +450,7 @@ because they are game currency, not performance.
 
 - All runs go through `services/ai_runner` (`run_agent_for_org_id`), which covers every provider
   the org may use and its capability gate.
-- The in-memory job queue holds 50 jobs and loses them on restart, so monthly drafts, half-year
+- The in-memory job queue holds 50 jobs and loses them on restart, so monthly drafts, period
   summaries and whole-org goal suggestions don't use it. Each row carries `draft_status` (`none |
   pending | ready | failed`), `draft_attempts`, `draft_error` and `draft_claimed_at`. A sweeper
   claims pending rows with limited concurrency.
@@ -493,7 +525,8 @@ the identity check lists them so HR can pick one.
 The first time someone opens **People → Appraisals**, they get a one-page guide. After that it is
 one click away ("How this works") on every screen. There is one version per audience:
 
-- **Everyone:** the year at a glance (monthly check-ins, quarterly feedback, the half-year review,
+- **Everyone:** the review period at a glance, worded from the org's settings (for example
+  monthly check-ins and feedback, a review every quarter,
   the growth conversation), what the AI does and doesn't do, the five bands with their
   descriptors, and who sees what.
 - **Employees:** how to write a good check-in line, with a thin and a good example side by side
@@ -510,7 +543,7 @@ as plain text files, one per audience, so it can be edited without a migration.
 
 | Risk | What we do |
 |---|---|
-| Recency | Six monthly records. The summary covers all of them. |
+| Recency | A monthly record for the whole period. The summary covers all of them. |
 | Memory and thin self-evaluations | The AI draft comes first, and the employee adds to it. |
 | Self-ratings run high | Self-scores must cite evidence, and the manager sees the same evidence first. |
 | Manager rubber-stamps the self-score | Agreement rate per manager in calibration, with a flag at 100%. |
@@ -566,10 +599,11 @@ Eight tables. Every status and option is a Postgres enum.
 
 **`appraisal_cycles`**
 `id, org_id, name, period_start, period_end, self_due, manager_due,
-status (draft → active → reviewing → closed), checkin_cadence (monthly | quarterly),
-feedback_cadence (monthly | quarterly), feedback_due_days, reminder_offsets (int[]),
+status (draft → active → reviewing → closed), review_period (quarterly | half_yearly | yearly),
+checkin_cadence (monthly | quarterly), feedback_cadence (monthly | quarterly | off), feedback_due_days, reminder_offsets (int[]),
 overdue_nudge (bool), hr_overdue_list (bool), suggest_goals_on_open (bool), ai_drafting (bool),
-enrolment_cutoff (date), intro_note (bytes), created_by`. A check constraint keeps feedback no more often than check-ins.
+enrolment_cutoff (date), intro_note (bytes), created_by`. All copied from the org settings at creation. Check constraints keep feedback no more
+often than check-ins and more often than reviews, and allow `off` only with quarterly reviews.
 
 **`appraisal_check_ins`**: unique `(profile_id, period_start)`
 `id, org_id, profile_id, cycle_id, period_start, period_end, working_days, available_days,
@@ -581,7 +615,7 @@ employee_note (bytes), status (open → employee_added | missed)`
 **`appraisals`**: unique `(cycle_id, profile_id)`
 `id, org_id, cycle_id, profile_id, manager_user_id, role_template_id, drafting_mode (ai | manual),
 status (enrolled → self_review → manager_review → calibration → shared → acknowledged, or
-withdrawn), ai_half_summary (bytes, nullable), half_summary_status (none | pending | ready |
+withdrawn), ai_period_summary (bytes, nullable), period_summary_status (none | pending | ready |
 failed), self_band, self_reason (bytes),
 self_evidence (JSONB fact refs), manager_band, manager_reason (bytes), manager_evidence (JSONB),
 final_band, ready_next_level (bool), performance_concern (bool), concern_note (bytes),
@@ -593,11 +627,11 @@ self_submitted_at, manager_submitted_at, shared_at, acknowledged_at`
 next cycle exists attaches when that cycle opens), target_period_start, position, title (bytes), measure (bytes),
 self_result (achieved | partly | not_yet), self_reason (bytes), self_evidence (JSONB),
 final_result, manager_reason (bytes), origin (manual | ai_suggested | role_library),
-status (suggested → accepted | dismissed), suggestion_basis (enum: feedback | last_half | blocker |
+status (suggested → accepted | dismissed), suggestion_basis (enum: feedback | last_period | blocker |
 trend | role_library), suggestion_refs (JSONB, including the trends version), original (JSONB: the
 suggestion before edits), dismiss_reason (bytes), accepted_by, accepted_at`. Partial unique index
 on `(profile_id, cycle_id, position) WHERE status = 'accepted'`.
-Only accepted goals count towards the three-per-half limit and appear in the review.
+Only accepted goals count towards the three-per-period limit and appear in the review.
 
 **`appraisal_manager_feedback`**: unique `(profile_id, period_start)`
 `id, org_id, cycle_id, profile_id, manager_user_id (snapshot; moves to a new manager while open),
@@ -652,6 +686,7 @@ using partial unique indexes only (the local database is Postgres 14).
 
 | Route | Who |
 |---|---|
+| `GET/PUT /settings` (org appraisal settings) | HR |
 | `GET/POST /cycles`, `PATCH /cycles/{id}` | HR |
 | `GET /cycles/{id}/identity-check` | HR |
 | `POST /cycles/{id}/activate`, `/start-review` (→ `202` summaries), `/close` | HR |
@@ -699,7 +734,7 @@ services/appraisals/settings.py    config["appraisals"] read/write, one owner
 services/appraisals/draft_sweeper.py claims pending drafts, limited concurrency, retry rules
 services/appraisals/timeline.py    evidence timeline (no AI)
 services/appraisals/enrolment.py   enrol, withdraw, mid-cycle joiners, overlap check
-services/appraisals/check_in_job.py, check_in_scheduler.py, half_summary_job.py
+services/appraisals/check_in_job.py, check_in_scheduler.py, period_summary_job.py
 services/appraisals/self_review.py, manager_review.py, calibration.py, lifecycle.py, notify.py
 services/appraisals/feedback.py    open feedback items per cadence, done rules
 services/appraisals/reminders.py   pure: (today, items, schedule, holidays) → reminders due
@@ -727,7 +762,7 @@ The full mock is in the design artifact, and the outlines below match it. Everyt
 │  • Fixed 2 UAT bugs on it within a day  [BUG-310] [BUG-311]        │
 │ Team                                                               │
 │  • 5 useful reviews on payments PRs  [PR #820] [PR #826] …         │
-│ Initiative · Growth   Glideship can't see this. Add it below.      │
+│ Initiative · Growth   Nothing here. [+ Add a line] [+ Add a link]  │
 ├────────────────────────────────────────────────────────────────────┤
 │ Wins the system missed  [ Ran the daily suite; caught 3 regressions]│
 │ What's blocking me      [ Flaky staging DB                        ] │
@@ -753,8 +788,8 @@ added lines, feedback due date and status, and any identity warning. For quarter
 
 **3. Self-review (employee)**
 ```
-┌ H2 2026 review · due Jan 7 ────────────────────────────────────────┐
-│ Six-month summary (AI-drafted, linked)                    [expand] │
+┌ Q4 2026 review · due Jan 7 ────────────────────────────────────────┐
+│ Period summary (AI-drafted, linked)                       [expand] │
 │ Goal 1  UAT automation 80% · test report                           │
 │   (•) Achieved ( ) Partly ( ) Not yet                              │
 │   Why [ 82% on Dec report ]   Evidence [PR #845] [+ add]           │
@@ -769,8 +804,8 @@ added lines, feedback due date and status, and any identity warning. For quarter
 
 **4. Manager review**
 ```
-┌ Priya S. · H2 2026 ────────────────────────────────────────────────┐
-│ Six-month summary · 6/6 check-ins · 98 of 124 days                 │
+┌ Priya S. · Q4 2026 ────────────────────────────────────────────────┐
+│ Period summary · 3/3 check-ins · 49 of 62 days                     │
 │ Goal 1 UAT automation 80%   Priya: Achieved   [Agree] [Change]     │
 │ Goal 2 Refunds to prod      Priya: Partly     [Agree] [Change▾]    │
 │        → Achieved · Reason [ Shipped Dec 12, BUD-052 ] required    │
@@ -798,7 +833,7 @@ means for the role, which fact sources apply, and its goal library.
 
 **10. Suggested goals (employee and manager, in the growth conversation):** three to five
 AI-suggested goals, each with measure, source and "why this" citations, and Accept, Edit or
-Dismiss. Accepted goals fill the "next half's goals" list.
+Dismiss. Accepted goals fill the "next period's goals" list.
 
 **11. My month for a role outside engineering:** the same screen as 1, with board cards and Slack
 intake bugs from Glideship, the person's own links labelled "added by you", and a goal values
@@ -807,6 +842,9 @@ section.
 **12. Manual mode (any role):** the check-in shows "Your work in Glideship" as plain chips with
 tag pickers and the same text boxes, with a callout that nothing on the page is AI-written. The
 self-review shows the evidence timeline instead of the AI summary.
+
+**14. Org settings (HR):** review period, check-in and feedback cadence with the allowed
+combinations, AI drafting, due days and reminder offsets, and a preview of the year it produces.
 
 **13. Cycle readiness and progress (HR):** AI ready or manual, people without a primary manager or
 role template, identity warnings, and during the cycle who's done and who's overdue.
@@ -829,8 +867,9 @@ the band and goal choices. Evidence chips open their source in a new tab.
 - Reminder schedule, as a pure function: offsets in working days skip weekends and the
   leave policy's holidays; nothing is sent once an item is done; one reminder per user per key; one DM covers
   all of a manager's reports; HR's overdue list only after its offset.
-- Feedback cadence: quarterly feedback skips the quarter that ends a half; a feedback cadence
-  more frequent than check-ins is rejected.
+- Cadence rules: feedback ending on the review's last day is skipped; feedback must be more
+  frequent than reviews and no more frequent than check-ins; "off" only with quarterly reviews;
+  a running cycle keeps its copied settings when the org settings change.
 - Trends: items without a source link are dropped; unapproved drafts never reach suggestions;
   each suggestion records the trends version; at-risk goals and the "try next" line from the
   latest feedback appear in the suggestion input.
@@ -897,7 +936,7 @@ One PR in six milestones, with a review after each:
 2. Role templates and their seed, drafting-mode switches, enrolment, identity check, fact
    gathering (including board cards and HR facts), availability, the creation tick, links, tags,
    goal values and the check-in screens in manual mode. Manual mode ships first.
-3. The AI draft on top: sweeper, retry rules, the AI check-in lines and the six-month summary.
+3. The AI draft on top: sweeper, retry rules, the AI check-in lines and the period summary.
 4. Cycle setup with readiness, cadence settings, manager feedback, the reminder engine and Slack DMs, and the
    intro guide.
 5. Goals (role library, carry-over, AI suggestions), self-review, manager agree or change, calibration and sharing.
