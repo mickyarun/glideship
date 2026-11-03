@@ -66,7 +66,7 @@ Manager feedback         │           Manager + employee: growth conversation,
 | 2 | Band scale | **Keep your 1–5 labels**, 1 = Always exceeds and 5 = Does not meet, so HR's pay mapping still works. Show the label first and the number second. |
 | 3 | Must the manager give a reason when they change a score? | **Yes**, one line. The employee sees it once the review is shared. |
 | 4 | Must a band 1 or 2 cite evidence? | **Yes**, for both the employee and the manager. Band 5 from the manager needs evidence or a written reason too. |
-| 5 | Who scores when someone has several managers? | The **primary** manager, snapshotted when the cycle opens. The others can read. |
+| 5 | Who scores when someone has several managers? | The **primary** manager, snapshotted when the cycle opens. The others can read. Nobody without a primary manager can be enrolled; the cycle's readiness check lists them for HR. |
 | 6 | Encryption | **Yes.** Notes, reasons and AI text use the HR key, bound to `profile_id`. Bands and goal results stay plain, so the spread view works. |
 | 7 | Does HR still need a number out of 100 for pay? | **No**, use the band. If you must have one, map each band to a fixed number rather than asking anyone to type one in. |
 | 8 | What happens to the five areas? | They become **four headings** that group the monthly summary: Delivery & quality, Initiative, Team, Growth. Nobody scores them and they have no weights. |
@@ -74,15 +74,60 @@ Manager feedback         │           Manager + employee: growth conversation,
 | 10 | Evidence for roles outside engineering | **Board cards, linked evidence and monthly goal values**, each labelled with where it came from. No helpdesk or analytics connectors in the first version. |
 | 11 | Suggested goals | **The AI suggests, people choose.** HR can generate suggestions for everyone when a cycle opens. Nothing becomes a goal until the employee or manager accepts it. |
 | 12 | Role templates | **Seed ten** (Engineering, QA, Product, Design, HR, Support, SEO & content, Compliance, Sales, Finance & ops). HR edits them and matches them to departments and designations. |
+| 13 | AI or manual | **Both, and manual is a full path, not a fallback.** An org switch, a cycle switch and a role-template switch decide it; any one set to manual wins. Teams that only use boards get the manual path. |
+
+## AI or manual
+
+Some teams use Glideship only for boards, and some orgs won't connect an AI provider at all. For
+them every step must work with no AI. The design therefore separates two things that the earlier
+draft mixed up:
+
+- **The fact list** is plain data: the cards, bugs, BUDs and PRs Glideship recorded for the
+  person in the period. It is gathered by SQL, saved on the check-in, and shown in every mode.
+- **The AI draft** is optional prose written on top of the fact list. It can be off, pending,
+  ready or failed, and the page works the same in every state.
+
+**Where the switch lives** (any one set to manual wins; the result is saved on each appraisal as
+`drafting_mode` when the cycle opens):
+
+1. Org: `config["appraisals"].ai_enabled`, read and written only by its own settings module, the
+   same way `services/delivery_settings.py` handles Delivery AI.
+2. Cycle: `appraisal_cycles.ai_drafting`. Cycle setup runs `check_provider_connection()` and shows
+   whether AI is ready before HR picks.
+3. Role template: `appraisal_role_templates.ai_drafting`, off by default for templates whose work
+   is mostly on boards (Sales, Finance & ops, HR) and editable by HR.
+
+Teams in Glideship are engineering and repository groupings and a person can be in several, so
+the switch is not on teams.
+
+**What replaces each AI step:**
+
+| Step | With AI | Manual |
+|---|---|---|
+| Monthly check-in | AI lines on top of the fact list | "Your work in Glideship": the fact list as plain chips grouped by source. The employee tags each to a heading or goal. Text boxes, links and goal values are the same. |
+| Self-review summary | AI six-month summary | An evidence timeline: each month's facts, the employee's lines, goal values, and per goal "N items you tagged". |
+| Goals | AI suggestions plus the role library | Pick from the role library, carry over last half's goals, or write your own. |
+| Feedback, scoring, calibration, sharing | Already manual | No change |
+
+**When the AI fails partway through a cycle.** The check-in row and its fact list are written in
+one transaction before any AI call. A failed or pending draft shows the manual view with a
+callout ("The AI summary isn't available; your work is listed below"). A late result fills only
+the AI text and never touches what the employee wrote. The self-review opens whatever state the
+summary is in.
 
 ## Monthly check-in
 
-**What the AI drafts** (first working day of the month, for the month before):
+**What Glideship lists** (first working day of the month, for the month before; in every mode):
 
-- Up to six lines under the four headings. Every line links to a BUD, PR, review, bug or card.
+- The fact list: cards completed, bugs reported or fixed, BUDs and PRs, as chips grouped by
+  source. Saved on the check-in and refreshed until it closes, so later edits to a card don't
+  rewrite past months.
 - A line for availability, such as "17 of 21 working days (4 on leave)", worked out from approved
-  leave and the office's holidays.
-- Under any heading with nothing in it: "Glideship can't see this. Add it below if it matters."
+  leave and the holidays and working days on the person's leave policy (the org default if none).
+
+**What the AI adds** (AI mode only): up to six lines under the four headings, each citing facts
+from the list. Under any heading with nothing in it: "Glideship can't see this. Add it below if
+it matters."
 
 **What the employee adds** (all optional):
 
@@ -93,6 +138,8 @@ Manager feedback         │           Manager + employee: growth conversation,
   and an optional heading or goal. These show as "added by you", not "from Glideship".
 - Goal values: for each goal with a number in its measure, this month's value and where it came
   from (for example "CSAT 4.6 · helpdesk report link").
+- Tags: any fact or link can be tagged to a heading or goal. In manual mode this is how the
+  evidence timeline groups things; in AI mode it overrides the AI's grouping.
 
 The manager's reply is no longer part of the check-in. It moves to manager feedback (below), which
 runs monthly or quarterly. The check-in closes when the next one opens. Nothing is ever scored.
@@ -116,6 +163,9 @@ set number of days later (default 10). The employee sees it as soon as the manag
 feedback item the manager never writes stays "not done" in the Team tab and in calibration, and
 it never blocks the half-year review.
 
+Each feedback item snapshots its manager. If the primary manager changes mid-cycle, open items
+move to the new manager and finished ones stay with the old one.
+
 Goal statuses are the manager's view only during the half. They don't decide the goal result at
 the end; the employee still self-scores and the manager agrees or changes.
 
@@ -125,7 +175,7 @@ Every piece of work with an owner has a due date: the employee's self-score, the
 feedback, the manager's half-year review, and the acknowledgement. One reminder engine handles
 all of them.
 
-**Default schedule** (org settings, in working days, using the office's holidays):
+**Default schedule** (org settings, in working days on the recipient's leave policy):
 
 | When | Who | Slack DM |
 |---|---|---|
@@ -136,12 +186,18 @@ all of them.
 | 3 working days after | HR | One list: managers with feedback still open, and how many each. |
 
 - **One DM per manager per reminder**, covering all their reports, never one per report.
-- Reminders stop as soon as everything is done. Nobody gets the same reminder twice: each send is
-  recorded in `appraisal_reminders_sent`, unique on target, user and reminder key.
+- Reminders stop as soon as everything is done. Nobody gets the same reminder twice: each send
+  claims a row in the existing `digest_claims` table (new kinds such as `appraisal_feedback_due`,
+  unique per org, kind, user and day), which already handles retries, restarts and a second
+  instance.
 - The same schedule runs for the employee's self-score ("Your H2 review is due Wed 7 Jan") and
   the manager's half-year review.
 - DMs carry counts and dates only, never names of reports, bands or notes.
-- The daily job runs on the same schedule as the leave digest. Each reminder type registers a
+- Two separate ticks. The **creation tick** (check-ins, feedback items, fact lists) runs for every
+  org, because the leave digest scheduler only visits orgs with Slack connected and appraisals
+  must not depend on Slack. The **reminder tick** sends DMs and only needs Slack-connected orgs.
+  Both use the org's clock from `org_zone()`, as board due reminders do, because offices have no
+  timezone column. Each reminder type registers a
   `NotificationCategory` (`appraisal_reminders`, default on) and goes through
   `list_slack_recipients`. A manager who opts out still sees due dates in the app, and still
   appears on HR's overdue list.
@@ -163,6 +219,19 @@ HR sets these when creating a cycle. Defaults come from the org's last cycle.
 | Suggested goals | generate for everyone when the cycle opens, or on request | on request |
 | Intro note | a short note from HR shown at the top of the guide | empty |
 
+## Who is in a cycle
+
+- Activating a cycle creates an `appraisals` row with status `enrolled` for every active profile
+  in scope that has a primary manager.
+- Someone who joins mid-cycle is enrolled if they join before the cycle's enrolment cut-off
+  (default: two months before the end). After that they start in the next cycle.
+- Someone who moves to `on_notice` or `exited` is set to `withdrawn`. Their check-ins stay.
+- A person can't be in two overlapping cycles. The service checks this under a row lock, because
+  an exclusion constraint on date ranges would need the `btree_gist` extension.
+- Merging two accounts (`services/employees/merge.py`) must also repoint every appraisal column
+  that holds a user id: `manager_user_id`, `accepted_by`, `added_by`, `reported_by`, and the
+  reminder claims.
+
 ## Half-year review
 
 ### Goals
@@ -171,7 +240,8 @@ Two or three goals per person per half. Each goal is an outcome plus how you'll 
 for example "UAT automation coverage 80% · measured from the test report".
 
 Goals are set in the growth conversation at the end of the previous half, or by the manager when a
-cycle opens, usually starting from the AI suggestions below. While the cycle runs, each monthly
+cycle opens, starting from the AI suggestions below or, in manual mode, from the role library and
+last half's goals. While the cycle runs, each monthly
 summary tags the facts that relate to a goal, and the employee records a value for any goal with
 a number in its measure.
 
@@ -182,7 +252,30 @@ per person. The input is:
 
 - the person's role template: its goal library and what counts as evidence for that role,
 - last half's goals and results, and the "one thing to work on" from the growth conversation,
-- the person's own check-ins from last half, including what was blocking them.
+- the latest manager feedback: the "try next" line, and any goal marked At risk or Off track,
+- the person's own check-ins from last half, including what was blocking them,
+- the role template's market trends (below).
+
+Each suggestion carries a badge for where it came from: **From your feedback**, **From last
+half**, **From what's blocking you**, **Market trend** or **Role library**, and a "why" line
+that cites the check-in, feedback item or trend it rests on.
+
+### Market trends per role
+
+Each role template has a short "What's changing in this role" list: three to six items, each a
+sentence, a source link and a date (for QA, something like "teams are moving routine regression
+checks to AI-assisted test generation"). Suggestions may cite them, so a goal can point
+somewhere new instead of only repeating last half.
+
+- **Refreshing them.** Once per cycle, HR can ask the AI to draft an updated list for a template.
+  The run uses the provider's web search where the org's provider has it, and every item must
+  carry a source link; items without one are dropped. The draft goes to HR, who edits and
+  approves it. Nothing reaches a suggestion until HR approves it, and the approved list is
+  versioned so each suggestion records which version it used.
+- **Manual mode.** HR writes the list by hand, and the goal picker shows trend-based goals from
+  the library that HR has tagged to a trend.
+- **Limits.** Trends describe the field, never the person, and are never used to judge a band.
+  Sources are public pages; no customer or employee data goes into the research prompt.
 
 Each suggestion is an outcome, a measure and where the measure comes from, for example "First
 response under 4 hours on 90% of tickets · helpdesk weekly report". Rules:
@@ -194,6 +287,10 @@ response under 4 hours on 90% of tickets · helpdesk weekly report". Rules:
 - A suggestion built on last half's facts cites them, using the same citation check as the
   summaries. A suggestion taken straight from the role library says so.
 - If the person has no history (a new joiner), suggestions come from the role library only.
+- In manual mode there are no suggestions. The goal picker offers the role library, last half's
+  goals to carry over, and "Write my own".
+- Suggesting for everyone runs as a database-backed sweep, not through the in-memory job queue
+  (see "Running the AI").
 
 Suggesting goals sits close to the EU AI Act's "allocate tasks based on individual behaviour"
 wording, which is another reason a person always picks.
@@ -207,7 +304,7 @@ The employee fills in:
 - **Overall band:** pick 1 to 5 from the descriptors, write why in up to three lines, and attach
   evidence. Bands 1 and 2 need at least two pieces of evidence.
 
-The AI's six-month summary (below) is shown above the form. The employee writes after reading it.
+The six-month summary (AI) or evidence timeline (manual) is shown above the form. The employee writes after reading it.
 
 ### Manager: agree or change
 
@@ -252,15 +349,21 @@ The growth conversation is a separate section, opened after sharing:
 
 No band is shown on this screen.
 
-## The AI's six-month summary
+## The six-month summary
 
-When the self-review opens, a job writes a short summary from the six check-ins:
+**Evidence timeline (every mode).** Each month's fact list, the employee's lines, links and goal
+values, in order, with a section per goal listing what was tagged to it. This is built without AI
+and is what manual mode shows.
+
+**AI summary (AI mode).** When the self-review opens, a job writes a short summary from the
+check-ins, shown above the timeline:
 
 - what got done and how it went, per heading,
-- per goal: evidence found, partial or none in Glideship,
+- per goal: the facts that relate to it,
 - what the employee said was blocking them, and whether it got better.
 
-Every sentence cites facts from the check-ins. The AI never suggests a band or a goal result.
+Every sentence cites facts from the check-ins. The AI never suggests a band or a goal result, and
+it doesn't judge whether a goal's evidence is enough.
 
 ## Evidence: getting it right
 
@@ -285,11 +388,18 @@ a GitHub noreply address holding their PRs.
 | PRs | merged, with BUD link if any | `pull_requests.author_user_id`, `merged_at` |
 | Reviews | valid code reviews given | `reward_events` source `sp_review` |
 | Bugs | reported, fixed, later found in their shipped work | `bugs.reporter_id`, `assignee_id`, `resolved_at` |
-| Board cards | completed on team boards | `board_card_assignees`, `board_cards.completed_at` |
+| Board cards | moved into a `done` stage in the period | `board_card_events` with `to_category = 'done'`, plus `board_card_assignees` |
 | Learnings | retrospectives on BUDs they worked on | `feature_learnings.retrospective_md` |
 | Estimates | estimate vs actual on closed BUDs | `feature_learnings.estimated_days`, `cycle_time_days` |
 | Skills | modules or languages touched for the first time | `skill_profiles` |
 | QA | test evidence uploaded | `qa_test_evidence.uploaded_by` |
+
+**Board card rules.** `completed_at` is also set when a card is canceled and is cleared when it
+reopens, so it can't be used alone. A card counts if its stage entered the `done` category in the
+period and it is still done when the fact list is saved. Archived cards and cards on archived
+boards still count. Every current assignee gets credit, because assignee history isn't kept.
+Cards on boards with `visibility = members` show as "private record" to viewers who aren't
+members.
 
 Only about a third of PRs carry a BUD link, so PRs are read directly. SP and XP are never used,
 because they are game currency, not performance.
@@ -302,8 +412,21 @@ because they are game currency, not performance.
   id. Links are built from our own fact records, never from the AI's text.
 - Lines describe work, not counts. They never compare the person with colleagues.
 - Each run stores its prompt, model id, fact ids and output, so anyone can see what the AI saw.
-- Jobs use the async pattern (handler, `202`, `useJobSocket`) through `run_claude_code`, following
-  the org's `claude_auth_mode`. The monthly run is scheduled the same way as the leave digest.
+- See "Running the AI" for how runs are scheduled and how failures fall back to manual.
+
+### Running the AI
+
+- All runs go through `services/ai_runner` (`run_agent_for_org_id`), which covers every provider
+  the org may use and its capability gate.
+- The in-memory job queue holds 50 jobs and loses them on restart, so monthly drafts, half-year
+  summaries and whole-org goal suggestions don't use it. Each row carries `draft_status` (`none |
+  pending | ready | failed`), `draft_attempts`, `draft_error` and `draft_claimed_at`. A sweeper
+  claims pending rows with limited concurrency.
+- Provider missing, unsupported or AI switched off are permanent: the row is set to `none` and the
+  person gets the manual view. Anything else is retried three times, then `failed`. A login
+  failure can't yet be told apart from a timeout, so add an auth-failure code to
+  `ClaudeErrorCode`.
+- Only a single "regenerate" by a person uses the `202` job pattern.
 
 ### Leave
 
@@ -414,6 +537,12 @@ as plain text files, one per audience, so it can be edited without a migration.
 | HR (`appraisals:manage`) | all | after submit | read; send back | read | all |
 | Anyone else | no | no | no | no | no |
 
+- Chips are checked against the viewer's access. BUD and PR chips show as "private record" to
+  viewers without `workspace:engineering`, as do member-only board cards and HR facts. They still
+  count as evidence.
+- Calibration and bulk share leave out the HR reviewer's own appraisal and their manager's.
+- `appraisal_viewed` is recorded at most once per viewer per appraisal per day. AI runs are
+  recorded in the run log, not the audit table, because audit rows need a human actor.
 - Manager feedback, including goal statuses, is visible to the employee as soon as the manager
   saves it. Links and goal values follow the check-in's access. Everyone can read their own role
   template; HR edits templates.
@@ -422,32 +551,38 @@ as plain text files, one per audience, so it can be edited without a migration.
   own review, including HR and the owner.
 - **Encryption** with `core/hr_crypto.py`. Associated data is
   `(org_id, profile_id, "appraisal", record_id, field)`. It covers AI text, employee notes,
-  manager notes, reasons, goals, manager-only notes and the reply.
+  manager notes, reasons, goals, manager-only notes and the reply. Slack DMs never need these fields,
+because they carry counts and dates only.
 - **Audit** goes to the append-only `employee_audit_events`, which follows the profile across
   merges. New actions: `appraisal_viewed` (anyone but the subject), `appraisal_scored`,
-  `appraisal_changed`, `appraisal_sent_back`, `appraisal_shared`, `appraisal_ai_generated`.
+  `appraisal_changed`, `appraisal_sent_back`, `appraisal_shared`, `appraisal_goal_accepted`. Adding
+them is an enum migration.
 - Every AI-drafted section is labelled as AI-drafted. Before rolling out in the EU or UK, have
   counsel confirm the setup. This plan is not legal advice.
 
 ## Data model
 
-Nine tables. Every status and option is a Postgres enum.
+Eight tables. Every status and option is a Postgres enum.
 
 **`appraisal_cycles`**
 `id, org_id, name, period_start, period_end, self_due, manager_due,
 status (draft → active → reviewing → closed), checkin_cadence (monthly | quarterly),
 feedback_cadence (monthly | quarterly), feedback_due_days, reminder_offsets (int[]),
-overdue_nudge (bool), hr_overdue_list (bool), suggest_goals_on_open (bool), intro_note (bytes),
-created_by`. A check constraint keeps feedback no more often than check-ins.
+overdue_nudge (bool), hr_overdue_list (bool), suggest_goals_on_open (bool), ai_drafting (bool),
+enrolment_cutoff (date), intro_note (bytes), created_by`. A check constraint keeps feedback no more often than check-ins.
 
 **`appraisal_check_ins`**: unique `(profile_id, period_start)`
 `id, org_id, profile_id, cycle_id, period_start, period_end, working_days, available_days,
-identity_warnings (JSONB), ai_summary (bytes), ai_fact_refs (JSONB), ai_model, ai_generated_at,
-employee_note (bytes), status (drafted → employee_added | missed)`
+identity_warnings (JSONB), fact_refs (JSONB, not null: source, id, key, title, url, done_at,
+board_id), fact_tags (JSONB), ai_summary (bytes, nullable), ai_model, ai_generated_at,
+draft_status (none | pending | ready | failed), draft_attempts, draft_error, draft_claimed_at,
+employee_note (bytes), status (open → employee_added | missed)`
 
 **`appraisals`**: unique `(cycle_id, profile_id)`
-`id, org_id, cycle_id, profile_id, manager_user_id, role_template_id, status (self_review → manager_review →
-calibration → shared → acknowledged), ai_half_summary (bytes), self_band, self_reason (bytes),
+`id, org_id, cycle_id, profile_id, manager_user_id, role_template_id, drafting_mode (ai | manual),
+status (enrolled → self_review → manager_review → calibration → shared → acknowledged, or
+withdrawn), ai_half_summary (bytes, nullable), half_summary_status (none | pending | ready |
+failed), self_band, self_reason (bytes),
 self_evidence (JSONB fact refs), manager_band, manager_reason (bytes), manager_evidence (JSONB),
 final_band, ready_next_level (bool), performance_concern (bool), concern_note (bytes),
 send_back_note (bytes), growth_strength (bytes), growth_focus (bytes), reply (bytes),
@@ -455,15 +590,18 @@ self_submitted_at, manager_submitted_at, shared_at, acknowledged_at`
 
 **`appraisal_goals`**
 `id, org_id, profile_id, cycle_id (nullable: a goal set in the growth conversation before the
-next cycle exists attaches when that cycle opens), position, title (bytes), measure (bytes),
+next cycle exists attaches when that cycle opens), target_period_start, position, title (bytes), measure (bytes),
 self_result (achieved | partly | not_yet), self_reason (bytes), self_evidence (JSONB),
 final_result, manager_reason (bytes), origin (manual | ai_suggested | role_library),
-status (suggested → accepted | dismissed), suggestion_refs (JSONB), accepted_by, accepted_at`.
+status (suggested → accepted | dismissed), suggestion_basis (enum: feedback | last_half | blocker |
+trend | role_library), suggestion_refs (JSONB, including the trends version), original (JSONB: the
+suggestion before edits), dismiss_reason (bytes), accepted_by, accepted_at`. Partial unique index
+on `(profile_id, cycle_id, position) WHERE status = 'accepted'`.
 Only accepted goals count towards the three-per-half limit and appear in the review.
 
 **`appraisal_manager_feedback`**: unique `(profile_id, period_start)`
-`id, org_id, cycle_id, profile_id, manager_user_id, period_start, period_end, cadence (monthly |
-quarterly), due_on, keep_note (bytes), try_note (bytes), goal_status (JSONB: goal id →
+`id, org_id, cycle_id, profile_id, manager_user_id (snapshot; moves to a new manager while open),
+period_start, period_end, cadence (monthly | quarterly), due_on, keep_note (bytes), try_note (bytes), goal_status (JSONB: goal id →
 on_track | at_risk | off_track, plus a note in bytes), status (open → done), done_at`
 
 **`appraisal_evidence_links`**
@@ -476,12 +614,13 @@ reported_by`
 
 **`appraisal_role_templates`**
 `id, org_id, name, match_departments (text[]), match_designations (text[]), heading_meanings
-(JSONB), fact_sources (enum[]), goal_library (JSONB: title, measure, measure_source), is_default,
+(JSONB), fact_sources (enum[]), goal_library (JSONB: title, measure, measure_source, trend_id), trends
+(JSONB: id, text, source_url, as_of), trends_version, trends_status (draft | approved),
+trends_approved_by, ai_drafting (bool),
+is_default,
 updated_by`. The profile's template is snapshotted on the appraisal when a cycle opens.
 
-**`appraisal_reminders_sent`**: unique `(target_kind, target_id, user_id, reminder_key)`
-`id, org_id, target_kind (self_review | manager_feedback | manager_review | acknowledge),
-target_id, user_id, reminder_key, sent_at`
+Reminders reuse `digest_claims` with new `DigestClaimKind` values instead of a new table.
 
 `final_band` and `final_result` are stored when the manager submits, so a later code change can't
 move a shared result. Migrations come from `alembic revision --autogenerate` on a scratch database,
@@ -494,10 +633,10 @@ using partial unique indexes only (the local database is Postgres 14).
 | Route | Who |
 |---|---|
 | `GET /mine`, `GET /team` | employee, manager |
-| `GET /{id}` | per access table |
+| `GET /{id}` (always returns the fact list; the AI draft may be null) | per access table |
 | `PUT /{id}/employee` | employee (until it closes) |
-| `PUT /{id}/manager` | primary manager |
-| `POST /{id}/regenerate` → `202` | employee or manager, before the employee adds lines |
+| `POST /{id}/regenerate` → `202` | employee or manager, before the employee adds lines; `409` in manual mode |
+| `PUT /{id}/fact-tags` | employee (until it closes) |
 | `POST/DELETE /{id}/links` | employee (until it closes) |
 | `PUT /{id}/goal-values` | employee (until it closes) |
 
@@ -517,10 +656,14 @@ using partial unique indexes only (the local database is Postgres 14).
 | `GET /cycles/{id}/identity-check` | HR |
 | `POST /cycles/{id}/activate`, `/start-review` (→ `202` summaries), `/close` | HR |
 | `GET /cycles/{id}/calibration` (includes feedback done rates) | HR |
-| `POST /cycles/{id}/suggest-goals` → `202` (everyone or a list of people) | HR |
-| `POST /{id}/suggest-goals` → `202` | manager or employee |
+| `POST /cycles/{id}/suggest-goals` (everyone or a list; marks goals pending for the sweeper) | HR |
+| `POST /{id}/suggest-goals` → `202` (`409` in manual mode) | manager or employee |
+| `GET /{id}/goal-options` (role library + carry-over, no AI) | manager or employee |
+| `GET /cycles/{id}/readiness` (AI status, people without a primary manager or template, identity check) | HR |
+| `GET /cycles/{id}/progress` (who's done, who's overdue) | HR |
 | `POST /goals/{id}/accept`, `/dismiss`, `PATCH /goals/{id}` | employee or manager |
 | `GET/POST /role-templates`, `PATCH/DELETE /role-templates/{id}` | HR |
+| `POST /role-templates/{id}/trends/draft` → `202` (AI mode), `POST /role-templates/{id}/trends/approve` | HR |
 | `GET /mine`, `GET /team`, `GET /{id}` | per access table |
 | `PUT /{id}/goals` | manager, or employee and manager together in the growth conversation |
 | `PUT /{id}/self`, `POST /{id}/self/submit` | employee |
@@ -539,12 +682,11 @@ models/appraisal_cycle.py          models/appraisal_check_in.py
 models/appraisal.py                models/appraisal_goal.py
 models/appraisal_manager_feedback.py models/appraisal_evidence_link.py
 models/appraisal_goal_value.py     models/appraisal_role_template.py
-models/appraisal_reminder_sent.py
 repositories/appraisal_cycle.py    repositories/appraisal_check_in.py
 repositories/appraisal.py          repositories/appraisal_goal.py
 repositories/work_facts.py         one query per fact source
 repositories/appraisal_feedback.py repositories/appraisal_role_template.py
-repositories/appraisal_evidence.py repositories/appraisal_reminder.py
+repositories/appraisal_evidence.py
 services/appraisals/template.py    bands, descriptors, headings
 services/appraisals/access.py      pure access function
 services/appraisals/crypto.py      field encryption with the AAD above
@@ -552,6 +694,11 @@ services/appraisals/identity.py    identity set + identity check
 services/appraisals/availability.py
 services/appraisals/facts.py       gather + tag by heading and goal
 services/appraisals/summarise.py   prompt, call, citation check
+services/appraisals/drafting_mode.py org + cycle + template switch → ai | manual
+services/appraisals/settings.py    config["appraisals"] read/write, one owner
+services/appraisals/draft_sweeper.py claims pending drafts, limited concurrency, retry rules
+services/appraisals/timeline.py    evidence timeline (no AI)
+services/appraisals/enrolment.py   enrol, withdraw, mid-cycle joiners, overlap check
 services/appraisals/check_in_job.py, check_in_scheduler.py, half_summary_job.py
 services/appraisals/self_review.py, manager_review.py, calibration.py, lifecycle.py, notify.py
 services/appraisals/feedback.py    open feedback items per cadence, done rules
@@ -559,6 +706,7 @@ services/appraisals/reminders.py   pure: (today, items, schedule, holidays) → 
 services/appraisals/reminder_job.py daily send, grouped per user, idempotent
 services/appraisals/role_templates.py, role_template_seed.py
 services/appraisals/goal_suggest.py, goal_suggest_job.py
+services/appraisals/role_trends.py  draft (web-search run, source required), approve, version
 services/appraisals/hr_facts.py    leave_config_events + document uploads, access-checked chips
 api/v1/check_ins.py, appraisal_cycles.py, appraisals.py, manager_feedback.py,
 appraisal_role_templates.py
@@ -656,6 +804,13 @@ Dismiss. Accepted goals fill the "next half's goals" list.
 intake bugs from Glideship, the person's own links labelled "added by you", and a goal values
 section.
 
+**12. Manual mode (any role):** the check-in shows "Your work in Glideship" as plain chips with
+tag pickers and the same text boxes, with a callout that nothing on the page is AI-written. The
+self-review shows the evidence timeline instead of the AI summary.
+
+**13. Cycle readiness and progress (HR):** AI ready or manual, people without a primary manager or
+role template, identity warnings, and during the cycle who's done and who's overdue.
+
 The UI uses `AppCallout` for the AI-drafted and "can't see this" notices and `AppPillToggle` for
 the band and goal choices. Evidence chips open their source in a new tab.
 
@@ -671,16 +826,27 @@ the band and goal choices. Evidence chips open their source in a new tab.
 - Crypto: round trip works, and a blob moved to another profile or field fails.
 - Calibration maths: agreement rate, gaps of two or more bands, and the 100%-agree flag.
 
-- Reminder schedule, as a pure function: offsets in working days skip weekends and office
-  holidays; nothing is sent once an item is done; one reminder per user per key; one DM covers
+- Reminder schedule, as a pure function: offsets in working days skip weekends and the
+  leave policy's holidays; nothing is sent once an item is done; one reminder per user per key; one DM covers
   all of a manager's reports; HR's overdue list only after its offset.
 - Feedback cadence: quarterly feedback skips the quarter that ends a half; a feedback cadence
   more frequent than check-ins is rejected.
+- Trends: items without a source link are dropped; unapproved drafts never reach suggestions;
+  each suggestion records the trends version; at-risk goals and the "try next" line from the
+  latest feedback appear in the suggestion input.
 - Suggested goals: never accepted automatically; the three-accepted limit; uncited
   history-based suggestions are dropped; a new joiner gets role-library suggestions only.
 - Role template matching by department and designation, the general fallback, and fact sources
   skipped per template.
 - Chips the viewer can't open render as "private record" and still count as evidence.
+- Drafting mode: any switch set to manual wins; the mode is saved at activation and later switch
+  changes don't move it.
+- Draft sweeper: permanent errors go to `none` (manual view) without retry; others retry three
+  times then `failed`; a late AI result never overwrites employee text.
+- Board facts: canceled cards and reopened cards don't count; archived cards do; every assignee
+  gets credit; member-only boards show "private record".
+- Enrolment: no primary manager blocks enrolment; mid-cycle joiners respect the cut-off; exits
+  withdraw; overlapping cycles are rejected.
 
 **pytest (integration, testcontainers)**
 - A merged noreply account's PRs appear in the check-in. An unmerged one appears in the identity
@@ -688,6 +854,10 @@ the band and goal choices. Evidence chips open their source in a new tab.
 - The monthly scheduler creates one check-in per active profile. It is idempotent per month, and
   the AI is stubbed.
 - Facts stay within the org and the period.
+- The creation tick creates check-ins for an org with no Slack connected.
+- A whole cycle in manual mode, from activation to acknowledgement, makes no AI call.
+- An AI failure mid-cycle leaves a usable check-in with the fact list.
+- Merging two accounts repoints appraisal user ids.
 - The reminder job, run twice on the same day, sends each DM once, and stops after the manager
   marks everything done.
 - HR facts come only from rows where the person is the actor.
@@ -696,6 +866,8 @@ the band and goal choices. Evidence chips open their source in a new tab.
 
 **Vitest**
 - The check-in renders a chip per fact and the "can't see this" heading.
+- Manual mode: no AI text or regenerate button; tags save; the self-review shows the timeline.
+- A failed or pending draft shows the callout and the fact list.
 - Self-review: submit is blocked for band 1 or 2 with fewer than two pieces of evidence.
 - Manager review: Change requires a reason, and Agree copies the value.
 - Calibration table: agreement rate and flags.
@@ -706,7 +878,8 @@ the band and goal choices. Evidence chips open their source in a new tab.
 - The guide opens on first visit only and is reachable from "How this works".
 
 **Playwright (`e2e/specs/appraisals.spec.ts`, `e2e/screens/appraisals.ts`)**
-- Employee adds check-in lines → manager replies.
+- Employee adds check-in lines and tags facts.
+- A boards-only team in manual mode completes a cycle end to end.
 - HR starts the review → employee self-scores → manager agrees with one goal and changes
   another → HR shares → employee sees the reason and acknowledges → growth goals are set.
 - Quarterly feedback: a manager gets the open item, writes goal statuses and marks it done; the
@@ -718,15 +891,17 @@ the band and goal choices. Evidence chips open their source in a new tab.
 
 ## Delivery
 
-One PR in five milestones, with a review after each:
+One PR in six milestones, with a review after each:
 
 1. Tables, access function, permission, encryption and audit.
-2. Role templates and their seed, identity check, fact gathering (including board cards and HR
-   facts), availability, the monthly AI job, links and goal values, and the check-in screens.
-3. Cycle setup with cadence settings, manager feedback, the reminder engine and Slack DMs, and the
+2. Role templates and their seed, drafting-mode switches, enrolment, identity check, fact
+   gathering (including board cards and HR facts), availability, the creation tick, links, tags,
+   goal values and the check-in screens in manual mode. Manual mode ships first.
+3. The AI draft on top: sweeper, retry rules, the AI check-in lines and the six-month summary.
+4. Cycle setup with readiness, cadence settings, manager feedback, the reminder engine and Slack DMs, and the
    intro guide.
-4. Goals and suggested goals, self-review, manager agree or change, calibration and sharing.
-5. Growth conversation, then a full browser walkthrough, Playwright, and a green rerun of all
+5. Goals (role library, carry-over, AI suggestions), self-review, manager agree or change, calibration and sharing.
+6. Growth conversation, then a full browser walkthrough, Playwright, and a green rerun of all
    suites.
 
 ## Deliberately left out
