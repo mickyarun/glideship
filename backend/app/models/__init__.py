@@ -112,6 +112,7 @@ from app.models.feature_learning import FeatureLearning
 from app.models.feature_match_log import FeatureMatchLog
 from app.models.feature_qa_session import FeatureQASession, FeatureQAStatus
 from app.models.feature_to_repo import FeatureToRepo, FeatureToRepoRole
+from app.models.followup_settings import FollowupSettings
 from app.models.jira_import import ImportStatus, JiraImportSession, JiraIssueBudMap, MapStatus
 from app.models.jwt_token import JWTToken
 from app.models.leave_config_event import LeaveConfigEvent
@@ -331,6 +332,7 @@ __all__ = [
     "ExternalItemMap",
     "ExternalItemStatus",
     "DigestClaim",
+    "FollowupSettings",
     "Feature",
     "FeatureQASession",
     "FeatureQAStatus",

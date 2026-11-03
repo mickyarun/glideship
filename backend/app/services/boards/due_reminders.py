@@ -45,6 +45,7 @@ from app.services.boards.due_stage import KIND, FireWindow, stage_day
 from app.services.boards.org_config import due_reminder_time
 from app.services.leave.digest_settings import org_zone
 from app.services.notifications import NotificationCategory
+from app.services.scheduling.claim_outcome import claim_outcome
 from app.services.scheduling.pace import Pace
 from app.services.scheduling.tick_loop import due_local_date, run_tick_loop
 from app.services.slack_dm import send_each
@@ -103,18 +104,11 @@ async def org_pass(org: DueOrg, now: datetime) -> None:
     async with AsyncSessionLocal() as db:
         claims = DigestClaimRepository(db, org_id=org_id)
         for user_id in texts:
-            status = _outcome(reached.get(user_id))
+            status = claim_outcome(reached.get(user_id))
             error = "slack_failed" if status is DigestClaimStatus.FAILED else None
             await claims.finish(KIND, user_id, window.day, status, error)
         await db.commit()
     logger.info("board_due_sent", org_id=str(org_id), people=len(texts), reached=len(reached))
-
-
-def _outcome(reached: bool | None) -> DigestClaimStatus:
-    """Sent, failed (retried by a later tick), or skipped (no Slack, not linked, or muted)."""
-    if reached is None:
-        return DigestClaimStatus.SKIPPED
-    return DigestClaimStatus.SENT if reached else DigestClaimStatus.FAILED
 
 
 async def run_forever() -> None:

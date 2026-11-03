@@ -48,10 +48,16 @@ def test_explicit_true_is_enabled() -> None:
     assert is_category_enabled(prefs, NotificationCategory.QUIZ) is True
 
 
-def test_default_preferences_covers_every_category_and_is_all_on() -> None:
+def test_default_preferences_covers_every_category_with_its_registry_default() -> None:
     defaults = default_preferences()
     assert set(defaults) == {d.category.value for d in NOTIFICATION_CATEGORIES}
-    assert all(defaults.values())
+    assert defaults == {d.category.value: d.default_enabled for d in NOTIFICATION_CATEGORIES}
+
+
+def test_daily_followups_is_opt_in() -> None:
+    assert default_preferences()[NotificationCategory.DAILY_FOLLOWUPS.value] is False
+    assert is_category_enabled({}, NotificationCategory.DAILY_FOLLOWUPS) is False
+    assert is_category_enabled(None, NotificationCategory.DAILY_FOLLOWUPS) is False
 
 
 def test_resolve_category_accepts_known_keys_and_rejects_junk() -> None:

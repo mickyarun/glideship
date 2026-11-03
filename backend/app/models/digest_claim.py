@@ -37,6 +37,7 @@ class DigestClaimKind(StrEnum):
     """Which daily message a claim is for."""
 
     BOARD_DUE = "board_due"
+    DAILY_FOLLOWUPS = "daily_followups"
 
 
 class DigestClaimStatus(StrEnum):

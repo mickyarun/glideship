@@ -58,6 +58,7 @@ class NotificationCategory(StrEnum):
     BOARD_CARDS = "board_cards"
     BOARD_HANDOVERS = "board_handovers"
     BOARD_DUE_REMINDERS = "board_due_reminders"
+    DAILY_FOLLOWUPS = "daily_followups"
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,8 @@ class CategoryDef:
         default_enabled: Whether members receive it before touching settings.
         required_permission: Only members holding this permission receive
             it; ``None`` means every member.
+        own_card: Set and switched on its own settings card (it has more
+            than an on/off), so the generic list leaves it out.
     """
 
     category: NotificationCategory
@@ -80,6 +83,7 @@ class CategoryDef:
     group: str
     default_enabled: bool = True
     required_permission: str | None = None
+    own_card: bool = False
 
 
 # Ordered registry — drives the profile UI listing order. "Games & fun" groups
@@ -132,6 +136,14 @@ NOTIFICATION_CATEGORIES: tuple[CategoryDef, ...] = (
         description="One morning message with your cards due today and overdue.",
         group="Boards",
         required_permission=BOARDS_VIEW,
+    ),
+    CategoryDef(
+        category=NotificationCategory.DAILY_FOLLOWUPS,
+        label="Daily follow-ups",
+        description="Your overdue and due-soon cards and BUDs, once a day at a time you pick.",
+        group="Your work",
+        default_enabled=False,
+        own_card=True,
     ),
 )
 

@@ -23,11 +23,19 @@ the opt-out rule, with no DB/HTTP scaffolding.
 from app.api.v1.me import _prefs_to_items
 from app.services.notifications import NOTIFICATION_CATEGORIES, NotificationCategory
 
+# Categories with their own settings card aren't in the generic list.
+LISTED = [d for d in NOTIFICATION_CATEGORIES if not d.own_card]
 
-def test_empty_prefs_render_every_category_enabled() -> None:
+
+def test_empty_prefs_render_every_listed_category_at_its_default() -> None:
     items = _prefs_to_items({})
-    assert [i.key for i in items] == [d.category.value for d in NOTIFICATION_CATEGORIES]
-    assert all(i.enabled for i in items)
+    assert [i.key for i in items] == [d.category.value for d in LISTED]
+    assert [i.enabled for i in items] == [d.default_enabled for d in LISTED]
+
+
+def test_categories_with_their_own_card_are_left_out() -> None:
+    keys = {i.key for i in _prefs_to_items({})}
+    assert NotificationCategory.DAILY_FOLLOWUPS.value not in keys
 
 
 def test_muted_category_renders_disabled_others_stay_on() -> None:
@@ -39,7 +47,7 @@ def test_muted_category_renders_disabled_others_stay_on() -> None:
 
 def test_items_carry_registry_copy() -> None:
     items = _prefs_to_items({})
-    for item, definition in zip(items, NOTIFICATION_CATEGORIES, strict=True):
+    for item, definition in zip(items, LISTED, strict=True):
         assert item.label == definition.label
         assert item.description == definition.description
         assert item.group == definition.group

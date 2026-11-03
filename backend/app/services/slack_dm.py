@@ -21,6 +21,7 @@ triggered the message is already saved and visible in the app.
 import asyncio
 import uuid
 from collections.abc import Mapping
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,16 +83,32 @@ async def send_each(
     connected. ``pace`` spaces the DMs out (one at a time without it), so a
     large batch stays inside Slack's rate limits instead of failing en masse.
     """
+    messages = {user_id: (text, None) for user_id, text in texts.items()}
+    return await send_each_rich(org_id, category, messages, pace=pace)
+
+
+Blocks = list[dict[str, Any]]
+
+
+async def send_each_rich(
+    org_id: uuid.UUID,
+    category: NotificationCategory,
+    messages: Mapping[uuid.UUID, tuple[str, Blocks | None]],
+    *,
+    pace: Pace | None = None,
+) -> dict[uuid.UUID, bool]:
+    """:func:`send_each` for messages with Block Kit blocks; the text is the fallback."""
     async with AsyncSessionLocal() as session:
         token = await bot_token(session, org_id)
         if not token:
             return {}
-        pairs = await _recipients(session, org_id, category, set(texts))
+        pairs = await _recipients(session, org_id, category, set(messages))
     turns = pace or Pace(1, 0.0)
 
     async def _one(user_id: uuid.UUID, slack_id: str) -> tuple[uuid.UUID, bool]:
+        text, blocks = messages[user_id]
         async with turns.turn():
-            return user_id, await _deliver_one(org_id, token, slack_id, texts[user_id])
+            return user_id, await _deliver_one(org_id, token, slack_id, text, blocks)
 
     return dict(await asyncio.gather(*(_one(uid, sid) for uid, sid in pairs)))
 
@@ -131,10 +148,14 @@ async def _deliver(org_id: uuid.UUID, token: str, slack_ids: list[str], text: st
         await _deliver_one(org_id, token, slack_id, text)
 
 
-async def _deliver_one(org_id: uuid.UUID, token: str, slack_id: str, text: str) -> bool:
+async def _deliver_one(
+    org_id: uuid.UUID, token: str, slack_id: str, text: str, blocks: Blocks | None = None
+) -> bool:
     try:
         channel = await conversations_open(token, slack_id)
-        return bool(channel) and await chat_post_message(token, channel or "", text) is not None
+        if not channel:
+            return False
+        return await chat_post_message(token, channel, text, blocks=blocks) is not None
     except Exception:
         logger.warning("slack_dm_failed", org_id=str(org_id), exc_info=True)
         return False
