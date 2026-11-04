@@ -235,6 +235,18 @@ def test_unreadable_settings_turn_ai_off() -> None:
     assert appraisal_settings({}).ai_enabled is True
 
 
+def test_forget_transcript_removes_a_private_runs_whole_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    folder = tmp_path / ".claude" / "projects" / "-tmp-bodhiorchard-private-abc"
+    folder.mkdir(parents=True)
+    (folder / "abc.jsonl").write_text("{}")
+    (folder / "agent-1.jsonl").write_text("{}")
+    forget_transcript("abc")
+    assert not folder.exists()
+
+
 def test_forget_transcript_removes_only_that_run(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

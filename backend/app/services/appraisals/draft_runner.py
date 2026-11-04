@@ -54,9 +54,12 @@ def _projects() -> Path:
 def forget_transcript(session_id: str) -> None:
     """Delete the transcript the CLI saved for this run, wherever it filed it."""
     for path in _projects().glob(f"*/{session_id}.jsonl"):
-        with contextlib.suppress(OSError):
-            path.unlink()
-            path.parent.rmdir()  # Only goes if empty: a private run's own folder.
+        if PRIVATE_RUN_DIR_PREFIX in path.parent.name:
+            # The run's own folder: the CLI also leaves side files in it.
+            shutil.rmtree(path.parent, ignore_errors=True)
+        else:
+            with contextlib.suppress(OSError):
+                path.unlink()
 
 
 def sweep_leftovers() -> None:
@@ -65,8 +68,7 @@ def sweep_leftovers() -> None:
     Call before any run starts. Folder names are the run's path with
     punctuation as dashes, so the prefix survives in them.
     """
-    prefix = PRIVATE_RUN_DIR_PREFIX.rstrip("-")
-    for path in _projects().glob(f"*{prefix}-*"):
+    for path in _projects().glob(f"*{PRIVATE_RUN_DIR_PREFIX}*"):
         shutil.rmtree(path, ignore_errors=True)
     for path in Path(tempfile.gettempdir()).glob(f"{PRIVATE_RUN_DIR_PREFIX}*"):
         shutil.rmtree(path, ignore_errors=True)

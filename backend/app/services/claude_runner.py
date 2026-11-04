@@ -859,7 +859,7 @@ async def run_claude_code(
             preexec_fn=apply_subprocess_rlimits(),
         )
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(prompt.encode() if config.private_run else None),
+            proc.communicate(prompt.encode()) if config.private_run else proc.communicate(),
             timeout=config.timeout_seconds,
         )
 
