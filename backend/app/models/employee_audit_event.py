@@ -37,6 +37,26 @@ class EmployeeAuditAction(StrEnum):
     DOCUMENT_UPLOADED = "document_uploaded"
     DOCUMENT_VIEWED = "document_viewed"
     DOCUMENT_DELETED = "document_deleted"
+    # Appraisals. ``target`` is the appraisal or goal id.
+    APPRAISAL_VIEWED = "appraisal_viewed"
+    APPRAISAL_SCORED = "appraisal_scored"
+    APPRAISAL_CHANGED = "appraisal_changed"
+    APPRAISAL_SENT_BACK = "appraisal_sent_back"
+    APPRAISAL_SHARED = "appraisal_shared"
+    APPRAISAL_GOAL_ACCEPTED = "appraisal_goal_accepted"
+
+
+# The employee record's access log shows these; appraisal events have their
+# own readers and stay out of it.
+RECORD_ACTIONS: frozenset[EmployeeAuditAction] = frozenset(
+    {
+        EmployeeAuditAction.FIELD_REVEALED,
+        EmployeeAuditAction.DETAILS_UPDATED,
+        EmployeeAuditAction.DOCUMENT_UPLOADED,
+        EmployeeAuditAction.DOCUMENT_VIEWED,
+        EmployeeAuditAction.DOCUMENT_DELETED,
+    }
+)
 
 
 class EmployeeAuditEvent(BaseModel):

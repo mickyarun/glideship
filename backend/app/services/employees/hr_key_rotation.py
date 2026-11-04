@@ -19,13 +19,16 @@ it), deploy, run this, then drop the old key. Anything already under the
 current key is skipped, so it's safe to run again after an interruption.
 """
 
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import hr_crypto
 from app.models.employee_document import EmployeeDocument
 from app.repositories.hr_rotation import HRRotationRepository
+from app.services.appraisals import crypto as appraisal_crypto
 from app.services.employees.document_policy import ENCRYPTED_BLOB_POLICY
 from app.services.employees.documents import document_aad, document_path
 from app.services.employees.sensitive_details import ENCRYPTED, field_aad
@@ -48,25 +51,54 @@ def _reencrypt(blob: bytes, aad: str, ring: hr_crypto.Keyring) -> bytes | None:
     return hr_crypto.encrypt(hr_crypto.decrypt(blob, aad, ring), aad, ring)
 
 
-async def rotate(db: AsyncSession, *, dry_run: bool) -> RotationReport:
-    """Re-encrypt every field and document not under the current key."""
-    ring = hr_crypto.keyring()
-    repo = HRRotationRepository(db)
-    report = RotationReport()
-    for row in await repo.all_sensitive():
-        for name in ENCRYPTED:
+def _rotate_fields(
+    rows: Iterable[Any],
+    fields: Sequence[str],
+    aad: Callable[[Any, str], str],
+    ring: hr_crypto.Keyring,
+    report: RotationReport,
+    *,
+    dry_run: bool,
+) -> None:
+    """Re-encrypt the named blob columns of each row, noting any that fail."""
+    for row in rows:
+        for name in fields:
             blob = getattr(row, name)
             if blob is None:
                 continue
             try:
-                fresh = _reencrypt(blob, field_aad(row.org_id, row.profile_id, name), ring)
+                fresh = _reencrypt(blob, aad(row, name), ring)
             except hr_crypto.HRDecryptionError as exc:
-                report.failed.append(f"details {row.id} {name}: {exc}")
+                report.failed.append(f"{type(row).__name__} {row.id} {name}: {exc}")
                 continue
             if fresh is not None:
                 report.fields += 1
                 if not dry_run:
                     setattr(row, name, fresh)
+
+
+async def rotate(db: AsyncSession, *, dry_run: bool) -> RotationReport:
+    """Re-encrypt every field and document not under the current key."""
+    ring = hr_crypto.keyring()
+    repo = HRRotationRepository(db)
+    report = RotationReport()
+    _rotate_fields(
+        await repo.all_sensitive(),
+        tuple(ENCRYPTED),
+        lambda row, name: field_aad(row.org_id, row.profile_id, name),
+        ring,
+        report,
+        dry_run=dry_run,
+    )
+    for table in appraisal_crypto.SEALED:
+        _rotate_fields(
+            await repo.all_of(table.model),
+            table.fields,
+            appraisal_crypto.aad,
+            ring,
+            report,
+            dry_run=dry_run,
+        )
     storage = get_file_storage()
     for doc in await repo.all_documents():
         # One unreadable or missing file mustn't stop the rest: report it,

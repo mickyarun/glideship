@@ -22,6 +22,7 @@ request. Nothing request-facing may use this repository.
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.base import BaseModel
 from app.models.employee_document import EmployeeDocument
 from app.models.employee_sensitive import EmployeeSensitiveDetails
 
@@ -41,4 +42,9 @@ class HRRotationRepository:
     async def all_documents(self) -> list[EmployeeDocument]:
         """Every document row."""
         result = await self._db.execute(select(EmployeeDocument))
+        return list(result.scalars().all())
+
+    async def all_of[T: BaseModel](self, model: type[T]) -> list[T]:
+        """Every row of one encrypted table (the appraisal tables)."""
+        result = await self._db.execute(select(model))
         return list(result.scalars().all())

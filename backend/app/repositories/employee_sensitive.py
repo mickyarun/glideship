@@ -15,11 +15,16 @@
 """Data access for employees' sensitive details, documents and access log."""
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.employee_audit_event import EmployeeAuditAction, EmployeeAuditEvent
+from app.models.employee_audit_event import (
+    RECORD_ACTIONS,
+    EmployeeAuditAction,
+    EmployeeAuditEvent,
+)
 from app.models.employee_document import EmployeeDocument
 from app.models.employee_sensitive import EmployeeSensitiveDetails
 from app.repositories.base import BaseRepository
@@ -103,14 +108,35 @@ class EmployeeAuditRepository:
         )
 
     async def for_profile(self, profile_id: uuid.UUID) -> list[EmployeeAuditEvent]:
-        """The most recent entries about one employee record, newest first."""
+        """The most recent record-access entries about one employee, newest first."""
         result = await self._db.execute(
             select(EmployeeAuditEvent)
             .where(
                 EmployeeAuditEvent.org_id == self._org,
                 EmployeeAuditEvent.profile_id == profile_id,
+                EmployeeAuditEvent.action.in_(RECORD_ACTIONS),
             )
             .order_by(EmployeeAuditEvent.created_at.desc())
             .limit(ACCESS_LOG_LIMIT)
         )
         return list(result.scalars().all())
+
+    async def recorded_since(
+        self,
+        *,
+        actor_id: uuid.UUID,
+        action: EmployeeAuditAction,
+        target: str,
+        since: datetime,
+    ) -> bool:
+        """Whether this actor already has this entry since ``since``."""
+        stmt = select(
+            exists().where(
+                EmployeeAuditEvent.org_id == self._org,
+                EmployeeAuditEvent.actor_id == actor_id,
+                EmployeeAuditEvent.action == action,
+                EmployeeAuditEvent.target == target,
+                EmployeeAuditEvent.created_at >= since,
+            )
+        )
+        return bool((await self._db.execute(stmt)).scalar())

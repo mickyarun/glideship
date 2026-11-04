@@ -21,6 +21,15 @@ auto-generation of migration scripts.
 from app.models.agent_activity import AgentActivityLog
 from app.models.agent_skill import AgentSkill, AgentType
 from app.models.agent_skill_bud_stage import AgentSkillBudStage
+from app.models.appraisal import Appraisal
+from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_cycle import AppraisalCycle
+from app.models.appraisal_evidence_link import AppraisalEvidenceLink
+from app.models.appraisal_goal import AppraisalGoal
+from app.models.appraisal_goal_revision import AppraisalGoalRevision
+from app.models.appraisal_goal_value import AppraisalGoalValue
+from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
+from app.models.appraisal_role_template import AppraisalRoleTemplate
 from app.models.backend_route_cache import BackendRouteCache
 from app.models.backlash import BacklashMatch, BacklashPlayerStats
 from app.models.base import Base, BaseModel
@@ -183,6 +192,15 @@ __all__ = [
     "AgentSkillBudStage",
     "AgentTaskStatus",
     "AgentType",
+    "Appraisal",
+    "AppraisalCheckIn",
+    "AppraisalCycle",
+    "AppraisalEvidenceLink",
+    "AppraisalGoal",
+    "AppraisalGoalRevision",
+    "AppraisalGoalValue",
+    "AppraisalManagerFeedback",
+    "AppraisalRoleTemplate",
     "BackendRouteCache",
     "BacklashMatch",
     "BacklashPlayerStats",
