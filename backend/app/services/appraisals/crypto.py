@@ -31,6 +31,7 @@ from typing import Any
 
 from app.core import hr_crypto
 from app.models.appraisal import Appraisal
+from app.models.appraisal_ai_run import AppraisalAiRun
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_evidence_link import AppraisalEvidenceLink
@@ -84,6 +85,7 @@ SEALED: tuple[SealedTable, ...] = (
     SealedTable(AppraisalManagerFeedback, ("keep_note", "try_note", "goal_notes"), _profile),
     SealedTable(AppraisalEvidenceLink, ("url", "title"), _profile),
     SealedTable(AppraisalGoalValue, ("value", "source_note", "source_url"), _goal),
+    SealedTable(AppraisalAiRun, ("prompt", "output"), _profile),
 )
 
 _BY_MODEL: dict[type[BaseModel], SealedTable] = {t.model: t for t in SEALED}

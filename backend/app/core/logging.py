@@ -26,8 +26,12 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Iterator, MutableMapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -39,6 +43,37 @@ _LOG_FILE_MAX_BYTES = 20 * 1024 * 1024
 _LOG_FILE_BACKUP_COUNT = 5
 _DEFAULT_LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 
+# Log fields that can carry a run's prompt or output.
+_CONTENT_FIELDS = frozenset({"cmd", "prompt"})
+_CONTENT_SUFFIX = "_preview"
+_REDACTED = "[withheld]"
+_withhold_content: ContextVar[bool] = ContextVar("withhold_content", default=False)
+
+
+@contextmanager
+def content_free_logs() -> Iterator[None]:
+    """Keep prompts and model output out of every log line in this block.
+
+    For AI runs over people data. It works on the log event, so it covers
+    every provider and any task started inside the block.
+    """
+    token = _withhold_content.set(True)
+    try:
+        yield
+    finally:
+        _withhold_content.reset(token)
+
+
+def _drop_content(
+    _logger: object, _method: str, event: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Blank content-bearing fields while :func:`content_free_logs` is active."""
+    if _withhold_content.get():
+        for key in event:
+            if key in _CONTENT_FIELDS or key.endswith(_CONTENT_SUFFIX):
+                event[key] = _REDACTED
+    return event
+
 
 def setup_logging(log_level: str = "INFO", json_output: bool = True) -> None:
     """Configure structlog for JSON-formatted structured logging.
@@ -49,6 +84,7 @@ def setup_logging(log_level: str = "INFO", json_output: bool = True) -> None:
     """
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
+        _drop_content,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),

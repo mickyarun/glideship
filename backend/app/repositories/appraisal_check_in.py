@@ -44,6 +44,19 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
         )
         return list(result.scalars().all())
 
+    async def for_person_in_cycle(
+        self, profile_id: uuid.UUID, cycle_id: uuid.UUID
+    ) -> list[AppraisalCheckIn]:
+        """One person's check-ins in a cycle, oldest first."""
+        result = await self._db.execute(
+            self._scoped(select(AppraisalCheckIn))
+            .where(
+                AppraisalCheckIn.profile_id == profile_id, AppraisalCheckIn.cycle_id == cycle_id
+            )
+            .order_by(AppraisalCheckIn.period_start)
+        )
+        return list(result.scalars().all())
+
     async def for_profiles(
         self, profile_ids: Collection[uuid.UUID], *, since: date | None = None
     ) -> list[AppraisalCheckIn]:

@@ -96,6 +96,18 @@ export const useCheckInsStore = defineStore('checkIns', () => {
     }
   }
 
+  /** Pick up a finished draft without touching anything else on screen. */
+  async function refreshDraft(id: string): Promise<void> {
+    const data = (await api.get<CheckInRead>(`${BASE}/${id}`)).data
+    if (current.value?.id !== id) return
+    const { ai_lines, ai_hidden, can_regenerate, draft_status } = data
+    current.value = { ...current.value, ai_lines, ai_hidden, can_regenerate, draft_status }
+  }
+
+  function regenerate(id: string): Promise<string | null> {
+    return write(() => api.post(`${BASE}/${id}/regenerate`), "Couldn't ask for a new draft. Try again.")
+  }
+
   function saveNote(id: string, note: CheckInNote): Promise<string | null> {
     return write(() => api.put(`${BASE}/${id}/note`, note), "Couldn't save. Try again.")
   }
@@ -130,6 +142,6 @@ export const useCheckInsStore = defineStore('checkIns', () => {
 
   return {
     mine, team, current, loading, error, listLoading, listError,
-    fetchMine, fetchTeam, fetchOne, saveNote, saveTag, addLink, removeLink, saveGoalValue,
+    fetchMine, fetchTeam, fetchOne, refreshDraft, regenerate, saveNote, saveTag, addLink, removeLink, saveGoalValue,
   }
 })

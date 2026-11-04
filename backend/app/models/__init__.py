@@ -22,6 +22,7 @@ from app.models.agent_activity import AgentActivityLog
 from app.models.agent_skill import AgentSkill, AgentType
 from app.models.agent_skill_bud_stage import AgentSkillBudStage
 from app.models.appraisal import Appraisal
+from app.models.appraisal_ai_run import AppraisalAiRun
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_evidence_link import AppraisalEvidenceLink
@@ -193,6 +194,7 @@ __all__ = [
     "AgentTaskStatus",
     "AgentType",
     "Appraisal",
+    "AppraisalAiRun",
     "AppraisalCheckIn",
     "AppraisalCycle",
     "AppraisalEvidenceLink",

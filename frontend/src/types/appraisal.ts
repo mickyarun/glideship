@@ -60,6 +60,12 @@ export interface CheckInGoal {
   source_url: string | null
 }
 
+export interface AiLine {
+  section: string
+  text: string
+  fact_ids: string[]
+}
+
 export interface CheckInRead {
   id: string
   profile_id: string
@@ -75,7 +81,9 @@ export interface CheckInRead {
   can_edit: boolean
   drafting_mode: DraftingMode
   draft_status: DraftStatus
-  ai_summary: string | null
+  ai_lines: AiLine[]
+  ai_hidden: boolean
+  can_regenerate: boolean
   heading_meanings: Partial<Record<EvidenceHeading, string>>
   facts: FactView[]
   fact_tags: Record<string, FactTag>

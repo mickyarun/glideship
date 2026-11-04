@@ -152,6 +152,10 @@ class ClaudeRunnerConfig:
     # leaves the CLI's defaults; a list (``[]`` for none) takes every other
     # built-in away and leaves only the MCP tools (``claude_guard.tool_scope``).
     builtin_tools: list[str] | None = None
+    # No MCP servers at all, not even the host's or a repo's: passes an empty
+    # config with ``--strict-mcp-config``. For runs whose prompt holds people
+    # data, where one reachable tool could carry it somewhere.
+    no_mcp: bool = False
 
 
 def _find_tool_uses(obj: Any, callback: ProgressCallback) -> None:
@@ -750,6 +754,7 @@ async def run_claude_code(
 
     # Write temporary MCP config if tools are needed
     mcp_config_file = None
+    mcp_json: dict[str, Any] | None = {"mcpServers": {}} if config.no_mcp else None
     if config.mcp:
         mcp_json = {
             "mcpServers": {
@@ -765,6 +770,7 @@ async def run_claude_code(
                 },
             },
         }
+    if mcp_json is not None:
         with tempfile.NamedTemporaryFile(
             suffix=".json",
             prefix="bodhiorchard_mcp_",

@@ -35,7 +35,7 @@ function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
     id: 'c1', profile_id: 'p1', user_id: 'u1', person_name: 'Priya', manager_name: 'Ravi',
     period_start: '2026-10-01', period_end: '2026-10-31', working_days: 22, available_days: '20',
     status: 'open', closed: false, can_edit: true, drafting_mode: 'manual', draft_status: 'none',
-    ai_summary: null, heading_meanings: {}, facts: [], fact_tags: {},
+    ai_lines: [], ai_hidden: false, can_regenerate: false, heading_meanings: {}, facts: [], fact_tags: {},
     note: { lines: {}, blocking: '', next_month: '' }, links: [], goals: [], identity_warnings: [],
     ...overrides,
   }

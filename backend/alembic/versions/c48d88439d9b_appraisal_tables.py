@@ -1,8 +1,8 @@
 """Appraisal tables, their enums, new audit actions and the goal-history trigger.
 
-Revision ID: c32197082c72
+Revision ID: c48d88439d9b
 Revises: a1e8aeee2202
-Create Date: 2026-11-04 16:27:52.193418
+Create Date: 2026-11-04 17:38:52.867498
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "c32197082c72"
+revision: str = "c48d88439d9b"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -61,6 +61,9 @@ _ENUMS = {
     ),
     "appraisal_trends_status": postgresql.ENUM(
         "draft", "approved", name="appraisal_trends_status", create_type=False
+    ),
+    "appraisal_draft_kind": postgresql.ENUM(
+        "check_in", "period_summary", name="appraisal_draft_kind", create_type=False
     ),
     "appraisal_draft_status": postgresql.ENUM(
         "none", "pending", "ready", "failed", name="appraisal_draft_status", create_type=False
@@ -282,6 +285,40 @@ def upgrade() -> None:
         ["org_id"],
         unique=True,
         postgresql_where="is_default",
+    )
+    op.create_table(
+        "appraisal_ai_runs",
+        sa.Column("org_id", sa.UUID(), nullable=False),
+        sa.Column("profile_id", sa.UUID(), nullable=False),
+        sa.Column("kind", _ENUMS["appraisal_draft_kind"], nullable=False),
+        sa.Column("record_id", sa.UUID(), nullable=False),
+        sa.Column("provider", sa.String(length=40), nullable=False),
+        sa.Column("fact_ids", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("prompt", sa.LargeBinary(), nullable=True),
+        sa.Column("output", sa.LargeBinary(), nullable=True),
+        sa.Column("error", sa.String(length=60), nullable=True),
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["org_id"],
+            ["organizations.id"],
+        ),
+        sa.ForeignKeyConstraint(["profile_id"], ["employee_profiles.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "ix_appraisal_ai_runs_record", "appraisal_ai_runs", ["org_id", "record_id"], unique=False
     )
     op.create_table(
         "appraisal_check_ins",
@@ -728,6 +765,8 @@ def downgrade() -> None:
     )
     op.drop_index("ix_appraisal_check_ins_cycle", table_name="appraisal_check_ins")
     op.drop_table("appraisal_check_ins")
+    op.drop_index("ix_appraisal_ai_runs_record", table_name="appraisal_ai_runs")
+    op.drop_table("appraisal_ai_runs")
     op.drop_index(
         "uq_appraisal_role_templates_default",
         table_name="appraisal_role_templates",

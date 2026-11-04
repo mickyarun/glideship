@@ -494,11 +494,15 @@ because they are game currency, not performance.
   person gets the manual view. Anything else is retried three times, then `failed`. A login
   failure can't yet be told apart from a timeout, so add an auth-failure code to
   `ClaudeErrorCode`.
-- Only a single "regenerate" by a person uses the `202` job pattern.
-- Drafting runs get no tools at all: no MCP server, no shell, no file access. The prompt holds
-  card titles and other text people typed, which could carry an instruction such as "post this
-  to Slack"; with no tools there is nothing it can act on. The run returns text, and the citation
-  check is the only path into the row. The trend drafts for role templates are the one exception,
+- "Regenerate" sets the row back to pending and answers `202`; the sweeper picks it up within a
+  minute, so it survives a restart like any other draft.
+- Drafting runs get no tools at all: no built-in tools, an empty `--strict-mcp-config` (so the
+  host's own MCP servers can't load) and no repository. The prompt holds card titles and other
+  text people typed, which could carry an instruction such as "post this to Slack"; with no tools
+  there is nothing it can act on. A provider that can't guarantee this is refused and the person
+  gets the manual view. The run returns text, and the citation check is the only path into the
+  row. Its logs carry no prompt or output (`content_free_logs`) and the CLI's saved transcript is
+  deleted straight after. A viewer who can't open every fact behind a draft doesn't get the draft. The trend drafts for role templates are the one exception,
   and they get web search only.
 
 ### Leave
@@ -659,7 +663,7 @@ them is an enum migration.
 
 ## Data model
 
-Eight tables. Every status and option is a Postgres enum.
+Ten tables. Every status and option is a Postgres enum.
 
 **`appraisal_cycles`**
 `id, org_id, name, period_start, period_end, self_due, manager_due, ack_due, scope (JSONB: offices,
@@ -727,6 +731,10 @@ reported_by`
 trends_approved_by, ai_drafting (bool),
 is_default,
 updated_by`. The profile's template is snapshotted on the appraisal when a cycle opens.
+
+**`appraisal_ai_runs`**
+`id, org_id, profile_id, kind (check_in | period_summary), record_id, provider, fact_ids (JSONB),
+prompt (bytes), output (bytes), error`. One row per AI run, so anyone can see what the AI saw.
 
 Reminders reuse `digest_claims` with new `DigestClaimKind` values instead of a new table.
 

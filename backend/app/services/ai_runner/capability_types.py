@@ -94,6 +94,9 @@ class ProviderCapabilities:
     # Whether the adapter can take the built-in file, shell and web tools away
     # so only the run's MCP tools remain (``ClaudeRunnerConfig.builtin_tools``).
     scopes_builtin_tools: bool = True
+    # Whether the adapter can guarantee no MCP servers at all, including ones
+    # configured on the host (``ClaudeRunnerConfig.no_mcp``).
+    isolates_mcp: bool = False
     # Reasoning as a boolean (Ollama's `think`) rather than a level. Providers
     # with graded reasoning use ``supports_effort``/``effort_values``.
     supports_thinking: bool = False

@@ -22,11 +22,11 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
-from app.models.appraisal_enums import AppraisalStatus
+from app.models.appraisal_enums import AppraisalStatus, DraftingMode, DraftStatus
 from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.models.employee_reporting_manager import EmployeeReportingManager
 from app.models.user import User
-from app.repositories.base import BaseRepository
+from app.repositories.base import BaseRepository, rowcount
 
 # Appraisals still in progress: a manager change or an exit affects them.
 OPEN = (
@@ -132,3 +132,18 @@ class AppraisalRepository(BaseRepository[Appraisal]):
             )
         )
         return list(result.scalars().all())
+
+    async def queue_summaries(self, cycle_id: uuid.UUID) -> int:
+        """Mark each AI-mode appraisal in a cycle for a period summary."""
+        result = await self._db.execute(
+            update(Appraisal)
+            .where(
+                Appraisal.org_id == self._org,
+                Appraisal.cycle_id == cycle_id,
+                Appraisal.drafting_mode == DraftingMode.AI,
+                Appraisal.status != AppraisalStatus.WITHDRAWN,
+                Appraisal.period_summary_status == DraftStatus.NONE,
+            )
+            .values(period_summary_status=DraftStatus.PENDING, summary_attempts=0)
+        )
+        return rowcount(result)

@@ -78,6 +78,22 @@ async def get_check_in(
     return await read_check_in(db, caller, ctx)
 
 
+@router.post(
+    "/{check_in_id}/regenerate",
+    response_model=CheckInRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def post_regenerate(
+    check_in_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> CheckInRead:
+    """Ask for a fresh AI draft, before the person has added anything."""
+    ctx = await check_in_context(db, caller, check_in_id)
+    await check_in_writes.regenerate(db, ctx)
+    return await read_check_in(db, caller, ctx, log_view=False)
+
+
 @router.put("/{check_in_id}/note", response_model=CheckInRead)
 async def put_note(
     check_in_id: uuid.UUID,

@@ -172,6 +172,13 @@ class FactSource(StrEnum):
     HR_RECORDS = "hr_records"
 
 
+class DraftKind(StrEnum):
+    """What an AI run wrote."""
+
+    CHECK_IN = "check_in"
+    PERIOD_SUMMARY = "period_summary"
+
+
 class TrendsStatus(StrEnum):
     """Whether a role template's market trends may feed suggestions."""
 

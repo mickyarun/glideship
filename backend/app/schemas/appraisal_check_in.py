@@ -117,6 +117,14 @@ class GoalPanelItem(BaseModel):
     source_url: str | None = None
 
 
+class AiLine(BaseModel):
+    """One AI-drafted line, with the facts that back it."""
+
+    section: str
+    text: str
+    fact_ids: list[str]
+
+
 class CheckInRead(BaseModel):
     """One check-in as the caller may see it."""
 
@@ -135,7 +143,10 @@ class CheckInRead(BaseModel):
     can_edit: bool
     drafting_mode: DraftingMode
     draft_status: DraftStatus
-    ai_summary: str | None
+    ai_lines: list[AiLine]
+    # Lines exist but this viewer can't open every fact behind them.
+    ai_hidden: bool
+    can_regenerate: bool
     heading_meanings: dict[str, str]
     facts: list[FactView]
     fact_tags: dict[str, FactTag]

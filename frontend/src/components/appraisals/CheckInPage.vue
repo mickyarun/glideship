@@ -26,8 +26,17 @@
     <AppCallout v-else-if="checkIn.drafting_mode === 'manual'" variant="info" title="Manual check-in">
       Nothing on this page is written by AI. Below is what Glideship recorded{{ editable ? ' for you' : '' }} this month.
     </AppCallout>
+    <AppCallout v-else-if="checkIn.draft_status === 'pending'" variant="info">
+      The AI draft is being written. The work is listed below and you can carry on; it appears here when it's ready.
+    </AppCallout>
+    <AppCallout v-else-if="checkIn.ai_hidden" variant="info">
+      The AI draft is hidden because it draws on records you can't open.
+    </AppCallout>
     <AppCallout v-else-if="checkIn.draft_status !== 'ready'" variant="warning">
       The AI summary isn't available right now. The work is listed below and the check-in works as usual.
+      <template v-if="checkIn.can_regenerate" #actions>
+        <v-btn size="small" variant="outlined" @click="regenerate">Try again</v-btn>
+      </template>
     </AppCallout>
     <AppCallout v-if="checkIn.identity_warnings.length" variant="warning" title="Work may be missing">
       {{ warningText }}
@@ -35,6 +44,13 @@
     <AppCallout v-if="error" variant="error">{{ error }}</AppCallout>
 
     <CheckInGoalsPanel :goals="checkIn.goals" :editable="editable" period-label="This period's" @save="saveValue" />
+    <CheckInAiLines
+      v-if="checkIn.ai_lines.length"
+      :lines="checkIn.ai_lines"
+      :facts="checkIn.facts"
+      :can-regenerate="checkIn.can_regenerate"
+      @regenerate="regenerate"
+    />
     <CheckInWork
       :facts="checkIn.facts"
       :tags="checkIn.fact_tags"
@@ -63,8 +79,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
+import CheckInAiLines from '@/components/appraisals/CheckInAiLines.vue'
 import CheckInGoalsPanel from '@/components/appraisals/CheckInGoalsPanel.vue'
 import CheckInHeadings from '@/components/appraisals/CheckInHeadings.vue'
 import CheckInWork from '@/components/appraisals/CheckInWork.vue'
@@ -105,6 +122,27 @@ watch(
   { immediate: true },
 )
 
+// While a draft is being written, look for it now and then.
+const POLL_MS = 15_000
+let poll: ReturnType<typeof setInterval> | undefined
+
+function stopPolling(): void {
+  clearInterval(poll)
+  poll = undefined
+}
+
+watch(
+  () => [props.checkIn.id, props.checkIn.draft_status],
+  () => {
+    stopPolling()
+    if (props.checkIn.draft_status === 'pending') {
+      poll = setInterval(() => void store.refreshDraft(props.checkIn.id), POLL_MS)
+    }
+  },
+  { immediate: true },
+)
+onBeforeUnmount(stopPolling)
+
 function cleaned(): CheckInNote {
   const lines: Partial<Record<EvidenceHeading, string[]>> = {}
   for (const [heading, texts] of Object.entries(draft.lines)) {
@@ -124,6 +162,7 @@ async function save(): Promise<void> {
   saving.value = false
 }
 
+const regenerate = () => run(store.regenerate(props.checkIn.id))
 const saveTag = (itemId: string, tag: FactTag | null) => run(store.saveTag(props.checkIn.id, itemId, tag))
 const saveValue = (goalId: string, body: GoalValueIn) => run(store.saveGoalValue(props.checkIn.id, goalId, body))
 const addLink = (heading: EvidenceHeading, url: string, title: string) =>

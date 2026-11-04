@@ -39,6 +39,7 @@ from app.core.middleware import RequestLoggingMiddleware
 from app.repositories.board_agent_run_sweep import recover_stuck_board_agent_runs
 from app.repositories.external_import_sweep import recover_stuck_external_imports
 from app.services.appraisals.check_in_scheduler import run_check_in_scheduler
+from app.services.appraisals.draft_sweeper import run_draft_sweeper
 from app.services.boards.agents.stale_sweep import run_forever as run_board_agent_stale_sweep
 from app.services.boards.due_reminders import run_forever as run_board_due_reminders
 from app.services.celebrations.scheduler import run_forever as run_celebrations
@@ -344,6 +345,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     followups_task = asyncio.create_task(run_followups())
     # Opens, refreshes and closes appraisal check-ins for every org (Slack or not).
     appraisal_check_in_task = asyncio.create_task(run_check_in_scheduler())
+    # Finishes pending AI drafts; the queue is the rows, so a restart loses nothing.
+    appraisal_draft_task = asyncio.create_task(run_draft_sweeper())
 
     # 9. PR-merge Redis-stream worker pool. One consumer per
     # (org, repo) stream; supervisor task spawns consumers lazily as
@@ -393,6 +396,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     board_agent_stale_task.cancel()
     followups_task.cancel()
     appraisal_check_in_task.cancel()
+    appraisal_draft_task.cancel()
     if pr_merge_pool is not None:
         await pr_merge_pool.stop()
     await stop_workers()
