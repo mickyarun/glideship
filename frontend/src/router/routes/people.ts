@@ -50,6 +50,22 @@ export const peopleRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/leave/LeaveReportsView.vue'),
   },
   {
+    // Everyone: their own check-ins. The API decides what each person sees.
+    path: 'appraisals',
+    name: 'appraisal-my-month',
+    component: () => import('@/views/appraisals/MyMonthView.vue'),
+  },
+  {
+    path: 'appraisals/team',
+    name: 'appraisal-team',
+    component: () => import('@/views/appraisals/TeamCheckInsView.vue'),
+  },
+  {
+    path: 'appraisals/check-ins/:id',
+    name: 'appraisal-check-in',
+    component: () => import('@/views/appraisals/CheckInView.vue'),
+  },
+  {
     path: 'settings/leave',
     name: 'settings-leave',
     meta: { permission: 'leave:configure' },

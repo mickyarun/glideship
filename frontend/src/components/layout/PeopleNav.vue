@@ -53,6 +53,20 @@
     rounded="lg"
   />
   <v-list-item
+    prepend-icon="mdi-notebook-edit-outline"
+    title="My month"
+    to="/appraisals"
+    exact
+    rounded="lg"
+  />
+  <v-list-item
+    v-if="leaveStore.approvalCount.has_reports"
+    prepend-icon="mdi-account-group-outline"
+    title="Team check-ins"
+    to="/appraisals/team"
+    rounded="lg"
+  />
+  <v-list-item
     v-if="canViewEmployees"
     prepend-icon="mdi-account-multiple-outline"
     title="Employees"

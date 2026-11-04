@@ -124,6 +124,8 @@ class CheckInRead(BaseModel):
     profile_id: uuid.UUID
     user_id: uuid.UUID
     person_name: str
+    # Who scores this person's review and reads their check-ins.
+    manager_name: str | None
     period_start: date
     period_end: date
     working_days: int

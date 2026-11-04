@@ -69,7 +69,13 @@ async def read_check_in(db: AsyncSession, caller: Caller, ctx: CheckInContext) -
         template = await AppraisalRoleTemplateRepository(db, org_id=org_id).get_by_id(
             ctx.appraisal.role_template_id
         )
-    user = await UserRepository(db).get_by_id_in_org(profile.user_id, org_id)
+    users = UserRepository(db)
+    user = await users.get_by_id_in_org(profile.user_id, org_id)
+    manager = (
+        await users.get_by_id_in_org(ctx.appraisal.manager_user_id, org_id)
+        if ctx.appraisal
+        else None
+    )
     mode = ctx.appraisal.drafting_mode if ctx.appraisal else DraftingMode.MANUAL
     ready = check_in.draft_status is DraftStatus.READY
     return CheckInRead(
@@ -77,6 +83,7 @@ async def read_check_in(db: AsyncSession, caller: Caller, ctx: CheckInContext) -
         profile_id=profile.id,
         user_id=profile.user_id,
         person_name=user.name if user else "",
+        manager_name=manager.name if manager else None,
         period_start=check_in.period_start,
         period_end=check_in.period_end,
         working_days=check_in.working_days,
