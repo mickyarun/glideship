@@ -1,8 +1,8 @@
 """Appraisal tables, their enums, new audit actions and the goal-history trigger.
 
-Revision ID: ef580cb1cd8e
+Revision ID: c32197082c72
 Revises: a1e8aeee2202
-Create Date: 2026-11-04 15:43:18.421011
+Create Date: 2026-11-04 16:27:52.193418
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "ef580cb1cd8e"
+revision: str = "c32197082c72"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -291,9 +291,12 @@ def upgrade() -> None:
         sa.Column("period_start", sa.Date(), nullable=False),
         sa.Column("period_end", sa.Date(), nullable=False),
         sa.Column("working_days", sa.SmallInteger(), nullable=False),
-        sa.Column("available_days", sa.SmallInteger(), nullable=False),
+        sa.Column("available_days", sa.Numeric(precision=4, scale=1), nullable=False),
         sa.Column("identity_warnings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("fact_refs", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "facts_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+        ),
         sa.Column("fact_tags", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("ai_summary", sa.LargeBinary(), nullable=True),
         sa.Column("ai_model", sa.String(length=100), nullable=True),
@@ -304,6 +307,7 @@ def upgrade() -> None:
         sa.Column("draft_claimed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("employee_note", sa.LargeBinary(), nullable=True),
         sa.Column("status", _ENUMS["appraisal_check_in_status"], nullable=False),
+        sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
             "created_at",
@@ -333,6 +337,13 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_appraisal_check_ins_cycle", "appraisal_check_ins", ["org_id", "cycle_id"], unique=False
+    )
+    op.create_index(
+        "ix_appraisal_check_ins_open",
+        "appraisal_check_ins",
+        ["org_id", "period_end"],
+        unique=False,
+        postgresql_where="closed_at IS NULL",
     )
     op.create_index(
         "ix_appraisal_check_ins_pending_draft",
@@ -709,6 +720,11 @@ def downgrade() -> None:
         "ix_appraisal_check_ins_pending_draft",
         table_name="appraisal_check_ins",
         postgresql_where="draft_status = 'pending'",
+    )
+    op.drop_index(
+        "ix_appraisal_check_ins_open",
+        table_name="appraisal_check_ins",
+        postgresql_where="closed_at IS NULL",
     )
     op.drop_index("ix_appraisal_check_ins_cycle", table_name="appraisal_check_ins")
     op.drop_table("appraisal_check_ins")

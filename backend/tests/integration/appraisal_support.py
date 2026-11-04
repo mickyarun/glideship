@@ -16,11 +16,13 @@
 
 from __future__ import annotations
 
+import random
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
@@ -31,6 +33,10 @@ from app.models.appraisal_enums import (
     FeedbackCadence,
     ReviewPeriod,
 )
+from app.models.board import Board, BoardStage
+from app.models.board_card import BoardCard, BoardCardAssignee
+from app.models.board_card_detail import BoardCardEvent
+from app.models.board_enums import BoardCardEventType, BoardStageCategory
 from app.repositories.employee_profile import EmployeeProfileRepository
 from tests.integration.leave_support import Factory, report_to, setup_org
 
@@ -100,3 +106,51 @@ async def add_and_commit(db: AsyncSession, row: object) -> None:
     """Insert one row and commit, so constraint errors surface here."""
     db.add(row)
     await db.commit()
+
+
+async def done_card(
+    factory: Factory,
+    board: Board,
+    assignee: uuid.UUID,
+    done_at: datetime,
+    *,
+    still_done: bool = True,
+    title: str = "Renew the payroll vendor contract",
+) -> uuid.UUID:
+    """A card assigned to ``assignee`` that entered a done stage at ``done_at``.
+
+    With ``still_done=False`` it has since moved back to the first stage.
+    """
+    async with factory() as db:
+        stages = list(
+            await db.scalars(
+                select(BoardStage)
+                .where(BoardStage.board_id == board.id)
+                .order_by(BoardStage.position)
+            )
+        )
+        done = next(s for s in stages if s.category is BoardStageCategory.DONE)
+        card = BoardCard(
+            org_id=board.org_id,
+            board_id=board.id,
+            number=random.randint(1, 10**6),
+            stage_id=done.id if still_done else stages[0].id,
+            position=1.0,
+            title=title,
+        )
+        db.add(card)
+        await db.flush()
+        db.add(BoardCardAssignee(org_id=board.org_id, card_id=card.id, user_id=assignee))
+        event = BoardCardEvent(
+            org_id=board.org_id,
+            card_id=card.id,
+            board_id=board.id,
+            type=BoardCardEventType.MOVED,
+            to_stage_id=done.id,
+            to_category=BoardStageCategory.DONE,
+        )
+        db.add(event)
+        await db.flush()
+        event.created_at = done_at
+        await db.commit()
+        return card.id

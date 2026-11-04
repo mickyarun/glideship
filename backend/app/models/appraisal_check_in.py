@@ -22,6 +22,7 @@ drafts from the database rather than an in-memory queue.
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
@@ -31,9 +32,11 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     LargeBinary,
+    Numeric,
     SmallInteger,
     String,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -54,6 +57,12 @@ class AppraisalCheckIn(BaseModel):
             name="ck_appraisal_check_ins_days",
         ),
         Index("ix_appraisal_check_ins_cycle", "org_id", "cycle_id"),
+        Index(
+            "ix_appraisal_check_ins_open",
+            "org_id",
+            "period_end",
+            postgresql_where="closed_at IS NULL",
+        ),
         # The sweeper's claim query.
         Index(
             "ix_appraisal_check_ins_pending_draft",
@@ -74,7 +83,8 @@ class AppraisalCheckIn(BaseModel):
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     working_days: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    available_days: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    # Half days count 0.5.
+    available_days: Mapped[Decimal] = mapped_column(Numeric(4, 1), nullable=False)
     # Accounts that may be this person but aren't linked yet.
     identity_warnings: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list
@@ -82,6 +92,10 @@ class AppraisalCheckIn(BaseModel):
     # Each: source, id, key, title, url, done_at, board_id. Ids and titles
     # only; never decrypted HR content.
     fact_refs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    # When the fact list was last gathered; the scheduler refreshes it daily.
+    facts_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     # Fact id → {"heading": ..., "goal_id": ...}, set by the employee.
     fact_tags: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     ai_summary: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
@@ -107,3 +121,6 @@ class AppraisalCheckIn(BaseModel):
         nullable=False,
         default=CheckInStatus.OPEN,
     )
+    # Set when the next check-in opens (or the self-review, for the last one);
+    # after that the fact list is frozen and nobody edits it.
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

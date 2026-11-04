@@ -28,6 +28,7 @@ from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.api.router import api_router
+from app.api.v1._appraisal_errors import register_appraisal_errors
 from app.api.v1._board_errors import register_board_errors
 from app.api.v1._hr_errors import register_hr_errors
 from app.api.v1._leave_errors import register_leave_errors
@@ -37,6 +38,7 @@ from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.repositories.board_agent_run_sweep import recover_stuck_board_agent_runs
 from app.repositories.external_import_sweep import recover_stuck_external_imports
+from app.services.appraisals.check_in_scheduler import run_check_in_scheduler
 from app.services.boards.agents.stale_sweep import run_forever as run_board_agent_stale_sweep
 from app.services.boards.due_reminders import run_forever as run_board_due_reminders
 from app.services.celebrations.scheduler import run_forever as run_celebrations
@@ -340,6 +342,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 8m. Daily follow-ups: an opt-in DM of each person's due cards and BUDs at
     # their own local time, claimed once per person-day.
     followups_task = asyncio.create_task(run_followups())
+    # Opens, refreshes and closes appraisal check-ins for every org (Slack or not).
+    appraisal_check_in_task = asyncio.create_task(run_check_in_scheduler())
 
     # 9. PR-merge Redis-stream worker pool. One consumer per
     # (org, repo) stream; supervisor task spawns consumers lazily as
@@ -388,6 +392,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     board_due_task.cancel()
     board_agent_stale_task.cancel()
     followups_task.cancel()
+    appraisal_check_in_task.cancel()
     if pr_merge_pool is not None:
         await pr_merge_pool.stop()
     await stop_workers()
@@ -461,6 +466,7 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=_block_cors_on_mcp)
 
 app.include_router(api_router)
 register_leave_errors(app)
+register_appraisal_errors(app)
 register_hr_errors(app)
 register_board_errors(app)
 
