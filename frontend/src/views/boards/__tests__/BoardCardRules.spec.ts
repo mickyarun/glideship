@@ -19,7 +19,7 @@
  * checklist asks before Done, and the repository is picked from the
  * board's linked ones (or cleared).
  */
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/socket', async () => (await import('./cardPageMockModules')).socketModule())
@@ -44,11 +44,20 @@ const later = (s: number) => new Date(Date.parse(CARD.updated_at) + s * 1000).to
 // Vuetify mounts a menu's items once it activates, which on a loaded CI
 // runner can take longer than vi.waitFor's 1 s default.
 const MENU_OPENS = { timeout: 5_000 }
-// A test that opens the menu twice needs room for both waits, which the
+// A test that opens the menu twice needs room for every wait, which the
 // 5 s default test timeout alone doesn't leave.
-const TWO_MENUS = 3 * MENU_OPENS.timeout
+const TWO_MENUS = 5 * MENU_OPENS.timeout
 const menuItem = (text: string) =>
   [...document.querySelectorAll<HTMLElement>('.v-overlay--active .v-list-item')].find(i => i.textContent?.includes(text))
+// The activator toggles, so a click that lands while the last menu is still
+// closing shuts it again; wait for it to be gone before opening the next.
+async function pickRepo(wrapper: VueWrapper, text: string): Promise<void> {
+  await vi.waitFor(() => expect(document.querySelector('.v-overlay--active')).toBeNull(), MENU_OPENS)
+  await wrapper.find('button[aria-label="Change repository"]').trigger('click')
+  await flushPromises()
+  await vi.waitFor(() => menuItem(text)!.click(), MENU_OPENS)
+  await flushPromises()
+}
 const buttonNamed = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)
 
 function start(card: Partial<CardDetail> = {}): void {
@@ -96,17 +105,11 @@ describe('BoardCardView stage rules and repository', () => {
   it("picks the repository from the board's linked ones, links to it, and clears it", async () => {
     cardApi.update.mockImplementation(async (_k, _n, body: CardUpdate) => ({ ...CARD, ...body, updated_at: later(1) }) as CardDetail)
     const { wrapper } = await mountCardPage()
-    await wrapper.find('button[aria-label="Change repository"]').trigger('click')
-    await flushPromises()
-    await vi.waitFor(() => menuItem('northwind-web')!.click(), MENU_OPENS)
-    await flushPromises()
+    await pickRepo(wrapper, 'northwind-web')
     expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { repo_id: 'r1' })
     const link = wrapper.find('aside[aria-label="Card details"] a[href="https://github.com/northwind/northwind-web"]')
     expect(link.attributes('rel')).toContain('noopener')
-    await wrapper.find('button[aria-label="Change repository"]').trigger('click')
-    await flushPromises()
-    await vi.waitFor(() => menuItem('No repository')!.click(), MENU_OPENS)
-    await flushPromises()
+    await pickRepo(wrapper, 'No repository')
     expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { repo_id: null })
   }, TWO_MENUS)
 
