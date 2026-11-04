@@ -26,7 +26,7 @@ from app.models.appraisal_enums import AppraisalStatus
 from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.models.employee_reporting_manager import EmployeeReportingManager
 from app.models.user import User
-from app.repositories.base import BaseRepository, rowcount
+from app.repositories.base import BaseRepository
 
 # Appraisals still in progress: a manager change or an exit affects them.
 OPEN = (
@@ -72,8 +72,10 @@ class AppraisalRepository(BaseRepository[Appraisal]):
         )
         return list(result.scalars().all())
 
-    async def move_scorer(self, profile_id: uuid.UUID, manager_user_id: uuid.UUID) -> int:
-        """Point the person's open appraisals at a new primary manager."""
+    async def move_scorer(
+        self, profile_id: uuid.UUID, manager_user_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        """Point the person's open appraisals at a new primary manager; the ids moved."""
         result = await self._db.execute(
             update(Appraisal)
             .where(
@@ -83,19 +85,20 @@ class AppraisalRepository(BaseRepository[Appraisal]):
                 Appraisal.manager_user_id != manager_user_id,
             )
             .values(manager_user_id=manager_user_id)
+            .returning(Appraisal.id)
         )
-        return rowcount(result)
+        return list(result.scalars().all())
 
     async def enrollable_profiles(
         self, cutoff: date, exclude: Collection[uuid.UUID] = ()
     ) -> list[EmployeeProfile]:
-        """Active people with a working account who joined by ``cutoff``."""
+        """Active people (not on notice) with a working account who joined by ``cutoff``."""
         stmt = (
             select(EmployeeProfile)
             .join(User, User.id == EmployeeProfile.user_id)
             .where(
                 EmployeeProfile.org_id == self._org,
-                EmployeeProfile.status.in_((EmployeeStatus.ACTIVE, EmployeeStatus.ON_NOTICE)),
+                EmployeeProfile.status == EmployeeStatus.ACTIVE,
                 User.is_active.is_(True),
                 or_(
                     EmployeeProfile.date_of_joining.is_(None),

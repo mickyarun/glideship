@@ -18,8 +18,8 @@
      them here; feedback goes in manager feedback, not in the check-in. -->
 <template>
   <AppPage title="Your team's check-ins" subtitle="The latest month for each person who reports to you.">
-    <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
-    <v-progress-linear v-if="store.loading" indeterminate color="primary" />
+    <AppCallout v-if="store.listError" variant="error">{{ store.listError }}</AppCallout>
+    <v-progress-linear v-if="store.listLoading" indeterminate color="primary" />
     <p v-else-if="!store.team.length" class="team__empty">Nobody who reports to you has a check-in yet.</p>
     <ul v-else class="team__list">
       <li v-for="row in store.team" :key="row.id">

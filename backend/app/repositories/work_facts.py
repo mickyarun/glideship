@@ -99,23 +99,33 @@ class WorkFactsRepository:
     async def buds_shipped(
         self, users: Collection[uuid.UUID], start: datetime, end: datetime
     ) -> list[FactRow]:
-        """BUDs assigned to them that reached production in the period."""
+        """BUDs assigned to them that first shipped in the period and are still shipped.
+
+        Shipped is the first move into production (or straight to closed),
+        so a BUD in production in January and closed in February counts once.
+        """
         moved = (
-            select(BUDTimelineEvent.bud_id, func.max(BUDTimelineEvent.created_at).label("at"))
+            select(BUDTimelineEvent.bud_id, func.min(BUDTimelineEvent.created_at).label("at"))
             .where(
                 BUDTimelineEvent.org_id == self._org,
                 BUDTimelineEvent.event_type == BUDTimelineEventType.STATUS_CHANGE.value,
                 BUDTimelineEvent.detail["to"].astext.in_(SHIPPED_STATUSES),
-                BUDTimelineEvent.created_at >= start,
-                BUDTimelineEvent.created_at < end,
             )
             .group_by(BUDTimelineEvent.bud_id)
+            .having(
+                func.min(BUDTimelineEvent.created_at) >= start,
+                func.min(BUDTimelineEvent.created_at) < end,
+            )
             .subquery()
         )
         stmt = (
             select(BUDDocument.id, BUDDocument.bud_number, BUDDocument.title, moved.c.at)
             .join(moved, moved.c.bud_id == BUDDocument.id)
-            .where(BUDDocument.org_id == self._org, BUDDocument.assignee_id.in_(users))
+            .where(
+                BUDDocument.org_id == self._org,
+                BUDDocument.assignee_id.in_(users),
+                BUDDocument.status.in_((BUDStatus.PROD, BUDStatus.CLOSED)),
+            )
         )
         return await self._per_bud(stmt, FactSource.BUDS, "shipped")
 

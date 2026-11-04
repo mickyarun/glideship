@@ -119,7 +119,10 @@ async def update_cycle(
 ) -> AppraisalCycle:
     """Change a draft cycle."""
     cycle = await draft_cycle(db, org_id, cycle_id)
-    changes = body.model_dump(exclude_unset=True, exclude={"intro_note", "scope"}, mode="json")
+    # A null means "leave it": every column here is required.
+    changes = body.model_dump(
+        exclude_unset=True, exclude_none=True, exclude={"intro_note", "scope"}, mode="json"
+    )
     for field, value in changes.items():
         setattr(cycle, field, value)
     if body.scope is not None:

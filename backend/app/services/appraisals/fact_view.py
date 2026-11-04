@@ -27,6 +27,7 @@ from typing import Any
 from app.core.permission_deps import PermissionSet
 from app.core.permissions_people import WORKSPACE_ENGINEERING
 from app.models.appraisal_enums import FactSource
+from app.services.employees.access import MANAGE as EMPLOYEES_MANAGE
 
 ENGINEERING_SOURCES = frozenset(
     {
@@ -37,7 +38,7 @@ ENGINEERING_SOURCES = frozenset(
         FactSource.QA_EVIDENCE.value,
     }
 )
-HR_RECORDS_PERMISSION = "employees:manage"
+HR_RECORDS_PERMISSION = EMPLOYEES_MANAGE
 PRIVATE_LABEL = {"board_cards": "Board", "hr_records": "HR"}
 
 

@@ -88,7 +88,7 @@ async def put_note(
     """Save the employee's lines, blocker and plan for next month."""
     ctx = await _own(db, caller, check_in_id)
     await check_in_writes.save_note(db, ctx, body)
-    return await read_check_in(db, caller, ctx)
+    return await read_check_in(db, caller, ctx, log_view=False)
 
 
 @router.put("/{check_in_id}/fact-tags", response_model=CheckInRead)
@@ -101,7 +101,7 @@ async def put_tags(
     """Say which goal (or heading) each fact or link helped."""
     ctx = await _own(db, caller, check_in_id)
     await check_in_writes.save_tags(db, ctx, body)
-    return await read_check_in(db, caller, ctx)
+    return await read_check_in(db, caller, ctx, log_view=False)
 
 
 @router.post("/{check_in_id}/links", response_model=CheckInRead, status_code=201)
@@ -114,7 +114,7 @@ async def post_link(
     """Add a link (up to five)."""
     ctx = await _own(db, caller, check_in_id)
     await check_in_writes.add_link(db, ctx, caller.user_id, body)
-    return await read_check_in(db, caller, ctx)
+    return await read_check_in(db, caller, ctx, log_view=False)
 
 
 @router.delete("/{check_in_id}/links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -141,4 +141,4 @@ async def put_goal_value(
     """This month's value for one of the period's goals."""
     ctx = await _own(db, caller, check_in_id)
     await check_in_writes.save_goal_value(db, ctx, caller.user_id, goal_id, body)
-    return await read_check_in(db, caller, ctx)
+    return await read_check_in(db, caller, ctx, log_view=False)

@@ -30,7 +30,7 @@
     <div v-for="group in groups" :key="group.source" class="work__group">
       <h3 class="work__source">{{ group.label }} · {{ group.facts.length }}</h3>
       <div v-for="fact in group.facts" :key="fact.id" class="work__row">
-        <a v-if="fact.url && !fact.private" :href="fact.url" class="work__key">{{ fact.key }}</a>
+        <a v-if="safeHref(fact.url) && !fact.private" :href="safeHref(fact.url) ?? undefined" class="work__key">{{ fact.key }}</a>
         <span v-else class="work__key work__key--private">{{ fact.key }}</span>
         <span class="work__what">
           <template v-if="fact.private">Can't be opened by you; it still counts.</template>
@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CheckInGoal, FactTag, FactView } from '@/types/appraisal'
-import { factsBySource, tagFromValue, tagOptions, tagValue } from '@/utils/appraisalCheckIn'
+import { factsBySource, safeHref, tagFromValue, tagOptions, tagValue } from '@/utils/appraisalCheckIn'
 
 const props = defineProps<{
   facts: FactView[]

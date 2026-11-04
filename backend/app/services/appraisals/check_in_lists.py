@@ -59,14 +59,12 @@ async def team_check_ins(db: AsyncSession, caller: Caller) -> list[CheckInSummar
         u.id: u
         for u in await UserRepository(db).get_many_by_ids([p.user_id for p in profiles.values()])
     }
-    latest: dict[uuid.UUID, AppraisalCheckIn] = {}
-    for check_in in await AppraisalCheckInRepository(db, org_id=caller.org_id).for_profiles(
+    latest = await AppraisalCheckInRepository(db, org_id=caller.org_id).latest_for_profiles(
         list(profiles)
-    ):
-        latest.setdefault(check_in.profile_id, check_in)
+    )
     out = []
-    for profile_id, check_in in latest.items():
-        profile = profiles[profile_id]
+    for check_in in latest:
+        profile = profiles[check_in.profile_id]
         user = users.get(profile.user_id)
         out.append(_summary(check_in, profile.user_id, user.name if user else ""))
     return sorted(out, key=lambda s: s.person_name.lower())

@@ -30,7 +30,8 @@ from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import AppraisalStatus, CycleStatus
 from app.models.appraisal_role_template import AppraisalRoleTemplate
-from app.models.employee_profile import EmployeeProfile
+from app.models.employee_audit_event import EmployeeAuditAction
+from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -39,11 +40,15 @@ from app.repositories.employee_reporting_manager import (
     ManagerLink,
 )
 from app.schemas.appraisal_cycle import EnrolmentReport
+from app.services.appraisals import audit
 from app.services.appraisals.cycles import draft_cycle
 from app.services.appraisals.drafting_mode import drafting_mode
 from app.services.appraisals.errors import AppraisalConflictError
 from app.services.appraisals.role_templates import ensure_seeded, match_template
 from app.services.appraisals.settings import load_appraisal_settings
+
+# Moving to either status withdraws the person's appraisals in progress.
+LEAVING = frozenset({EmployeeStatus.ON_NOTICE, EmployeeStatus.EXITED})
 
 
 def _primary(links: Sequence[ManagerLink]) -> ManagerLink | None:
@@ -87,9 +92,7 @@ async def enrol(
         if profile.id in enrolled_ids:
             report.already_enrolled += 1
             continue
-        primary = next(
-            (m for m in links.get(profile.id, []) if m.is_primary and m.is_active), None
-        )
+        primary = _primary(links.get(profile.id, []))
         if primary is None:
             report.no_primary_manager.append(profile.user_id)
             continue
@@ -152,7 +155,7 @@ async def enrol_late_joiners(db: AsyncSession, org_id: uuid.UUID, today: date) -
 
 
 async def withdraw_on_exit(db: AsyncSession, org_id: uuid.UUID, profile_id: uuid.UUID) -> int:
-    """Withdraw the person's appraisals still in progress when they leave."""
+    """Withdraw the person's appraisals still in progress when they go on notice or leave."""
     open_ones = await AppraisalRepository(db, org_id=org_id).open_for_profile(profile_id)
     for appraisal in open_ones:
         appraisal.status = AppraisalStatus.WITHDRAWN
@@ -161,13 +164,15 @@ async def withdraw_on_exit(db: AsyncSession, org_id: uuid.UUID, profile_id: uuid
 
 
 async def follow_primary_manager(
-    db: AsyncSession, org_id: uuid.UUID, profile_id: uuid.UUID
+    db: AsyncSession, org_id: uuid.UUID, profile: EmployeeProfile, actor_id: uuid.UUID
 ) -> int:
     """Move open appraisals and feedback to the person's current primary manager.
 
     With no primary manager left, the snapshot stays; the access rules
-    already stop a manager who left the reporting line from scoring.
+    already stop a manager who left the reporting line from scoring. Each
+    moved appraisal is audited, since the new scorer reads everything.
     """
+    profile_id = profile.id
     links = await EmployeeReportingManagerRepository(db, org_id=org_id).list_for_profiles(
         [profile_id]
     )
@@ -175,7 +180,17 @@ async def follow_primary_manager(
     if primary is None:
         return 0
     moved = await AppraisalRepository(db, org_id=org_id).move_scorer(profile_id, primary.user_id)
-    moved += await AppraisalFeedbackRepository(db, org_id=org_id).move_open(
+    for appraisal_id in moved:
+        audit.record(
+            db,
+            org_id=org_id,
+            actor_id=actor_id,
+            subject_user_id=profile.user_id,
+            profile_id=profile_id,
+            action=EmployeeAuditAction.APPRAISAL_CHANGED,
+            target=appraisal_id,
+        )
+    feedback = await AppraisalFeedbackRepository(db, org_id=org_id).move_open(
         profile_id, primary.user_id
     )
-    return moved
+    return len(moved) + feedback

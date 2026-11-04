@@ -38,33 +38,34 @@ export const useCheckInsStore = defineStore('checkIns', () => {
   const mine = ref<CheckInSummary[]>([])
   const team = ref<CheckInSummary[]>([])
   const current = ref<CheckInRead | null>(null)
+  // Lists and the open check-in keep their own state, so one screen's
+  // error never shows on another.
   const loading = ref(false)
   const error = ref('')
+  const listLoading = ref(false)
+  const listError = ref('')
   // Guards against a slow response for an earlier check-in landing last.
   let request = 0
 
-  async function fetchMine(): Promise<void> {
-    loading.value = true
-    error.value = ''
+  async function fetchList(path: string, fallback: string): Promise<CheckInSummary[]> {
+    listLoading.value = true
+    listError.value = ''
     try {
-      mine.value = (await api.get<CheckInSummary[]>(`${BASE}/mine`)).data
+      return (await api.get<CheckInSummary[]>(`${BASE}/${path}`)).data
     } catch (err) {
-      error.value = extractApiError(err, "Couldn't load your check-ins. Reload to try again.")
+      listError.value = extractApiError(err, fallback)
+      return []
     } finally {
-      loading.value = false
+      listLoading.value = false
     }
   }
 
+  async function fetchMine(): Promise<void> {
+    mine.value = await fetchList('mine', "Couldn't load your check-ins. Reload to try again.")
+  }
+
   async function fetchTeam(): Promise<void> {
-    loading.value = true
-    error.value = ''
-    try {
-      team.value = (await api.get<CheckInSummary[]>(`${BASE}/team`)).data
-    } catch (err) {
-      error.value = extractApiError(err, "Couldn't load your team's check-ins. Reload to try again.")
-    } finally {
-      loading.value = false
-    }
+    team.value = await fetchList('team', "Couldn't load your team's check-ins. Reload to try again.")
   }
 
   async function fetchOne(id: string): Promise<void> {
@@ -86,7 +87,9 @@ export const useCheckInsStore = defineStore('checkIns', () => {
 
   async function write(send: () => Promise<{ data: CheckInRead }>, fallback: string): Promise<string | null> {
     try {
-      current.value = (await send()).data
+      const data = (await send()).data
+      // A slow save for one check-in mustn't replace another now on screen.
+      if (current.value?.id === data.id) current.value = data
       return null
     } catch (err) {
       return extractApiError(err, fallback)
@@ -126,7 +129,7 @@ export const useCheckInsStore = defineStore('checkIns', () => {
   }
 
   return {
-    mine, team, current, loading, error,
+    mine, team, current, loading, error, listLoading, listError,
     fetchMine, fetchTeam, fetchOne, saveNote, saveTag, addLink, removeLink, saveGoalValue,
   }
 })

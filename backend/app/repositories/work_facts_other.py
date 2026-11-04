@@ -67,16 +67,22 @@ class OtherFactsRepository:
     async def board_cards(
         self, users: Collection[uuid.UUID], start: datetime, end: datetime
     ) -> list[FactRow]:
-        """Cards assigned to them that reached a done stage in the period and stayed done."""
+        """Cards assigned to them whose latest move into done fell in the period.
+
+        The latest one ever, not the latest in the period: a card done in
+        January, reopened and done again in February counts in February only.
+        """
         done = (
             select(BoardCardEvent.card_id, func.max(BoardCardEvent.created_at).label("at"))
             .where(
                 BoardCardEvent.org_id == self._org,
                 BoardCardEvent.to_category == BoardStageCategory.DONE,
-                BoardCardEvent.created_at >= start,
-                BoardCardEvent.created_at < end,
             )
             .group_by(BoardCardEvent.card_id)
+            .having(
+                func.max(BoardCardEvent.created_at) >= start,
+                func.max(BoardCardEvent.created_at) < end,
+            )
             .subquery()
         )
         stmt = (

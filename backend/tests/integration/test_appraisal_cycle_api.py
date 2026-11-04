@@ -173,7 +173,7 @@ async def test_exit_withdraws_and_a_new_manager_takes_over(
     async with pg_session_factory() as db:
         profile = await EmployeeProfileRepository(db, org_id=org).get_by_user(p["emp"])
         assert profile is not None
-        assert await follow_primary_manager(db, org, profile.id) == 1
+        assert await follow_primary_manager(db, org, profile, p["hr"]) == 1
         assert await withdraw_on_exit(db, org, profile.id) == 1
         await db.commit()
         row = await db.scalar(

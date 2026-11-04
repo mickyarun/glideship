@@ -15,7 +15,6 @@
 """Monthly check-ins end to end: the tick, the fact rules, writes, access, closing."""
 
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -25,24 +24,15 @@ from sqlalchemy import select
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_enums import CheckInStatus, DraftStatus
-from app.models.board import BoardVisibility
-from app.repositories.appraisal_cycle import orgs_with_running_cycles
-from app.services.appraisals.check_in_scheduler import org_pass
 from app.services.file_storage import FileStorage
-from tests.integration.appraisal_support import done_card
-from tests.integration.board_support import new_board
+from tests.integration.appraisal_month import NOV_2, Month, october, run_tick
 from tests.integration.hr_support import configure_hr_storage
 from tests.integration.leave_support import (
     Factory,
-    add_request,
     as_user,
-    give_role,
-    report_to,
-    setup_org,
 )
 
 pytestmark = pytest.mark.integration
-NOV_2 = datetime(2026, 11, 2, 6, tzinfo=UTC)  # the first working day after October
 DEC_2 = datetime(2026, 12, 2, 6, tzinfo=UTC)
 CHECK_INS = "/api/v1/check-ins"
 
@@ -51,48 +41,6 @@ CHECK_INS = "/api/v1/check-ins"
 def hr_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FileStorage:
     """The shared test HR key (see ``hr_support``)."""
     return configure_hr_storage(monkeypatch, tmp_path)
-
-
-@dataclass(frozen=True)
-class Month:
-    org: uuid.UUID
-    people: dict[str, uuid.UUID]
-    counted: uuid.UUID
-
-
-async def _tick(factory: Factory, org: uuid.UUID, now: datetime) -> None:
-    async with factory() as db:
-        mine = [o for o in await orgs_with_running_cycles(db) if o.org_id == org]
-        assert mine
-        await org_pass(db, mine[0], now)
-        await db.commit()
-
-
-async def _october(client: AsyncClient, factory: Factory) -> Month:
-    org, ids, _ = await setup_org(factory, "Hr", "Ravi", "Priya", "Meena", "Sam")
-    p = dict(zip(("hr", "mgr", "emp", "quiet", "stranger"), ids, strict=True))
-    await give_role(factory, org, p["hr"], "hr")
-    for person in ("emp", "quiet"):
-        await report_to(factory, org, p[person], p["mgr"])
-    board = await new_board(factory, org, visibility=BoardVisibility.MEMBERS)
-    counted = await done_card(factory, board, p["emp"], datetime(2026, 10, 15, 9, tzinfo=UTC))
-    await done_card(
-        factory, board, p["emp"], datetime(2026, 10, 16, 9, tzinfo=UTC), still_done=False
-    )
-    await done_card(factory, board, p["emp"], datetime(2026, 11, 1, 12, tzinfo=UTC))
-    await add_request(factory, org, p["emp"], date(2026, 10, 20), date(2026, 10, 21), "2")
-    hr = as_user(p["hr"], org)
-    cycle = await client.post(
-        "/api/v1/appraisals/cycles",
-        json={"period_start": "2026-10-01", "ai_drafting": False},
-        headers=hr,
-    )
-    activated = await client.post(
-        f"/api/v1/appraisals/cycles/{cycle.json()['id']}/activate", headers=hr
-    )
-    assert activated.status_code == 200, activated.text
-    await _tick(factory, org, NOV_2)
-    return Month(org, p, counted)
 
 
 async def _check_in_id(client: AsyncClient, m: Month, who: str) -> str:
@@ -104,8 +52,8 @@ async def _check_in_id(client: AsyncClient, m: Month, who: str) -> str:
 async def test_tick_lists_only_cards_still_done_in_the_month(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
-    m = await _october(client, pg_session_factory)
-    await _tick(pg_session_factory, m.org, NOV_2)  # a second pass changes nothing
+    m = await october(client, pg_session_factory)
+    await run_tick(pg_session_factory, m.org, NOV_2)  # a second pass changes nothing
     async with pg_session_factory() as db:
         rows = list(
             await db.scalars(select(AppraisalCheckIn).where(AppraisalCheckIn.org_id == m.org))
@@ -122,7 +70,7 @@ async def test_tick_lists_only_cards_still_done_in_the_month(
 async def test_employee_writes_until_it_closes(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
-    m = await _october(client, pg_session_factory)
+    m = await october(client, pg_session_factory)
     me = as_user(m.people["emp"], m.org)
     check_in = await _check_in_id(client, m, "emp")
     note = {"lines": {"team": ["Covered support during the launch"]}, "blocking": "Access logs"}
@@ -156,7 +104,7 @@ async def test_employee_writes_until_it_closes(
 async def test_manager_reads_but_never_writes_and_others_get_nothing(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
-    m = await _october(client, pg_session_factory)
+    m = await october(client, pg_session_factory)
     check_in = await _check_in_id(client, m, "emp")
     manager = as_user(m.people["mgr"], m.org)
     read = await client.get(f"{CHECK_INS}/{check_in}", headers=manager)
@@ -178,15 +126,15 @@ async def test_manager_reads_but_never_writes_and_others_get_nothing(
 async def test_check_in_closes_when_the_next_opens(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
-    m = await _october(client, pg_session_factory)
+    m = await october(client, pg_session_factory)
     me = as_user(m.people["emp"], m.org)
     check_in = await _check_in_id(client, m, "emp")
     await client.put(
         f"{CHECK_INS}/{check_in}/note", json={"next_month": "Close in 5 days"}, headers=me
     )
-    await _tick(pg_session_factory, m.org, DEC_2)
+    await run_tick(pg_session_factory, m.org, DEC_2)
     async with pg_session_factory() as db:
-        october = {
+        october_rows = {
             r.profile_id: r
             for r in await db.scalars(
                 select(AppraisalCheckIn).where(
@@ -202,8 +150,8 @@ async def test_check_in_closes_when_the_next_opens(
             )
         )
     assert november is not None
-    assert all(r.closed_at is not None for r in october.values())
-    statuses = sorted(r.status for r in october.values())
+    assert all(r.closed_at is not None for r in october_rows.values())
+    statuses = sorted(r.status for r in october_rows.values())
     assert statuses == [CheckInStatus.EMPLOYEE_ADDED, CheckInStatus.MISSED]
     late = await client.put(f"{CHECK_INS}/{check_in}/note", json={"blocking": "late"}, headers=me)
     assert late.status_code == 409

@@ -21,7 +21,7 @@ involved, so a check-in is always usable. An AI-mode check-in is marked
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, date, datetime, tzinfo
+from datetime import date, datetime, tzinfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,7 @@ async def _fill(
     template: AppraisalRoleTemplate | None,
     loose: Sequence[LooseAccount],
     zone: tzinfo,
+    now: datetime,
 ) -> None:
     """Work out availability, identity warnings and the fact list."""
     org_id = check_in.org_id
@@ -60,7 +61,7 @@ async def _fill(
         person = Person(user.id, user.name, user.email, user.github_username)
         check_in.identity_warnings = [warning(a) for a in possible_duplicates(person, loose)]
     sources = template.fact_sources if template else FALLBACK_SOURCES
-    check_in.facts_at = datetime.now(UTC)
+    check_in.facts_at = now
     check_in.fact_refs = await gather(
         db,
         org_id,
@@ -80,6 +81,7 @@ async def create_check_in(
     period: tuple[date, date],
     loose: Sequence[LooseAccount],
     zone: tzinfo,
+    now: datetime,
 ) -> AppraisalCheckIn:
     """A new check-in for one period, facts included."""
     check_in = AppraisalCheckIn(
@@ -93,7 +95,7 @@ async def create_check_in(
             DraftStatus.PENDING if appraisal.drafting_mode is DraftingMode.AI else DraftStatus.NONE
         ),
     )
-    await _fill(db, check_in, profile, template, loose, zone)
+    await _fill(db, check_in, profile, template, loose, zone, now)
     db.add(check_in)
     await db.flush()
     return check_in
@@ -106,6 +108,7 @@ async def refresh_check_in(
     template: AppraisalRoleTemplate | None,
     loose: Sequence[LooseAccount],
     zone: tzinfo,
+    now: datetime,
 ) -> None:
     """Re-gather an open check-in, keeping what the person wrote and tagged.
 
@@ -114,5 +117,5 @@ async def refresh_check_in(
     """
     if check_in.closed_at is not None:
         return
-    await _fill(db, check_in, profile, template, loose, zone)
+    await _fill(db, check_in, profile, template, loose, zone, now)
     await db.flush()

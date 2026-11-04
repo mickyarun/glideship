@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from sqlalchemy import and_, delete, exists, func, select
+from sqlalchemy import ColumnElement, and_, delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
@@ -31,6 +31,19 @@ from app.models.organization import Organization
 from app.repositories.base import BaseRepository
 
 RUNNING = (CycleStatus.ACTIVE, CycleStatus.REVIEWING)
+
+
+def _needs_pass() -> ColumnElement[bool]:
+    """Running, or closed early with check-ins still open."""
+    still_open = exists(
+        select(AppraisalCheckIn.id).where(
+            AppraisalCheckIn.cycle_id == AppraisalCycle.id, AppraisalCheckIn.closed_at.is_(None)
+        )
+    )
+    return or_(
+        AppraisalCycle.status.in_(RUNNING),
+        and_(AppraisalCycle.status == CycleStatus.CLOSED, still_open),
+    )
 
 
 class AppraisalCycleRepository(BaseRepository[AppraisalCycle]):
@@ -81,11 +94,9 @@ class AppraisalCycleRepository(BaseRepository[AppraisalCycle]):
         )
         return result.scalar_one_or_none()
 
-    async def running(self) -> list[AppraisalCycle]:
-        """Active and reviewing cycles."""
-        result = await self._db.execute(
-            self._scoped(select(AppraisalCycle)).where(AppraisalCycle.status.in_(RUNNING))
-        )
+    async def needing_pass(self) -> list[AppraisalCycle]:
+        """Running cycles, and closed ones that still have open check-ins to close."""
+        result = await self._db.execute(self._scoped(select(AppraisalCycle)).where(_needs_pass()))
         return list(result.scalars().all())
 
     async def running_on(self, day: date) -> list[AppraisalCycle]:
@@ -113,27 +124,30 @@ class CycleOrg:
 
     org_id: uuid.UUID
     config: dict[str, Any] | None
-    # The default leave policy's timezone and working days, when it has one.
+    # The default leave policy, when it has one: its holidays, timezone and week.
+    policy_id: uuid.UUID | None
     policy_timezone: str | None
     working_days: list[int] | None
 
 
 async def orgs_with_running_cycles(db: AsyncSession) -> list[CycleOrg]:
-    """Every org with an active or reviewing cycle.
+    """Every org with a cycle that needs the check-in tick.
 
     Spans every org: the check-in scheduler's starting point only.
     """
     running = exists(
-        select(AppraisalCycle.id).where(
-            AppraisalCycle.org_id == Organization.id, AppraisalCycle.status.in_(RUNNING)
-        )
+        select(AppraisalCycle.id).where(AppraisalCycle.org_id == Organization.id, _needs_pass())
     )
     policy = and_(LeavePolicy.org_id == Organization.id, LeavePolicy.is_default.is_(True))
     rows = await db.execute(
         select(
-            Organization.id, Organization.config, LeavePolicy.timezone, LeavePolicy.working_days
+            Organization.id,
+            Organization.config,
+            LeavePolicy.id,
+            LeavePolicy.timezone,
+            LeavePolicy.working_days,
         )
         .outerjoin(LeavePolicy, policy)
         .where(running)
     )
-    return [CycleOrg(r[0], r[1], r[2], r[3]) for r in rows.all()]
+    return [CycleOrg(r[0], r[1], r[2], r[3], r[4]) for r in rows.all()]

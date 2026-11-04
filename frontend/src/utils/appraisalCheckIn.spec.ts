@@ -19,6 +19,7 @@ import {
   emptyHeadings,
   factsBySource,
   monthTitle,
+  safeHref,
   statusLabel,
   tagFromValue,
   tagOptions,
@@ -106,4 +107,16 @@ describe('emptyHeadings', () => {
     })
     expect(emptyHeadings(filled)).toEqual(['delivery_quality'])
   })
+})
+
+describe('safeHref', () => {
+  it.each(['https://github.com/x/pull/1', 'http://intranet/doc', '/boards/OPS/cards/1'])(
+    'links %s',
+    url => expect(safeHref(url)).toBe(url),
+  )
+
+  it.each(['javascript:alert(1)', ' JavaScript:alert(1)', '//evil.example', 'data:text/html,x', null])(
+    'refuses %s',
+    url => expect(safeHref(url)).toBeNull(),
+  )
 })

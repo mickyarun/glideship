@@ -58,10 +58,17 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
         result = await self._db.execute(stmt.order_by(AppraisalCheckIn.period_start.desc()))
         return list(result.scalars().all())
 
-    async def open_ones(self) -> list[AppraisalCheckIn]:
-        """Check-ins that haven't closed yet."""
+    async def latest_for_profiles(
+        self, profile_ids: Collection[uuid.UUID]
+    ) -> list[AppraisalCheckIn]:
+        """Each person's most recent check-in, one row per person."""
+        if not profile_ids:
+            return []
         result = await self._db.execute(
-            self._scoped(select(AppraisalCheckIn)).where(AppraisalCheckIn.closed_at.is_(None))
+            self._scoped(select(AppraisalCheckIn))
+            .where(AppraisalCheckIn.profile_id.in_(profile_ids))
+            .order_by(AppraisalCheckIn.profile_id, AppraisalCheckIn.period_start.desc())
+            .distinct(AppraisalCheckIn.profile_id)
         )
         return list(result.scalars().all())
 

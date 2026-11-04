@@ -40,18 +40,25 @@ from app.services.appraisals.context import Caller, CheckInContext
 from app.services.appraisals.fact_view import board_ids, for_viewer
 
 
-async def read_check_in(db: AsyncSession, caller: Caller, ctx: CheckInContext) -> CheckInRead:
-    """The check-in as ``caller`` may see it."""
+async def read_check_in(
+    db: AsyncSession, caller: Caller, ctx: CheckInContext, *, log_view: bool = True
+) -> CheckInRead:
+    """The check-in as ``caller`` may see it.
+
+    Opening it logs a view (someone else's, once a day per appraisal); the
+    reply to a save passes ``log_view=False``.
+    """
     check_in, profile, org_id = ctx.check_in, ctx.profile, caller.org_id
     is_self = caller.user_id == profile.user_id
-    await audit.record_view(
-        db,
-        org_id=org_id,
-        actor_id=caller.user_id,
-        subject_user_id=profile.user_id,
-        profile_id=profile.id,
-        target=check_in.id,
-    )
+    if log_view:
+        await audit.record_view(
+            db,
+            org_id=org_id,
+            actor_id=caller.user_id,
+            subject_user_id=profile.user_id,
+            profile_id=profile.id,
+            target=ctx.appraisal.id if ctx.appraisal else check_in.id,
+        )
     facts = check_in.fact_refs or []
     boards = (
         set()
@@ -77,7 +84,10 @@ async def read_check_in(db: AsyncSession, caller: Caller, ctx: CheckInContext) -
         else None
     )
     mode = ctx.appraisal.drafting_mode if ctx.appraisal else DraftingMode.MANUAL
-    ready = check_in.draft_status is DraftStatus.READY
+    shown = for_viewer(facts, is_self=is_self, perms=caller.perms, boards=boards)
+    # The summary is written from every fact; if any is private to this
+    # viewer, the prose could name it, so they don't get the summary.
+    ready = check_in.draft_status is DraftStatus.READY and not any(f["private"] for f in shown)
     return CheckInRead(
         id=check_in.id,
         profile_id=profile.id,
@@ -95,10 +105,7 @@ async def read_check_in(db: AsyncSession, caller: Caller, ctx: CheckInContext) -
         draft_status=check_in.draft_status,
         ai_summary=crypto.unseal(check_in, "ai_summary") if ready else None,
         heading_meanings=dict(template.heading_meanings) if template else {},
-        facts=[
-            FactView.model_validate(f)
-            for f in for_viewer(facts, is_self=is_self, perms=caller.perms, boards=boards)
-        ],
+        facts=[FactView.model_validate(f) for f in shown],
         fact_tags=_tags(check_in.fact_tags or {}),
         note=CheckInNote.model_validate(crypto.unseal_json(check_in, "employee_note") or {}),
         links=[

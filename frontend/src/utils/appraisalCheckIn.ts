@@ -114,6 +114,14 @@ export function tagFromValue(value: string | null): FactTag | null {
   return { goal_id: null, heading: id as EvidenceHeading }
 }
 
+/** The link if it is http(s) or a path in the app; anything else isn't linked. */
+export function safeHref(url: string | null): string | null {
+  if (!url) return null
+  const lowered = url.trim().toLowerCase()
+  if (lowered.startsWith('https://') || lowered.startsWith('http://')) return url
+  return url.startsWith('/') && !url.startsWith('//') ? url : null
+}
+
 /** Which headings have nothing in them yet (no lines, links or tagged items). */
 export function emptyHeadings(checkIn: CheckInRead): EvidenceHeading[] {
   const filled = new Set<EvidenceHeading>()

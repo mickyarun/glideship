@@ -25,6 +25,7 @@ from pydantic import TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_role_template import AppraisalRoleTemplate
+from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.schemas.appraisal_role_template import SeedTemplate
 
@@ -44,9 +45,15 @@ async def ensure_seeded(
     """The org's templates, seeding the standard set the first time.
 
     Only seeds an org with none at all, so a template HR deleted on purpose
-    never comes back.
+    never comes back (the general fallback can't be deleted).
     """
     repo = AppraisalRoleTemplateRepository(db, org_id=org_id)
+    existing = await repo.list_for_org()
+    if existing:
+        return existing
+    # The general fallback can't be deleted, so an org that has ever been
+    # seeded always has one. Lock before seeding so two callers can't both.
+    await AppraisalCycleRepository(db, org_id=org_id).lock_org()
     existing = await repo.list_for_org()
     if existing:
         return existing

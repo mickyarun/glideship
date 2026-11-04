@@ -69,6 +69,17 @@ def _queries(db: AsyncSession, org_id: uuid.UUID) -> dict[FactSource, Query]:
     }
 
 
+def safe_url(url: str) -> str | None:
+    """The link if it is http(s) or a path in the app; anything else is dropped.
+
+    PR links come from several writers; a ``javascript:`` one must never
+    reach an ``href`` on an HR page.
+    """
+    lowered = url.strip().lower()
+    in_app = url.startswith("/") and not url.startswith("//")
+    return url if in_app or lowered.startswith(("https://", "http://")) else None
+
+
 def as_ref(row: FactRow) -> dict[str, Any]:
     """How a fact is saved in ``fact_refs``."""
     return {
@@ -76,7 +87,7 @@ def as_ref(row: FactRow) -> dict[str, Any]:
         "id": row.id,
         "key": row.key,
         "title": row.title,
-        "url": row.url,
+        "url": safe_url(row.url),
         "verb": row.verb,
         "done_at": row.done_at.isoformat() if row.done_at else None,
         "board_id": str(row.board_id) if row.board_id else None,

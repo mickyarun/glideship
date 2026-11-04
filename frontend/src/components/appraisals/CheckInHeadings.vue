@@ -39,7 +39,8 @@
           <v-btn v-if="editable" icon="mdi-close" variant="text" size="small" :aria-label="`Remove line ${i + 1}`" @click="removeLine(heading.value, i)" />
         </li>
         <li v-for="link in linksUnder(heading.value)" :key="link.id" class="heading__item">
-          <a :href="link.url" target="_blank" rel="noopener noreferrer">{{ link.title || link.url }}</a>
+          <a v-if="safeHref(link.url)" :href="safeHref(link.url) ?? undefined" target="_blank" rel="noopener noreferrer">{{ link.title || link.url }}</a>
+          <span v-else>{{ link.title || link.url }}</span>
           <span class="heading__added">added by {{ editable ? 'you' : 'them' }}</span>
           <v-btn v-if="editable" icon="mdi-close" variant="text" size="small" :aria-label="`Remove link ${link.title || link.url}`" @click="emit('remove-link', link.id)" />
         </li>
@@ -65,7 +66,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CheckInLink, EvidenceHeading } from '@/types/appraisal'
-import { HEADINGS } from '@/utils/appraisalCheckIn'
+import { HEADINGS, safeHref } from '@/utils/appraisalCheckIn'
 
 const MAX_LINKS = 5
 

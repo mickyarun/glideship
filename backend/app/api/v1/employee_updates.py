@@ -41,7 +41,7 @@ from app.schemas.employee import (
     ManagersUpdate,
     NameUpdate,
 )
-from app.services.appraisals.enrolment import follow_primary_manager, withdraw_on_exit
+from app.services.appraisals.enrolment import LEAVING, follow_primary_manager, withdraw_on_exit
 from app.services.employees.access import MANAGE, access_for
 from app.services.employees.lifecycle import apply_exit
 from app.services.employees.managers import (
@@ -131,8 +131,8 @@ async def update_work(
                 detail="That office was just deleted. Pick another.",
             ) from exc
         raise
-    if revoked is not None:
-        # They have left: appraisals still in progress are withdrawn.
+    if profile.status != previous_status and profile.status in LEAVING:
+        # On notice or gone: appraisals still in progress are withdrawn.
         await withdraw_on_exit(db, org_id, profile.id)
     await follow_office_policy(
         db,
@@ -227,5 +227,5 @@ async def update_managers(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     await links.replace_for_profile(profile.id, pairs)
     # Open appraisals and feedback follow the new primary manager.
-    await follow_primary_manager(db, org_id, profile.id)
+    await follow_primary_manager(db, org_id, profile, current_user.id)
     return await employee_read(db, org_id=org_id, profile=profile, user=user, access=access)

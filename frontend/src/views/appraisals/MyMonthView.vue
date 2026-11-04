@@ -22,9 +22,9 @@
     <template v-if="store.mine.length > 1" #actions>
       <AppPillToggle :model-value="selected ?? ''" :options="monthOptions" aria-label="Month" @update:model-value="v => pick(String(v))" />
     </template>
-    <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
-    <v-progress-linear v-if="store.loading && !store.current" indeterminate color="primary" />
-    <p v-else-if="!store.loading && !store.mine.length" class="my-month__empty">
+    <AppCallout v-if="store.listError || store.error" variant="error">{{ store.listError || store.error }}</AppCallout>
+    <v-progress-linear v-if="(store.listLoading || store.loading) && !store.current" indeterminate color="primary" />
+    <p v-else-if="!store.listLoading && !store.mine.length" class="my-month__empty">
       No check-ins yet. Your first one opens on the first working day after a month in an appraisal cycle ends.
     </p>
     <CheckInPage v-if="store.current" :check-in="store.current" />

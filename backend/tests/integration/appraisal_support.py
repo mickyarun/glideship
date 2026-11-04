@@ -38,7 +38,11 @@ from app.models.board_card import BoardCard, BoardCardAssignee
 from app.models.board_card_detail import BoardCardEvent
 from app.models.board_enums import BoardCardEventType, BoardStageCategory
 from app.repositories.employee_profile import EmployeeProfileRepository
-from tests.integration.leave_support import Factory, report_to, setup_org
+from tests.integration.leave_support import (
+    Factory,
+    report_to,
+    setup_org,
+)
 
 
 def cycle_row(org_id: uuid.UUID, **overrides: Any) -> AppraisalCycle:
