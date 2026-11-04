@@ -67,6 +67,9 @@
       @add-link="addLink"
       @remove-link="removeLink"
     />
+    <p v-if="editable && checkIn.drafting_mode === 'ai'" class="check-in__ai-note">
+      What you write here is included when the AI summarises the period for your review.
+    </p>
     <section class="check-in__extra" aria-label="Blockers and next month">
       <v-textarea v-model="draft.blocking" label="What's blocking me" rows="2" auto-grow maxlength="1000" :readonly="!editable" />
       <v-textarea v-model="draft.next_month" label="Next month" rows="2" auto-grow maxlength="1000" :readonly="!editable" />
@@ -109,9 +112,12 @@ const warningText = computed(() => {
 })
 const dirty = computed(() => JSON.stringify(cleaned()) !== JSON.stringify(props.checkIn.note))
 
+// Keyed on the note's content: a tag or redraft replaces the whole check-in,
+// and that mustn't wipe what's being typed.
 watch(
-  () => props.checkIn.note,
-  note => {
+  () => `${props.checkIn.id}:${JSON.stringify(props.checkIn.note)}`,
+  () => {
+    const { note } = props.checkIn
     // A plain copy: the note is a reactive proxy, which structuredClone refuses.
     draft.lines = Object.fromEntries(
       Object.entries(note.lines).map(([heading, lines]) => [heading, [...(lines ?? [])]]),
@@ -124,7 +130,9 @@ watch(
 
 // While a draft is being written, look for it now and then.
 const POLL_MS = 15_000
+const POLL_LIMIT = 40
 let poll: ReturnType<typeof setInterval> | undefined
+let polls = 0
 
 function stopPolling(): void {
   clearInterval(poll)
@@ -136,7 +144,12 @@ watch(
   () => {
     stopPolling()
     if (props.checkIn.draft_status === 'pending') {
-      poll = setInterval(() => void store.refreshDraft(props.checkIn.id), POLL_MS)
+      polls = 0
+      poll = setInterval(() => {
+        polls += 1
+        if (polls > POLL_LIMIT) stopPolling()
+        else if (!document.hidden) void store.refreshDraft(props.checkIn.id)
+      }, POLL_MS)
     }
   },
   { immediate: true },
@@ -191,6 +204,11 @@ const removeLink = (linkId: string) => run(store.removeLink(props.checkIn.id, li
   gap: 12px;
   padding: 12px 0;
   background: rgb(var(--v-theme-background));
+}
+.check-in__ai-note {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 .check-in__who {
   font-size: 13px;

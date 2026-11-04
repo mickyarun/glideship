@@ -1,8 +1,8 @@
 """Appraisal tables, their enums, new audit actions and the goal-history trigger.
 
-Revision ID: c48d88439d9b
+Revision ID: fd39bf30adae
 Revises: a1e8aeee2202
-Create Date: 2026-11-04 17:38:52.867498
+Create Date: 2026-11-04 17:57:30.911802
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "c48d88439d9b"
+revision: str = "fd39bf30adae"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -340,6 +340,7 @@ def upgrade() -> None:
         sa.Column("ai_generated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("draft_status", _ENUMS["appraisal_draft_status"], nullable=False),
         sa.Column("draft_attempts", sa.SmallInteger(), nullable=False),
+        sa.Column("redrafts", sa.SmallInteger(), nullable=False),
         sa.Column("draft_error", sa.String(length=60), nullable=True),
         sa.Column("draft_claimed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("employee_note", sa.LargeBinary(), nullable=True),

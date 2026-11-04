@@ -47,10 +47,14 @@ Rules:
 
 
 def _data(payload: Mapping[str, Any]) -> str:
-    return f"<DATA>\n{json.dumps(payload, ensure_ascii=False, indent=1)}\n</DATA>"
+    # Escaped so a typed "</DATA>" can't close the block.
+    text = json.dumps(payload, ensure_ascii=False, indent=1)
+    text = text.replace("<", "\\u003c").replace(">", "\\u003e")
+    return f"<DATA>\n{text}\n</DATA>"
 
 
-def _fact(fact: Mapping[str, Any]) -> dict[str, Any]:
+def prompt_fact(fact: Mapping[str, Any]) -> dict[str, Any]:
+    """The parts of a fact a prompt may see."""
     keep = ("id", "source", "verb", "title", "done_at")
     return {key: fact.get(key) for key in keep}
 
@@ -66,7 +70,7 @@ def check_in_prompt(
         "headings": {h: meanings.get(h, "") for h in HEADINGS},
         "goals": list(goals),
         "availability": availability,
-        "facts": [_fact(f) for f in facts],
+        "facts": [prompt_fact(f) for f in facts],
     }
     return (
         f"{_RULES}\nWrite up to {CHECK_IN_LINES} lines about this month's work, each under one "

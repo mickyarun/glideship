@@ -15,8 +15,9 @@
 """Reading an AI draft: only lines backed by facts we hold survive (pure).
 
 The model's text is never trusted for links or ids. A line with no
-citation, an unknown id or an unknown section is dropped, and links are
-built from our own fact records when the draft is shown.
+citation, an unknown id or an unknown section is dropped, as is one that
+scores, compares or judges, and links are built from our own fact records
+when the draft is shown.
 """
 
 import json
@@ -26,6 +27,16 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 MAX_LINE_CHARS = 300
+# Scoring, comparing, judging or linking: never in a draft, whatever the prompt
+# was talked into. Typed text reaches the model, so this can't rest on the rules
+# in the prompt alone.
+_FORBIDDEN = re.compile(
+    r"https?://|www\.|\bbands?\b|\bscor(e|es|ed|ing)\b|\bratings?\b|\brated\b|"
+    r"\b(better|worse|stronger|weaker|faster|slower) than\b|\bcompared (to|with)\b|"
+    r"\b(out|under|over)perform|\bexpectations?\b|\bpromot(e|ed|ion)\b|"
+    r"\b(deserves?|should be)\b|\b(every|all) (deadlines?|goals?)\b",
+    re.IGNORECASE,
+)
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 
@@ -63,7 +74,7 @@ def _line(raw: Any, sections: Collection[str], known: Collection[str]) -> DraftL
     if section not in sections or not isinstance(text, str) or not isinstance(cited, list):
         return None
     text = text.strip()
-    if not text or len(text) > MAX_LINE_CHARS or not cited:
+    if not text or len(text) > MAX_LINE_CHARS or not cited or _FORBIDDEN.search(text):
         return None
     if not all(isinstance(i, str) and i in known for i in cited):
         return None

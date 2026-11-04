@@ -43,19 +43,21 @@ _LOG_FILE_MAX_BYTES = 20 * 1024 * 1024
 _LOG_FILE_BACKUP_COUNT = 5
 _DEFAULT_LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 
-# Log fields that can carry a run's prompt or output.
-_CONTENT_FIELDS = frozenset({"cmd", "prompt"})
-_CONTENT_SUFFIX = "_preview"
+# What survives in a log line from a private run: these fields, and any plain
+# number or flag. Text is withheld by default, because a new log field on a
+# run could carry a prompt, model output or a CLI error quoting them.
+_SAFE_FIELDS = frozenset({"event", "level", "timestamp", "logger", "provider", "org_id"})
 _REDACTED = "[withheld]"
 _withhold_content: ContextVar[bool] = ContextVar("withhold_content", default=False)
 
 
 @contextmanager
 def content_free_logs() -> Iterator[None]:
-    """Keep prompts and model output out of every log line in this block.
+    """Keep all free text out of log lines in this block.
 
     For AI runs over people data. It works on the log event, so it covers
-    every provider and any task started inside the block.
+    every provider and any task started inside the block. Stdlib logging
+    from third-party libraries doesn't pass through it.
     """
     token = _withhold_content.set(True)
     try:
@@ -67,10 +69,10 @@ def content_free_logs() -> Iterator[None]:
 def _drop_content(
     _logger: object, _method: str, event: MutableMapping[str, Any]
 ) -> MutableMapping[str, Any]:
-    """Blank content-bearing fields while :func:`content_free_logs` is active."""
+    """Blank everything but safe fields while :func:`content_free_logs` is active."""
     if _withhold_content.get():
-        for key in event:
-            if key in _CONTENT_FIELDS or key.endswith(_CONTENT_SUFFIX):
+        for key, value in event.items():
+            if key not in _SAFE_FIELDS and not isinstance(value, bool | int | float | None):
                 event[key] = _REDACTED
     return event
 

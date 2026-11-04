@@ -17,6 +17,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import CheckInPage from '@/components/appraisals/CheckInPage.vue'
 import { boardTestPlugins } from '@/components/boards/__tests__/mountHelpers'
+import { useCheckInsStore } from '@/stores/checkIns'
 import type { CheckInRead } from '@/types/appraisal'
 
 const FACT = {
@@ -55,6 +56,7 @@ describe('CheckInPage', () => {
     const wrapper = page({ draft_status: 'pending' })
     expect(wrapper.text()).toContain('The AI draft is being written.')
     expect(wrapper.find('.work__key').text()).toBe('OPS-1')
+    wrapper.unmount()
   })
 
   it('still shows the work when the draft failed, with a way to retry', () => {
@@ -69,6 +71,37 @@ describe('CheckInPage', () => {
     expect(wrapper.find('.ai__badge').text()).toBe('AI draft')
     expect(wrapper.find('.ai__line').text()).toContain('Closed the month')
     expect(wrapper.find('a.ai__cite').attributes('href')).toBe('/b')
+  })
+
+  it('keeps unsaved typing when a tag or redraft replaces the check-in', async () => {
+    const wrapper = page({ drafting_mode: 'manual', draft_status: 'none' })
+    const box = wrapper.findAll('textarea')[0]
+    await box.setValue('Still typing this')
+    await wrapper.setProps({ checkIn: checkIn({ drafting_mode: 'manual', draft_status: 'none', fact_tags: {} }) })
+    expect((wrapper.findAll('textarea')[0].element as HTMLTextAreaElement).value).toBe('Still typing this')
+  })
+
+  it('takes the saved note when it really changed', async () => {
+    const wrapper = page({ drafting_mode: 'manual', draft_status: 'none' })
+    await wrapper.findAll('textarea')[0].setValue('Old')
+    const saved = { lines: {}, blocking: 'Saved', next_month: '' }
+    await wrapper.setProps({ checkIn: checkIn({ drafting_mode: 'manual', draft_status: 'none', note: saved }) })
+    expect((wrapper.findAll('textarea')[0].element as HTMLTextAreaElement).value).toBe('Saved')
+  })
+
+  it('polls while a draft is pending and stops when it lands or the page goes', async () => {
+    vi.useFakeTimers()
+    const wrapper = page({ draft_status: 'pending' })
+    const refresh = vi.spyOn(useCheckInsStore(), 'refreshDraft').mockResolvedValue()
+    vi.advanceTimersByTime(15_000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    await wrapper.setProps({ checkIn: checkIn({ draft_status: 'ready' }) })
+    vi.advanceTimersByTime(60_000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    await wrapper.setProps({ checkIn: checkIn({ draft_status: 'pending' }) })
+    wrapper.unmount()
+    vi.advanceTimersByTime(60_000)
+    expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it('tells a reader why the draft is hidden', () => {

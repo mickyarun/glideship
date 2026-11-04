@@ -98,10 +98,14 @@ export const useCheckInsStore = defineStore('checkIns', () => {
 
   /** Pick up a finished draft without touching anything else on screen. */
   async function refreshDraft(id: string): Promise<void> {
-    const data = (await api.get<CheckInRead>(`${BASE}/${id}`)).data
-    if (current.value?.id !== id) return
-    const { ai_lines, ai_hidden, can_regenerate, draft_status } = data
-    current.value = { ...current.value, ai_lines, ai_hidden, can_regenerate, draft_status }
+    try {
+      const data = (await api.get<CheckInRead>(`${BASE}/${id}`)).data
+      if (current.value?.id !== id) return
+      const { ai_lines, ai_hidden, can_regenerate, draft_status } = data
+      current.value = { ...current.value, ai_lines, ai_hidden, can_regenerate, draft_status }
+    } catch {
+      // The next poll tries again; the page works without the draft.
+    }
   }
 
   function regenerate(id: string): Promise<string | null> {

@@ -15,64 +15,60 @@
 """Claiming AI drafts from the database, across orgs, for the sweeper only.
 
 The queue is the rows themselves, so a restart loses nothing. A claim that
-was never finished (the process died) is taken again once it goes stale.
-``SKIP LOCKED`` keeps two sweepers off the same row.
+was never finished (the process died) is taken again once it goes stale,
+and a run that failed keeps its claim until then, which is the retry
+backoff. ``SKIP LOCKED`` keeps two sweepers off the same row.
 """
 
 import uuid
+from collections.abc import Collection
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_enums import DraftStatus
 
 
-async def claim_check_ins(
-    db: AsyncSession, now: datetime, stale_before: datetime, limit: int
-) -> list[uuid.UUID]:
-    """Claim up to ``limit`` pending check-in drafts; their ids."""
-    rows = await db.scalars(
-        select(AppraisalCheckIn)
-        .where(
-            AppraisalCheckIn.draft_status == DraftStatus.PENDING,
-            or_(
-                AppraisalCheckIn.draft_claimed_at.is_(None),
-                AppraisalCheckIn.draft_claimed_at < stale_before,
-            ),
-        )
-        .order_by(AppraisalCheckIn.created_at)
-        .limit(limit)
-        .with_for_update(skip_locked=True)
-    )
-    claimed = list(rows)
-    for row in claimed:
-        row.draft_claimed_at = now
-        row.draft_attempts += 1
-    return [row.id for row in claimed]
+@dataclass(frozen=True)
+class Claim:
+    """A claimed draft: the claim time is what a save must still find."""
+
+    record_id: uuid.UUID
+    org_id: uuid.UUID
+    claimed_at: datetime
 
 
-async def claim_summaries(
-    db: AsyncSession, now: datetime, stale_before: datetime, limit: int
-) -> list[uuid.UUID]:
-    """Claim up to ``limit`` pending period summaries; their appraisal ids."""
-    rows = await db.scalars(
-        select(Appraisal)
+async def claim_next(
+    db: AsyncSession,
+    model: type[AppraisalCheckIn] | type[Appraisal],
+    columns: tuple[InstrumentedAttribute[Any], InstrumentedAttribute[Any], str],
+    now: datetime,
+    stale_before: datetime,
+    served: Collection[uuid.UUID],
+) -> Claim | None:
+    """Claim the oldest waiting draft, preferring orgs not in ``served``."""
+    status, claimed, attempts = columns
+    order: list[Any] = [model.created_at]
+    if served:
+        order.insert(0, case((model.org_id.in_(served), 1), else_=0))
+    row: Any = await db.scalar(
+        select(model)
         .where(
-            Appraisal.period_summary_status == DraftStatus.PENDING,
-            or_(
-                Appraisal.summary_claimed_at.is_(None),
-                Appraisal.summary_claimed_at < stale_before,
-            ),
+            status == DraftStatus.PENDING,
+            or_(claimed.is_(None), claimed < stale_before),
         )
-        .order_by(Appraisal.created_at)
-        .limit(limit)
+        .order_by(*order)
+        .limit(1)
         .with_for_update(skip_locked=True)
     )
-    claimed = list(rows)
-    for row in claimed:
-        row.summary_claimed_at = now
-        row.summary_attempts += 1
-    return [row.id for row in claimed]
+    if row is None:
+        return None
+    setattr(row, claimed.key, now)
+    setattr(row, attempts, getattr(row, attempts) + 1)
+    return Claim(row.id, row.org_id, now)

@@ -62,7 +62,7 @@ _SUBTYPE_TO_CODE: dict[str, ClaudeErrorCode] = {
 # How the CLIs word a refused login.
 _AUTH_FAILURE = re.compile(
     r"not logged in|please run /login|invalid api key|authentication[_ ](failed|error)|"
-    r"unauthorized|\b401\b",
+    r"unauthorized|http 401|status 401",
     re.IGNORECASE,
 )
 

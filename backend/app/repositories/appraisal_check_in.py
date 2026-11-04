@@ -18,10 +18,11 @@ import uuid
 from collections.abc import Collection
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_enums import DraftStatus
 from app.models.appraisal_evidence_link import AppraisalEvidenceLink
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.base import BaseRepository
@@ -84,6 +85,18 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
             .distinct(AppraisalCheckIn.profile_id)
         )
         return list(result.scalars().all())
+
+    async def cancel_pending_drafts(self, profile_id: uuid.UUID) -> None:
+        """Stop any AI draft still waiting for this person."""
+        await self._db.execute(
+            update(AppraisalCheckIn)
+            .where(
+                AppraisalCheckIn.org_id == self._org,
+                AppraisalCheckIn.profile_id == profile_id,
+                AppraisalCheckIn.draft_status == DraftStatus.PENDING,
+            )
+            .values(draft_status=DraftStatus.NONE, draft_claimed_at=None)
+        )
 
     async def links(self, check_in_id: uuid.UUID) -> list[AppraisalEvidenceLink]:
         """The links on one check-in, oldest first."""

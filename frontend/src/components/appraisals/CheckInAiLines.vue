@@ -37,6 +37,7 @@
             <template v-for="fact in cited(line)" :key="fact.id">
               <a v-if="safeHref(fact.url)" :href="safeHref(fact.url) ?? undefined" class="ai__cite">{{ fact.key }}</a>
               <span v-else class="ai__cite">{{ fact.key }}</span>
+              <span class="ai__source">{{ fact.title }}</span>
             </template>
           </span>
         </li>
@@ -115,6 +116,11 @@ function cited(line: AiLine): FactView[] {
 }
 .ai__cites {
   margin-left: 4px;
+}
+.ai__source {
+  margin-left: 4px;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 .ai__cite {
   margin-left: 4px;

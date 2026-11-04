@@ -28,11 +28,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CycleStatus
+from app.models.appraisal_enums import AppraisalStatus, CycleStatus, DraftStatus
 from app.models.appraisal_role_template import AppraisalRoleTemplate
 from app.models.employee_audit_event import EmployeeAuditAction
 from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.repositories.appraisal import AppraisalRepository
+from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.employee_reporting_manager import (
@@ -159,6 +160,10 @@ async def withdraw_on_exit(db: AsyncSession, org_id: uuid.UUID, profile_id: uuid
     open_ones = await AppraisalRepository(db, org_id=org_id).open_for_profile(profile_id)
     for appraisal in open_ones:
         appraisal.status = AppraisalStatus.WITHDRAWN
+        if appraisal.period_summary_status is DraftStatus.PENDING:
+            appraisal.period_summary_status = DraftStatus.NONE
+    # Nothing more about them goes to the AI provider.
+    await AppraisalCheckInRepository(db, org_id=org_id).cancel_pending_drafts(profile_id)
     await db.flush()
     return len(open_ones)
 

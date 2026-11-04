@@ -109,6 +109,9 @@ class AppraisalCheckIn(BaseModel):
         default=DraftStatus.NONE,
     )
     draft_attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    # How many redrafts were asked for: each is a paid run, and re-rolling
+    # until the text flatters shouldn't be open-ended.
+    redrafts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     # An error code, never the provider's message (it may echo prompt text).
     draft_error: Mapped[str | None] = mapped_column(String(60), nullable=True)
     draft_claimed_at: Mapped[datetime | None] = mapped_column(

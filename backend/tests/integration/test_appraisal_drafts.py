@@ -17,7 +17,7 @@
 import json
 import uuid
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -31,6 +31,7 @@ from app.models.appraisal_enums import DraftStatus
 from app.models.organization import Organization
 from app.repositories.appraisal import AppraisalRepository
 from app.services.appraisals import crypto, draft_sweeper
+from app.services.appraisals.draft_sweeper import STALE_AFTER
 from app.services.appraisals.settings import CONFIG_KEY
 from app.services.claude_errors import ClaudeErrorCode
 from app.services.claude_runner import ClaudeRunResult
@@ -42,6 +43,7 @@ from tests.integration.leave_support import Factory, as_user
 pytestmark = pytest.mark.integration
 CHECK_INS = "/api/v1/check-ins"
 Reply = Callable[[str], ClaudeRunResult]
+RETRY_WAIT = STALE_AFTER + timedelta(minutes=1)
 
 
 @pytest.fixture
@@ -83,9 +85,9 @@ async def _row(factory: Factory, m: Month) -> AppraisalCheckIn:
     return next(r for r in rows if r.fact_refs)
 
 
-async def _sweep(factory: Factory, m: Month) -> AppraisalCheckIn:
-    """One sweeper pass, and this org's check-in after it."""
-    await draft_sweeper.tick_once(datetime.now(UTC))
+async def _sweep(factory: Factory, m: Month, later: int = 0) -> AppraisalCheckIn:
+    """A sweeper pass ``later`` retry waits from now, and this org's check-in after it."""
+    await draft_sweeper.tick_once(datetime.now(UTC) + later * RETRY_WAIT)
     return await _row(factory, m)
 
 
@@ -113,12 +115,18 @@ async def test_retries_three_times_then_fails_and_the_check_in_still_works(
     m = await october(client, pg_session_factory, ai=True)
     model.append(_fails(ClaudeErrorCode.TIMEOUT))
     row = await _sweep(pg_session_factory, m)
-    assert row.draft_status is DraftStatus.PENDING and row.draft_claimed_at is None
-    await _sweep(pg_session_factory, m)
-    row = await _sweep(pg_session_factory, m)
+    # It keeps its claim, so the next try waits.
+    assert row.draft_status is DraftStatus.PENDING and row.draft_claimed_at is not None
+    assert (await _sweep(pg_session_factory, m)).draft_attempts == 1
+    await _sweep(pg_session_factory, m, later=1)
+    row = await _sweep(pg_session_factory, m, later=2)
     assert row.draft_status is DraftStatus.FAILED and row.draft_error == "timeout"
-    read = await client.get(f"{CHECK_INS}/{row.id}", headers=as_user(m.people["emp"], m.org))
-    assert read.status_code == 200 and read.json()["facts"]
+    assert row.draft_attempts == 3
+    me = as_user(m.people["emp"], m.org)
+    read = (await client.get(f"{CHECK_INS}/{row.id}", headers=me)).json()
+    assert read["facts"] and read["ai_lines"] == [] and read["can_regenerate"]
+    saved = await client.put(f"{CHECK_INS}/{row.id}/note", json={"blocking": "x"}, headers=me)
+    assert saved.status_code == 200
 
 
 @pytest.mark.parametrize(
@@ -145,7 +153,7 @@ async def test_unreadable_output_and_no_cited_lines_are_retried(
     row = await _sweep(pg_session_factory, m)
     assert (row.draft_status, row.draft_error) == (DraftStatus.PENDING, "unreadable")
     model.append(_cite(["made-up-id"]))
-    row = await _sweep(pg_session_factory, m)
+    row = await _sweep(pg_session_factory, m, later=1)
     assert (row.draft_status, row.draft_error) == (DraftStatus.PENDING, "no_cited_lines")
 
 
@@ -246,7 +254,7 @@ async def test_period_summary_cites_months_and_facts(
         return ClaudeRunResult(success=True, output=json.dumps({"lines": lines}))
 
     model.append(reply)
-    await draft_sweeper.tick_once(datetime.now(UTC) + timedelta(minutes=1))
+    await draft_sweeper.tick_once(datetime.now(UTC))
     async with pg_session_factory() as db:
         appraisal = await db.scalar(
             select(Appraisal).where(
@@ -257,5 +265,4 @@ async def test_period_summary_cites_months_and_facts(
         assert appraisal.period_summary_status is DraftStatus.READY
         saved = crypto.unseal_json(appraisal, "ai_period_summary")
     assert saved[0]["text"] == "Access logs held things up"
-    assert any("Access logs" in p for p in prompts)
-    assert date(2026, 10, 1).isoformat() in prompts[0]
+    assert any(f'"check_in": "{row.id}"' in p and "Access logs" in p for p in prompts)

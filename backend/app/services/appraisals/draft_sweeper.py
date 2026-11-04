@@ -14,126 +14,59 @@
 
 """The AI draft sweeper: claims pending drafts and finishes them.
 
-Runs every minute with limited concurrency. A draft is never lost to a
-restart, because the queue is the rows. Permanent errors (no provider,
-refused login, a provider that can't run without tools) set the row to
-``none`` and the person sees the manual view; anything else retries three
-times, then ``failed``. A result only ever fills the AI columns, so it
-can't touch what anyone wrote, however late it arrives.
+Each minute a few workers take drafts one at a time until none is waiting,
+so a draft asked for now starts as soon as a worker is free, and orgs take
+turns. Nothing is lost to a restart, because the queue is the rows.
+Permanent errors (no provider, refused login, a provider that can't run
+without tools) set the row to ``none`` and the person sees the manual
+view; anything else keeps its claim until it goes stale, which spaces the
+retries out, and after three tries is ``failed``. A result only ever fills
+the AI columns, so it can't touch what anyone wrote, however late it
+arrives.
 """
 
 import asyncio
 import uuid
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.models.appraisal import Appraisal
 from app.models.appraisal_ai_run import AppraisalAiRun
 from app.models.appraisal_check_in import AppraisalCheckIn
-from app.models.appraisal_enums import DraftKind, DraftStatus
-from app.repositories.appraisal_drafts import claim_check_ins, claim_summaries
+from app.models.appraisal_enums import DraftStatus
+from app.repositories.appraisal_drafts import Claim, claim_next
 from app.repositories.organization import OrganizationRepository
 from app.services.appraisals import crypto
-from app.services.appraisals.draft_check import DraftUnreadableError, as_stored, checked_lines
-from app.services.appraisals.draft_inputs import DraftInput, check_in_input, summary_input
-from app.services.appraisals.draft_runner import PERMANENT, run_draft
-from app.services.claude_runner import ClaudeRunResult
+from app.services.appraisals.draft_result import (
+    CHECK_IN,
+    MAX_ATTEMPTS,
+    SUMMARY,
+    Row,
+    Slot,
+    save_result,
+)
+from app.services.appraisals.draft_runner import run_draft, sweep_leftovers
 from app.services.scheduling.tick_loop import run_tick_loop
 
 logger = structlog.get_logger(__name__)
 TICK_SECONDS = 60
-BATCH = 10
-CONCURRENCY = 3
-MAX_ATTEMPTS = 3
-STALE_AFTER = timedelta(minutes=15)
-UNREADABLE = "unreadable"
-NO_CITED_LINES = "no_cited_lines"
-
-Row = AppraisalCheckIn | Appraisal
-
-
-@dataclass(frozen=True)
-class Slot:
-    """Which columns a kind of draft lives in, and how to build its input."""
-
-    kind: DraftKind
-    model: type[Row]
-    status: str
-    attempts: str
-    error: str
-    claimed: str
-    text: str
-    build: Callable[[AsyncSession, Any], Awaitable[DraftInput | None]]
-
-
-CHECK_IN = Slot(
-    DraftKind.CHECK_IN,
-    AppraisalCheckIn,
-    "draft_status",
-    "draft_attempts",
-    "draft_error",
-    "draft_claimed_at",
-    "ai_summary",
-    check_in_input,
-)
-SUMMARY = Slot(
-    DraftKind.PERIOD_SUMMARY,
-    Appraisal,
-    "period_summary_status",
-    "summary_attempts",
-    "summary_error",
-    "summary_claimed_at",
-    "ai_period_summary",
-    summary_input,
-)
-
-
-def after_failure(attempts: int, *, permanent: bool) -> DraftStatus:
-    """Where a draft goes after a failed run (pure)."""
-    if permanent:
-        return DraftStatus.NONE
-    return DraftStatus.FAILED if attempts >= MAX_ATTEMPTS else DraftStatus.PENDING
-
-
-def _save(
-    slot: Slot, row: Row, data: DraftInput, result: ClaudeRunResult, now: datetime
-) -> str | None:
-    """Apply a run's result to the row; the error code, if it failed."""
-    code = str(result.error_code.value) if result.error_code else "unknown"
-    permanent = result.error_code in PERMANENT
-    lines = []
-    if result.success:
-        try:
-            lines = checked_lines(result.output, data.sections, data.known_ids, data.limit)
-            code = "" if lines else NO_CITED_LINES
-        except DraftUnreadableError:
-            code = UNREADABLE
-    setattr(row, slot.claimed, None)
-    if lines:
-        crypto.seal_json(row, slot.text, as_stored(lines))
-        setattr(row, slot.status, DraftStatus.READY)
-        setattr(row, slot.error, None)
-        if isinstance(row, AppraisalCheckIn):
-            row.ai_generated_at = now
-        return None
-    attempts = getattr(row, slot.attempts)
-    setattr(row, slot.status, after_failure(attempts, permanent=permanent))
-    setattr(row, slot.error, code)
-    return code
+WORKERS = 3
+# Longer than the slowest run (Ollama's timeout is four times the usual one),
+# so a live run is never taken twice; also the wait between retries.
+STALE_AFTER = timedelta(minutes=30)
+CRASHED = "crashed"
 
 
 async def _load(db: AsyncSession, slot: Slot, record_id: uuid.UUID) -> Row | None:
     return cast(Row | None, await db.get(slot.model, record_id))
 
 
-async def process(slot: Slot, record_id: uuid.UUID, now: datetime) -> None:
+async def process(slot: Slot, claim: Claim) -> None:
     """Build, run and save one claimed draft."""
+    record_id = claim.record_id
     async with AsyncSessionLocal() as db:
         row = await _load(db, slot, record_id)
         if row is None:
@@ -142,6 +75,7 @@ async def process(slot: Slot, record_id: uuid.UUID, now: datetime) -> None:
         if getattr(row, slot.attempts) > MAX_ATTEMPTS:
             # Earlier tries died before saving anything; stop taking it.
             setattr(row, slot.status, DraftStatus.FAILED)
+            setattr(row, slot.error, CRASHED)
             setattr(row, slot.claimed, None)
             await db.commit()
             return
@@ -156,9 +90,10 @@ async def process(slot: Slot, record_id: uuid.UUID, now: datetime) -> None:
     result = await run_draft(org_id, data.prompt)
     async with AsyncSessionLocal() as db:
         row = await _load(db, slot, record_id)
-        if row is None:
+        # Someone else took it, or it was cancelled, while this one ran.
+        if row is None or getattr(row, slot.claimed) != claim.claimed_at:
             return
-        code = _save(slot, row, data, result, now)
+        code = save_result(slot, row, data, result, claim.claimed_at)
         if code is None and isinstance(row, AppraisalCheckIn):
             row.ai_model = provider
         run = AppraisalAiRun(
@@ -176,32 +111,45 @@ async def process(slot: Slot, record_id: uuid.UUID, now: datetime) -> None:
         await db.commit()
 
 
-async def _guarded(
-    limit: asyncio.Semaphore, slot: Slot, record_id: uuid.UUID, now: datetime
-) -> None:
-    async with limit:
+async def _next(served: set[uuid.UUID], now: datetime) -> tuple[Slot, Claim] | None:
+    """Claim one draft, giving each org a turn before any has a second."""
+    stale = now - STALE_AFTER
+    async with AsyncSessionLocal() as db:
+        for slot in (CHECK_IN, SUMMARY):
+            columns = (
+                getattr(slot.model, slot.status),
+                getattr(slot.model, slot.claimed),
+                slot.attempts,
+            )
+            claim = await claim_next(db, slot.model, columns, now, stale, served)
+            if claim is not None:
+                await db.commit()
+                if claim.org_id in served:
+                    served.clear()
+                served.add(claim.org_id)
+                return slot, claim
+    return None
+
+
+async def _worker(served: set[uuid.UUID], now_utc: datetime | None) -> None:
+    while (taken := await _next(served, now_utc or datetime.now(UTC))) is not None:
+        slot, claim = taken
         try:
-            await process(slot, record_id, now)
+            await process(slot, claim)
         except Exception:
-            # Stays claimed; the stale check takes it again, up to the attempt limit.
-            logger.exception("appraisal_draft_failed", kind=slot.kind.value, id=str(record_id))
+            # Keeps its claim; the stale check takes it again, up to the limit.
+            logger.exception(
+                "appraisal_draft_failed", kind=slot.kind.value, id=str(claim.record_id)
+            )
 
 
 async def tick_once(now_utc: datetime | None = None) -> None:
-    """Claim a batch of each kind and run them."""
-    now = now_utc or datetime.now(UTC)
-    stale = now - STALE_AFTER
-    async with AsyncSessionLocal() as db:
-        check_ins = await claim_check_ins(db, now, stale, BATCH)
-        summaries = await claim_summaries(db, now, stale, BATCH)
-        await db.commit()
-    limit = asyncio.Semaphore(CONCURRENCY)
-    await asyncio.gather(
-        *(_guarded(limit, CHECK_IN, i, now) for i in check_ins),
-        *(_guarded(limit, SUMMARY, i, now) for i in summaries),
-    )
+    """Work through every draft that's waiting."""
+    served: set[uuid.UUID] = set()
+    await asyncio.gather(*(_worker(served, now_utc) for _ in range(WORKERS)))
 
 
 async def run_draft_sweeper() -> None:
     """The long-running loop started from the app's lifespan."""
+    sweep_leftovers()
     await run_tick_loop("appraisal_draft_sweeper", TICK_SECONDS, tick_once)

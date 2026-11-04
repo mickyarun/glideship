@@ -25,14 +25,14 @@ from collections.abc import Mapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
-from app.models.appraisal_enums import CheckInStatus, DraftingMode, DraftStatus
+from app.models.appraisal_enums import CheckInStatus, DraftStatus
 from app.models.appraisal_evidence_link import AppraisalEvidenceLink
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.appraisal_check_in import MAX_LINKS, AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.schemas.appraisal_check_in import CheckInNote, FactTag, GoalValueIn, LinkCreate
 from app.services.appraisals import crypto
-from app.services.appraisals.context import CheckInContext
+from app.services.appraisals.context import CheckInContext, may_regenerate
 from app.services.appraisals.errors import (
     AppraisalConflictError,
     AppraisalInvalidError,
@@ -61,19 +61,6 @@ async def _goal_ids(db: AsyncSession, ctx: CheckInContext) -> set[uuid.UUID]:
     return {g.id for g in goals}
 
 
-def may_regenerate(ctx: CheckInContext) -> bool:
-    """AI mode, still open, nothing added by the person, and it's theirs or their report's."""
-    check_in = ctx.check_in
-    return (
-        ctx.appraisal is not None
-        and ctx.appraisal.drafting_mode is DraftingMode.AI
-        and check_in.closed_at is None
-        and check_in.status is CheckInStatus.OPEN
-        and check_in.draft_status is not DraftStatus.PENDING
-        and (ctx.access.edit_check_ins or ctx.access.write_feedback)
-    )
-
-
 async def regenerate(db: AsyncSession, ctx: CheckInContext) -> None:
     """Ask for a fresh AI draft; the sweeper picks it up within a minute."""
     if not may_regenerate(ctx):
@@ -82,6 +69,7 @@ async def regenerate(db: AsyncSession, ctx: CheckInContext) -> None:
     check_in.draft_status = DraftStatus.PENDING
     check_in.draft_attempts = 0
     check_in.draft_claimed_at = None
+    check_in.redrafts += 1
     await db.flush()
 
 

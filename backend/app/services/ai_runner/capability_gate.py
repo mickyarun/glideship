@@ -79,7 +79,9 @@ def unsupported_reason(
             f"cannot turn off its file and shell tools. Switch the organisation to "
             f"another provider (Settings → AI Config) to use it."
         )
-    if config.no_mcp and caps.supports_mcp and not caps.isolates_mcp:
+    if config.private_run and config.mcp is not None:
+        return "A private run can't have MCP tools."
+    if config.private_run and caps.supports_mcp and not caps.isolates_mcp:
         return (
             f"This feature handles people data and must run with no MCP servers, which "
             f"the {name} provider cannot guarantee. Switch the organisation to another "

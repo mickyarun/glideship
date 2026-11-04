@@ -31,14 +31,18 @@ CONFIG_KEY = "appraisals"
 def appraisal_settings(
     org_config: dict[str, Any] | None, org_id: uuid.UUID | None = None
 ) -> AppraisalSettings:
-    """The org's settings, or the defaults if missing or unreadable."""
+    """The org's settings: the defaults if missing, AI off if unreadable.
+
+    Off, because an org that turned AI off must not get it back from a
+    corrupted setting.
+    """
     raw = (org_config or {}).get(CONFIG_KEY) or {}
     try:
         return AppraisalSettings.model_validate(raw)
     except ValidationError:
         keys = sorted(raw) if isinstance(raw, dict) else type(raw).__name__
         logger.error("appraisal_settings_invalid", org_id=str(org_id), keys=keys)
-        return AppraisalSettings()
+        return AppraisalSettings(ai_enabled=False)
 
 
 async def load_appraisal_settings(db: AsyncSession, org_id: uuid.UUID) -> AppraisalSettings:

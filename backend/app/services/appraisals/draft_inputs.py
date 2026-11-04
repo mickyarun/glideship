@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
-from app.models.appraisal_enums import DraftingMode
+from app.models.appraisal_enums import AppraisalStatus, CycleStatus, DraftingMode
 from app.models.appraisal_goal import AppraisalGoal
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
@@ -43,6 +43,7 @@ from app.services.appraisals.draft_prompt import (
     HEADINGS,
     SUMMARY_LINES,
     check_in_prompt,
+    prompt_fact,
     summary_prompt,
 )
 from app.services.appraisals.facts import as_ref, bounds
@@ -78,7 +79,17 @@ async def _meanings(db: AsyncSession, appraisal: Appraisal) -> dict[str, str]:
 
 
 async def _ai_allowed(db: AsyncSession, appraisal: Appraisal | None) -> bool:
-    if appraisal is None or appraisal.drafting_mode is not DraftingMode.AI:
+    """AI mode, still in progress, its cycle not closed, and AI still on for the org."""
+    if (
+        appraisal is None
+        or appraisal.drafting_mode is not DraftingMode.AI
+        or appraisal.status is AppraisalStatus.WITHDRAWN
+    ):
+        return False
+    cycle = await AppraisalCycleRepository(db, org_id=appraisal.org_id).get_by_id(
+        appraisal.cycle_id
+    )
+    if cycle is None or cycle.status is CycleStatus.CLOSED:
         return False
     return (await load_appraisal_settings(db, appraisal.org_id)).ai_enabled
 
@@ -112,7 +123,7 @@ async def _month(db: AsyncSession, check_in: AppraisalCheckIn) -> dict[str, Any]
         "period_start": check_in.period_start.isoformat(),
         "available_days": str(check_in.available_days),
         "working_days": check_in.working_days,
-        "facts": check_in.fact_refs or [],
+        "facts": [prompt_fact(f) for f in check_in.fact_refs or []],
         "own_lines": note.get("lines", {}),
         "blocking": note.get("blocking", ""),
         "goal_values": [
@@ -143,7 +154,7 @@ async def summary_input(db: AsyncSession, appraisal: Appraisal) -> DraftInput | 
         for row in await repo.learnings_and_estimates(people, first, after)
         + await repo.skills(people, first, after)
     ]
-    months.append({"check_in": None, "period_facts": extra})
+    months.append({"check_in": None, "period_facts": [prompt_fact(f) for f in extra]})
     goals = await AppraisalGoalRepository(db, org_id=org_id).accepted_for_period(
         appraisal.profile_id, cycle.period_start
     )

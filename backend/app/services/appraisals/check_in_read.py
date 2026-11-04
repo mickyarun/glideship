@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions_people import APPRAISALS_MANAGE
-from app.models.appraisal_enums import DraftingMode, DraftStatus
+from app.models.appraisal_enums import DraftingMode
 from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
@@ -37,8 +37,7 @@ from app.schemas.appraisal_check_in import (
     LinkRead,
 )
 from app.services.appraisals import audit, crypto
-from app.services.appraisals.check_in_writes import may_regenerate
-from app.services.appraisals.context import Caller, CheckInContext
+from app.services.appraisals.context import Caller, CheckInContext, may_regenerate
 from app.services.appraisals.fact_view import board_ids, for_viewer
 
 
@@ -89,7 +88,8 @@ async def read_check_in(
     shown = for_viewer(facts, is_self=is_self, perms=caller.perms, boards=boards)
     # The summary is written from every fact; if any is private to this
     # viewer, the prose could name it, so they don't get the summary.
-    drafted = check_in.draft_status is DraftStatus.READY
+    # A redraft under way or failed keeps showing the lines it would replace.
+    drafted = check_in.ai_summary is not None
     hidden = drafted and any(f["private"] for f in shown)
     lines = crypto.unseal_json(check_in, "ai_summary") if drafted and not hidden else None
     return CheckInRead(

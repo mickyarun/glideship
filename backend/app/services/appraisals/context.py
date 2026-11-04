@@ -29,7 +29,13 @@ from app.core.permission_deps import PermissionSet
 from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CycleStatus
+from app.models.appraisal_enums import (
+    AppraisalStatus,
+    CheckInStatus,
+    CycleStatus,
+    DraftingMode,
+    DraftStatus,
+)
 from app.models.employee_profile import EmployeeProfile
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
@@ -40,6 +46,7 @@ from app.services.appraisals.access import AppraisalAccess, Stage, access_for, r
 from app.services.appraisals.errors import AppraisalNotFoundError
 
 NOT_FOUND = "Check-in not found."
+MAX_REDRAFTS = 3
 
 
 @dataclass(frozen=True)
@@ -65,6 +72,20 @@ class CheckInContext:
     def is_open(self) -> bool:
         """Still editable: not closed, and its cycle and appraisal still running."""
         return self.check_in.closed_at is None and self.access.edit_check_ins
+
+
+def may_regenerate(ctx: CheckInContext) -> bool:
+    """AI mode, still open, nothing added, redrafts left, and theirs or their report's."""
+    check_in = ctx.check_in
+    return (
+        ctx.appraisal is not None
+        and ctx.appraisal.drafting_mode is DraftingMode.AI
+        and check_in.closed_at is None
+        and check_in.status is CheckInStatus.OPEN
+        and check_in.draft_status is not DraftStatus.PENDING
+        and check_in.redrafts < MAX_REDRAFTS
+        and (ctx.access.edit_check_ins or ctx.access.write_feedback)
+    )
 
 
 def stage_for(appraisal: Appraisal | None, cycle: AppraisalCycle | None) -> Stage:
