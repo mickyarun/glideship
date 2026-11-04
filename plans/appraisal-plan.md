@@ -77,6 +77,7 @@ Manager feedback         │           Manager + employee: growth conversation,
 | 11 | Suggested goals | **The AI suggests, people choose.** HR can generate suggestions for everyone when a cycle opens. Nothing becomes a goal until the employee or manager accepts it. |
 | 12 | Role templates | **Seed ten** (Engineering, QA, Product, Design, HR, Support, SEO & content, Compliance, Sales, Finance & ops). HR edits them and matches them to departments and designations. |
 | 13 | AI or manual | **Both, and manual is a full path, not a fallback.** An org switch, a cycle switch and a role-template switch decide it; any one set to manual wins. Teams that only use boards get the manual path. |
+| 14 | Appraisals over MCP | **Yes, for routine work, off until HR turns it on.** Check-in lines, tags, goal values, own goals, status and draft feedback. Scoring, submitting, sharing and goal decisions stay on the screens, and anything written over MCP waits for the person to keep it. |
 
 ## AI or manual
 
@@ -238,6 +239,7 @@ cycle copies them, so changing a setting never moves a running cycle.
 | Reminder offsets and HR overdue list | as in the reminder table | -3, 0, +2, HR at +3 |
 | Due days | self-score and manager review, days after the period ends | 7 and 14 |
 | Suggested goals when a cycle opens | on, off | off |
+| Appraisals over MCP | off, own records only, own and team | off |
 
 **Cycle settings.** HR sets these when creating a cycle; everything above is prefilled from the
 org settings and can be changed for that one cycle.
@@ -769,6 +771,77 @@ using partial unique indexes only (the local database is Postgres 14).
 review", "sent back", "shared", and the due-date reminders above. Each stream registers a
 `NotificationCategory` and goes through `list_slack_recipients`. DMs never include content.
 
+## Access through MCP
+
+People can do the routine parts of an appraisal from Claude Code or a desktop AI client,
+through Glideship's MCP server. An engineer can say "fill in my November check-in from what I
+shipped", and a manager can ask "who on my team is behind on Q4, and what did Priya say was
+blocking her?". The screens stay the only place where anyone scores, decides or shares.
+
+**What the tools can do**
+
+| Tool | Who | What it does |
+|---|---|---|
+| `appraisal_status` | anyone enrolled | What's open for me, due dates, my goals for this period |
+| `get_my_check_in` | employee | The month's fact list with ids, my lines so far, the AI draft if there is one |
+| `add_check_in_lines` | employee | Add lines under a heading, each citing fact ids from this check-in or a link; until the check-in closes |
+| `tag_check_in_fact` | employee | Say which goal a fact helped |
+| `set_goal_value` | employee | This month's value for a goal measure, with where it came from |
+| `propose_goal` | employee | Write my own goal; it arrives as `proposed` for the manager |
+| `get_my_feedback`, `get_my_result` | employee | Manager feedback once saved; the review once shared |
+| `team_appraisal_status` | manager | Counts and due dates per report: check-ins, feedback, reviews |
+| `get_report_check_in` | manager | One report's check-in, same access as the screen |
+| `draft_manager_feedback` | primary manager | Save keep, try next and goal-status notes as a draft |
+| `add_goal_for_report` | primary manager | Add a goal with its "why now" line, as `manager_added`, before the self-review opens |
+
+**What stays on the screens.** Self-scores, the manager's agree or change, submitting either of
+them, calibration, sharing, sending back, confirming or declining a goal, editing a confirmed
+goal, role templates, trends and every HR setting. Manager-only questions and other people's
+self-scores are never returned over MCP. A band is a decision about a person's pay and career;
+it should be made by someone looking at the evidence, the descriptors and the reasons on one
+screen, and pressed by that person.
+
+**Writes land as drafts the person keeps.** Lines added over MCP show on the check-in under
+"From your assistant, not kept yet", with Keep, Edit and Remove. Only kept lines are part of the
+check-in when it closes, so nothing an assistant wrote reaches the manager unread. Manager
+feedback drafted over MCP is saved, never marked done: "Share with Priya" is still a click on the
+screen. A goal added for a report waits on the manager's goals screen for that person, under the
+same heading, and the report sees it only once the manager adds it there.
+Every write records `source = mcp` and the token's name in the goal or check-in history.
+
+**Guarding the facts.** `add_check_in_lines` rejects fact ids that aren't in this check-in's saved
+fact list, and links must be URLs, the same citation check the AI draft goes through. The tool
+descriptions tell the assistant to cite only what Glideship listed and never to invent work.
+In manual mode the tools work the same; the AI draft field is just empty.
+
+**Who can connect**
+
+- **Personal tokens only.** Org-level tokens, internal tokens and scoped tokens from board card
+  runs and BUD agents never see the appraisal tools: they aren't listed and calls are refused.
+  This sits next to the scoped-token check in `mcp/token_grants.py`.
+- **Not only engineers.** Every MCP token today needs `workspace:engineering`
+  (`mcp/auth_owner.py`), which would shut out HR, support and SEO. The owner check returns
+  whether the owner has engineering access, and a token whose owner doesn't sees only the
+  appraisal tools. The remote endpoint re-checks this on every heartbeat, as it does today.
+- **Same access, read fresh.** Each call goes through `services/appraisals/access.py` with the
+  caller's current permissions and manager links, exactly like the API. Anything denied answers
+  "not found". Handlers are thin and call the same services as the API routes; no SQL in the MCP
+  layer.
+- **Both transports.** The stdio bridge for Claude Code, and the remote endpoint for desktop
+  clients, which most people outside engineering use. Each tool is added to the remote allowlist
+  in `mcp/streamable.py` by name, as the board tools are.
+- **An org setting, off by default.** "Appraisals over MCP": off, own records only, or own and
+  team. When it is on, appraisal text leaves Glideship for whichever model the person's AI client
+  uses, which may not be the provider the org set up for drafting. HR turns it on knowingly, and
+  the Me page shows which tokens can reach appraisals.
+
+**Privacy in the logs.** `mcp_audit_log` records some parameter values; its allowlist in
+`mcp/audit.py` includes `title` and `content`. Appraisal tools use their own parameter names
+(`lines`, `note`, `outcome`, `measure`) and record only the tool, the record id and the status,
+with a test that none of their parameter names is on the allowlist. Reads of someone else's
+record also write `appraisal_viewed` to `employee_audit_events` with `via = mcp`, under the same
+once-a-day rule. Calls use the normal MCP rate limit.
+
 ## Backend layout (each file about 200 lines or fewer)
 
 ```
@@ -805,6 +878,10 @@ services/appraisals/hr_facts.py    leave_config_events + document uploads, acces
 api/v1/check_ins.py, appraisal_cycles.py, appraisals.py, manager_feedback.py,
 appraisal_role_templates.py
 schemas/check_in.py, schemas/appraisal.py
+mcp/appraisal_tool_schemas.py      tool schemas, remote allowlist entries
+mcp/handlers_appraisals.py         employee tools, thin over the services
+mcp/handlers_appraisals_team.py    manager tools
+mcp/appraisal_tool_access.py       personal-token, org-setting and non-engineering gate
 core/permissions_people.py         + APPRAISALS category, appraisals:manage (sensitive)
 ```
 
@@ -945,6 +1022,10 @@ the band and goal choices. Evidence chips open their source in a new tab.
   gets credit; member-only boards show "private record".
 - Enrolment: no primary manager blocks enrolment; mid-cycle joiners respect the cut-off; exits
   withdraw; overlapping cycles are rejected.
+- MCP: org, internal and scoped tokens never list or call appraisal tools; a token without
+  engineering access lists only them; the org setting hides them, and "own records only" hides
+  the manager tools; scoring, sharing and manager-only questions have no tool; fact ids outside
+  the check-in are rejected; no appraisal parameter name is on the audit allowlist.
 
 **pytest (integration, testcontainers)**
 - A merged noreply account's PRs appear in the check-in. An unmerged one appears in the identity
@@ -956,6 +1037,8 @@ the band and goal choices. Evidence chips open their source in a new tab.
 - A whole cycle in manual mode, from activation to acknowledgement, makes no AI call.
 - An AI failure mid-cycle leaves a usable check-in with the fact list.
 - Merging two accounts repoints appraisal user ids.
+- MCP lines stay out of a closed check-in unless kept; MCP feedback is never marked done; a
+  report's check-in read over MCP writes `appraisal_viewed` with `via = mcp`.
 - The reminder job, run twice on the same day, sends each DM once, and stops after the manager
   marks everything done.
 - HR facts come only from rows where the person is the actor.
@@ -989,7 +1072,7 @@ the band and goal choices. Evidence chips open their source in a new tab.
 
 ## Delivery
 
-One PR in six milestones, with a review after each:
+One PR in seven milestones, with a review after each:
 
 1. Tables, access function, permission, encryption and audit.
 2. Role templates and their seed, drafting-mode switches, enrolment, identity check, fact
@@ -999,7 +1082,9 @@ One PR in six milestones, with a review after each:
 4. Cycle setup with readiness, cadence settings, manager feedback, the reminder engine and Slack DMs, and the
    intro guide.
 5. Goals (role library, carry-over, AI suggestions), self-review, manager agree or change, calibration and sharing.
-6. Growth conversation, then a full browser walkthrough, Playwright, and a green rerun of all
+6. MCP tools, the non-engineering token gate, the org setting and the "from your assistant"
+   block on the check-in.
+7. Growth conversation, then a full browser walkthrough, Playwright, and a green rerun of all
    suites.
 
 ## Deliberately left out
