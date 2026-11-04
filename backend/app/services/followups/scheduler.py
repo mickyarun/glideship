@@ -34,10 +34,9 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.digest_claim import DigestClaimStatus
 from app.repositories.digest_claim import DigestClaimRepository, settled_claims
-from app.repositories.followup_settings import Subscriber
 from app.repositories.followup_settings import followup_subscribers as subscribers
 from app.services.followups.due_state import LocalDay
-from app.services.followups.schedule import due_day
+from app.services.followups.schedule import Subscriber, due_day
 from app.services.followups.stage import KIND, stage_org
 from app.services.notifications import NotificationCategory
 from app.services.scheduling.claim_outcome import claim_outcome
@@ -53,7 +52,8 @@ async def tick_once(now_utc: datetime | None = None) -> None:
     """One pass over everyone who turned the follow-ups on."""
     now = now_utc or datetime.now(UTC)
     async with AsyncSessionLocal() as db:
-        people = await subscribers(db, CATEGORY.value)
+        rows = await subscribers(db, CATEGORY.value, default_time=settings.followups.default_time)
+        people = [Subscriber.of(row) for row in rows]
         due = await _due_now(db, people, now)
     slots = asyncio.Semaphore(settings.followups.org_concurrency)
 

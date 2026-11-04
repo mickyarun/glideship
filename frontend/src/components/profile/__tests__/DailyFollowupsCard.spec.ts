@@ -71,15 +71,6 @@ describe('DailyFollowupsCard', () => {
     )
   })
 
-  it("fills in this device's zone when none is saved", async () => {
-    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    const wrapper = await mountCard({ ...OFF, enabled: true, timezone: null })
-    expect(wrapper.text()).toContain(zone)
-    await wrapper.find('input[type="checkbox"]').setValue(false)
-    await flushPromises()
-    expect(http.put).toHaveBeenCalledWith('/v1/me/followups', { ...OFF, timezone: zone })
-  })
-
   it("switches to this device's zone when a different one is saved", async () => {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
     const other = zone === 'Pacific/Auckland' ? 'Europe/London' : 'Pacific/Auckland'

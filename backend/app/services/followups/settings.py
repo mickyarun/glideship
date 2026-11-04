@@ -19,9 +19,10 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.repositories.followup_settings import FollowupSettingsRepository, enabled_anywhere
+from app.repositories.followup_settings import FollowupSettingsRepository
 from app.repositories.user import UserRepository
 from app.schemas.followups import FollowupSettingsRead, FollowupSettingsUpdate
+from app.services.followups.zone import default_zone
 from app.services.notifications import NotificationCategory, is_category_enabled
 
 CATEGORY = NotificationCategory.DAILY_FOLLOWUPS
@@ -32,22 +33,25 @@ async def read_settings(
 ) -> FollowupSettingsRead:
     """The person's choice, with the defaults filled in where they haven't chosen.
 
-    On or off is per org; a person who never saved here starts off.
+    On or off is per org, and on until they turn it off. A "false" left in
+    their notification choices from before shows as off, since it mutes the
+    DM, until they turn it on again.
     """
     prefs = await UserRepository(db).get_notification_prefs(user_id)
+    allowed = is_category_enabled(prefs, CATEGORY)
     repo = FollowupSettingsRepository(db, org_id=org_id)
     saved = await repo.get(user_id)
     if saved is not None:
         return FollowupSettingsRead(
-            enabled=saved.enabled and is_category_enabled(prefs, CATEGORY),
+            enabled=saved.enabled and allowed,
             send_time=saved.send_time,
             timezone=saved.timezone,
             weekdays_only=saved.weekdays_only,
         )
     return FollowupSettingsRead(
-        enabled=False,
+        enabled=allowed,
         send_time=settings.followups.default_time,
-        timezone=await repo.policy_timezone(user_id),
+        timezone=default_zone(await repo.zone_parts(user_id), org_id),
         weekdays_only=True,
     )
 
@@ -55,7 +59,11 @@ async def read_settings(
 async def save_settings(
     db: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID, body: FollowupSettingsUpdate
 ) -> FollowupSettingsRead:
-    """Save this org's switch and schedule, then mirror "on anywhere" into the prefs."""
+    """Save this org's switch and schedule.
+
+    The per-org row is the only switch, so any account-wide choice for the
+    category is cleared rather than left to mute other orgs.
+    """
     await FollowupSettingsRepository(db, org_id=org_id).upsert(
         user_id,
         enabled=body.enabled,
@@ -65,8 +73,8 @@ async def save_settings(
     )
     users = UserRepository(db)
     prefs = dict(await users.get_notification_prefs(user_id))
-    prefs[CATEGORY.value] = await enabled_anywhere(db, user_id)
-    await users.set_notification_prefs(user_id, prefs)
+    if prefs.pop(CATEGORY.value, None) is not None:
+        await users.set_notification_prefs(user_id, prefs)
     return FollowupSettingsRead(
         enabled=body.enabled,
         send_time=body.send_time,

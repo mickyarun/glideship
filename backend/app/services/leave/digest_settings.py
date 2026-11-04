@@ -70,19 +70,26 @@ async def digest_zone(
     return resolve_zone(name)
 
 
-def org_zone(
+def org_zone_name(
     org_config: dict[str, Any] | None, policy_timezone: str | None, org_id: uuid.UUID | None = None
-) -> tzinfo:
-    """The zone :func:`digest_zone` resolves, without creating the default policy (no I/O).
+) -> str:
+    """The IANA name :func:`digest_zone` resolves, without creating the default policy.
 
-    For other daily messages (board due reminders) that follow the same
-    timezone but mustn't set up leave for an org that doesn't use it.
-    ``policy_timezone`` is the default leave policy's, when there is one;
-    without it, the presence timezone the default would start from.
+    For other daily messages (board due reminders, follow-ups) that follow
+    the same timezone but mustn't set up leave for an org that doesn't use
+    it. ``policy_timezone`` is the default leave policy's, when there is
+    one; without it, the presence timezone the default would start from.
     """
     name = (
         digest_settings(org_config, org_id).timezone
         or policy_timezone
         or get_presence_settings(org_config).timezone
     )
-    return resolve_zone(name or "UTC")
+    return name or "UTC"
+
+
+def org_zone(
+    org_config: dict[str, Any] | None, policy_timezone: str | None, org_id: uuid.UUID | None = None
+) -> tzinfo:
+    """The zone :func:`org_zone_name` names (no I/O)."""
+    return resolve_zone(org_zone_name(org_config, policy_timezone, org_id))

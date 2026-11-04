@@ -27,12 +27,12 @@ pytestmark = pytest.mark.integration
 URL = "/api/v1/me/followups"
 
 
-async def test_off_by_default_then_saved_and_read_back(
+async def test_on_by_default_then_saved_and_read_back(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     me = (await card_team(client, pg_session_factory)).editor
     first = ok(await client.get(URL, headers=me.headers))
-    assert first["enabled"] is False and first["weekdays_only"] is True
+    assert first["enabled"] is True and first["weekdays_only"] is True
     assert first["send_time"] == "09:00:00"
 
     body = {
@@ -55,6 +55,19 @@ async def test_off_by_default_then_saved_and_read_back(
     assert (await client.put(URL, json=offset, headers=me.headers)).status_code == 422
 
 
+async def test_saving_clears_an_old_account_wide_off(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    me = (await card_team(client, pg_session_factory)).editor
+    muted = {"preferences": {"daily_followups": False}}
+    ok(await client.patch("/api/v1/me/notification-preferences", json=muted, headers=me.headers))
+    assert ok(await client.get(URL, headers=me.headers))["enabled"] is False
+
+    body = {"enabled": True, "send_time": "09:00", "timezone": "UTC", "weekdays_only": True}
+    ok(await client.put(URL, json=body, headers=me.headers))
+    assert ok(await client.get(URL, headers=me.headers))["enabled"] is True
+
+
 async def test_an_unknown_timezone_is_refused(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
@@ -62,7 +75,7 @@ async def test_an_unknown_timezone_is_refused(
     body = {"enabled": True, "send_time": "08:00", "timezone": "Mars/Olympus"}
     response = await client.put(URL, json=body, headers=me.headers)
     assert response.status_code == 422
-    assert ok(await client.get(URL, headers=me.headers))["enabled"] is False
+    assert ok(await client.get(URL, headers=me.headers))["timezone"] != "Mars/Olympus"
     # A time with an offset contradicts the zone, so it's refused too.
     offset = {**body, "timezone": "Europe/London", "send_time": "08:00+05:30"}
     assert (await client.put(URL, json=offset, headers=me.headers)).status_code == 422

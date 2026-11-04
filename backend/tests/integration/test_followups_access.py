@@ -16,12 +16,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, time
 
 import pytest
 from httpx import AsyncClient
 
-from app.models.user import OrgToUser
+from app.models.user import OrgToUser, User
 from app.repositories.followup_settings import followup_subscribers
 from app.schemas.followups import FollowupSettingsUpdate
 from app.services.followups import scheduler
@@ -32,7 +33,7 @@ from tests.integration.followups_support import (
     Dms,
     capture_dms,
     due_card,
-    opt_in,
+    save_schedule,
     sections,
     target_bud,
 )
@@ -41,6 +42,7 @@ from tests.integration.scan_features_bugs_support import Factory, new_org
 pytestmark = pytest.mark.integration
 
 CATEGORY = "daily_followups"
+NINE = time(9, 0)
 
 # Tuesday 26 March 2030, 09:00 in London (GMT).
 AT = datetime(2030, 3, 26, 9, 0, tzinfo=UTC)
@@ -59,7 +61,7 @@ async def test_a_bud_is_left_out_for_someone_who_cannot_open_buds(
     seller = await person(pg_session_factory, org, "sales")
     await put_role(client, team.admin, team.key, seller.id, "editor")
     ids = await link_slack(pg_session_factory, org, seller.id)
-    await opt_in(pg_session_factory, org, seller.id)
+    await save_schedule(pg_session_factory, org, seller.id)
     await due_card(client, team.admin, team.key, "Pricing deck", "2030-03-26T12:00:00Z", seller)
     await target_bud(pg_session_factory, org, 61, seller.id, datetime(2030, 3, 25, tzinfo=UTC))
 
@@ -70,7 +72,7 @@ async def test_a_bud_is_left_out_for_someone_who_cannot_open_buds(
     assert len(texts) == 1 and "Pricing deck" in texts[0]
 
 
-async def test_turning_it_on_in_one_org_leaves_the_other_org_as_it_was(
+async def test_turning_it_off_in_one_org_leaves_the_other_org_on(
     client: AsyncClient, pg_session_factory: Factory
 ) -> None:
     team = await card_team(client, pg_session_factory)
@@ -81,25 +83,39 @@ async def test_turning_it_on_in_one_org_leaves_the_other_org_as_it_was(
         db.add(OrgToUser(user_id=me, org_id=second))
         await db.commit()
     await link_slack(pg_session_factory, first, me)
-    on = FollowupSettingsUpdate(enabled=True, send_time="09:00", timezone="Europe/London")
-    async with pg_session_factory() as db:
-        await save_settings(db, second, me, on)
-        await save_settings(db, second, me, on.model_copy(update={"enabled": False}))
-        await save_settings(db, first, me, on)
-        await db.commit()
 
+    async def my_orgs() -> set[uuid.UUID]:
+        async with pg_session_factory() as db:
+            people = await followup_subscribers(db, CATEGORY, default_time=NINE)
+        return {s.org_id for s in people if s.user_id == me}
+
+    # Never touched: on in both orgs.
+    assert await my_orgs() == {first, second}
+
+    off = FollowupSettingsUpdate(enabled=False, send_time="09:00", timezone="Europe/London")
     async with pg_session_factory() as db:
+        await save_settings(db, second, me, off)
+        await db.commit()
         assert (await read_settings(db, first, me)).enabled is True
         assert (await read_settings(db, second, me)).enabled is False
-        orgs = [
-            s.org_id for s in await followup_subscribers(db, "daily_followups") if s.user_id == me
-        ]
-    assert orgs == [first]
+    assert await my_orgs() == {first}
 
-    # Off in the only org where it was on: off everywhere, and the prefs say so.
     async with pg_session_factory() as db:
-        await save_settings(db, first, me, on.model_copy(update={"enabled": False}))
+        await save_settings(db, first, me, off)
         await db.commit()
-        assert [
-            s for s in await followup_subscribers(db, "daily_followups") if s.user_id == me
-        ] == []
+    assert await my_orgs() == set()
+
+
+async def test_an_old_account_wide_off_keeps_it_off_everywhere(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    team = await card_team(client, pg_session_factory)
+    org = await org_of(pg_session_factory, team.admin)
+    await link_slack(pg_session_factory, org, team.editor.id)
+    async with pg_session_factory() as db:
+        user = await db.get(User, team.editor.id)
+        assert user is not None
+        user.notification_prefs = {CATEGORY: False}
+        await db.commit()
+        people = await followup_subscribers(db, CATEGORY, default_time=NINE)
+    assert team.editor.id not in {s.user_id for s in people}

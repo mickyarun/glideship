@@ -142,7 +142,6 @@ NOTIFICATION_CATEGORIES: tuple[CategoryDef, ...] = (
         label="Daily follow-ups",
         description="Your overdue and due-soon cards and BUDs, once a day at a time you pick.",
         group="Your work",
-        default_enabled=False,
         own_card=True,
     ),
 )

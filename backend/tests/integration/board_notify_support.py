@@ -32,6 +32,7 @@ from sqlalchemy import select
 from app.models.notification import Notification
 from app.models.user import User
 from app.services import slack_dm
+from app.services.boards import due_stage
 from app.services.notifications import notice
 from tests.integration.leave_slack_support import connect_slack
 from tests.integration.scan_features_bugs_support import Factory
@@ -69,6 +70,19 @@ async def flush_open_fakes() -> None:
             slack.pending.clear()
             # A test may have made a send fail on purpose; it already asserted that.
             await asyncio.gather(*queued, return_exceptions=True)
+
+
+def without_followups(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave the morning card reminder on its own: nobody's cards go in a follow-ups DM.
+
+    The follow-ups are on by default and take over the reminder's DM on the
+    days they go out; the hand-off itself is tested in test_followups_skips.
+    """
+
+    async def _nobody(*_args: Any) -> set[uuid.UUID]:
+        return set()
+
+    monkeypatch.setattr(due_stage, "covered_by_followups", _nobody)
 
 
 def fake_slack(monkeypatch: pytest.MonkeyPatch, factory: Factory) -> Slack:

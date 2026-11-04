@@ -54,10 +54,10 @@ def test_default_preferences_covers_every_category_with_its_registry_default() -
     assert defaults == {d.category.value: d.default_enabled for d in NOTIFICATION_CATEGORIES}
 
 
-def test_daily_followups_is_opt_in() -> None:
-    assert default_preferences()[NotificationCategory.DAILY_FOLLOWUPS.value] is False
-    assert is_category_enabled({}, NotificationCategory.DAILY_FOLLOWUPS) is False
-    assert is_category_enabled(None, NotificationCategory.DAILY_FOLLOWUPS) is False
+def test_daily_followups_is_on_by_default() -> None:
+    assert default_preferences()[NotificationCategory.DAILY_FOLLOWUPS.value] is True
+    assert is_category_enabled({}, NotificationCategory.DAILY_FOLLOWUPS) is True
+    assert is_category_enabled(None, NotificationCategory.DAILY_FOLLOWUPS) is True
 
 
 def test_resolve_category_accepts_known_keys_and_rejects_junk() -> None:

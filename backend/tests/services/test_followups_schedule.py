@@ -19,8 +19,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.config import settings
-from app.repositories.followup_settings import Subscriber
-from app.services.followups.schedule import due_day, skips_day
+from app.services.followups.schedule import Subscriber, due_day, skips_day
 
 # Wednesday 6 March 2030.
 WEDNESDAY = date(2030, 3, 6)

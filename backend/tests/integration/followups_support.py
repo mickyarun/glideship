@@ -29,7 +29,6 @@ from app.models.bud import BUDStatus
 from app.models.digest_claim import DigestClaim, DigestClaimKind
 from app.models.followup_settings import FollowupSettings
 from app.models.policy_holiday import HolidayKind, HolidaySource, PolicyHoliday
-from app.models.user import User
 from app.services import slack_dm
 from app.services.followups import scheduler
 from app.services.leave.policies import ensure_default_policy
@@ -74,7 +73,7 @@ def sections(blocks: list[dict[str, Any]]) -> list[str]:
     return [b["text"]["text"] for b in blocks if b["type"] == "section"]
 
 
-async def opt_in(
+async def save_schedule(
     factory: Factory,
     org: uuid.UUID,
     user_id: uuid.UUID,
@@ -82,12 +81,10 @@ async def opt_in(
     at: time = time(9, 0),
     zone: str = LONDON,
     weekdays_only: bool = True,
+    enabled: bool = True,
 ) -> None:
-    """Turn the follow-ups on for a person with a saved schedule."""
+    """Save a person's follow-ups schedule in ``org`` (or turn it off there)."""
     async with factory() as db:
-        user = await db.get(User, user_id)
-        assert user is not None
-        user.notification_prefs = {**(user.notification_prefs or {}), "daily_followups": True}
         db.add(
             FollowupSettings(
                 org_id=org,
@@ -95,7 +92,7 @@ async def opt_in(
                 send_time=at,
                 timezone=zone,
                 weekdays_only=weekdays_only,
-                enabled=True,
+                enabled=enabled,
             )
         )
         await db.commit()
