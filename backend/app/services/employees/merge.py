@@ -63,7 +63,13 @@ async def transfer_employee_record(
             "Change their reporting managers in People first."
         )
     await managers.ensure_primaries()
-    appraisal_rows = await AppraisalMergeRepository(db, org_id=org_id).repoint_user(source, target)
+    appraisal = AppraisalMergeRepository(db, org_id=org_id)
+    appraisal_rows = await appraisal.repoint_user(source, target)
+    if await appraisal.self_managed_count():
+        raise EmployeeMergeConflictError(
+            "Merging these members would make someone their own appraisal manager. "
+            "Change who manages their appraisal in People first."
+        )
     return EmployeeMergeResult(
         profile_moved=bool(moved), reports_moved=reports, appraisal_rows_moved=appraisal_rows
     )

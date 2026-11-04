@@ -20,6 +20,7 @@ is created, so changing the org settings never moves a running cycle.
 
 import uuid
 from datetime import date
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -31,7 +32,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.appraisal_enums import (
@@ -51,7 +52,7 @@ class AppraisalCycle(BaseModel):
     __table_args__ = (
         CheckConstraint("period_end > period_start", name="ck_appraisal_cycles_period"),
         CheckConstraint(
-            "self_due >= period_end AND manager_due >= self_due",
+            "self_due >= period_end AND manager_due >= self_due AND ack_due >= manager_due",
             name="ck_appraisal_cycles_due_dates",
         ),
         # Quarterly check-ins only fit reviews longer than a quarter.
@@ -72,7 +73,10 @@ class AppraisalCycle(BaseModel):
             "enrolment_cutoff >= period_start AND enrolment_cutoff <= period_end",
             name="ck_appraisal_cycles_cutoff",
         ),
-        CheckConstraint("feedback_due_days >= 0", name="ck_appraisal_cycles_feedback_due"),
+        CheckConstraint(
+            "feedback_due_days >= 0 AND hr_overdue_offset >= 0",
+            name="ck_appraisal_cycles_offsets",
+        ),
         Index("ix_appraisal_cycles_org_period", "org_id", "period_start"),
     )
 
@@ -84,6 +88,8 @@ class AppraisalCycle(BaseModel):
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     self_due: Mapped[date] = mapped_column(Date, nullable=False)
     manager_due: Mapped[date] = mapped_column(Date, nullable=False)
+    # The employee acknowledges the shared result by this date.
+    ack_due: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[CycleStatus] = mapped_column(
         pg_enum(CycleStatus, "appraisal_cycle_status"),
         nullable=False,
@@ -107,6 +113,11 @@ class AppraisalCycle(BaseModel):
     hr_overdue_offset: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     suggest_goals_on_open: Mapped[bool] = mapped_column(Boolean, nullable=False)
     ai_drafting: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # Who is in it: {"offices": [...], "departments": [...], "templates": [...]};
+    # empty means everyone active.
+    scope: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    # Department or designation → role template id, overriding the match.
+    template_overrides: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # People who join after this date wait for the next cycle.
     enrolment_cutoff: Mapped[date] = mapped_column(Date, nullable=False)
     # HR's note at the top of the guide, encrypted.

@@ -69,7 +69,7 @@ class AppraisalCheckIn(BaseModel):
         UUID(as_uuid=True), ForeignKey("employee_profiles.id", ondelete="CASCADE"), nullable=False
     )
     cycle_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="RESTRICT"), nullable=False
     )
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)

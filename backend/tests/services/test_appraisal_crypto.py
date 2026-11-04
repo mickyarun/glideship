@@ -117,3 +117,43 @@ def test_every_blob_column_on_an_appraisal_table_is_listed() -> None:
         if isinstance(column.type, LargeBinary)
     }
     assert blobs == listed
+
+
+def _copy_title(source: AppraisalGoal, **changes: object) -> AppraisalGoal:
+    target = AppraisalGoal(
+        org_id=changes.get("org_id", source.org_id),
+        profile_id=changes.get("profile_id", source.profile_id),
+    )
+    target.id = changes.get("id", source.id)  # type: ignore[assignment]
+    target.title = source.title
+    return target
+
+
+@pytest.mark.parametrize("change", ["id", "org_id"])
+def test_blob_copied_to_another_row_or_org_fails(change: str) -> None:
+    goal = _goal()
+    crypto.seal(goal, "title", "Mine")
+    with pytest.raises(hr_crypto.HRDecryptionError):
+        crypto.unseal(_copy_title(goal, **{change: uuid.uuid4()}), "title")
+
+
+def test_same_id_in_another_table_fails() -> None:
+    check_in = AppraisalCheckIn(org_id=uuid.uuid4(), profile_id=uuid.uuid4())
+    crypto.seal(check_in, "employee_note", "Mine")
+    goal = AppraisalGoal(org_id=check_in.org_id, profile_id=check_in.profile_id)
+    goal.id = check_in.id
+    goal.title = check_in.employee_note  # type: ignore[assignment]
+    with pytest.raises(hr_crypto.HRDecryptionError):
+        crypto.unseal(goal, "title")
+
+
+def test_unseal_of_an_unlisted_field_is_refused() -> None:
+    with pytest.raises(ValueError, match="not an encrypted appraisal field"):
+        crypto.unseal(_goal(), "status")
+
+
+def test_sealing_before_the_owner_is_set_is_refused() -> None:
+    goal = AppraisalGoal(org_id=uuid.uuid4())
+    with pytest.raises(ValueError, match="needs its org, owner and id"):
+        crypto.seal(goal, "title", "Too early")
+    assert goal.title is None

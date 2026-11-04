@@ -82,7 +82,7 @@ class AppraisalGoal(BaseModel):
         UUID(as_uuid=True), ForeignKey("employee_profiles.id", ondelete="CASCADE"), nullable=False
     )
     cycle_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="CASCADE"), nullable=True
+        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="RESTRICT"), nullable=True
     )
     target_period_start: Mapped[date] = mapped_column(Date, nullable=False)
     # 1–3 once accepted; empty while suggested or proposed.

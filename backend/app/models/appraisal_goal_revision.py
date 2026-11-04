@@ -16,7 +16,9 @@
 
 The "changed by you, from ..." line under a goal reads from here. A
 database trigger refuses DELETE and any UPDATE except re-encrypting the
-blobs under a new HR key, so the history can't be quietly rewritten.
+blobs under a new HR key, so the history can't be quietly rewritten. A
+purge for an erasure request sets ``glideship.purge_goal_history`` to
+``on`` for its own transaction.
 """
 
 import uuid

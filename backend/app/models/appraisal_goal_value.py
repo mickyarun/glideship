@@ -20,7 +20,7 @@ search console export), shown as "reported by" the employee.
 
 import uuid
 
-from sqlalchemy import ForeignKey, LargeBinary, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, LargeBinary, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,6 +33,7 @@ class AppraisalGoalValue(BaseModel):
     __tablename__ = "appraisal_goal_values"
     __table_args__ = (
         UniqueConstraint("goal_id", "check_in_id", name="uq_appraisal_goal_values_check_in"),
+        Index("ix_appraisal_goal_values_check_in", "check_in_id"),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(

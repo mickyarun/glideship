@@ -44,6 +44,7 @@ def cycle_row(org_id: uuid.UUID, **overrides: Any) -> AppraisalCycle:
         "period_end": date(2026, 12, 31),
         "self_due": date(2027, 1, 7),
         "manager_due": date(2027, 1, 14),
+        "ack_due": date(2027, 1, 28),
         "review_period": ReviewPeriod.QUARTERLY,
         "checkin_cadence": CheckInCadence.MONTHLY,
         "feedback_cadence": FeedbackCadence.MONTHLY,

@@ -21,7 +21,7 @@ repointing here.
 
 import uuid
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
@@ -32,6 +32,7 @@ from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.appraisal_role_template import AppraisalRoleTemplate
+from app.models.employee_profile import EmployeeProfile
 from app.repositories.base import rowcount
 
 # Goal revisions keep the original ``changed_by``: the history is
@@ -69,3 +70,21 @@ class AppraisalMergeRepository:
             )
             changed += rowcount(result)
         return changed
+
+    async def self_managed_count(self) -> int:
+        """Appraisals and feedback whose scoring manager is the person themself.
+
+        A merge can cause this (merging a manager's second account into one
+        of their reports); the merge refuses rather than leave a review
+        nobody can score.
+        """
+        total = 0
+        for model in (Appraisal, AppraisalManagerFeedback):
+            stmt = (
+                select(func.count())
+                .select_from(model)
+                .join(EmployeeProfile, EmployeeProfile.id == model.profile_id)
+                .where(model.org_id == self._org, model.manager_user_id == EmployeeProfile.user_id)
+            )
+            total += int((await self._db.execute(stmt)).scalar_one())
+        return total

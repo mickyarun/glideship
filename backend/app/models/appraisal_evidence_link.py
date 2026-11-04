@@ -32,7 +32,10 @@ class AppraisalEvidenceLink(BaseModel):
     """One link on one check-in."""
 
     __tablename__ = "appraisal_evidence_links"
-    __table_args__ = (Index("ix_appraisal_evidence_links_check_in", "check_in_id"),)
+    __table_args__ = (
+        Index("ix_appraisal_evidence_links_check_in", "check_in_id"),
+        Index("ix_appraisal_evidence_links_goal", "goal_id"),
+    )
 
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False

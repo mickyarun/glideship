@@ -32,6 +32,7 @@ from sqlalchemy import (
     Index,
     LargeBinary,
     SmallInteger,
+    String,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -52,7 +53,18 @@ class Appraisal(BaseModel):
         CheckConstraint(f"self_band {_BAND_RANGE}", name="ck_appraisals_self_band"),
         CheckConstraint(f"manager_band {_BAND_RANGE}", name="ck_appraisals_manager_band"),
         CheckConstraint(f"final_band {_BAND_RANGE}", name="ck_appraisals_final_band"),
+        CheckConstraint(
+            "self_submitted_at IS NULL OR self_band IS NOT NULL",
+            name="ck_appraisals_self_submitted_band",
+        ),
+        CheckConstraint(
+            "manager_submitted_at IS NULL"
+            " OR (manager_band IS NOT NULL AND final_band IS NOT NULL)",
+            name="ck_appraisals_manager_submitted_band",
+        ),
         Index("ix_appraisals_manager", "org_id", "manager_user_id"),
+        Index("ix_appraisals_profile", "profile_id"),
+        Index("ix_appraisals_role_template", "role_template_id"),
         Index(
             "ix_appraisals_pending_summary",
             "summary_claimed_at",
@@ -64,7 +76,7 @@ class Appraisal(BaseModel):
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
     cycle_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="RESTRICT"), nullable=False
     )
     profile_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("employee_profiles.id", ondelete="CASCADE"), nullable=False
@@ -96,6 +108,8 @@ class Appraisal(BaseModel):
     summary_claimed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # An error code, never the provider's message.
+    summary_error: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     self_band: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     self_reason: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)

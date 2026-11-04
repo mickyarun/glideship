@@ -1,8 +1,8 @@
 """Appraisal tables, their enums, new audit actions and the goal-history trigger.
 
-Revision ID: 3876d5d38401
+Revision ID: ef580cb1cd8e
 Revises: a1e8aeee2202
-Create Date: 2026-11-04 15:34:38.866888
+Create Date: 2026-11-04 15:43:18.421011
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "3876d5d38401"
+revision: str = "ef580cb1cd8e"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -137,6 +137,7 @@ def upgrade() -> None:
         sa.Column("period_end", sa.Date(), nullable=False),
         sa.Column("self_due", sa.Date(), nullable=False),
         sa.Column("manager_due", sa.Date(), nullable=False),
+        sa.Column("ack_due", sa.Date(), nullable=False),
         sa.Column("status", _ENUMS["appraisal_cycle_status"], nullable=False),
         sa.Column("review_period", _ENUMS["appraisal_review_period"], nullable=False),
         sa.Column("checkin_cadence", _ENUMS["appraisal_checkin_cadence"], nullable=False),
@@ -148,6 +149,8 @@ def upgrade() -> None:
         sa.Column("hr_overdue_offset", sa.SmallInteger(), nullable=False),
         sa.Column("suggest_goals_on_open", sa.Boolean(), nullable=False),
         sa.Column("ai_drafting", sa.Boolean(), nullable=False),
+        sa.Column("scope", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("template_overrides", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("enrolment_cutoff", sa.Date(), nullable=False),
         sa.Column("intro_note", sa.LargeBinary(), nullable=True),
         sa.Column("created_by", sa.UUID(), nullable=True),
@@ -178,10 +181,12 @@ def upgrade() -> None:
             "enrolment_cutoff >= period_start AND enrolment_cutoff <= period_end",
             name="ck_appraisal_cycles_cutoff",
         ),
-        sa.CheckConstraint("feedback_due_days >= 0", name="ck_appraisal_cycles_feedback_due"),
+        sa.CheckConstraint(
+            "feedback_due_days >= 0 AND hr_overdue_offset >= 0", name="ck_appraisal_cycles_offsets"
+        ),
         sa.CheckConstraint("period_end > period_start", name="ck_appraisal_cycles_period"),
         sa.CheckConstraint(
-            "self_due >= period_end AND manager_due >= self_due",
+            "self_due >= period_end AND manager_due >= self_due AND ack_due >= manager_due",
             name="ck_appraisal_cycles_due_dates",
         ),
         sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="SET NULL"),
@@ -317,7 +322,7 @@ def upgrade() -> None:
             name="ck_appraisal_check_ins_days",
         ),
         sa.CheckConstraint("period_end > period_start", name="ck_appraisal_check_ins_period"),
-        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["org_id"],
             ["organizations.id"],
@@ -383,7 +388,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("position BETWEEN 1 AND 3", name="ck_appraisal_goals_position"),
         sa.ForeignKeyConstraint(["accepted_by"], ["users.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["org_id"],
             ["organizations.id"],
@@ -438,7 +443,7 @@ def upgrade() -> None:
             "status <> 'done' OR done_at IS NOT NULL", name="ck_appraisal_feedback_done_at"
         ),
         sa.CheckConstraint("period_end > period_start", name="ck_appraisal_feedback_period"),
-        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["manager_user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["org_id"],
@@ -467,6 +472,7 @@ def upgrade() -> None:
         sa.Column("period_summary_status", _ENUMS["appraisal_draft_status"], nullable=False),
         sa.Column("summary_attempts", sa.SmallInteger(), nullable=False),
         sa.Column("summary_claimed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("summary_error", sa.String(length=60), nullable=True),
         sa.Column("self_band", sa.SmallInteger(), nullable=True),
         sa.Column("self_reason", sa.LargeBinary(), nullable=True),
         sa.Column("self_evidence", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -500,8 +506,17 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("final_band BETWEEN 1 AND 5", name="ck_appraisals_final_band"),
         sa.CheckConstraint("manager_band BETWEEN 1 AND 5", name="ck_appraisals_manager_band"),
+        sa.CheckConstraint(
+            "manager_submitted_at IS NULL"
+            " OR (manager_band IS NOT NULL AND final_band IS NOT NULL)",
+            name="ck_appraisals_manager_submitted_band",
+        ),
         sa.CheckConstraint("self_band BETWEEN 1 AND 5", name="ck_appraisals_self_band"),
-        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="CASCADE"),
+        sa.CheckConstraint(
+            "self_submitted_at IS NULL OR self_band IS NOT NULL",
+            name="ck_appraisals_self_submitted_band",
+        ),
+        sa.ForeignKeyConstraint(["cycle_id"], ["appraisal_cycles.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["manager_user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["org_id"],
@@ -523,6 +538,10 @@ def upgrade() -> None:
         ["summary_claimed_at"],
         unique=False,
         postgresql_where="period_summary_status = 'pending'",
+    )
+    op.create_index("ix_appraisals_profile", "appraisals", ["profile_id"], unique=False)
+    op.create_index(
+        "ix_appraisals_role_template", "appraisals", ["role_template_id"], unique=False
     )
     op.create_table(
         "appraisal_evidence_links",
@@ -563,6 +582,9 @@ def upgrade() -> None:
         ["check_in_id"],
         unique=False,
     )
+    op.create_index(
+        "ix_appraisal_evidence_links_goal", "appraisal_evidence_links", ["goal_id"], unique=False
+    )
     op.create_table(
         "appraisal_goal_values",
         sa.Column("org_id", sa.UUID(), nullable=False),
@@ -595,6 +617,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("goal_id", "check_in_id", name="uq_appraisal_goal_values_check_in"),
     )
+    op.create_index(
+        "ix_appraisal_goal_values_check_in", "appraisal_goal_values", ["check_in_id"], unique=False
+    )
     # ### end Alembic commands ###
     for action in (
         "appraisal_viewed",
@@ -605,19 +630,29 @@ def upgrade() -> None:
         "appraisal_goal_accepted",
     ):
         op.execute(f"ALTER TYPE employee_audit_action ADD VALUE IF NOT EXISTS '{action}'")
-    # Goal history is append-only: no deletes, and an update may only
-    # re-encrypt the blobs (HR key rotation), never change who did what.
+    # Goal history is append-only. An update may only re-encrypt a blob that
+    # is already there (HR key rotation): never change who did what, never
+    # blank a blob or fill an empty one. A purge for an erasure request sets
+    # glideship.purge_goal_history = 'on' for its own transaction.
     op.execute(
         """
         CREATE FUNCTION appraisal_goal_revisions_append_only() RETURNS trigger AS $$
         BEGIN
-            IF TG_OP = 'DELETE'
-                OR NEW.id IS DISTINCT FROM OLD.id
+            IF current_setting('glideship.purge_goal_history', true) = 'on' THEN
+                RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+            END IF;
+            IF TG_OP IN ('DELETE', 'TRUNCATE') THEN
+                RAISE EXCEPTION 'appraisal_goal_revisions is append-only';
+            END IF;
+            IF NEW.id IS DISTINCT FROM OLD.id
                 OR NEW.org_id IS DISTINCT FROM OLD.org_id
                 OR NEW.goal_id IS DISTINCT FROM OLD.goal_id
                 OR NEW.changed_by IS DISTINCT FROM OLD.changed_by
                 OR NEW.kind IS DISTINCT FROM OLD.kind
                 OR NEW.created_at IS DISTINCT FROM OLD.created_at
+                OR (NEW.before IS NULL) <> (OLD.before IS NULL)
+                OR (NEW.after IS NULL) <> (OLD.after IS NULL)
+                OR (NEW.reason IS NULL) <> (OLD.reason IS NULL)
             THEN
                 RAISE EXCEPTION 'appraisal_goal_revisions is append-only';
             END IF;
@@ -633,17 +668,27 @@ def upgrade() -> None:
         FOR EACH ROW EXECUTE FUNCTION appraisal_goal_revisions_append_only()
         """
     )
+    op.execute(
+        """
+        CREATE TRIGGER appraisal_goal_revisions_no_truncate
+        BEFORE TRUNCATE ON appraisal_goal_revisions
+        FOR EACH STATEMENT EXECUTE FUNCTION appraisal_goal_revisions_append_only()
+        """
+    )
 
 
 def downgrade() -> None:
-    op.execute(
-        "DROP TRIGGER IF EXISTS appraisal_goal_revisions_no_change ON appraisal_goal_revisions"
-    )
+    for trigger in ("appraisal_goal_revisions_no_change", "appraisal_goal_revisions_no_truncate"):
+        op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON appraisal_goal_revisions")
     op.execute("DROP FUNCTION IF EXISTS appraisal_goal_revisions_append_only()")
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index("ix_appraisal_goal_values_check_in", table_name="appraisal_goal_values")
     op.drop_table("appraisal_goal_values")
+    op.drop_index("ix_appraisal_evidence_links_goal", table_name="appraisal_evidence_links")
     op.drop_index("ix_appraisal_evidence_links_check_in", table_name="appraisal_evidence_links")
     op.drop_table("appraisal_evidence_links")
+    op.drop_index("ix_appraisals_role_template", table_name="appraisals")
+    op.drop_index("ix_appraisals_profile", table_name="appraisals")
     op.drop_index(
         "ix_appraisals_pending_summary",
         table_name="appraisals",

@@ -56,7 +56,7 @@ class AppraisalManagerFeedback(BaseModel):
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
     cycle_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("appraisal_cycles.id", ondelete="RESTRICT"), nullable=False
     )
     profile_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("employee_profiles.id", ondelete="CASCADE"), nullable=False
@@ -67,6 +67,7 @@ class AppraisalManagerFeedback(BaseModel):
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     # Feedback runs monthly or quarterly; "in the review" creates no items.
+    # Shares the check-in cadence type because the values are the same.
     cadence: Mapped[CheckInCadence] = mapped_column(
         pg_enum(CheckInCadence, "appraisal_checkin_cadence"), nullable=False
     )

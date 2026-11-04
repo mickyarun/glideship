@@ -46,16 +46,10 @@ class EmployeeAuditAction(StrEnum):
     APPRAISAL_GOAL_ACCEPTED = "appraisal_goal_accepted"
 
 
-# The employee record's access log shows these; appraisal events have their
-# own readers and stay out of it.
+# The employee record's access log shows everything but appraisal events,
+# which have their own readers.
 RECORD_ACTIONS: frozenset[EmployeeAuditAction] = frozenset(
-    {
-        EmployeeAuditAction.FIELD_REVEALED,
-        EmployeeAuditAction.DETAILS_UPDATED,
-        EmployeeAuditAction.DOCUMENT_UPLOADED,
-        EmployeeAuditAction.DOCUMENT_VIEWED,
-        EmployeeAuditAction.DOCUMENT_DELETED,
-    }
+    action for action in EmployeeAuditAction if not action.value.startswith("appraisal_")
 )
 
 

@@ -12,13 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The appraisal access rules: who sees and changes what, at each stage."""
+"""The appraisal access rules: who sees and changes what, at each stage.
+
+The matrix compares whole ``AppraisalAccess`` values, so any flag that
+flips fails a case rather than slipping past a spot check.
+"""
 
 import uuid
+
+import pytest
 
 from app.core.permission_deps import PermissionSet
 from app.services.appraisals.access import (
     NO_ACCESS,
+    AppraisalAccess,
     Relation,
     Stage,
     access_for,
@@ -27,91 +34,188 @@ from app.services.appraisals.access import (
 
 EMPLOYEE = Relation(is_self=True, is_primary_manager=False, is_other_manager=False)
 PRIMARY = Relation(is_self=False, is_primary_manager=True, is_other_manager=False)
-OTHER_MANAGER = Relation(is_self=False, is_primary_manager=False, is_other_manager=True)
+OTHER = Relation(is_self=False, is_primary_manager=False, is_other_manager=True)
 STRANGER = Relation(is_self=False, is_primary_manager=False, is_other_manager=False)
+HRS_MANAGER = Relation(
+    is_self=False, is_primary_manager=False, is_other_manager=False, is_callers_manager=True
+)
 NOBODY = PermissionSet(ids=frozenset(), is_owner=False)
 HR = PermissionSet(ids=frozenset({"appraisals:manage"}), is_owner=False)
 OWNER = PermissionSet(ids=frozenset(), is_owner=True)
-DRAFTING = Stage()
-SELF_SUBMITTED = Stage(self_submitted=True)
-MANAGER_SUBMITTED = Stage(self_submitted=True, manager_submitted=True)
+
+DRAFT = Stage()
+SELF_DONE = Stage(self_submitted=True)
+MGR_DONE = Stage(self_submitted=True, manager_submitted=True)
 SHARED = Stage(self_submitted=True, manager_submitted=True, shared=True)
+LOCKED = Stage(self_submitted=True, manager_submitted=True, editable=False)
+
+READ = {"view_check_ins": True, "view_feedback": True}
+OWN = {**READ, "edit_check_ins": True, "view_self_score": True}
+LEAD = {**READ, "write_feedback": True, "manage_goals": True, "view_calibration": True}
+LEAD_SCORING = {**LEAD, "view_manager_score": True, "view_manager_only": True}
+
+CASES: list[tuple[str, PermissionSet, Relation, Stage, dict[str, bool]]] = [
+    ("employee drafting", NOBODY, EMPLOYEE, DRAFT, {**OWN, "edit_self_score": True}),
+    ("employee submitted", NOBODY, EMPLOYEE, MGR_DONE, OWN),
+    ("employee shared", NOBODY, EMPLOYEE, SHARED, {**OWN, "view_manager_score": True}),
+    ("employee locked", NOBODY, EMPLOYEE, LOCKED, {**READ, "view_self_score": True}),
+    ("hr on own record", HR, EMPLOYEE, MGR_DONE, OWN),
+    ("owner on own record", OWNER, EMPLOYEE, MGR_DONE, OWN),
+    (
+        "primary before self-score",
+        NOBODY,
+        PRIMARY,
+        DRAFT,
+        {**LEAD_SCORING, "edit_manager_score": True, "edit_manager_only": True},
+    ),
+    (
+        "primary after self-score",
+        NOBODY,
+        PRIMARY,
+        SELF_DONE,
+        {
+            **LEAD_SCORING,
+            "view_self_score": True,
+            "edit_manager_score": True,
+            "edit_manager_only": True,
+        },
+    ),
+    ("primary submitted", NOBODY, PRIMARY, MGR_DONE, {**LEAD_SCORING, "view_self_score": True}),
+    (
+        "primary locked",
+        NOBODY,
+        PRIMARY,
+        LOCKED,
+        {**READ, "view_calibration": True, "view_manager_score": True, "view_manager_only": True}
+        | {"view_self_score": True},
+    ),
+    ("other manager drafting", NOBODY, OTHER, DRAFT, READ),
+    ("other manager self done", NOBODY, OTHER, SELF_DONE, {**READ, "view_self_score": True}),
+    (
+        "other manager submitted",
+        NOBODY,
+        OTHER,
+        MGR_DONE,
+        {**READ, "view_self_score": True, "view_manager_score": True},
+    ),
+    ("hr drafting", HR, STRANGER, DRAFT, {**READ, "view_calibration": True}),
+    (
+        "hr self done",
+        HR,
+        STRANGER,
+        SELF_DONE,
+        {**READ, "view_calibration": True, "view_self_score": True},
+    ),
+    (
+        "hr submitted",
+        HR,
+        STRANGER,
+        MGR_DONE,
+        {
+            **READ,
+            "view_calibration": True,
+            "view_self_score": True,
+            "view_manager_score": True,
+            "view_manager_only": True,
+            "send_back": True,
+            "share": True,
+        },
+    ),
+    (
+        "hr shared",
+        HR,
+        STRANGER,
+        SHARED,
+        {
+            **READ,
+            "view_calibration": True,
+            "view_self_score": True,
+            "view_manager_score": True,
+            "view_manager_only": True,
+        },
+    ),
+    (
+        "hr locked",
+        HR,
+        STRANGER,
+        LOCKED,
+        {
+            **READ,
+            "view_calibration": True,
+            "view_self_score": True,
+            "view_manager_score": True,
+            "view_manager_only": True,
+        },
+    ),
+    ("owner submitted", OWNER, STRANGER, MGR_DONE, {}),  # filled below: same as HR
+    ("hr on their own manager", HR, HRS_MANAGER, MGR_DONE, {}),
+    ("owner on their own manager", OWNER, HRS_MANAGER, MGR_DONE, {}),
+    (
+        "hr who is also the primary manager",
+        HR,
+        PRIMARY,
+        MGR_DONE,
+        {
+            **LEAD_SCORING,
+            "view_self_score": True,
+            "send_back": True,
+            "share": True,
+        },
+    ),
+]
+_HR_SUBMITTED = next(c[4] for c in CASES if c[0] == "hr submitted")
+CASES = [(n, p, r, s, _HR_SUBMITTED if n == "owner submitted" else e) for n, p, r, s, e in CASES]
+
+
+@pytest.mark.parametrize(
+    ("perms", "relation", "stage", "expected"),
+    [c[1:] for c in CASES],
+    ids=[c[0] for c in CASES],
+)
+def test_access_matrix(
+    perms: PermissionSet, relation: Relation, stage: Stage, expected: dict[str, bool]
+) -> None:
+    assert access_for(perms, relation, stage) == AppraisalAccess(**expected)
+
+
+@pytest.mark.parametrize("stage", [DRAFT, SELF_DONE, MGR_DONE, SHARED, LOCKED])
+@pytest.mark.parametrize("perms", [NOBODY, HR, OWNER])
+def test_nobody_else_gets_anything(perms: PermissionSet, stage: Stage) -> None:
+    for relation in (STRANGER, HRS_MANAGER):
+        if perms is NOBODY or relation is HRS_MANAGER:
+            assert access_for(perms, relation, stage) == NO_ACCESS
+
+
+@pytest.mark.parametrize("relation", [EMPLOYEE, PRIMARY, OTHER])
+def test_everyone_with_a_reason_can_see_it(relation: Relation) -> None:
+    assert access_for(NOBODY, relation, DRAFT).any
+    assert not NO_ACCESS.any
 
 
 def test_relation_for_tells_primary_from_other_managers() -> None:
-    me, boss, other = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    subject = uuid.uuid4()
+    boss, other, stranger, subject = (uuid.uuid4() for _ in range(4))
     assert relation_for(boss, subject, boss, {boss, other}) == PRIMARY
-    assert relation_for(other, subject, boss, {boss, other}) == OTHER_MANAGER
-    assert relation_for(me, subject, boss, {boss}) == STRANGER
+    assert relation_for(other, subject, boss, {boss, other}) == OTHER
+    assert relation_for(stranger, subject, boss, {boss}) == STRANGER
     assert relation_for(subject, subject, boss, {boss}) == EMPLOYEE
+
+
+def test_relation_for_without_a_primary_manager() -> None:
+    boss, subject = uuid.uuid4(), uuid.uuid4()
+    assert relation_for(boss, subject, None, {boss}) == OTHER
+
+
+def test_replaced_primary_manager_loses_scoring_rights() -> None:
+    old_boss, new_boss, subject = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    assert relation_for(old_boss, subject, old_boss, {new_boss}) == STRANGER
 
 
 def test_relation_for_never_makes_you_your_own_manager() -> None:
     me = uuid.uuid4()
-    assert relation_for(me, me, me, {me}) == EMPLOYEE
+    assert relation_for(me, me, me, {me}, callers_manager_ids={me}) == EMPLOYEE
 
 
-def test_employee_sees_manager_scores_only_once_shared() -> None:
-    assert not access_for(NOBODY, EMPLOYEE, MANAGER_SUBMITTED).view_manager_score
-    assert access_for(NOBODY, EMPLOYEE, SHARED).view_manager_score
-
-
-def test_employee_never_sees_manager_only_answers() -> None:
-    for stage in (DRAFTING, MANAGER_SUBMITTED, SHARED):
-        assert not access_for(NOBODY, EMPLOYEE, stage).view_manager_only
-
-
-def test_employee_edits_self_score_until_submitted() -> None:
-    assert access_for(NOBODY, EMPLOYEE, DRAFTING).edit_self_score
-    assert not access_for(NOBODY, EMPLOYEE, SELF_SUBMITTED).edit_self_score
-
-
-def test_hr_and_owner_are_only_the_employee_on_their_own_record() -> None:
-    for perms in (HR, OWNER):
-        rights = access_for(perms, EMPLOYEE, MANAGER_SUBMITTED)
-        assert not rights.view_manager_score
-        assert not rights.view_manager_only
-        assert not rights.edit_manager_score
-        assert not rights.share
-
-
-def test_primary_manager_sees_self_score_only_after_submit() -> None:
-    assert not access_for(NOBODY, PRIMARY, DRAFTING).view_self_score
-    assert access_for(NOBODY, PRIMARY, SELF_SUBMITTED).view_self_score
-
-
-def test_primary_manager_scores_until_submitted() -> None:
-    assert access_for(NOBODY, PRIMARY, SELF_SUBMITTED).edit_manager_score
-    assert access_for(NOBODY, PRIMARY, SELF_SUBMITTED).edit_manager_only
-    assert not access_for(NOBODY, PRIMARY, MANAGER_SUBMITTED).edit_manager_score
-
-
-def test_primary_manager_owns_feedback_and_goals() -> None:
-    rights = access_for(NOBODY, PRIMARY, DRAFTING)
-    assert rights.write_feedback and rights.manage_goals
-
-
-def test_other_manager_reads_but_never_writes() -> None:
-    rights = access_for(NOBODY, OTHER_MANAGER, MANAGER_SUBMITTED)
-    assert rights.view_check_ins and rights.view_feedback and rights.view_manager_score
-    assert not (rights.write_feedback or rights.edit_manager_score or rights.manage_goals)
-    assert not rights.view_manager_only
-    assert not access_for(NOBODY, OTHER_MANAGER, SELF_SUBMITTED).view_manager_score
-
-
-def test_hr_reads_after_submit_and_shares_once() -> None:
-    assert not access_for(HR, STRANGER, SELF_SUBMITTED).view_manager_only
-    rights = access_for(HR, STRANGER, MANAGER_SUBMITTED)
-    assert rights.view_manager_only and rights.share and rights.send_back
-    assert not rights.edit_manager_score
-    assert not access_for(HR, STRANGER, SHARED).share
-
-
-def test_owner_counts_as_hr_on_other_records() -> None:
-    assert access_for(OWNER, STRANGER, MANAGER_SUBMITTED).share
-
-
-def test_anyone_else_gets_nothing() -> None:
-    assert access_for(NOBODY, STRANGER, SHARED) == NO_ACCESS
-    assert not NO_ACCESS.any
+def test_relation_for_spots_the_callers_own_manager() -> None:
+    hr, their_manager = uuid.uuid4(), uuid.uuid4()
+    relation = relation_for(hr, their_manager, None, (), callers_manager_ids={their_manager})
+    assert relation == HRS_MANAGER

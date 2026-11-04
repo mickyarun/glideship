@@ -100,7 +100,11 @@ def aad(row: BaseModel, field: str) -> str:
     """Associated data for one field of one row."""
     table = _table(row, field)
     org_id = getattr(row, "org_id")  # noqa: B009 - every appraisal table has it
-    return f"{org_id}|{table.owner(row)}|{table.model.__tablename__}|{row.id}|{field}"
+    owner = table.owner(row)
+    if org_id is None or row.id is None or owner.endswith(":None"):
+        # Sealing before these are set would make a blob nobody can open.
+        raise ValueError(f"{type(row).__name__} needs its org, owner and id before {field}.")
+    return f"{org_id}|{owner}|{table.model.__tablename__}|{row.id}|{field}"
 
 
 def seal(row: BaseModel, field: str, text: str | None) -> None:
@@ -118,6 +122,7 @@ def seal(row: BaseModel, field: str, text: str | None) -> None:
 
 def unseal(row: BaseModel, field: str) -> str | None:
     """The decrypted text of ``row.field``, or None when it is empty."""
+    _table(row, field)
     blob: bytes | None = getattr(row, field)
     return hr_crypto.decrypt(blob, aad(row, field)).decode() if blob else None
 

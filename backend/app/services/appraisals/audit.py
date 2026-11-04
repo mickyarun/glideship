@@ -66,8 +66,13 @@ async def record_view(
     day_start = moment.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     repo = EmployeeAuditRepository(db, org_id=org_id)
     action = EmployeeAuditAction.APPRAISAL_VIEWED
+    # Check-then-insert can race and log twice; fine for "at most daily".
     if await repo.recorded_since(
-        actor_id=actor_id, action=action, target=str(target), since=day_start
+        actor_id=actor_id,
+        profile_id=profile_id,
+        action=action,
+        target=str(target),
+        since=day_start,
     ):
         return False
     repo.record(
@@ -76,5 +81,7 @@ async def record_view(
         profile_id=profile_id,
         action=action,
         target=str(target),
+        # The same clock as the once-a-day check, so the two always agree.
+        at=moment,
     )
     return True

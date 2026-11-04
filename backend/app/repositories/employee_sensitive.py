@@ -94,18 +94,20 @@ class EmployeeAuditRepository:
         profile_id: uuid.UUID,
         action: EmployeeAuditAction,
         target: str,
+        at: datetime | None = None,
     ) -> None:
-        """Stage one entry in the caller's transaction."""
-        self._db.add(
-            EmployeeAuditEvent(
-                org_id=self._org,
-                actor_id=actor_id,
-                subject_user_id=subject_user_id,
-                profile_id=profile_id,
-                action=action,
-                target=target,
-            )
+        """Stage one entry in the caller's transaction; ``at`` defaults to now()."""
+        event = EmployeeAuditEvent(
+            org_id=self._org,
+            actor_id=actor_id,
+            subject_user_id=subject_user_id,
+            profile_id=profile_id,
+            action=action,
+            target=target,
         )
+        if at is not None:
+            event.created_at = at
+        self._db.add(event)
 
     async def for_profile(self, profile_id: uuid.UUID) -> list[EmployeeAuditEvent]:
         """The most recent record-access entries about one employee, newest first."""
@@ -125,14 +127,20 @@ class EmployeeAuditRepository:
         self,
         *,
         actor_id: uuid.UUID,
+        profile_id: uuid.UUID,
         action: EmployeeAuditAction,
         target: str,
         since: datetime,
     ) -> bool:
-        """Whether this actor already has this entry since ``since``."""
+        """Whether this actor already has this entry since ``since``.
+
+        Filters on the profile so the ``(org, profile, created_at)`` index
+        serves it.
+        """
         stmt = select(
             exists().where(
                 EmployeeAuditEvent.org_id == self._org,
+                EmployeeAuditEvent.profile_id == profile_id,
                 EmployeeAuditEvent.actor_id == actor_id,
                 EmployeeAuditEvent.action == action,
                 EmployeeAuditEvent.target == target,
