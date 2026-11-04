@@ -36,8 +36,10 @@ def _card(n: int, hours: float, title: str = "Card") -> DueCard:
         board_id=uuid.uuid4(),
         board_key="OPS",
         board_name="Ops <team>",
+        card_id=uuid.uuid4(),
         number=n,
         title=title,
+        stage_name="Doing",
         due_at=START + timedelta(hours=hours),
     )
 

@@ -305,6 +305,7 @@ def _prefs_to_items(prefs: dict[str, bool]) -> list[NotificationPreferenceItem]:
             enabled=is_category_enabled(prefs, definition.category),
         )
         for definition in NOTIFICATION_CATEGORIES
+        if not definition.own_card
     ]
 
 

@@ -40,6 +40,7 @@ from app.repositories.external_import_sweep import recover_stuck_external_import
 from app.services.boards.agents.stale_sweep import run_forever as run_board_agent_stale_sweep
 from app.services.boards.due_reminders import run_forever as run_board_due_reminders
 from app.services.celebrations.scheduler import run_forever as run_celebrations
+from app.services.followups.scheduler import run_forever as run_followups
 from app.services.imports.sweeper import run_forever as run_import_sweep
 from app.services.leave.carry_scheduler import run_forever as run_leave_carry_forward
 from app.services.leave.digest_scheduler import run_forever as run_leave_digest
@@ -336,6 +337,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 8l. Card agent runs past their deadline plus a grace are failed, so a
     # hung or lost job never holds its card's one active run.
     board_agent_stale_task = asyncio.create_task(run_board_agent_stale_sweep())
+    # 8m. Daily follow-ups: an opt-in DM of each person's due cards and BUDs at
+    # their own local time, claimed once per person-day.
+    followups_task = asyncio.create_task(run_followups())
 
     # 9. PR-merge Redis-stream worker pool. One consumer per
     # (org, repo) stream; supervisor task spawns consumers lazily as
@@ -383,6 +387,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import_sweep_task.cancel()
     board_due_task.cancel()
     board_agent_stale_task.cancel()
+    followups_task.cancel()
     if pr_merge_pool is not None:
         await pr_merge_pool.stop()
     await stop_workers()

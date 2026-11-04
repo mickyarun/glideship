@@ -33,7 +33,13 @@ from app.repositories.board_due import DueOrg
 from app.services import slack_dm
 from app.services.boards import due_reminders
 from tests.integration.board_api_support import CardTeam, card_team, make_card, org_of
-from tests.integration.board_notify_support import Slack, fake_slack, link_slack, notes
+from tests.integration.board_notify_support import (
+    Slack,
+    fake_slack,
+    link_slack,
+    notes,
+    without_followups,
+)
 from tests.integration.scan_features_bugs_support import Factory
 from tests.integration.test_board_notify_edges import deactivate
 
@@ -51,6 +57,7 @@ OVERDUE = "2031-05-30T10:00:00Z"
 @pytest.fixture
 def slack(monkeypatch: pytest.MonkeyPatch, pg_session_factory: Factory) -> Slack:
     monkeypatch.setattr(due_reminders, "AsyncSessionLocal", pg_session_factory)
+    without_followups(monkeypatch)
     monkeypatch.setattr(settings.boards, "due_reminder_dm_interval_seconds", 0.0)
     return fake_slack(monkeypatch, pg_session_factory)
 

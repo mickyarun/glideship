@@ -20,6 +20,7 @@
 <template>
   <AppPage title="My leave" :subtitle="subtitle">
     <template #actions>
+      <v-btn variant="text" :to="{ name: 'leave-holidays' }">Holidays</v-btn>
       <v-btn variant="text" :to="{ name: 'leave-team' }">Team calendar</v-btn>
       <v-btn v-if="summary?.work_arrangement !== 'remote'" variant="outlined" :disabled="!summary" @click="open('wfh')">
         Work from home

@@ -19,7 +19,7 @@
  * checklist asks before Done, and the repository is picked from the
  * board's linked ones (or cleared).
  */
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/socket', async () => (await import('./cardPageMockModules')).socketModule())
@@ -44,8 +44,24 @@ const later = (s: number) => new Date(Date.parse(CARD.updated_at) + s * 1000).to
 // Vuetify mounts a menu's items once it activates, which on a loaded CI
 // runner can take longer than vi.waitFor's 1 s default.
 const MENU_OPENS = { timeout: 5_000 }
+// A test that opens the menu twice needs room for both waits, which the
+// 5 s default test timeout alone doesn't leave.
+const TWO_MENUS = 3 * MENU_OPENS.timeout
+// Picking an item closes the menu at once and again 40 ms later (Vuetify's
+// VMenu closeParents timer). Timers run in the order they fall due, so one
+// set for longer after the click always runs after that second close.
+const MENU_CLOSE_TIMER_MS = 50
 const menuItem = (text: string) =>
   [...document.querySelectorAll<HTMLElement>('.v-overlay--active .v-list-item')].find(i => i.textContent?.includes(text))
+// Waits out the menu's delayed close, or on a slow runner it shuts the menu
+// the next pick has just opened.
+async function pickRepo(wrapper: VueWrapper, text: string): Promise<void> {
+  await wrapper.find('button[aria-label="Change repository"]').trigger('click')
+  await flushPromises()
+  await vi.waitFor(() => menuItem(text)!.click(), MENU_OPENS)
+  await new Promise(resolve => setTimeout(resolve, MENU_CLOSE_TIMER_MS))
+  await flushPromises()
+}
 const buttonNamed = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)
 
 function start(card: Partial<CardDetail> = {}): void {
@@ -93,19 +109,13 @@ describe('BoardCardView stage rules and repository', () => {
   it("picks the repository from the board's linked ones, links to it, and clears it", async () => {
     cardApi.update.mockImplementation(async (_k, _n, body: CardUpdate) => ({ ...CARD, ...body, updated_at: later(1) }) as CardDetail)
     const { wrapper } = await mountCardPage()
-    await wrapper.find('button[aria-label="Change repository"]').trigger('click')
-    await flushPromises()
-    await vi.waitFor(() => menuItem('northwind-web')!.click(), MENU_OPENS)
-    await flushPromises()
+    await pickRepo(wrapper, 'northwind-web')
     expect(cardApi.update).toHaveBeenCalledWith('OPS', 3, { repo_id: 'r1' })
     const link = wrapper.find('aside[aria-label="Card details"] a[href="https://github.com/northwind/northwind-web"]')
     expect(link.attributes('rel')).toContain('noopener')
-    await wrapper.find('button[aria-label="Change repository"]').trigger('click')
-    await flushPromises()
-    await vi.waitFor(() => menuItem('No repository')!.click(), MENU_OPENS)
-    await flushPromises()
+    await pickRepo(wrapper, 'No repository')
     expect(cardApi.update).toHaveBeenLastCalledWith('OPS', 3, { repo_id: null })
-  })
+  }, TWO_MENUS)
 
   it('reads None once the repository is unlinked elsewhere', async () => {
     start({ repo_id: 'r1' })

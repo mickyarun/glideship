@@ -37,9 +37,14 @@ from app.services.slack_mrkdwn import escape_mrkdwn
 TITLE = "A card was handed over to you"
 
 
+def bud_number_path(number: int) -> str:
+    """A BUD's page in the app by its number, e.g. ``/buds/123``."""
+    return f"/buds/{number}"
+
+
 def bud_path(bud: BUDDocument) -> str:
     """The BUD's page in the app, e.g. ``/buds/123``."""
-    return f"/buds/{bud.bud_number}"
+    return bud_number_path(bud.bud_number)
 
 
 async def stage_owner_notice(

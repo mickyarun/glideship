@@ -25,6 +25,7 @@
         <v-btn icon="mdi-chevron-right" variant="outlined" size="small" aria-label="Next month" @click="calendar.step(1)" />
       </div>
       <v-btn variant="outlined" @click="calendar.today()">Today</v-btn>
+      <v-btn variant="text" prepend-icon="mdi-format-list-bulleted" :to="{ name: 'leave-holidays' }">Holidays</v-btn>
     </template>
 
     <CalendarLegend />

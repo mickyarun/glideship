@@ -54,8 +54,10 @@ class DueCard:
     board_id: uuid.UUID
     board_key: str
     board_name: str
+    card_id: uuid.UUID
     number: int
     title: str
+    stage_name: str
     due_at: datetime
 
 
@@ -118,8 +120,10 @@ class BoardDueRepository:
                 Board.id,
                 Board.key,
                 Board.name,
+                BoardCard.id,
                 BoardCard.number,
                 BoardCard.title,
+                BoardStage.name,
                 BoardCard.due_at,
             )
             .join(BoardCardAssignee, BoardCardAssignee.card_id == BoardCard.id)
@@ -151,9 +155,11 @@ class BoardDueRepository:
                 board_id=row[1],
                 board_key=row[2],
                 board_name=row[3],
-                number=row[4],
-                title=row[5],
-                due_at=row[6],
+                card_id=row[4],
+                number=row[5],
+                title=row[6],
+                stage_name=row[7],
+                due_at=row[8],
             )
             for row in rows.all()
         ]
