@@ -23,7 +23,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models.leave_request import LeaveRequest, LeaveStatus
+from app.models.leave_request import LeaveKind, LeaveRequest, LeaveStatus
 from app.models.notification import Notification
 from tests.integration.leave_support import Factory, add_request, as_user, future_monday, team
 
@@ -128,6 +128,25 @@ async def test_manager_moves_leave_and_a_clash_changes_nothing(
     assert body["decision_note"] == "Swap with Ravi" and body["can_change"] is True
     assert "Leave changed" in await _notes_for(pg_session_factory, p["emp"])
     assert other  # untouched
+
+
+async def test_leave_can_be_moved_onto_a_wfh_day(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org, p, casual = await team(pg_session_factory)
+    monday = future_monday()
+    next_monday = monday + timedelta(7)
+    rid = await _approved(client, org, p["emp"], p["mgr"], casual, monday, monday)
+    await add_request(
+        pg_session_factory, org, p["emp"], next_monday, next_monday + timedelta(4), "5",
+        kind=LeaveKind.WFH,
+    )  # fmt: skip
+    moved = await client.post(
+        f"/api/v1/leave/requests/{rid}/reschedule",
+        json={"start_date": next_monday.isoformat(), "end_date": next_monday.isoformat()},
+        headers=as_user(p["mgr"], org),
+    )
+    assert moved.status_code == 200, moved.text
 
 
 async def test_only_their_approvers_and_never_their_own(

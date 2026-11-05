@@ -27,13 +27,15 @@ from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.leave_policy import LeavePolicy
-from app.models.leave_request import LeaveKind, LeaveRequest, LeaveStatus
+from app.models.leave_request import HalfDay, LeaveKind, LeaveRequest, LeaveStatus
 from app.models.policy_holiday import HolidayKind
 from app.repositories.leave_policy import LeavePolicyRepository
 from app.repositories.leave_request import LeaveRequestRepository
 from app.repositories.policy_holiday import PolicyHolidayRepository
 from app.repositories.user import UserRepository
+from app.services.leave.calendar_math import halves
 from app.services.leave.digest_compose import OutToday, compose
+from app.services.leave.wfh_overlap import approved_time_off
 
 # How far ahead to look for someone's next working day.
 LOOKAHEAD = timedelta(days=62)
@@ -58,14 +60,30 @@ class _Calendar:
         return None
 
 
+def _leave_over_wfh(requests: list[LeaveRequest]) -> list[LeaveRequest]:
+    """Drop WFH where leave covers all of it: they aren't working those halves."""
+    off: dict[uuid.UUID, set[HalfDay]] = {}
+    for r in approved_time_off(requests):
+        off.setdefault(r.user_id, set()).update(halves(r.half_day))
+    return [
+        r
+        for r in requests
+        if r.kind != LeaveKind.WFH or not halves(r.half_day) <= off.get(r.user_id, set())
+    ]
+
+
 async def build_digest(db: AsyncSession, org_id: uuid.UUID, today: date) -> str | None:
     """The day's post, or None when there's nobody to mention or nobody at work."""
     policies = await LeavePolicyRepository(db, org_id=org_id).list_ordered()
-    requests = [
-        r
-        for r in await LeaveRequestRepository(db, org_id=org_id).active_between(None, today, today)
-        if r.status == LeaveStatus.APPROVED
-    ]
+    requests = _leave_over_wfh(
+        [
+            r
+            for r in await LeaveRequestRepository(db, org_id=org_id).active_between(
+                None, today, today
+            )
+            if r.status == LeaveStatus.APPROVED
+        ]
+    )
     latest_end = max((r.end_date for r in requests), default=today)
     calendars = await _calendars(db, org_id, policies, today, latest_end + LOOKAHEAD)
     working = [c for c in calendars.values() if c.works(today)]

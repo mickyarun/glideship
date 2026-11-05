@@ -16,6 +16,7 @@
  *  date badge and the policy notes in "Good to know". */
 import type { CalendarEntry, LeaveSummary } from '@/types/leave'
 import { joinWithAnd, pluralDays } from '@/utils/leave'
+import { withoutReplacedWfh } from '@/utils/leaveCalendar'
 import { addDays, MONTH_SHORT, parseIsoDate } from '@/utils/leaveDates'
 
 export interface OutRow {
@@ -41,7 +42,7 @@ export function outSoon(
   limit: number,
 ): { rows: OutRow[]; more: number } {
   const last = addDays(today, days - 1)
-  const all = entries
+  const all = withoutReplacedWfh(entries)
     .filter(e => !e.is_own && (e.status === 'approved' || e.status === 'pending'))
     .filter(e => e.end_date >= today && e.start_date <= last)
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.user.name.localeCompare(b.user.name))

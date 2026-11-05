@@ -15,6 +15,7 @@
 /** My leave, the request panel, approvals and the team calendar. */
 import { expect, type Locator, type Page } from '@playwright/test'
 import type { LeaveDays } from '../fixtures/dates.ts'
+import { pickOption } from './forms.ts'
 
 export const monthTitle = (day: Date): string => day.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
 
@@ -59,6 +60,13 @@ export async function showCalendarMonth(page: Page, day: Date): Promise<Locator>
     await expect(page.getByRole('region', { name: monthTitle(shown) })).toBeVisible()
   }
   return page.getByRole('region', { name: monthTitle(day) })
+}
+
+/** Narrows a leave report to exactly these dates, so no month boundary matters. */
+export async function onlyThoseDays(page: Page, days: LeaveDays): Promise<void> {
+  await pickOption(page, 'Dates', /^Custom/)
+  await page.getByLabel('From', { exact: true }).fill(days.from)
+  await page.getByLabel('To', { exact: true }).fill(days.to)
 }
 
 /** A day's cell label in the month grid, e.g. "Mon 23 Nov". */

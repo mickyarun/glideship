@@ -66,6 +66,11 @@ def same_leave_year(start: date, end: date, start_month: int) -> bool:
     return leave_year_bounds(start, start_month) == leave_year_bounds(end, start_month)
 
 
+def halves(half_day: HalfDay) -> set[HalfDay]:
+    """The halves of a day a booking covers."""
+    return {HalfDay.FIRST_HALF, HalfDay.SECOND_HALF} if half_day == HalfDay.NONE else {half_day}
+
+
 def iter_dates(start: date, end: date) -> list[date]:
     """Every date from ``start`` to ``end`` inclusive."""
     return [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
