@@ -28,15 +28,37 @@ export async function showAllRequests(page: Page): Promise<void> {
   await myRequests(page).getByRole('radio', { name: 'All' }).click()
 }
 
-export async function sendLeaveRequest(page: Page, leaveType: string, days: LeaveDays, reason: string): Promise<void> {
+/** `partOfDay` is "Morning" or "Afternoon", for a single day. */
+export async function sendLeaveRequest(
+  page: Page,
+  leaveType: string,
+  days: LeaveDays,
+  reason: string,
+  partOfDay?: string,
+): Promise<void> {
   await page.getByRole('button', { name: 'Request leave' }).click()
   await expect(page.getByRole('heading', { name: 'Request leave', level: 2 })).toBeVisible()
   await page.getByRole('radio', { name: new RegExp(leaveType) }).check()
   await page.getByLabel('From', { exact: true }).fill(days.from)
   await page.getByLabel('To', { exact: true }).fill(days.to)
+  if (partOfDay) {
+    await page.getByRole('radiogroup', { name: 'Part of the day' }).getByRole('radio', { name: partOfDay }).click()
+  }
   await page.getByLabel('Reason (optional)').fill(reason)
   await page.getByRole('button', { name: 'Send request' }).click()
   await expect(page.getByText('Request sent')).toBeVisible()
+}
+
+/** Cancels the request whose options button names `request`, from My requests. */
+export async function cancelMyRequest(page: Page, request: string): Promise<void> {
+  await myRequests(page).getByRole('button', { name: new RegExp(`^Options for ${request}`) }).click()
+  await page.getByRole('menuitem', { name: 'Cancel request' })
+    .or(page.getByRole('listitem').filter({ hasText: 'Cancel request' }))
+    .first()
+    .click()
+  const confirm = page.getByRole('dialog').filter({ hasText: 'Cancel this request?' })
+  await confirm.getByRole('button', { name: 'Cancel request' }).click()
+  await expect(page.getByText('Request cancelled')).toBeVisible()
 }
 
 /** Opens the approvals queue and the first request from `employee`. */

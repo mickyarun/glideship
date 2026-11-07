@@ -20,14 +20,37 @@ reports leave it out. Pending leave changes nothing until it's approved.
 """
 
 from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
 from app.models.leave_request import HalfDay, LeaveKind, LeaveRequest, LeaveStatus
-from app.services.leave.calendar_math import HALF_DAY, halves, iter_dates
+from app.services.leave.calendar_math import HALF_DAY, days_by_month, halves, iter_dates
 
 TIME_OFF = (LeaveKind.LEAVE, LeaveKind.OPTIONAL_HOLIDAY)
 ZERO = Decimal("0")
+
+
+@dataclass(frozen=True)
+class HeldDays:
+    """The days a WFH being changed holds before the change."""
+
+    start: date
+    end: date
+    half_day: HalfDay
+
+
+def already_held(
+    clash: LeaveRequest, held: HeldDays, start: date, end: date, half_day: HalfDay
+) -> bool:
+    """True when ``clash`` is time off only on days and halves the WFH already held.
+
+    That time off landed on the WFH, so keeping those days isn't new WFH on leave.
+    """
+    if clash.kind not in TIME_OFF:
+        return False
+    inside = held.start <= max(clash.start_date, start) and min(clash.end_date, end) <= held.end
+    return inside and halves(clash.half_day) & halves(half_day) <= halves(held.half_day)
 
 
 def approved_time_off(requests: Sequence[LeaveRequest]) -> list[LeaveRequest]:
@@ -62,3 +85,21 @@ def taken_over_by_month(
             key = (day.year, day.month)
             out[key] = out.get(key, ZERO) + lost
     return out
+
+
+def replaced_between(
+    wfh: LeaveRequest,
+    time_off: Sequence[LeaveRequest],
+    start: date,
+    end: date,
+    *,
+    working_days: Collection[int],
+    holidays: Mapping[date, str],
+) -> bool:
+    """True when ``time_off`` covers everything ``wfh`` books inside ``start..end``."""
+    first, last = max(wfh.start_date, start), min(wfh.end_date, end)
+    booked = days_by_month(first, last, wfh.half_day, working_days=working_days, holidays=holidays)
+    taken = taken_over_by_month(
+        wfh, time_off, first, last, working_days=working_days, holidays=holidays
+    )
+    return bool(booked) and booked == taken

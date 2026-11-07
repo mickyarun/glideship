@@ -40,6 +40,7 @@ from app.services.leave.evaluation_steps import (
 )
 from app.services.leave.high_leave import with_request
 from app.services.leave.policies import MemberPolicy, mandatory_holidays, today_for
+from app.services.leave.wfh_overlap import HeldDays
 from app.services.leave.wfh_usage import wfh_auto_approved
 
 ZERO = Decimal("0")
@@ -52,11 +53,13 @@ async def evaluate(
     user_id: uuid.UUID,
     body: LeaveRequestCreate,
     persist: bool = False,
+    held: HeldDays | None = None,
 ) -> Evaluation:
     """Check every rule for ``body`` and price it.
 
     ``persist`` lets a real submit write the year's allocation for the
-    requested type to the ledger; a preview only computes it.
+    requested type to the ledger; a preview only computes it. ``held`` is
+    what a WFH being changed already holds.
     """
     policy = member.policy
     result = Evaluation(start=body.start_date, end=body.end_date)
@@ -96,7 +99,7 @@ async def evaluate(
         result.days, result.excluded = counted.days, counted.excluded
         if result.days == ZERO:
             result.problem("no_working_days", "These dates are all weekends or holidays.")
-    await check_overlap(db, policy.org_id, user_id, result, body.kind, body.half_day)
+    await check_overlap(db, policy.org_id, user_id, result, body.kind, body.half_day, held)
     if body.kind == LeaveKind.LEAVE and body.leave_type_id is not None:
         await apply_balance(db, member, user_id, body.leave_type_id, result, persist)
         await check_monthly_limit(db, policy, user_id, body.half_day, result)

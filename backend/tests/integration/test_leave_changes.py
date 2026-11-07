@@ -25,6 +25,7 @@ from sqlalchemy import select
 
 from app.models.leave_request import LeaveKind, LeaveRequest, LeaveStatus
 from app.models.notification import Notification
+from app.repositories.leave_request import LeaveRequestRepository
 from tests.integration.leave_support import Factory, add_request, as_user, future_monday, team
 
 pytestmark = pytest.mark.integration
@@ -147,6 +148,67 @@ async def test_leave_can_be_moved_onto_a_wfh_day(
         headers=as_user(p["mgr"], org),
     )
     assert moved.status_code == 200, moved.text
+
+
+async def _wfh(factory: Factory, org: uuid.UUID, user: uuid.UUID, start: date, end: date) -> str:
+    days = str((end - start).days + 1)
+    await add_request(factory, org, user, start, end, days, kind=LeaveKind.WFH)
+    async with factory() as db:
+        rows = await LeaveRequestRepository(db, org_id=org).active_between(
+            [user], start, start, kinds=[LeaveKind.WFH]
+        )
+        return str(rows[0].id)
+
+
+async def test_a_wfh_with_leave_inside_it_can_be_trimmed(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org, p, casual = await team(pg_session_factory)
+    monday = future_monday()
+    wednesday = monday + timedelta(2)
+    wfh = await _wfh(pg_session_factory, org, p["emp"], monday, monday + timedelta(4))
+    await add_request(pg_session_factory, org, p["emp"], wednesday, wednesday, "1", type_id=casual)
+    trimmed = await client.post(
+        f"/api/v1/leave/requests/{wfh}/reschedule",
+        json={"start_date": monday.isoformat(), "end_date": (monday + timedelta(3)).isoformat()},
+        headers=as_user(p["mgr"], org),
+    )
+    assert trimmed.status_code == 200, trimmed.text
+    assert trimmed.json()["status"] == "approved"
+    assert trimmed.json()["end_date"] == (monday + timedelta(3)).isoformat()
+
+
+async def test_a_wfh_cannot_grow_onto_leave(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org, p, casual = await team(pg_session_factory)
+    monday = future_monday()
+    wednesday = monday + timedelta(2)
+    wfh = await _wfh(pg_session_factory, org, p["emp"], monday, monday + timedelta(1))
+    await add_request(pg_session_factory, org, p["emp"], wednesday, wednesday, "1", type_id=casual)
+    grown = await client.post(
+        f"/api/v1/leave/requests/{wfh}/reschedule",
+        json={"start_date": monday.isoformat(), "end_date": wednesday.isoformat()},
+        headers=as_user(p["mgr"], org),
+    )
+    assert grown.status_code == 409, grown.text
+    assert "You already have" in grown.text
+
+
+async def test_leave_still_cannot_move_onto_other_leave(
+    client: AsyncClient, pg_session_factory: Factory
+) -> None:
+    org, p, casual = await team(pg_session_factory)
+    monday = future_monday()
+    tuesday = monday + timedelta(1)
+    rid = await _approved(client, org, p["emp"], p["mgr"], casual, monday, monday)
+    await _approved(client, org, p["emp"], p["mgr"], casual, tuesday, tuesday)
+    moved = await client.post(
+        f"/api/v1/leave/requests/{rid}/reschedule",
+        json={"start_date": tuesday.isoformat(), "end_date": tuesday.isoformat()},
+        headers=as_user(p["mgr"], org),
+    )
+    assert moved.status_code == 409, moved.text
 
 
 async def test_only_their_approvers_and_never_their_own(

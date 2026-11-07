@@ -42,7 +42,7 @@ from app.services.leave.monthly_limit import first_month_over, limit_message
 from app.services.leave.optional_holidays import pick_optional_holiday
 from app.services.leave.over_balance import refusal
 from app.services.leave.policies import MemberPolicy
-from app.services.leave.wfh_overlap import TIME_OFF
+from app.services.leave.wfh_overlap import TIME_OFF, HeldDays, already_held
 
 ZERO = Decimal("0")
 
@@ -118,11 +118,13 @@ async def check_overlap(
     result: Evaluation,
     kind: LeaveKind,
     half_day: HalfDay,
+    held: HeldDays | None = None,
 ) -> None:
     """Refuse dates already covered by another pending or approved request.
 
     A morning and an afternoon of the same day don't clash. Time off can land
-    on a WFH day and takes it over; WFH can't land on time off.
+    on a WFH day and takes it over; WFH can't land on time off, except on days
+    a WFH being changed already ``held``.
     """
     clashes = [
         clash
@@ -133,6 +135,7 @@ async def check_overlap(
             kinds=None if kind == LeaveKind.WFH else TIME_OFF,
         )
         if not _other_half(clash, result.start, result.end, half_day)
+        and not (held and already_held(clash, held, result.start, result.end, half_day))
     ]
     if clashes:
         first = clashes[0]

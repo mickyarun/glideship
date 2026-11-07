@@ -20,7 +20,13 @@ from datetime import date
 from decimal import Decimal
 
 from app.models.leave_request import HalfDay, LeaveKind, LeaveRequest, LeaveStatus
-from app.services.leave.wfh_overlap import approved_time_off, taken_over_by_month
+from app.services.leave.wfh_overlap import (
+    HeldDays,
+    already_held,
+    approved_time_off,
+    replaced_between,
+    taken_over_by_month,
+)
 
 MON, TUE, THU, FRI = date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 4), date(2026, 6, 5)
 SAT = date(2026, 6, 6)
@@ -105,3 +111,61 @@ def test_only_approved_time_off_can_take_over() -> None:
         _wfh(),
     ]
     assert approved_time_off(rows) == [approved, holiday]
+
+
+NEXT_MON = date(2026, 6, 8)
+
+
+def _replaced(wfh: LeaveRequest, time_off: list[LeaveRequest], start: date, end: date) -> bool:
+    return replaced_between(wfh, time_off, start, end, working_days=WEEKDAYS, holidays={})
+
+
+def test_replaced_only_when_every_wfh_day_in_the_range_is_off() -> None:
+    leave = [_request(THU, THU)]
+    assert _replaced(_wfh(), leave, THU, THU)
+    assert not _replaced(_wfh(), leave, MON, THU)
+
+
+def test_replaced_skips_the_weekend_inside_a_wfh() -> None:
+    time_off = [_request(FRI, FRI), _request(NEXT_MON, NEXT_MON)]
+    assert _replaced(_wfh(FRI, NEXT_MON), time_off, FRI, NEXT_MON)
+
+
+def test_replaced_goes_by_halves() -> None:
+    morning, afternoon = _request(MON, MON, half_day=AM), _request(MON, MON, half_day=PM)
+    assert not _replaced(_wfh(MON, MON), [morning], MON, MON)
+    assert _replaced(_wfh(MON, MON), [morning, afternoon], MON, MON)
+    assert _replaced(_wfh(MON, MON, AM), [morning], MON, MON)
+    assert not _replaced(_wfh(MON, MON, AM), [afternoon], MON, MON)
+
+
+def test_nothing_is_replaced_where_the_wfh_books_no_days() -> None:
+    assert not _replaced(_wfh(FRI, NEXT_MON), [_request(FRI, NEXT_MON)], SAT, SAT)
+
+
+HELD = HeldDays(MON, FRI, HalfDay.NONE)
+
+
+def test_time_off_inside_what_the_wfh_held_can_stay() -> None:
+    assert already_held(_request(THU, THU), HELD, MON, THU, HalfDay.NONE)
+
+
+def test_only_the_part_of_the_time_off_in_the_new_dates_counts() -> None:
+    assert already_held(_request(FRI, NEXT_MON), HELD, MON, FRI, HalfDay.NONE)
+    assert not already_held(_request(FRI, NEXT_MON), HELD, MON, NEXT_MON, HalfDay.NONE)
+
+
+def test_time_off_on_a_new_day_is_not_held() -> None:
+    held = HeldDays(MON, TUE, HalfDay.NONE)
+    assert not already_held(_request(THU, THU), held, MON, THU, HalfDay.NONE)
+
+
+def test_widening_onto_a_half_that_was_never_held_is_refused() -> None:
+    morning_wfh = HeldDays(MON, MON, AM)
+    afternoon_off = _request(MON, MON, half_day=PM)
+    assert not already_held(afternoon_off, morning_wfh, MON, MON, HalfDay.NONE)
+    assert already_held(_request(MON, MON, half_day=AM), morning_wfh, MON, MON, HalfDay.NONE)
+
+
+def test_another_wfh_is_never_held() -> None:
+    assert not already_held(_wfh(THU, THU), HELD, MON, THU, HalfDay.NONE)

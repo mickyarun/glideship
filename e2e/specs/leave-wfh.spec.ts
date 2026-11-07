@@ -14,8 +14,10 @@
 
 /**
  * Leave on a day already booked as work from home: it can be asked for, it
- * replaces the WFH that day, and the day is counted once. WFH can't go on a
- * day that is already leave.
+ * replaces the WFH that day, and the day is counted once. Half a day replaces
+ * only that half, and cancelling the leave brings the WFH back. WFH can't go
+ * on a day that is already leave, but a WFH with leave on it can still be
+ * edited, and the approver isn't told that person is working from home.
  */
 import { readFileSync } from 'node:fs'
 import type { Locator } from '@playwright/test'
@@ -23,7 +25,14 @@ import { approveLeave, requestLeave, requestWfh } from '../fixtures/api.ts'
 import type { StackClient } from '../fixtures/client.ts'
 import { type LeaveDays, upcomingWeekdays } from '../fixtures/dates.ts'
 import { expect, test } from '../fixtures/test.ts'
-import { dayLabel, onlyThoseDays, openApproval, sendLeaveRequest, showCalendarMonth } from '../screens/leave.ts'
+import {
+  cancelMyRequest,
+  dayLabel,
+  onlyThoseDays,
+  openApproval,
+  sendLeaveRequest,
+  showCalendarMonth,
+} from '../screens/leave.ts'
 
 function team(stack: StackClient) {
   return stack.seedOrg({
@@ -40,6 +49,13 @@ type Org = Awaited<ReturnType<typeof team>>
 
 /** The first of the two days alone: both are booked as WFH, this one goes on leave. */
 const firstDay = (days: LeaveDays): LeaveDays => ({ ...days, to: days.from })
+
+/** The day after the first of the two. */
+function secondDay(days: LeaveDays): Date {
+  const next = new Date(days.start)
+  next.setDate(next.getDate() + 1)
+  return next
+}
 
 /** Eli's approved WFH across both days. */
 async function wfhBooked(stack: StackClient, org: Org, days: LeaveDays): Promise<void> {
@@ -76,9 +92,45 @@ test('an employee on WFH asks for leave on one of those days', async ({ signedIn
   const leaveDay = month.getByRole('button', { name: `${dayLabel(days.start)}, 1 out` })
   await expect(leaveDay).toContainText('Eli Em')
   await expect(leaveDay.getByTitle(/Work from home/)).toHaveCount(0)
-  const nextDay = new Date(days.start)
-  nextDay.setDate(nextDay.getDate() + 1)
-  await expect(month.getByRole('button', { name: `${dayLabel(nextDay)}, 1 out` }).getByTitle(/Work from home/)).toBeVisible()
+  await expect(month.getByRole('button', { name: `${dayLabel(secondDay(days))}, 1 out` }).getByTitle(/Work from home/)).toBeVisible()
+})
+
+test('a morning off on a WFH day keeps the afternoon as WFH', async ({ signedIn, stack }) => {
+  const org = await team(stack)
+  const days = upcomingWeekdays()
+  await wfhBooked(stack, org, days)
+
+  const employee = await signedIn(org.members.emp)
+  await employee.goto('/leave')
+  await sendLeaveRequest(employee, 'Casual leave', firstDay(days), 'Eye test', 'Morning')
+
+  const manager = await signedIn(org.members.mgr)
+  await openApproval(manager, 'Eli Employee')
+  await manager.getByRole('button', { name: 'Approve' }).click()
+  await manager.goto('/leave/team')
+  const month = await showCalendarMonth(manager, days.start)
+  const leaveDay = month.getByRole('button', { name: `${dayLabel(days.start)}, 2 out` })
+  await expect(leaveDay.getByTitle(/Work from home/)).toBeVisible()
+})
+
+test('cancelling the leave brings the WFH day back', async ({ signedIn, stack }) => {
+  const org = await team(stack)
+  const days = upcomingWeekdays()
+  await wfhBooked(stack, org, days)
+  await leaveTaken(stack, org, days)
+
+  const employee = await signedIn(org.members.emp)
+  await employee.goto('/leave/team')
+  const before = await showCalendarMonth(employee, days.start)
+  const leaveDay = before.getByRole('button', { name: `${dayLabel(days.start)}, 1 out` })
+  await expect(leaveDay.getByTitle(/Work from home/)).toHaveCount(0)
+
+  await employee.goto('/leave')
+  await cancelMyRequest(employee, 'Casual leave')
+
+  await employee.goto('/leave/team')
+  const after = await showCalendarMonth(employee, days.start)
+  await expect(after.getByRole('button', { name: `${dayLabel(days.start)}, 1 out` }).getByTitle(/Work from home/)).toBeVisible()
 })
 
 test('the report counts a WFH day taken over by leave once', async ({ signedIn, stack }) => {
@@ -124,4 +176,38 @@ test('the approver can tell WFH from leave under "Also out"', async ({ signedIn,
   const manager = await signedIn(org.members.mgr)
   await openApproval(manager, 'Pia Peer')
   await expect(manager.getByText(/Eli \(WFH, /)).toBeVisible()
+})
+
+test('"Also out" does not call someone on leave WFH', async ({ signedIn, stack }) => {
+  const org = await team(stack)
+  const days = upcomingWeekdays()
+  await wfhBooked(stack, org, days)
+  await leaveTaken(stack, org, days)
+  await requestLeave(await stack.api(org.members.peer), org.leaveTypes.CL, firstDay(days), 'Family wedding')
+
+  const manager = await signedIn(org.members.mgr)
+  await openApproval(manager, 'Pia Peer')
+  await expect(manager.getByText(/Eli \(/)).toBeVisible()
+  await expect(manager.getByText(/Eli \(WFH/)).toHaveCount(0)
+})
+
+test('a manager can shorten a WFH that has leave on it', async ({ signedIn, stack }) => {
+  const org = await team(stack)
+  const days = upcomingWeekdays()
+  await wfhBooked(stack, org, days)
+  await leaveTaken(stack, org, days)
+
+  const manager = await signedIn(org.members.mgr)
+  await manager.goto('/leave/approvals')
+  await manager.getByRole('radiogroup', { name: 'Show' }).getByRole('radio', { name: 'Decided' }).click()
+  await manager.getByRole('button', { name: /Eli Employee.*Work from home/ }).click()
+  await manager.getByRole('button', { name: 'Change dates' }).click()
+  const request = manager.getByRole('region', { name: /Eli/ })
+  await request.getByLabel('To', { exact: true }).fill(days.from)
+  await request.getByRole('button', { name: 'Save new dates' }).click()
+  await expect(request.getByRole('button', { name: 'Save new dates' })).toHaveCount(0)
+
+  await manager.goto('/leave/team')
+  const month = await showCalendarMonth(manager, days.start)
+  await expect(month.getByRole('button', { name: `${dayLabel(secondDay(days))}, nobody out` })).toBeVisible()
 })

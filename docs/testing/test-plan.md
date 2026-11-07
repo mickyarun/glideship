@@ -576,6 +576,9 @@ Mar 31, Feb 29) are used instead of `date.today()`-relative ones.
     leave replaces the WFH half by half in the digest and calendar; the day leaves the WFH
     allowance and the summary, but stays WFH for a viewer who can't see a hidden leave type
     -> `test_leave_wfh_taken_over.py`, `test_leave_wfh_overlap.py`
+  - a WFH with leave inside it can be shortened but can't grow onto new leave
+    -> `test_leave_changes.py`; "also out" leaves out WFH that leave replaces on the request's
+    days, and keeps it for days they're working -> `test_leave_also_out.py`
   - two offices placed through the employee API with their own policies: a holiday in one is
     a working day in the other (week, single day, half day), a Saturday worked only in one,
     optional holidays still count, each viewer's calendar shows their own office's holidays,
@@ -953,7 +956,7 @@ All paths under `e2e/specs/`. 75 tests in 26 files, in three projects: `setup-wi
 | Integrations | AI sign-in switched to an API key and kept; workspace MCP token generated | the token is shown once, then can only be replaced | | settings-integrations.spec.ts |
 | People settings | offices added, edited and removed; a leave policy created | | the quiz master turns the daily quiz on | settings-people.spec.ts |
 | Leave, more flows | WFH approved and on the calendar; half day; HR adjusts a balance | | the calendar shows the leave type to the manager and only "Leave" to a peer; the bell lists requests to review | leave-more.spec.ts |
-| Leave on a WFH day | leave asked for on a WFH day replaces the WFH on the calendar; the report and CSV count the day once | WFH can't go on a day that is already leave | "Also out" tells WFH from leave | leave-wfh.spec.ts |
+| Leave on a WFH day | leave asked for on a WFH day replaces the WFH on the calendar; the report and CSV count the day once; cancelling the leave brings the WFH back; a manager can shorten a WFH with leave on it | WFH can't go on a day that is already leave | a morning off keeps the afternoon as WFH; "Also out" doesn't call someone on leave WFH, and tells WFH from leave | leave-wfh.spec.ts |
 | Leave reports | HR summary, requests and CSV export for a custom range | a manager sees only direct reports | nobody reporting to you | leave-reports.spec.ts |
 | New hires | invite a new hire, add the employee record, they sign in with the temporary password | | | people-admin.spec.ts |
 | Profile | phone number saved; a notification switch kept; password changed | the old password stops working | | profile.spec.ts |
