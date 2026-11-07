@@ -21,7 +21,7 @@ import type { StackClient } from '../fixtures/client.ts'
 import { upcomingWeekdays } from '../fixtures/dates.ts'
 import { expect, test } from '../fixtures/test.ts'
 import {
-  allCaughtUp, dayLabel, myRequests, openApproval, sendLeaveRequest, showAllRequests, showCalendarMonth,
+  allCaughtUp, cancelMyRequest, dayLabel, myRequests, openApproval, sendLeaveRequest, showAllRequests, showCalendarMonth,
 } from '../screens/leave.ts'
 
 function team(stack: StackClient) {
@@ -79,14 +79,7 @@ test('an employee cancels a request that is still pending', async ({ signedIn, s
 
   const employee = await signedIn(org.members.emp)
   await employee.goto('/leave')
-  await myRequests(employee).getByRole('button', { name: /^Options for / }).click()
-  await employee.getByRole('menuitem', { name: 'Cancel request' })
-    .or(employee.getByRole('listitem').filter({ hasText: 'Cancel request' }))
-    .first()
-    .click()
-  const confirm = employee.getByRole('dialog').filter({ hasText: 'Cancel this request?' })
-  await confirm.getByRole('button', { name: 'Cancel request' }).click()
-  await expect(employee.getByText('Request cancelled')).toBeVisible()
+  await cancelMyRequest(employee, 'Casual leave')
   await showAllRequests(employee)
   await expect(myRequests(employee).getByText('Cancelled', { exact: true })).toBeVisible()
 

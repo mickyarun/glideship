@@ -24,7 +24,7 @@ import pytest
 
 from app.core.encryption import encrypt_secret
 from app.models.leave_digest_post import DigestStatus
-from app.models.leave_request import LeaveKind, LeaveStatus
+from app.models.leave_request import HalfDay, LeaveKind, LeaveStatus
 from app.models.organization import Organization
 from app.repositories.leave_digest_post import LeaveDigestPostRepository
 from app.schemas.leave import LeaveRequestCreate
@@ -84,6 +84,50 @@ async def test_post_names_who_is_out_and_never_the_type(pg_session_factory: Fact
     assert "On leave: Asha (back Thu)" in text
     assert "Working from home: Bala" in text
     assert "Chen" not in text and "Casual" not in text
+
+
+async def test_full_day_leave_replaces_wfh_but_a_half_day_does_not(
+    pg_session_factory: Factory,
+) -> None:
+    org, (asha, bala, _c, mgr), casual, mon = await _team(pg_session_factory)
+    wfh = LeaveRequestCreate(kind=LeaveKind.WFH, start_date=mon, end_date=mon + timedelta(4))
+    await _approved(pg_session_factory, org, asha, mgr, wfh)
+    await _approved(pg_session_factory, org, bala, mgr, wfh)
+    await _approved(pg_session_factory, org, asha, mgr, leave_body(casual, mon, mon))
+    await _approved(
+        pg_session_factory,
+        org,
+        bala,
+        mgr,
+        leave_body(casual, mon, mon, half_day=HalfDay.FIRST_HALF),
+    )
+    async with pg_session_factory() as db:
+        text = await build_digest(db, org, mon)
+        next_day = await build_digest(db, org, mon + timedelta(1))
+    assert text is not None and next_day is not None
+    assert "On leave: Asha (back tomorrow), Bala (out this morning)" in text
+    assert "Working from home: Bala" in text and "Working from home: Asha" not in text
+    assert "Working from home: Asha, Bala" in next_day
+
+
+async def test_leave_hides_wfh_only_when_it_covers_all_of_it(pg_session_factory: Factory) -> None:
+    org, (asha, bala, chen, mgr), casual, mon = await _team(pg_session_factory)
+    am, pm = HalfDay.FIRST_HALF, HalfDay.SECOND_HALF
+    morning_wfh = LeaveRequestCreate(kind=LeaveKind.WFH, start_date=mon, end_date=mon, half_day=am)
+    full_wfh = LeaveRequestCreate(kind=LeaveKind.WFH, start_date=mon, end_date=mon)
+    # Asha: the same morning. Bala: both halves off. Chen: the other half.
+    await _approved(pg_session_factory, org, asha, mgr, morning_wfh)
+    await _approved(pg_session_factory, org, asha, mgr, leave_body(casual, mon, mon, half_day=am))
+    await _approved(pg_session_factory, org, bala, mgr, full_wfh)
+    await _approved(pg_session_factory, org, bala, mgr, leave_body(casual, mon, mon, half_day=am))
+    await _approved(pg_session_factory, org, bala, mgr, leave_body(casual, mon, mon, half_day=pm))
+    await _approved(pg_session_factory, org, chen, mgr, morning_wfh)
+    await _approved(pg_session_factory, org, chen, mgr, leave_body(casual, mon, mon, half_day=pm))
+    async with pg_session_factory() as db:
+        text = await build_digest(db, org, mon)
+    assert text is not None
+    assert "Working from home: Chen (morning)" in text
+    assert "Asha (morning)" not in text and "Working from home: Bala" not in text
 
 
 async def test_no_post_when_nobody_is_working(pg_session_factory: Factory) -> None:

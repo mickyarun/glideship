@@ -39,6 +39,7 @@ from app.services.leave.errors import LeaveConflictError, LeaveInvalidError
 from app.services.leave.evaluation import evaluate
 from app.services.leave.loss_of_pay import rebalance, reprice
 from app.services.leave.policies import MemberPolicy
+from app.services.leave.wfh_overlap import HeldDays
 
 # The editor is an approver, so "nobody can approve this" doesn't apply.
 _IGNORED_PROBLEMS = {"no_approver"}
@@ -103,13 +104,18 @@ async def _reschedule_ahead(
     if start < today:
         raise LeaveInvalidError("Pick dates from today on.")
     body = _body(request, start, end, half_day)
+    held = None
+    if request.kind == LeaveKind.WFH:
+        held = HeldDays(request.start_date, request.end_date, request.half_day)
     # Set aside inside this transaction so the checks don't count it twice;
     # any problem rolls it back.
     repo = LeaveRequestRepository(db, org_id=request.org_id)
     if not await repo.transition(request.id, [LeaveStatus.APPROVED], status=LeaveStatus.CANCELLED):
         raise LeaveConflictError(CHANGED_MEANWHILE)
     await db.flush()
-    result = await evaluate(db, member=member, user_id=request.user_id, body=body, persist=True)
+    result = await evaluate(
+        db, member=member, user_id=request.user_id, body=body, persist=True, held=held
+    )
     await _refuse_problems(db, result.problems)
     return result.days
 

@@ -37,6 +37,16 @@ function entry(over: Partial<CalendarEntry>): CalendarEntry {
 describe('outSoon', () => {
   const today = '2026-10-28'
 
+  it('lists a day once when approved leave replaced the WFH on it', () => {
+    const { rows } = outSoon(
+      [entry({ request_id: 'wfh', kind: 'wfh' }), entry({ request_id: 'leave' })],
+      today,
+      7,
+      5,
+    )
+    expect(rows.map(r => r.label)).toEqual(['Leave'])
+  })
+
   it('keeps other people out in the window, soonest first', () => {
     const { rows, more } = outSoon(
       [

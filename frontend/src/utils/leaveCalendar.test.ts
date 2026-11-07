@@ -76,4 +76,57 @@ describe('entriesOnDay', () => {
     // Sat 7 Nov is a day off for both.
     expect(entriesOnDay([entry('leave', { start_date: '2026-11-02', end_date: '2026-11-08' })], '2026-11-07')).toEqual([])
   })
+
+  describe('leave on a WFH day', () => {
+    const user = { user_id: 'asha', name: 'Asha' }
+    const week = entry('wfh', { kind: 'wfh', user, start_date: '2026-11-02', end_date: '2026-11-06' })
+    const ids = (leave: Partial<CalendarEntry>, iso = '2026-11-05') =>
+      entriesOnDay(
+        [week, entry('leave', { user, start_date: '2026-11-05', end_date: '2026-11-05', ...leave })],
+        iso,
+      ).map(e => e.request_id)
+
+    it('shows only the leave on a full day of approved leave', () => {
+      expect(ids({})).toEqual(['leave'])
+      expect(ids({ kind: 'optional_holiday' })).toEqual(['leave'])
+    })
+
+    it('keeps the WFH on the rest of the range', () => {
+      expect(ids({}, '2026-11-04')).toEqual(['wfh'])
+    })
+
+    it('keeps the WFH while the leave is pending or only half a day', () => {
+      expect(ids({ status: 'pending' })).toEqual(['leave', 'wfh'])
+      expect(ids({ half_day: 'first_half' })).toEqual(['leave', 'wfh'])
+    })
+
+    it('goes by half days: leave must cover all of the WFH', () => {
+      const day = { user, start_date: '2026-11-05', end_date: '2026-11-05' }
+      const morningWfh = entry('wfh', { ...day, kind: 'wfh', half_day: 'first_half' })
+      const morning = entry('am', { ...day, half_day: 'first_half' })
+      const afternoon = entry('pm', { ...day, half_day: 'second_half' })
+      const on = (list: CalendarEntry[]) =>
+        entriesOnDay(list, '2026-11-05').map(e => e.request_id)
+      expect(on([morningWfh, morning])).toEqual(['am'])
+      expect(on([morningWfh, afternoon])).toEqual(['pm', 'wfh'])
+      expect(on([week, morning, afternoon])).toEqual(['am', 'pm'])
+    })
+
+    it('drops WFH from the month summary only when every day of it was replaced', () => {
+      const day = { user, start_date: '2026-11-05', end_date: '2026-11-05' }
+      const oneDay = entry('wfh', { ...day, kind: 'wfh' })
+      expect(monthSummary([oneDay, entry('leave', day)], NOVEMBER)).toBe('1 other out in November')
+      expect(monthSummary([week, entry('leave', day)], NOVEMBER)).toBe(
+        '1 other out in November · 1 working from home',
+      )
+    })
+
+    it('leaves a colleague’s WFH alone', () => {
+      const list = entriesOnDay(
+        [entry('colleague', { kind: 'wfh' }), entry('leave', {})],
+        '2026-11-02',
+      )
+      expect(list.map(e => e.request_id)).toEqual(['leave', 'colleague'])
+    })
+  })
 })

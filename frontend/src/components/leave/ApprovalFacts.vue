@@ -58,7 +58,10 @@ const facts = computed(() => {
     list.push({ label: 'Left after this', icon: 'mdi-scale-balance', text: `${formatDays(after)} in leave year ${year}` })
   }
   if (props.item.also_out.length) {
-    const names = props.item.also_out.map(o => `${firstName(o.name)} (${formatDayRange(o.start_date, o.end_date)})`)
+    const names = props.item.also_out.map(o => {
+      const when = formatDayRange(o.start_date, o.end_date)
+      return `${firstName(o.name)} (${o.kind === 'wfh' ? `WFH, ${when}` : when})`
+    })
     list.push({ label: 'Also out', icon: 'mdi-account-group-outline', text: names.join(', ') })
   }
   return list
