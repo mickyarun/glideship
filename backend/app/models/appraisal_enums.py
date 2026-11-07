@@ -184,3 +184,14 @@ class TrendsStatus(StrEnum):
 
     DRAFT = "draft"
     APPROVED = "approved"
+
+
+class GoalCheck(StrEnum):
+    """A manager's view of a goal mid-period, in quarterly feedback.
+
+    Kept in JSONB, so it has no Postgres type; it never decides the result.
+    """
+
+    ON_TRACK = "on_track"
+    AT_RISK = "at_risk"
+    OFF_TRACK = "off_track"

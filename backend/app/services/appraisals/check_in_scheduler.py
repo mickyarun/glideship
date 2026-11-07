@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The check-in tick: opens, refreshes and closes check-ins for every org.
+"""The creation tick: opens, refreshes and closes check-ins for every org.
 
 Runs hourly for every org with a running cycle, Slack or not. On the
 first working day (not a weekend or a holiday on the default leave
@@ -23,6 +23,7 @@ check-ins have their fact list refreshed once a day. A check-in closes
 when its successor opens, the last one in a cycle on the self-review due
 date, and all of them when HR closes the cycle; one closed with nothing
 added is marked missed, which is shown and never held against anyone.
+Manager feedback items open on the same tick (:mod:`.feedback_open`).
 """
 
 import uuid
@@ -54,6 +55,7 @@ from app.repositories.policy_holiday import PolicyHolidayRepository
 from app.services.appraisals.cadence import CADENCE_MONTHS, slices
 from app.services.appraisals.check_in_builder import create_check_in, refresh_check_in
 from app.services.appraisals.enrolment import enrol_late_joiners
+from app.services.appraisals.feedback_open import feedback_pass
 from app.services.leave.digest_settings import org_zone
 from app.services.scheduling.tick_loop import run_tick_loop
 
@@ -176,6 +178,7 @@ async def cycle_pass(db: AsyncSession, cycle: AppraisalCycle, tick: Tick) -> Non
             logger.exception(
                 "appraisal_check_in_person_failed", org_id=str(org_id), profile_id=str(profile.id)
             )
+    await feedback_pass(db, cycle, appraisals, profiles, tick.today, tick.working)
 
 
 async def org_pass(db: AsyncSession, org: CycleOrg, now: datetime) -> None:

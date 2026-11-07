@@ -16,7 +16,7 @@
 
 import uuid
 from collections.abc import Collection
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,22 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
         """Every check-in in a cycle."""
         result = await self._db.execute(
             self._scoped(select(AppraisalCheckIn)).where(AppraisalCheckIn.cycle_id == cycle_id)
+        )
+        return list(result.scalars().all())
+
+    async def opened_between(
+        self, cycle_ids: Collection[uuid.UUID], start: datetime, end: datetime
+    ) -> list[AppraisalCheckIn]:
+        """Check-ins in these cycles created in ``[start, end)`` and still open."""
+        if not cycle_ids:
+            return []
+        result = await self._db.execute(
+            self._scoped(select(AppraisalCheckIn)).where(
+                AppraisalCheckIn.cycle_id.in_(list(cycle_ids)),
+                AppraisalCheckIn.created_at >= start,
+                AppraisalCheckIn.created_at < end,
+                AppraisalCheckIn.closed_at.is_(None),
+            )
         )
         return list(result.scalars().all())
 

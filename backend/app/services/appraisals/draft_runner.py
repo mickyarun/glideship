@@ -28,7 +28,10 @@ import uuid
 from pathlib import Path
 
 from app.core.logging import content_free_logs
+from app.models.organization import AIProvider
 from app.services.ai_runner import run_agent_for_org_id
+from app.services.ai_runner.capabilities import capabilities_for
+from app.services.ai_runner.capability_gate import unsupported_reason
 from app.services.claude_errors import ClaudeErrorCode
 from app.services.claude_runner import (
     NO_REPO_CONTEXT,
@@ -74,16 +77,27 @@ def sweep_leftovers() -> None:
         shutil.rmtree(path, ignore_errors=True)
 
 
-async def run_draft(org_id: uuid.UUID, prompt: str) -> ClaudeRunResult:
-    """One tool-less run for this org."""
-    session_id = str(uuid.uuid4())
-    config = ClaudeRunnerConfig(
+def draft_config(session_id: str) -> ClaudeRunnerConfig:
+    """The settings every draft runs with."""
+    return ClaudeRunnerConfig(
         max_turns=MAX_TURNS,
         timeout_seconds=TIMEOUT_SECONDS,
         builtin_tools=[],
         private_run=True,
         cli_session_id=session_id,
     )
+
+
+def provider_refusal(provider: AIProvider | None) -> str | None:
+    """Why the org's provider would refuse a draft, or None when it can run one."""
+    caps = capabilities_for(provider or AIProvider.claude)
+    return unsupported_reason(caps, NO_REPO_CONTEXT, draft_config("readiness"))
+
+
+async def run_draft(org_id: uuid.UUID, prompt: str) -> ClaudeRunResult:
+    """One tool-less run for this org."""
+    session_id = str(uuid.uuid4())
+    config = draft_config(session_id)
     with content_free_logs():
         try:
             return await run_agent_for_org_id(org_id, prompt, NO_REPO_CONTEXT, config)

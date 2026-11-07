@@ -214,6 +214,9 @@ all of them.
 - The same schedule runs for the employee's self-score ("Your H2 review is due Wed 7 Jan") and
   the manager's period review.
 - DMs carry counts and dates only, never names of reports, bands or notes.
+- Offsets are counted on each recipient's own leave policy (working week and mandatory
+  holidays). HR's overdue list goes to everyone holding `appraisals:manage` at once, so it is
+  counted on the org's default policy.
 - Two separate ticks. The **creation tick** (check-ins, feedback items, fact lists) runs for every
   org, because the leave digest scheduler only visits orgs with Slack connected and appraisals
   must not depend on Slack. The **reminder tick** sends DMs and only needs Slack-connected orgs.
@@ -751,6 +754,7 @@ using partial unique indexes only (the local database is Postgres 14).
 
 | Route | Who |
 |---|---|
+| `GET /guide` (the intro guide's facts: the running cycle's rules and HR's note) | everyone |
 | `GET /mine`, `GET /team` | employee, manager |
 | `GET /{id}` (always returns the fact list; the AI draft may be null) | per access table |
 | `PUT /{id}/employee` | employee (until it closes) |
@@ -772,6 +776,7 @@ using partial unique indexes only (the local database is Postgres 14).
 | Route | Who |
 |---|---|
 | `GET/PUT /settings` (org appraisal settings) | HR |
+| `GET /cycles/{id}` | HR |
 | `GET/POST /cycles`, `PATCH /cycles/{id}` | HR |
 | `GET /cycles/{id}/identity-check` | HR |
 | `POST /cycles/{id}/activate`, `/start-review` (→ `202` summaries), `/close` | HR |

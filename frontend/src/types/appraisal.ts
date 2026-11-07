@@ -14,6 +14,8 @@
 
 /** Appraisal check-ins as the API returns them (`/api/v1/check-ins`). */
 
+import type { FeedbackShown } from '@/types/appraisalFeedback'
+
 export type EvidenceHeading = 'delivery_quality' | 'initiative' | 'team' | 'growth'
 export type CheckInStatus = 'open' | 'employee_added' | 'missed'
 export type DraftStatus = 'none' | 'pending' | 'ready' | 'failed'
@@ -91,6 +93,8 @@ export interface CheckInRead {
   links: CheckInLink[]
   goals: CheckInGoal[]
   identity_warnings: { user_id: string; name: string }[]
+  /** The manager's feedback answering this check-in, once some is written. */
+  feedback: FeedbackShown | null
 }
 
 export interface CheckInSummary {

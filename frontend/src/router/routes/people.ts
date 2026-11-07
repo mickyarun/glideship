@@ -66,6 +66,28 @@ export const peopleRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/appraisals/CheckInView.vue'),
   },
   {
+    // The manager writes; the person and HR read. The API decides.
+    path: 'appraisals/feedback/:id',
+    name: 'appraisal-feedback',
+    component: () => import('@/views/appraisals/FeedbackView.vue'),
+  },
+  {
+    // HR only (appraisals:manage); the API refuses everyone else.
+    path: 'appraisals/cycles',
+    name: 'appraisal-cycles',
+    component: () => import('@/views/appraisals/CyclesView.vue'),
+  },
+  {
+    path: 'appraisals/cycles/:id',
+    name: 'appraisal-cycle',
+    component: () => import('@/views/appraisals/CycleView.vue'),
+  },
+  {
+    path: 'appraisals/settings',
+    name: 'appraisal-settings',
+    component: () => import('@/views/appraisals/AppraisalSettingsView.vue'),
+  },
+  {
     path: 'settings/leave',
     name: 'settings-leave',
     meta: { permission: 'leave:configure' },

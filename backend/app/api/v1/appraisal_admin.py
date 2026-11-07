@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""HR's appraisal setup: org settings, cycles and role templates.
+"""HR's appraisal setup: org settings and role templates (cycles: :mod:`.appraisal_cycles`).
 
 Every route needs ``appraisals:manage``.
 """
@@ -26,13 +26,10 @@ from app.api.v1._appraisal_deps import get_caller
 from app.core.deps import get_db
 from app.core.permission_deps import require_permissions
 from app.core.permissions_people import APPRAISALS_MANAGE
-from app.repositories.appraisal_cycle import AppraisalCycleRepository
-from app.schemas.appraisal_cycle import CycleCreate, CycleRead, CycleUpdate, EnrolmentReport
 from app.schemas.appraisal_role_template import RoleTemplateBody, RoleTemplateRead
 from app.schemas.appraisal_settings import AppraisalSettings
-from app.services.appraisals import cycles, role_template_admin
+from app.services.appraisals import role_template_admin
 from app.services.appraisals.context import Caller
-from app.services.appraisals.enrolment import activate
 from app.services.appraisals.role_templates import ensure_seeded
 from app.services.appraisals.settings import load_appraisal_settings, save_appraisal_settings
 
@@ -58,59 +55,6 @@ async def put_settings(
     """Save the org's settings; running cycles keep their own copy."""
     await save_appraisal_settings(db, caller.org_id, body)
     return body
-
-
-@router.get("/cycles", response_model=list[CycleRead])
-async def list_cycles(
-    caller: Caller = Depends(get_caller), db: AsyncSession = Depends(get_db)
-) -> list[CycleRead]:
-    """Recent cycles, newest first."""
-    rows = await AppraisalCycleRepository(db, org_id=caller.org_id).list_recent()
-    return [CycleRead.model_validate(c) for c in rows]
-
-
-@router.post("/cycles", response_model=CycleRead, status_code=status.HTTP_201_CREATED)
-async def post_cycle(
-    body: CycleCreate,
-    caller: Caller = Depends(get_caller),
-    db: AsyncSession = Depends(get_db),
-) -> CycleRead:
-    """A draft cycle for the next period, prefilled from the org's settings."""
-    return CycleRead.model_validate(
-        await cycles.create_cycle(db, caller.org_id, caller.user_id, body)
-    )
-
-
-@router.patch("/cycles/{cycle_id}", response_model=CycleRead)
-async def patch_cycle(
-    cycle_id: uuid.UUID,
-    body: CycleUpdate,
-    caller: Caller = Depends(get_caller),
-    db: AsyncSession = Depends(get_db),
-) -> CycleRead:
-    """Change a draft cycle."""
-    return CycleRead.model_validate(await cycles.update_cycle(db, caller.org_id, cycle_id, body))
-
-
-@router.delete("/cycles/{cycle_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_cycle(
-    cycle_id: uuid.UUID,
-    caller: Caller = Depends(get_caller),
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    """Delete a draft cycle."""
-    await cycles.delete_cycle(db, caller.org_id, cycle_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/cycles/{cycle_id}/activate", response_model=EnrolmentReport)
-async def activate_cycle(
-    cycle_id: uuid.UUID,
-    caller: Caller = Depends(get_caller),
-    db: AsyncSession = Depends(get_db),
-) -> EnrolmentReport:
-    """Open the cycle and enrol everyone in its scope."""
-    return await activate(db, caller.org_id, cycle_id, caller.user_id)
 
 
 @router.get("/role-templates", response_model=list[RoleTemplateRead])

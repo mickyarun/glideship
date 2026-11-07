@@ -33,6 +33,7 @@ function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
     ai_lines: [], ai_hidden: false, can_regenerate: false, heading_meanings: {}, facts: [FACT],
     fact_tags: {}, note: { lines: {}, blocking: '', next_month: '' }, links: [], goals: [],
     identity_warnings: [],
+    feedback: null,
     ...overrides,
   }
 }

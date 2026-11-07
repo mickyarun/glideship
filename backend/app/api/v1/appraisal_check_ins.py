@@ -33,11 +33,13 @@ from app.schemas.appraisal_check_in import (
     GoalValueIn,
     LinkCreate,
 )
+from app.schemas.appraisal_guide import GuideRead
 from app.services.appraisals import check_in_writes
 from app.services.appraisals.check_in_lists import my_check_ins, team_check_ins
 from app.services.appraisals.check_in_read import read_check_in
 from app.services.appraisals.context import Caller, CheckInContext, check_in_context
 from app.services.appraisals.errors import AppraisalNotFoundError
+from app.services.appraisals.guide import guide
 
 router = APIRouter(tags=["appraisals"])
 
@@ -65,6 +67,14 @@ async def list_team(
 ) -> list[CheckInSummary]:
     """The latest check-ins of the caller's direct reports."""
     return await team_check_ins(db, caller)
+
+
+@router.get("/guide", response_model=GuideRead)
+async def get_guide(
+    caller: Caller = Depends(get_caller), db: AsyncSession = Depends(get_db)
+) -> GuideRead:
+    """The intro guide's facts: this cycle's rules and HR's note."""
+    return await guide(db, caller)
 
 
 @router.get("/{check_in_id}", response_model=CheckInRead)

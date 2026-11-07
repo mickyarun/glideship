@@ -15,8 +15,10 @@
 """Data access for manager feedback items."""
 
 import uuid
+from collections.abc import Collection
+from datetime import date
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_enums import FeedbackStatus
@@ -31,6 +33,52 @@ class AppraisalFeedbackRepository(BaseRepository[AppraisalManagerFeedback]):
         """Initialize the repository."""
         super().__init__(AppraisalManagerFeedback, db, org_id=org_id)
         self._org = org_id
+
+    async def for_cycles(self, cycle_ids: Collection[uuid.UUID]) -> list[AppraisalManagerFeedback]:
+        """Every feedback item in these cycles, oldest period first."""
+        if not cycle_ids:
+            return []
+        result = await self._db.execute(
+            self._scoped(select(AppraisalManagerFeedback))
+            .where(AppraisalManagerFeedback.cycle_id.in_(list(cycle_ids)))
+            .order_by(AppraisalManagerFeedback.period_start)
+        )
+        return list(result.scalars().all())
+
+    async def for_manager(self, manager_user_id: uuid.UUID) -> list[AppraisalManagerFeedback]:
+        """The items a manager holds, newest period first."""
+        result = await self._db.execute(
+            self._scoped(select(AppraisalManagerFeedback))
+            .where(AppraisalManagerFeedback.manager_user_id == manager_user_id)
+            .order_by(AppraisalManagerFeedback.period_start.desc())
+            .limit(200)
+        )
+        return list(result.scalars().all())
+
+    async def for_profiles(
+        self, profile_ids: Collection[uuid.UUID]
+    ) -> list[AppraisalManagerFeedback]:
+        """The items about these people, newest period first."""
+        if not profile_ids:
+            return []
+        result = await self._db.execute(
+            self._scoped(select(AppraisalManagerFeedback))
+            .where(AppraisalManagerFeedback.profile_id.in_(list(profile_ids)))
+            .order_by(AppraisalManagerFeedback.period_start.desc())
+        )
+        return list(result.scalars().all())
+
+    async def covering(
+        self, profile_id: uuid.UUID, period_end: date
+    ) -> AppraisalManagerFeedback | None:
+        """The item whose period ends with a check-in's: the feedback shown on it."""
+        result = await self._db.execute(
+            self._scoped(select(AppraisalManagerFeedback)).where(
+                AppraisalManagerFeedback.profile_id == profile_id,
+                AppraisalManagerFeedback.period_end == period_end,
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def move_open(self, profile_id: uuid.UUID, manager_user_id: uuid.UUID) -> int:
         """Hand the person's open feedback items to a new manager."""

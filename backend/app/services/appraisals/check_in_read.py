@@ -39,6 +39,7 @@ from app.schemas.appraisal_check_in import (
 from app.services.appraisals import audit, crypto
 from app.services.appraisals.context import Caller, CheckInContext, may_regenerate
 from app.services.appraisals.fact_view import board_ids, for_viewer
+from app.services.appraisals.feedback_read import shown_on_check_in
 
 
 async def read_check_in(
@@ -129,6 +130,7 @@ async def read_check_in(
         identity_warnings=(
             check_in.identity_warnings if is_self or caller.perms.has(APPRAISALS_MANAGE) else []
         ),
+        feedback=await shown_on_check_in(db, ctx),
     )
 
 

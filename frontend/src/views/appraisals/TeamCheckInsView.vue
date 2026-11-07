@@ -14,10 +14,15 @@
  * limitations under the License.
  -->
 
-<!-- Team check-ins: each direct report's latest check-in. Managers read
-     them here; feedback goes in manager feedback, not in the check-in. -->
+<!-- Team: the manager's feedback to write, then each direct report's
+     latest check-in. Feedback is written on its own page, never in the
+     check-in. -->
 <template>
-  <AppPage title="Your team's check-ins" subtitle="The latest month for each person who reports to you.">
+  <AppPage title="Your team" subtitle="Feedback to write, and the latest month for each person who reports to you.">
+    <template #actions><AppraisalGuide /></template>
+    <AppCallout v-if="feedback.teamError" variant="error">{{ feedback.teamError }}</AppCallout>
+    <TeamFeedbackList v-if="feedback.team.length" :rows="feedback.team" />
+    <h2 class="team__heading">Latest check-ins</h2>
     <AppCallout v-if="store.listError" variant="error">{{ store.listError }}</AppCallout>
     <v-progress-linear v-if="store.listLoading" indeterminate color="primary" />
     <p v-else-if="!store.team.length" class="team__empty">Nobody who reports to you has a check-in yet.</p>
@@ -36,17 +41,29 @@
 import { onMounted } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
+import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import TeamFeedbackList from '@/components/appraisals/TeamFeedbackList.vue'
+import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
+import { useManagerFeedbackStore } from '@/stores/managerFeedback'
 import { useCheckInsStore } from '@/stores/checkIns'
 import { monthTitle, statusLabel } from '@/utils/appraisalCheckIn'
 
 const store = useCheckInsStore()
+const feedback = useManagerFeedbackStore()
 
 onMounted(() => {
   void store.fetchTeam()
+  void feedback.fetchTeam()
+  void useAppraisalGuide().showOnFirstVisit()
 })
 </script>
 
 <style scoped>
+.team__heading {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
 .team__empty {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }

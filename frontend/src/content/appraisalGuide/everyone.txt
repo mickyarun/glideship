@@ -1,0 +1,17 @@
+## What the AI does and doesn't do
+
+When AI drafting is on, it writes a few lines about your month from the work Glideship recorded: cards, bugs, BUDs, pull requests and reviews. Every line shows the records it came from, so you can check it.
+
+- It never scores you, compares you with anyone, or judges your work.
+- It only sees your records, the headings for your role and what you wrote yourself.
+- Your manager scores, HR checks the spread, and people decide. The AI never does.
+
+When AI drafting is off, you see the same records as a plain list and write your own lines. Nothing on the page is written by AI.
+
+## Who sees what
+
+- Your check-ins: you, your managers and HR.
+- Your manager's feedback: you, as soon as they save it.
+- Your self-score: you, then your manager and HR once you submit it.
+- Your manager's score and reasons: you, once HR shares the result.
+- Answers only your manager gives, such as readiness for the next level: never you.

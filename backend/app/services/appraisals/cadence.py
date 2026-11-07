@@ -31,6 +31,11 @@ CADENCE_MONTHS: dict[CheckInCadence, int] = {
     CheckInCadence.MONTHLY: 1,
     CheckInCadence.QUARTERLY: 3,
 }
+# "In the review" has no feedback items: the review is the feedback.
+FEEDBACK_ITEMS: dict[FeedbackCadence, CheckInCadence] = {
+    FeedbackCadence.MONTHLY: CheckInCadence.MONTHLY,
+    FeedbackCadence.QUARTERLY: CheckInCadence.QUARTERLY,
+}
 
 
 def cadence_error(
@@ -85,3 +90,19 @@ def period_after(
         start = date(today.year, aligned, 1)
     end = date.fromordinal(add_months(start, months).toordinal() - 1)
     return start, end
+
+
+def feedback_periods(start: date, end: date, cadence: FeedbackCadence) -> list[tuple[date, date]]:
+    """The periods a manager writes feedback for in one review period.
+
+    A quarter that ends with the review period is covered by the review
+    itself, so half-yearly reviews get one quarterly item and yearly three.
+    Monthly feedback answers every monthly check-in, the last one included.
+    """
+    items = FEEDBACK_ITEMS.get(cadence)
+    if items is None:
+        return []
+    periods = slices(start, end, CADENCE_MONTHS[items])
+    if items is CheckInCadence.QUARTERLY:
+        periods = [p for p in periods if p[1] != end]
+    return periods

@@ -22,6 +22,7 @@ from typing import Self
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from app.models.appraisal_enums import CheckInStatus, DraftingMode, DraftStatus, EvidenceHeading
+from app.schemas.appraisal_feedback import FeedbackShown
 
 LINE = 300
 MAX_LINES = 10
@@ -154,6 +155,8 @@ class CheckInRead(BaseModel):
     links: list[LinkRead]
     goals: list[GoalPanelItem]
     identity_warnings: list[dict[str, str]]
+    # The manager's feedback answering this check-in, once some is written.
+    feedback: FeedbackShown | None = None
 
 
 class CheckInSummary(BaseModel):

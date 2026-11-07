@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import CycleStatus, ReviewPeriod
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
-from app.schemas.appraisal_cycle import CycleCreate, CycleUpdate
+from app.schemas.appraisal_cycle import CycleCreate, CycleRead, CycleUpdate
 from app.services.appraisals import crypto
 from app.services.appraisals.cadence import PERIOD_MONTHS, add_months, cadence_error, period_after
 from app.services.appraisals.errors import (
@@ -45,6 +45,12 @@ def default_name(review: ReviewPeriod, start: date) -> str:
     if review is ReviewPeriod.HALF_YEARLY:
         return f"H{(start.month - 1) // 6 + 1} {start.year}"
     return str(start.year)
+
+
+def cycle_read(cycle: AppraisalCycle) -> CycleRead:
+    """The cycle as the API returns it, with its intro note decrypted."""
+    data = {name: getattr(cycle, name) for name in CycleRead.model_fields if name != "intro_note"}
+    return CycleRead(**data, intro_note=crypto.unseal(cycle, "intro_note") or "")
 
 
 def enrolment_cutoff(start: date, end: date) -> date:
@@ -120,11 +126,19 @@ async def update_cycle(
     """Change a draft cycle."""
     cycle = await draft_cycle(db, org_id, cycle_id)
     # A null means "leave it": every column here is required.
+    # Python values, not JSON: the cadence rules compare enum members.
     changes = body.model_dump(
-        exclude_unset=True, exclude_none=True, exclude={"intro_note", "scope"}, mode="json"
+        exclude_unset=True,
+        exclude_none=True,
+        exclude={"intro_note", "scope", "template_overrides"},
     )
+    if body.template_overrides is not None:
+        cycle.template_overrides = {k: str(v) for k, v in body.template_overrides.items()}
     for field, value in changes.items():
         setattr(cycle, field, value)
+    problem = cadence_error(cycle.review_period, cycle.checkin_cadence, cycle.feedback_cadence)
+    if problem:
+        raise AppraisalInvalidError(problem)
     if body.scope is not None:
         cycle.scope = body.scope.model_dump(mode="json")
     if "intro_note" in body.model_fields_set:
@@ -141,3 +155,19 @@ async def delete_cycle(db: AsyncSession, org_id: uuid.UUID, cycle_id: uuid.UUID)
     """Delete a draft cycle."""
     cycle = await draft_cycle(db, org_id, cycle_id)
     await AppraisalCycleRepository(db, org_id=org_id).delete_draft(cycle)
+
+
+async def close_cycle(db: AsyncSession, org_id: uuid.UUID, cycle_id: uuid.UUID) -> AppraisalCycle:
+    """Close a running cycle: its open check-ins close on the next tick, edits stop.
+
+    Feedback still open stays "not done". Nothing is deleted.
+    """
+    cycle = await AppraisalCycleRepository(db, org_id=org_id).get_by_id(cycle_id)
+    if cycle is None:
+        raise AppraisalNotFoundError("Cycle not found.")
+    if cycle.status is CycleStatus.DRAFT:
+        raise AppraisalConflictError("A draft cycle hasn't opened; delete it instead.")
+    if cycle.status is not CycleStatus.CLOSED:
+        cycle.status = CycleStatus.CLOSED
+        await db.flush()
+    return cycle

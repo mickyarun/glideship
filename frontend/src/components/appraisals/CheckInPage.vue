@@ -70,6 +70,7 @@
     <p v-if="editable && checkIn.drafting_mode === 'ai'" class="check-in__ai-note">
       What you write here is included when the AI summarises the period for your review.
     </p>
+    <CheckInFeedback v-if="checkIn.feedback" :feedback="checkIn.feedback" />
     <section class="check-in__extra" aria-label="Blockers and next month">
       <v-textarea v-model="draft.blocking" label="What's blocking me" rows="2" auto-grow maxlength="1000" :readonly="!editable" />
       <v-textarea v-model="draft.next_month" label="Next month" rows="2" auto-grow maxlength="1000" :readonly="!editable" />
@@ -85,6 +86,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import CheckInAiLines from '@/components/appraisals/CheckInAiLines.vue'
+import CheckInFeedback from '@/components/appraisals/CheckInFeedback.vue'
 import CheckInGoalsPanel from '@/components/appraisals/CheckInGoalsPanel.vue'
 import CheckInHeadings from '@/components/appraisals/CheckInHeadings.vue'
 import CheckInWork from '@/components/appraisals/CheckInWork.vue'

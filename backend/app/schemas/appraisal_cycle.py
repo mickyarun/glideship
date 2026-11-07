@@ -18,9 +18,16 @@ import uuid
 from datetime import date
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.appraisal_enums import CheckInCadence, CycleStatus, FeedbackCadence, ReviewPeriod
+from app.models.appraisal_enums import (
+    AppraisalStatus,
+    CheckInCadence,
+    CycleStatus,
+    DraftingMode,
+    FeedbackCadence,
+    ReviewPeriod,
+)
 
 
 class CycleScope(BaseModel):
@@ -61,10 +68,23 @@ class CycleUpdate(BaseModel):
     ack_due: date | None = None
     feedback_due_days: int | None = Field(None, ge=0, le=60)
     reminder_offsets: list[int] | None = Field(None, max_length=6)
+    checkin_cadence: CheckInCadence | None = None
+    feedback_cadence: FeedbackCadence | None = None
     ai_drafting: bool | None = None
+    overdue_nudge: bool | None = None
+    hr_overdue_list: bool | None = None
+    hr_overdue_offset: int | None = Field(None, ge=0, le=30)
+    suggest_goals_on_open: bool | None = None
     scope: CycleScope | None = None
     template_overrides: dict[str, uuid.UUID] | None = Field(None, max_length=100)
     intro_note: str | None = Field(None, max_length=2000)
+
+    @field_validator("reminder_offsets")
+    @classmethod
+    def _offsets(cls, value: list[int] | None) -> list[int] | None:
+        if value is not None and any(not -10 <= offset <= 10 for offset in value):
+            raise ValueError("Reminder offsets must be within 10 working days of the due date.")
+        return value
 
 
 class CycleRead(BaseModel):
@@ -85,11 +105,16 @@ class CycleRead(BaseModel):
     feedback_cadence: FeedbackCadence
     feedback_due_days: int
     reminder_offsets: list[int]
+    overdue_nudge: bool
+    hr_overdue_list: bool
+    hr_overdue_offset: int
     ai_drafting: bool
     suggest_goals_on_open: bool
     enrolment_cutoff: date
     scope: CycleScope
     template_overrides: dict[str, uuid.UUID]
+    # Decrypted by the service; not read from the row.
+    intro_note: str = ""
 
 
 class EnrolmentReport(BaseModel):
@@ -99,3 +124,59 @@ class EnrolmentReport(BaseModel):
     already_enrolled: int
     no_primary_manager: list[uuid.UUID]
     no_template: list[uuid.UUID]
+
+
+class PersonRef(BaseModel):
+    """Someone HR needs to look at."""
+
+    user_id: uuid.UUID
+    name: str
+
+
+class IdentityFlag(PersonRef):
+    """Someone whose work may sit on an unmerged account."""
+
+    maybe: list[PersonRef]
+
+
+class Readiness(BaseModel):
+    """What HR should fix before activating, and what happens if they don't."""
+
+    drafting: DraftingMode
+    # Why drafts would be manual: the org or cycle switch, or the provider.
+    ai_note: str | None
+    in_scope: int
+    no_primary_manager: list[PersonRef]
+    no_template: list[PersonRef]
+    identity: list[IdentityFlag]
+
+
+class ProgressRow(BaseModel):
+    """One enrolled person's progress through the cycle: counts and states only."""
+
+    user_id: uuid.UUID
+    name: str
+    manager_name: str
+    status: AppraisalStatus
+    check_ins: int
+    check_ins_added: int
+    check_ins_missed: int
+    feedback: int
+    feedback_done: int
+    feedback_overdue: int
+
+
+class ManagerOverdue(BaseModel):
+    """A manager with feedback still open past its due date."""
+
+    name: str
+    overdue: int
+
+
+class CycleProgress(BaseModel):
+    """Who's done and who's overdue."""
+
+    people: list[ProgressRow]
+    feedback: int
+    feedback_done: int
+    managers_overdue: list[ManagerOverdue]

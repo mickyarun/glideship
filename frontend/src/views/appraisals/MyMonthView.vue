@@ -19,8 +19,9 @@
 <template>
   <AppPage :title="title" :subtitle="subtitle">
     <template #eyebrow><span class="my-month__eyebrow">Monthly check-in</span></template>
-    <template v-if="store.mine.length > 1" #actions>
-      <AppPillToggle :model-value="selected ?? ''" :options="monthOptions" aria-label="Month" @update:model-value="v => pick(String(v))" />
+    <template #actions>
+      <AppPillToggle v-if="store.mine.length > 1" :model-value="selected ?? ''" :options="monthOptions" aria-label="Month" @update:model-value="v => pick(String(v))" />
+      <AppraisalGuide />
     </template>
     <AppCallout v-if="store.listError || store.error" variant="error">{{ store.listError || store.error }}</AppCallout>
     <v-progress-linear v-if="(store.listLoading || store.loading) && !store.current" indeterminate color="primary" />
@@ -36,7 +37,9 @@ import { computed, onMounted, ref } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
+import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
 import CheckInPage from '@/components/appraisals/CheckInPage.vue'
+import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import { useCheckInsStore } from '@/stores/checkIns'
 import { availabilityLine, monthTitle } from '@/utils/appraisalCheckIn'
 
@@ -65,6 +68,7 @@ async function pick(id: string): Promise<void> {
 }
 
 onMounted(async () => {
+  void useAppraisalGuide().showOnFirstVisit()
   store.current = null
   await store.fetchMine()
   const latest = store.mine[0]

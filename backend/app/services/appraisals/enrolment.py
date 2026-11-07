@@ -52,13 +52,15 @@ from app.services.appraisals.settings import load_appraisal_settings
 LEAVING = frozenset({EmployeeStatus.ON_NOTICE, EmployeeStatus.EXITED})
 
 
-def _primary(links: Sequence[ManagerLink]) -> ManagerLink | None:
+def primary_link(links: Sequence[ManagerLink]) -> ManagerLink | None:
+    """The person's active primary manager link, if any."""
     return next((m for m in links if m.is_primary and m.is_active), None)
 
 
-def _in_scope(
+def in_scope(
     cycle: AppraisalCycle, profile: EmployeeProfile, template: AppraisalRoleTemplate | None
 ) -> bool:
+    """Whether the cycle's offices, departments and templates cover the person."""
     scope = cycle.scope or {}
     offices = set(scope.get("offices") or [])
     departments = {d.lower() for d in scope.get("departments") or []}
@@ -88,12 +90,12 @@ async def enrol(
         template = match_template(
             templates, profile.department, profile.designation, cycle.template_overrides
         )
-        if not _in_scope(cycle, profile, template):
+        if not in_scope(cycle, profile, template):
             continue
         if profile.id in enrolled_ids:
             report.already_enrolled += 1
             continue
-        primary = _primary(links.get(profile.id, []))
+        primary = primary_link(links.get(profile.id, []))
         if primary is None:
             report.no_primary_manager.append(profile.user_id)
             continue
@@ -181,7 +183,7 @@ async def follow_primary_manager(
     links = await EmployeeReportingManagerRepository(db, org_id=org_id).list_for_profiles(
         [profile_id]
     )
-    primary = _primary(links.get(profile_id, []))
+    primary = primary_link(links.get(profile_id, []))
     if primary is None:
         return 0
     moved = await AppraisalRepository(db, org_id=org_id).move_scorer(profile_id, primary.user_id)

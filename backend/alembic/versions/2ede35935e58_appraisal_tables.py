@@ -1,8 +1,8 @@
-"""Appraisal tables, their enums, new audit actions and the goal-history trigger.
+"""Appraisal tables, their enums, new audit and reminder values, and the goal-history trigger.
 
-Revision ID: fd39bf30adae
+Revision ID: 2ede35935e58
 Revises: a1e8aeee2202
-Create Date: 2026-11-04 17:57:30.911802
+Create Date: 2026-11-07 20:59:46.894457
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "fd39bf30adae"
+revision: str = "2ede35935e58"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -677,8 +677,18 @@ def upgrade() -> None:
         "appraisal_sent_back",
         "appraisal_shared",
         "appraisal_goal_accepted",
+        "appraisal_feedback_given",
     ):
         op.execute(f"ALTER TYPE employee_audit_action ADD VALUE IF NOT EXISTS '{action}'")
+    for kind in (
+        "appraisal_check_in_ready",
+        "appraisal_feedback_due",
+        "appraisal_self_due",
+        "appraisal_review_due",
+        "appraisal_ack_due",
+        "appraisal_hr_overdue",
+    ):
+        op.execute(f"ALTER TYPE digest_claim_kind ADD VALUE IF NOT EXISTS '{kind}'")
     # Goal history is append-only. An update may only re-encrypt a blob that
     # is already there (HR key rotation): never change who did what, never
     # blank a blob or fill an empty one. A purge for an erasure request sets

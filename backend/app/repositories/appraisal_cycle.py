@@ -99,6 +99,13 @@ class AppraisalCycleRepository(BaseRepository[AppraisalCycle]):
         result = await self._db.execute(self._scoped(select(AppraisalCycle)).where(_needs_pass()))
         return list(result.scalars().all())
 
+    async def running(self) -> list[AppraisalCycle]:
+        """Active and reviewing cycles."""
+        result = await self._db.execute(
+            self._scoped(select(AppraisalCycle)).where(AppraisalCycle.status.in_(RUNNING))
+        )
+        return list(result.scalars().all())
+
     async def running_on(self, day: date) -> list[AppraisalCycle]:
         """Active cycles whose period contains ``day``."""
         result = await self._db.execute(
