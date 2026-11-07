@@ -1,8 +1,8 @@
 """Appraisal tables, their enums, new audit and reminder values, and the goal-history trigger.
 
-Revision ID: 2ede35935e58
+Revision ID: 12d7a67b2866
 Revises: a1e8aeee2202
-Create Date: 2026-11-07 20:59:46.894457
+Create Date: 2026-11-07 21:37:33.065348
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "2ede35935e58"
+revision: str = "12d7a67b2866"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -346,6 +346,7 @@ def upgrade() -> None:
         sa.Column("employee_note", sa.LargeBinary(), nullable=True),
         sa.Column("status", _ENUMS["appraisal_check_in_status"], nullable=False),
         sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("notified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
             "created_at",
@@ -475,6 +476,7 @@ def upgrade() -> None:
         sa.Column("goal_notes", sa.LargeBinary(), nullable=True),
         sa.Column("status", _ENUMS["appraisal_feedback_status"], nullable=False),
         sa.Column("done_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("notified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
             "created_at",

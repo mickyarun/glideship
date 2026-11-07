@@ -27,7 +27,6 @@ from datetime import date, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.policy_holiday import HolidayKind
 from app.repositories.employee_profile import EmployeeProfileRepository
 from app.repositories.leave_policy import LeavePolicyRepository
 from app.repositories.policy_holiday import PolicyHolidayRepository
@@ -92,16 +91,16 @@ async def load_calendars(
     rows = await policies.by_ids(own)
     if default_policy is not None:
         rows[default_policy.id] = default_policy
-    holidays = PolicyHolidayRepository(db, org_id=org_id)
-    built: dict[uuid.UUID, WorkCalendar] = {}
-    for policy in rows.values():
-        days = await holidays.list_between(
-            policy.id, today - HOLIDAY_REACH, today + HOLIDAY_REACH, kind=HolidayKind.MANDATORY
-        )
-        built[policy.id] = WorkCalendar(
+    holidays = await PolicyHolidayRepository(db, org_id=org_id).mandatory_between(
+        list(rows), today - HOLIDAY_REACH, today + HOLIDAY_REACH
+    )
+    built = {
+        policy.id: WorkCalendar(
             working_days=frozenset(policy.working_days or WEEKDAYS),
-            holidays=frozenset(h.date for h in days),
+            holidays=frozenset(holidays.get(policy.id, set())),
         )
+        for policy in rows.values()
+    }
     default = built.get(default_policy.id) if default_policy else None
     fallback = default or WorkCalendar()
     by_user = {

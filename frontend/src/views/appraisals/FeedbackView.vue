@@ -39,21 +39,13 @@
           {{ monthTitle(c.period_start) }} · {{ statusLabel(c.status, c.closed) }}
         </router-link>
       </section>
-      <section v-if="item.goals.length" class="fb__goals" aria-label="Goals">
-        <h2 class="fb__heading">How each goal is going</h2>
-        <p class="fb__muted">Your view for now; it doesn't decide the result at the end.</p>
-        <div v-for="goal in item.goals" :key="goal.id" class="fb__goal">
-          <span class="fb__goal-title">{{ goal.title }}</span>
-          <AppPillToggle
-            :model-value="checks[goal.id] ?? ''"
-            :options="checkOptions"
-            :aria-label="`Status of ${goal.title}`"
-            size="sm"
-            @update:model-value="v => setCheck(goal.id, v)"
-          />
-          <v-text-field v-model="notes[goal.id]" label="Note (optional)" density="compact" hide-details maxlength="300" :readonly="!item.can_edit" />
-        </div>
-      </section>
+      <FeedbackGoals
+        v-if="item.goals.length"
+        v-model:checks="checks"
+        v-model:notes="notes"
+        :goals="item.goals"
+        :editable="item.can_edit"
+      />
       <section class="fb__lines" aria-label="Feedback">
         <v-textarea v-model="keep" label="Keep doing" rows="2" auto-grow maxlength="500" :readonly="!item.can_edit" />
         <v-textarea v-model="tryNext" label="Try next" rows="2" auto-grow maxlength="500" :readonly="!item.can_edit" />
@@ -73,12 +65,12 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
-import AppPillToggle from '@/components/common/AppPillToggle.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import FeedbackGoals from '@/components/appraisals/FeedbackGoals.vue'
 import { useManagerFeedbackStore } from '@/stores/managerFeedback'
 import type { FeedbackBody, GoalCheck } from '@/types/appraisalFeedback'
 import { monthTitle, statusLabel } from '@/utils/appraisalCheckIn'
-import { GOAL_CHECKS, feedbackPeriod } from '@/utils/appraisalFeedback'
+import { feedbackPeriod } from '@/utils/appraisalFeedback'
 import { longDate } from '@/utils/appraisalSetup'
 
 const route = useRoute()
@@ -93,7 +85,6 @@ const saving = ref(false)
 const finishing = ref(false)
 const message = ref('')
 const messageKind = ref<'error' | 'success'>('error')
-const checkOptions = GOAL_CHECKS.map(c => ({ label: c.label, value: c.value as string }))
 
 const title = computed(() =>
   item.value ? `${item.value.person_name} · ${feedbackPeriod(item.value.period_start, item.value.cadence)} feedback` : 'Feedback',
@@ -123,10 +114,6 @@ function saved(): FeedbackBody {
 
 const dirty = computed(() => JSON.stringify(body()) !== JSON.stringify(saved()))
 const canFinish = computed(() => Boolean(keep.value.trim() && tryNext.value.trim()) && item.value?.status !== 'done')
-
-function setCheck(goalId: string, value: string | null): void {
-  checks.value = { ...checks.value, [goalId]: (value || undefined) as GoalCheck | undefined }
-}
 
 // Only a different item resets the form, so a save never wipes typing.
 watch(
@@ -184,7 +171,6 @@ async function finish(): Promise<void> {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 .fb__check-ins,
-.fb__goals,
 .fb__lines {
   max-width: 880px;
   padding: 16px 20px;
@@ -202,31 +188,10 @@ async function finish(): Promise<void> {
   color: inherit;
   text-decoration: none;
 }
-.fb__goal {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  align-items: center;
-  padding: 8px 0;
-}
-.fb__goal + .fb__goal {
-  border-top: 1px solid rgb(var(--v-theme-rule));
-}
-.fb__goal .v-text-field {
-  grid-column: 1 / -1;
-}
-.fb__goal-title {
-  font-weight: 600;
-}
 .fb__save {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
   max-width: 880px;
-}
-@media (max-width: 600px) {
-  .fb__goal {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

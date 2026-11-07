@@ -12,20 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Manager feedback for one viewer: the team list, one item, and the
-feedback as it appears on the employee's check-in."""
+"""Manager feedback for one viewer: one item, and the feedback as it
+appears on the employee's check-in (the team list: :mod:`.feedback_team`)."""
 
-import uuid
-from collections import defaultdict
-from datetime import UTC, date, datetime
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import CheckInStatus, FeedbackStatus, GoalCheck
+from app.models.appraisal_enums import FeedbackStatus, GoalCheck
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
-from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
@@ -34,12 +31,12 @@ from app.schemas.appraisal_feedback import (
     FeedbackCheckIn,
     FeedbackGoal,
     FeedbackRead,
-    FeedbackRow,
     FeedbackShown,
 )
 from app.services.appraisals import audit, crypto
 from app.services.appraisals.context import Caller, CheckInContext
-from app.services.appraisals.feedback import FeedbackContext
+from app.services.appraisals.feedback import FeedbackContext, written
+from app.services.appraisals.org_clock import org_today
 
 
 def is_overdue(item: AppraisalManagerFeedback, today: date) -> bool:
@@ -47,7 +44,8 @@ def is_overdue(item: AppraisalManagerFeedback, today: date) -> bool:
     return item.status is FeedbackStatus.OPEN and today > item.due_on
 
 
-def _in_period(check_in: AppraisalCheckIn, item: AppraisalManagerFeedback) -> bool:
+def in_period(check_in: AppraisalCheckIn, item: AppraisalManagerFeedback) -> bool:
+    """The check-in is one of those the item covers (pure)."""
     return item.period_start <= check_in.period_start <= item.period_end
 
 
@@ -107,7 +105,7 @@ async def read_feedback(
         due_on=item.due_on,
         status=item.status,
         done_at=item.done_at,
-        overdue=is_overdue(item, datetime.now(UTC).date()),
+        overdue=is_overdue(item, await org_today(db, caller.org_id)),
         can_edit=ctx.can_edit,
         keep=crypto.unseal(item, "keep_note") or "",
         try_next=crypto.unseal(item, "try_note") or "",
@@ -120,59 +118,9 @@ async def read_feedback(
                 closed=c.closed_at is not None,
             )
             for c in check_ins
-            if _in_period(c, item)
+            if in_period(c, item)
         ],
     )
-
-
-async def team_feedback(db: AsyncSession, caller: Caller) -> list[FeedbackRow]:
-    """The items the caller holds for people who still report to them, newest first.
-
-    A finished item stays with the manager who wrote it, but once the
-    person has moved on it no longer shows in that manager's list.
-    """
-    repo = AppraisalRepository(db, org_id=caller.org_id)
-    reports = set(await repo.report_profile_ids(caller.user_id))
-    items = [
-        i
-        for i in await AppraisalFeedbackRepository(db, org_id=caller.org_id).for_manager(
-            caller.user_id
-        )
-        if i.profile_id in reports
-    ]
-    profiles = await repo.profiles_by_id(list({i.profile_id for i in items}))
-    names = {
-        u.id: u.name
-        for u in await UserRepository(db).get_many_by_ids([p.user_id for p in profiles.values()])
-    }
-    by_person: dict[uuid.UUID, list[AppraisalCheckIn]] = defaultdict(list)
-    for check_in in await AppraisalCheckInRepository(db, org_id=caller.org_id).for_profiles(
-        list(profiles)
-    ):
-        by_person[check_in.profile_id].append(check_in)
-    today = datetime.now(UTC).date()
-    rows = []
-    for item in items:
-        profile = profiles.get(item.profile_id)
-        if profile is None:
-            continue
-        covered = [c for c in by_person[item.profile_id] if _in_period(c, item)]
-        rows.append(
-            FeedbackRow(
-                id=item.id,
-                profile_id=item.profile_id,
-                person_name=names.get(profile.user_id, ""),
-                period_start=item.period_start,
-                period_end=item.period_end,
-                cadence=item.cadence,
-                due_on=item.due_on,
-                status=item.status,
-                overdue=is_overdue(item, today),
-                check_ins=len(covered),
-                check_ins_added=sum(c.status is CheckInStatus.EMPLOYEE_ADDED for c in covered),
-            )
-        )
-    return rows
 
 
 async def shown_on_check_in(db: AsyncSession, ctx: CheckInContext) -> FeedbackShown | None:
@@ -185,9 +133,9 @@ async def shown_on_check_in(db: AsyncSession, ctx: CheckInContext) -> FeedbackSh
         return None
     check_in = ctx.check_in
     item = await AppraisalFeedbackRepository(db, org_id=check_in.org_id).covering(
-        check_in.profile_id, check_in.period_end
+        check_in.cycle_id, check_in.profile_id, check_in.period_end
     )
-    if item is None or (item.keep_note is None and item.try_note is None):
+    if item is None or not written(item):
         return None
     manager = await UserRepository(db).get_by_id_in_org(item.manager_user_id, item.org_id)
     return FeedbackShown(

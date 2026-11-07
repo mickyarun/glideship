@@ -114,6 +114,41 @@ describe('FeedbackView', () => {
     expect(wrapper.text()).toContain('Marked done.')
   })
 
+  it('keeps the typing and never marks done when the save fails', async () => {
+    const wrapper = await view(item())
+    const [keep, tryNext] = wrapper.findAll('textarea:not(.v-textarea__sizer)')
+    await keep.setValue('Clear PRs')
+    await tryNext.setValue('Pair on UAT')
+    apiPut.mockRejectedValue(new Error('offline'))
+    await wrapper.findAll('button').find(b => b.text() === 'Mark done')?.trigger('click')
+    await flushPromises()
+    expect(apiPost).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Network error. Please check your connection.')
+    expect((keep.element as HTMLTextAreaElement).value).toBe('Clear PRs')
+  })
+
+  it('sends goal statuses, and asks for a status before keeping a note', async () => {
+    const goals = [{ id: 'g1', title: 'Clicks +25%', status: null, note: '' }]
+    const wrapper = await view(item({ cadence: 'quarterly', goals }))
+    const note = wrapper.find('.fb-goals__goal input')
+    await note.setValue('Behind in Sept')
+    expect(wrapper.text()).toContain('Pick a status to keep this note.')
+    await wrapper.findAll('[role="radio"]').find(r => r.text() === 'At risk')?.trigger('click')
+    expect(wrapper.text()).not.toContain('Pick a status to keep this note.')
+    apiPut.mockResolvedValue({ data: item({ cadence: 'quarterly', goals }) })
+    await wrapper.findAll('button').find(b => b.text() === 'Save')?.trigger('click')
+    await flushPromises()
+    expect(apiPut.mock.calls[0][1].goals).toEqual([{ goal_id: 'g1', status: 'at_risk', note: 'Behind in Sept' }])
+  })
+
+  it('shows goal statuses without letting a reader change them', async () => {
+    const goals = [{ id: 'g1', title: 'Clicks +25%', status: 'on_track' as const, note: '' }]
+    const wrapper = await view(item({ cadence: 'quarterly', goals, can_edit: false }))
+    const radios = wrapper.findAll('[role="radio"]')
+    expect(radios.every(r => r.attributes('disabled') !== undefined)).toBe(true)
+    expect(radios.find(r => r.text() === 'On track')?.attributes('aria-checked')).toBe('true')
+  })
+
   it('is read-only for anyone but the manager', async () => {
     const wrapper = await view(item({ can_edit: false, keep: 'Clear PRs', try_next: 'Pair' }))
     expect(wrapper.findAll('button').some(b => b.text() === 'Save')).toBe(false)

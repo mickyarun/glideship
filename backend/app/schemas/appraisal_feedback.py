@@ -35,7 +35,8 @@ class FeedbackBody(BaseModel):
 
     keep: str = Field("", max_length=500)
     try_next: str = Field("", max_length=500)
-    goals: list[GoalCheckIn] = Field(default_factory=list, max_length=10)
+    # The full set of statuses; left out (null), the saved ones are kept.
+    goals: list[GoalCheckIn] | None = Field(None, max_length=10)
 
 
 class FeedbackGoal(BaseModel):

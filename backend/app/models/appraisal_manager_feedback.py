@@ -84,3 +84,5 @@ class AppraisalManagerFeedback(BaseModel):
         default=FeedbackStatus.OPEN,
     )
     done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the manager was told it opened; empty until a reminder pass does.
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

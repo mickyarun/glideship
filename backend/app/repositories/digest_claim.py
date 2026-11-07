@@ -96,6 +96,20 @@ class DigestClaimRepository:
         )
         return inserted.scalar_one_or_none() is not None
 
+    async def settled_users(
+        self, kind: DigestClaimKind, local_date: date, *, max_retries: int, stale: timedelta
+    ) -> set[uuid.UUID]:
+        """People whose message of this kind for the day needs nothing more."""
+        rows = await self._db.execute(
+            select(DigestClaim.user_id).where(
+                DigestClaim.org_id == self._org,
+                DigestClaim.kind == kind,
+                DigestClaim.local_date == local_date,
+                not_(_retryable(max_retries, stale)),
+            )
+        )
+        return set(rows.scalars().all())
+
     async def reclaim_retryable(
         self,
         kind: DigestClaimKind,

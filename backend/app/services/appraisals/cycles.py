@@ -35,6 +35,7 @@ from app.services.appraisals.errors import (
     AppraisalInvalidError,
     AppraisalNotFoundError,
 )
+from app.services.appraisals.role_templates import ensure_seeded
 from app.services.appraisals.settings import load_appraisal_settings
 
 
@@ -107,6 +108,8 @@ async def create_cycle(
     )
     crypto.seal(cycle, "intro_note", body.intro_note)
     await repo.create(cycle)
+    # Readiness matches templates without writing, so they exist from here.
+    await ensure_seeded(db, org_id, actor_id)
     return cycle
 
 

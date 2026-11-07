@@ -15,22 +15,29 @@
 """The reminder tick: appraisal DMs once a day at the org's local send time.
 
 Only orgs with Slack connected get anything; the creation tick runs for
-everyone regardless. Each DM claims a ``digest_claims`` row first, so a
-retry, a restart or a second instance never sends the same reminder
-twice in a day. A failed send, or a claim left unfinished, is retried on a
-later tick that day with the message as it reads then.
+everyone regardless. Each pass first leaves out people already reached
+today, then for each kind claims a ``digest_claims`` row per person,
+sends, and records the outcome before moving to the next kind, so a
+claim is never held while other kinds go out. A failed send, or a claim
+left unfinished, is retried on a later tick that day with the message as
+it reads then. Delivered or undeliverable (muted, not linked), the
+openings a message announced are marked, so they aren't announced again.
 """
 
-from datetime import UTC, date, datetime, timedelta, tzinfo
+import asyncio
+import uuid
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.digest_claim import DigestClaimKind, DigestClaimStatus
+from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import CycleOrg, orgs_with_running_cycles
+from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.digest_claim import DigestClaimRepository
-from app.services.appraisals.reminder_stage import Texts, compose_day
+from app.services.appraisals.reminder_stage import Outbox, compose_day
 from app.services.leave.digest_settings import org_zone
 from app.services.notifications import NotificationCategory
 from app.services.scheduling.claim_outcome import claim_outcome
@@ -40,33 +47,73 @@ from app.services.slack_dm import bot_token, send_each
 
 logger = structlog.get_logger(__name__)
 CATEGORY = NotificationCategory.APPRAISAL_REMINDERS
+KINDS = (
+    DigestClaimKind.APPRAISAL_CHECK_IN_READY,
+    DigestClaimKind.APPRAISAL_FEEDBACK_DUE,
+    DigestClaimKind.APPRAISAL_HR_OVERDUE,
+)
 
 
-async def _claimed(
-    claims: DigestClaimRepository, kind: DigestClaimKind, texts: Texts, day: date
-) -> Texts:
-    """The messages this tick may send: new claims, and retries of failed ones."""
-    cfg = settings.appraisals
-    retry = set(
-        await claims.reclaim_retryable(
-            kind,
-            day,
-            max_retries=cfg.max_retries,
-            stale=timedelta(minutes=cfg.stale_minutes),
-            user_ids=set(texts),
+def _stale() -> timedelta:
+    return timedelta(minutes=settings.appraisals.stale_minutes)
+
+
+async def _claim(org_id: uuid.UUID, kind: DigestClaimKind, outbox: Outbox, day: date) -> Outbox:
+    """Claim this kind's messages: new claims, and retries of failed or stuck ones."""
+    async with AsyncSessionLocal() as db:
+        claims = DigestClaimRepository(db, org_id=org_id)
+        retry = set(
+            await claims.reclaim_retryable(
+                kind,
+                day,
+                max_retries=settings.appraisals.max_retries,
+                stale=_stale(),
+                user_ids=set(outbox),
+            )
         )
+        mine: Outbox = {}
+        for user_id in sorted(outbox):
+            if user_id in retry or await claims.claim(kind, user_id, day):
+                mine[user_id] = outbox[user_id]
+        await db.commit()
+    return mine
+
+
+async def _send(org_id: uuid.UUID, kind: DigestClaimKind, outbox: Outbox, day: date) -> None:
+    """Send one kind's claimed messages and record each outcome."""
+    cfg = settings.appraisals
+    texts = {user_id: message.text for user_id, message in outbox.items()}
+    reached = await send_each(
+        org_id, CATEGORY, texts, pace=Pace(cfg.dm_concurrency, cfg.dm_interval_seconds)
     )
-    out: Texts = {}
-    for user_id in sorted(texts):
-        if user_id in retry or await claims.claim(kind, user_id, day):
-            out[user_id] = texts[user_id]
-    return out
+    now = datetime.now(UTC)
+    async with AsyncSessionLocal() as db:
+        claims = DigestClaimRepository(db, org_id=org_id)
+        told_check_ins: list[uuid.UUID] = []
+        told_feedback: list[uuid.UUID] = []
+        for user_id, message in outbox.items():
+            status = claim_outcome(reached.get(user_id))
+            error = "slack_failed" if status is DigestClaimStatus.FAILED else None
+            await claims.finish(kind, user_id, day, status, error)
+            if status is not DigestClaimStatus.FAILED:
+                told_check_ins += message.check_ins
+                told_feedback += message.feedback
+        await AppraisalCheckInRepository(db, org_id=org_id).mark_notified(told_check_ins, now)
+        await AppraisalFeedbackRepository(db, org_id=org_id).mark_notified(told_feedback, now)
+        await db.commit()
+    logger.info(
+        "appraisal_reminders_sent",
+        org_id=str(org_id),
+        kind=kind.value,
+        people=len(outbox),
+        reached=len(reached),
+    )
 
 
 async def org_pass(org: CycleOrg, now: datetime) -> None:
     """Send the org's reminders if they're due now; nothing outside its window."""
     cfg = settings.appraisals
-    zone: tzinfo = org_zone(org.config, org.policy_timezone, org.org_id)
+    zone = org_zone(org.config, org.policy_timezone, org.org_id)
     window = timedelta(minutes=cfg.reminder_window_minutes)
     day = due_local_date(now, zone, cfg.reminder_time, window=window)
     if day is None:
@@ -74,31 +121,18 @@ async def org_pass(org: CycleOrg, now: datetime) -> None:
     async with AsyncSessionLocal() as db:
         if not await bot_token(db, org.org_id):
             return
-        composed = await compose_day(db, org.org_id, day, zone)
         claims = DigestClaimRepository(db, org_id=org.org_id)
-        outbox = {
-            kind: await _claimed(claims, kind, texts, day) for kind, texts in composed.items()
+        skip = {
+            kind: await claims.settled_users(
+                kind, day, max_retries=cfg.max_retries, stale=_stale()
+            )
+            for kind in KINDS
         }
-        await db.commit()
-    pace = Pace(cfg.dm_concurrency, cfg.dm_interval_seconds)
-    for kind, texts in outbox.items():
-        if not texts:
-            continue
-        reached = await send_each(org.org_id, CATEGORY, texts, pace=pace)
-        async with AsyncSessionLocal() as db:
-            claims = DigestClaimRepository(db, org_id=org.org_id)
-            for user_id in texts:
-                status = claim_outcome(reached.get(user_id))
-                error = "slack_failed" if status is DigestClaimStatus.FAILED else None
-                await claims.finish(kind, user_id, day, status, error)
-            await db.commit()
-        logger.info(
-            "appraisal_reminders_sent",
-            org_id=str(org.org_id),
-            kind=kind.value,
-            people=len(texts),
-            reached=len(reached),
-        )
+        composed = await compose_day(db, org.org_id, day, skip)
+    for kind, outbox in composed.items():
+        mine = await _claim(org.org_id, kind, outbox, day) if outbox else {}
+        if mine:
+            await _send(org.org_id, kind, mine, day)
 
 
 async def tick_once(now_utc: datetime | None = None) -> None:
@@ -106,11 +140,16 @@ async def tick_once(now_utc: datetime | None = None) -> None:
     now = now_utc or datetime.now(UTC)
     async with AsyncSessionLocal() as db:
         orgs = await orgs_with_running_cycles(db)
-    for org in orgs:
-        try:
-            await org_pass(org, now)
-        except Exception:
-            logger.exception("appraisal_reminders_org_failed", org_id=str(org.org_id))
+    slots = asyncio.Semaphore(settings.appraisals.org_concurrency)
+
+    async def _one(org: CycleOrg) -> None:
+        async with slots:
+            try:
+                await org_pass(org, now)
+            except Exception:
+                logger.exception("appraisal_reminders_org_failed", org_id=str(org.org_id))
+
+    await asyncio.gather(*(_one(org) for org in orgs))
 
 
 async def run_reminder_scheduler() -> None:

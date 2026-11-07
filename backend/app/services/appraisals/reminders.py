@@ -15,7 +15,8 @@
 """When each appraisal reminder is due (pure, no I/O).
 
 Every piece of work with an owner and a due date follows one schedule,
-copied onto the cycle when it was created: a message when it opens, then
+copied onto the cycle when it was created: a message on the first pass
+after it opens (however late in the day it opened), then
 one on each reminder offset (working days from the due date, counted on
 the recipient's calendar) while it isn't done. Offsets after the due date
 only fire with the overdue nudge on. HR gets one list of what is still
@@ -61,17 +62,18 @@ class Schedule:
 
 def moment(
     today: date,
-    opened_on: date | None,
+    announced: bool,
     due_on: date,
     schedule: Schedule,
     calendar: WorkCalendar,
 ) -> Moment | None:
-    """Today's reminder for work that opened on ``opened_on`` and is due ``due_on``.
+    """Today's reminder for work due ``due_on``, or None.
 
-    The caller only asks while the work isn't done. The opening message
+    The caller only asks while the work isn't done. Work whose opening
+    hasn't been announced gets the opening message, whatever the day; it
     wins over a reminder falling on the same day.
     """
-    if opened_on == today:
+    if not announced:
         return Moment.OPENS
     for offset in schedule.offsets:
         if offset > 0 and not schedule.overdue_nudge:

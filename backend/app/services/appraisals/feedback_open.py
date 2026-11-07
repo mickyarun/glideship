@@ -16,8 +16,10 @@
 
 On the first working day after a feedback period ends, each enrolled
 person gets an item for their primary manager, due ``feedback_due_days``
-after the period ends. As with check-ins, only the latest ended period opens, so someone
-enrolled late isn't handed items that are already overdue. Items never
+after the period ends, moved to the manager's next working day when that
+falls on a weekend or holiday, so the app and the reminders agree. As
+with check-ins, only the latest ended period opens, so someone enrolled
+late isn't handed items that are already overdue. Items never
 close on their own: one the manager never writes stays "not done" and
 never blocks the review.
 """
@@ -35,6 +37,7 @@ from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.employee_profile import EmployeeProfile
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.services.appraisals.cadence import FEEDBACK_ITEMS, feedback_periods
+from app.services.appraisals.work_calendar import load_calendars
 
 logger = structlog.get_logger(__name__)
 
@@ -79,13 +82,22 @@ async def feedback_pass(
     if period is None or cadence is None:
         return
     repo = AppraisalFeedbackRepository(db, org_id=cycle.org_id)
-    have = {(f.profile_id, f.period_start) for f in await repo.for_cycles([cycle.id])}
+    have = await repo.profile_ids_for_period(cycle.id, period[0])
+    due = []
     for appraisal in appraisals:
-        profile = profiles.get(appraisal.profile_id)
-        if profile is None or (profile.id, period[0]) in have:
+        person = profiles.get(appraisal.profile_id)
+        if appraisal.profile_id in have or person is None:
             continue
-        if not should_open_feedback(cycle, appraisal, profile, period, working):
-            continue
+        if should_open_feedback(cycle, appraisal, person, period, working):
+            due.append(appraisal)
+    if not due:
+        return
+    calendars = await load_calendars(db, cycle.org_id, {a.manager_user_id for a in due}, today)
+    for appraisal in due:
+        profile = profiles[appraisal.profile_id]
+        due_on = calendars.of(appraisal.manager_user_id).shift(
+            period[1] + timedelta(days=cycle.feedback_due_days), 0
+        )
         try:
             async with db.begin_nested():
                 await repo.create(
@@ -98,7 +110,7 @@ async def feedback_pass(
                         period_start=period[0],
                         period_end=period[1],
                         cadence=cadence,
-                        due_on=period[1] + timedelta(days=cycle.feedback_due_days),
+                        due_on=due_on,
                         goal_status={},
                         status=FeedbackStatus.OPEN,
                     )

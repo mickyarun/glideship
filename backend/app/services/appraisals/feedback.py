@@ -18,7 +18,7 @@ The primary manager writes it while the cycle runs; the item must also be
 theirs, so a finished item stays with the manager who wrote it after the
 reporting line changes. The employee sees what is saved straight away.
 Marking it done needs both lines; goal statuses are optional and only
-quarterly items have them.
+quarterly items have them. The person sees the item once anything is saved.
 """
 
 import uuid
@@ -70,7 +70,12 @@ class FeedbackContext:
     @property
     def written(self) -> bool:
         """Something is saved, so the employee sees it."""
-        return self.item.keep_note is not None or self.item.try_note is not None
+        return written(self.item)
+
+
+def written(item: AppraisalManagerFeedback) -> bool:
+    """A line or a goal status is saved: the employee sees the item from then on."""
+    return item.keep_note is not None or item.try_note is not None or bool(item.goal_status)
 
 
 async def feedback_context(
@@ -98,36 +103,68 @@ async def feedback_context(
     return ctx
 
 
+async def _goal_checks(
+    db: AsyncSession, ctx: FeedbackContext, body: FeedbackBody
+) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+    """The statuses and notes to store, checked against this period's goals."""
+    item = ctx.item
+    if item.cadence is not CheckInCadence.QUARTERLY or ctx.cycle is None:
+        raise AppraisalInvalidError("Goal statuses are only part of quarterly feedback.")
+    accepted = await AppraisalGoalRepository(db, org_id=item.org_id).accepted_for_period(
+        ctx.profile.id, ctx.cycle.period_start
+    )
+    known = {g.id for g in accepted}
+    goals: dict[str, dict[str, str]] = {}
+    notes: dict[str, str] = {}
+    for goal in body.goals or []:
+        if goal.goal_id not in known:
+            raise AppraisalInvalidError("That goal isn't one of this period's goals.")
+        goals[str(goal.goal_id)] = {"status": goal.status.value}
+        if goal.note.strip():
+            notes[str(goal.goal_id)] = goal.note.strip()
+    return goals, notes
+
+
 async def save_feedback(
     db: AsyncSession, caller: Caller, ctx: FeedbackContext, body: FeedbackBody
 ) -> None:
-    """Store the lines and goal statuses; an empty line clears it."""
+    """Store the lines and, when sent, the goal statuses; an empty line clears it.
+
+    Changing what the person may already have read is audited, ids only.
+    """
     if not ctx.can_edit:
         raise AppraisalConflictError("Only the person's manager can write this feedback now.")
     item = ctx.item
-    goals: dict[str, dict[str, str]] = {}
-    notes: dict[str, str] = {}
-    if body.goals:
-        if item.cadence is not CheckInCadence.QUARTERLY or ctx.cycle is None:
-            raise AppraisalInvalidError("Goal statuses are only part of quarterly feedback.")
-        accepted = await AppraisalGoalRepository(db, org_id=caller.org_id).accepted_for_period(
-            ctx.profile.id, ctx.cycle.period_start
-        )
-        known = {g.id for g in accepted}
-        for goal in body.goals:
-            if goal.goal_id not in known:
-                raise AppraisalInvalidError("That goal isn't one of this period's goals.")
-            goals[str(goal.goal_id)] = {"status": goal.status.value}
-            if goal.note.strip():
-                notes[str(goal.goal_id)] = goal.note.strip()
-    crypto.seal(item, "keep_note", body.keep.strip())
-    crypto.seal(item, "try_note", body.try_next.strip())
-    item.goal_status = goals
-    crypto.seal_json(item, "goal_notes", notes or None)
-    if item.status is FeedbackStatus.DONE and not (body.keep.strip() and body.try_next.strip()):
+    seen = written(item)
+    before = (crypto.unseal(item, "keep_note"), crypto.unseal(item, "try_note"), item.goal_status)
+    keep, try_next = body.keep.strip(), body.try_next.strip()
+    crypto.seal(item, "keep_note", keep)
+    crypto.seal(item, "try_note", try_next)
+    if body.goals is not None:
+        goals, notes = await _goal_checks(db, ctx, body) if body.goals else ({}, {})
+        item.goal_status = goals
+        crypto.seal_json(item, "goal_notes", notes or None)
+    if item.status is FeedbackStatus.DONE and not (keep and try_next):
         # Done means both lines are there; clearing one reopens it.
         item.status, item.done_at = FeedbackStatus.OPEN, None
+    after = (keep or None, try_next or None, item.goal_status)
+    if seen and before != after:
+        _audit(db, caller, ctx, EmployeeAuditAction.APPRAISAL_CHANGED)
     await db.flush()
+
+
+def _audit(
+    db: AsyncSession, caller: Caller, ctx: FeedbackContext, action: EmployeeAuditAction
+) -> None:
+    audit.record(
+        db,
+        org_id=caller.org_id,
+        actor_id=caller.user_id,
+        subject_user_id=ctx.profile.user_id,
+        profile_id=ctx.profile.id,
+        action=action,
+        target=ctx.item.id,
+    )
 
 
 async def mark_done(db: AsyncSession, caller: Caller, ctx: FeedbackContext) -> None:
@@ -140,13 +177,5 @@ async def mark_done(db: AsyncSession, caller: Caller, ctx: FeedbackContext) -> N
     if item.status is FeedbackStatus.DONE:
         return
     item.status, item.done_at = FeedbackStatus.DONE, datetime.now(UTC)
-    audit.record(
-        db,
-        org_id=caller.org_id,
-        actor_id=caller.user_id,
-        subject_user_id=ctx.profile.user_id,
-        profile_id=ctx.profile.id,
-        action=EmployeeAuditAction.APPRAISAL_FEEDBACK_GIVEN,
-        target=item.id,
-    )
+    _audit(db, caller, ctx, EmployeeAuditAction.APPRAISAL_FEEDBACK_GIVEN)
     await db.flush()

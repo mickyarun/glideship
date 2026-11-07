@@ -57,7 +57,6 @@ def test_a_six_day_week_counts_saturdays() -> None:
 @pytest.mark.parametrize(
     ("today", "expected"),
     [
-        (date(2026, 11, 2), Moment.OPENS),
         (date(2026, 11, 5), Moment.BEFORE),
         (TUE_10_NOV, Moment.DUE),
         (date(2026, 11, 12), Moment.AFTER),
@@ -66,13 +65,26 @@ def test_a_six_day_week_counts_saturdays() -> None:
     ],
 )
 def test_moment_follows_the_schedule(today: date, expected: Moment | None) -> None:
-    assert moment(today, date(2026, 11, 2), TUE_10_NOV, SCHEDULE, WEEK) is expected
+    assert moment(today, True, TUE_10_NOV, SCHEDULE, WEEK) is expected
+
+
+def test_an_unannounced_opening_wins_whatever_the_day() -> None:
+    # Opened after the day's reminder went out, or weeks ago before anyone was told.
+    assert moment(date(2026, 11, 3), False, TUE_10_NOV, SCHEDULE, WEEK) is Moment.OPENS
+    assert moment(TUE_10_NOV, False, TUE_10_NOV, SCHEDULE, WEEK) is Moment.OPENS
 
 
 def test_no_overdue_nudge_means_nothing_after_the_due_date() -> None:
     quiet = Schedule(offsets=(-3, 0, 2), overdue_nudge=False, hr_list=True, hr_offset=3)
-    assert moment(date(2026, 11, 12), None, TUE_10_NOV, quiet, WEEK) is None
-    assert moment(TUE_10_NOV, None, TUE_10_NOV, quiet, WEEK) is Moment.DUE
+    assert moment(date(2026, 11, 12), True, TUE_10_NOV, quiet, WEEK) is None
+    assert moment(TUE_10_NOV, True, TUE_10_NOV, quiet, WEEK) is Moment.DUE
+
+
+def test_shift_back_from_a_weekend_and_over_a_weekend_holiday() -> None:
+    saturday = date(2026, 11, 7)
+    assert WEEK.shift(saturday, -3) == date(2026, 11, 4)
+    weekend_holiday = WorkCalendar(holidays=frozenset({date(2026, 11, 8)}))
+    assert weekend_holiday.shift(date(2026, 11, 6), 1) == date(2026, 11, 9)
 
 
 def test_hr_list_goes_once_on_its_offset_and_only_when_switched_on() -> None:
@@ -113,3 +125,9 @@ def test_labels_and_other_messages() -> None:
     assert "October check-in is ready" in check_in_ready_text(["October"], "https://a.test")
     hr = hr_overdue_text([("Ravi", 2), ("", 1)], "https://a.test")
     assert hr.startswith("Manager feedback still open past its due date: Ravi 2, Unnamed 1.")
+
+
+def test_manager_names_cant_ping_or_link_in_hrs_list() -> None:
+    hr = hr_overdue_text([("<!channel> <https://evil.test|Open>", 1)], "https://a.test")
+    assert "<!channel>" not in hr and "<https://evil.test" not in hr
+    assert hr.startswith("Manager feedback still open past its due date: &lt;!channel&gt;")

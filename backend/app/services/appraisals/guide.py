@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions_people import APPRAISALS_MANAGE
 from app.repositories.appraisal import AppraisalRepository
-from app.repositories.appraisal_cycle import RUNNING, AppraisalCycleRepository
+from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.schemas.appraisal_guide import GuideRead
 from app.services.appraisals import crypto
 from app.services.appraisals.context import Caller
@@ -27,8 +27,8 @@ from app.services.appraisals.settings import load_appraisal_settings
 
 async def guide(db: AsyncSession, caller: Caller) -> GuideRead:
     """The running cycle's rules and HR's note, else the org's settings."""
-    recent = await AppraisalCycleRepository(db, org_id=caller.org_id).list_recent(limit=5)
-    cycle = next((c for c in recent if c.status in RUNNING), None)
+    running = await AppraisalCycleRepository(db, org_id=caller.org_id).running()
+    cycle = max(running, key=lambda c: c.period_start, default=None)
     is_manager = bool(
         await AppraisalRepository(db, org_id=caller.org_id).report_profile_ids(caller.user_id)
     )

@@ -147,3 +147,33 @@ async def test_the_guide_uses_the_running_cycle_and_knows_the_audience(
     assert (guide["is_manager"], guide["is_hr"]) == (False, False)
     assert (await client.get("/api/v1/check-ins/guide", headers=mgr)).json()["is_manager"]
     assert (await client.get("/api/v1/check-ins/guide", headers=hr)).json()["is_hr"]
+
+
+async def test_a_refused_edit_changes_nothing(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    org, p = await _org(pg_session_factory)
+    hr = as_user(p["hr"], org)
+    cycle = await _draft(client, org, p["hr"])
+    url = f"{BASE}/cycles/{cycle}"
+    before = (await client.get(url, headers=hr)).json()
+    bad = {"name": "Renamed", "feedback_cadence": "quarterly"}
+    assert (await client.patch(url, json=bad, headers=hr)).status_code == 422
+    assert (await client.patch(url, json={"feedback_due_days": 0}, headers=hr)).status_code == 422
+    assert (await client.get(url, headers=hr)).json() == before
+
+
+async def test_hrs_progress_leaves_out_their_own_and_their_managers_appraisals(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    # Priya also works in HR, and reports to both Ravi and Meena.
+    await give_role(pg_session_factory, m.org, m.people["emp"], "hr")
+    await report_to(pg_session_factory, m.org, m.people["emp"], m.people["mgr"], m.people["quiet"])
+    priya = as_user(m.people["emp"], m.org)
+    (cycle,) = (await client.get(f"{BASE}/cycles", headers=priya)).json()
+    progress = (await client.get(f"{BASE}/cycles/{cycle['id']}/progress", headers=priya)).json()
+    assert progress["people"] == [] and progress["feedback"] == 0
+    hr = as_user(m.people["hr"], m.org)
+    full = (await client.get(f"{BASE}/cycles/{cycle['id']}/progress", headers=hr)).json()
+    assert sorted(r["name"] for r in full["people"]) == ["Meena", "Priya"]

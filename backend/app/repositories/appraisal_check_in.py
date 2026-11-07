@@ -18,11 +18,12 @@ import uuid
 from collections.abc import Collection
 from datetime import date, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
-from app.models.appraisal_enums import DraftStatus
+from app.models.appraisal_enums import AppraisalStatus, DraftStatus
 from app.models.appraisal_evidence_link import AppraisalEvidenceLink
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.base import BaseRepository
@@ -45,21 +46,36 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
         )
         return list(result.scalars().all())
 
-    async def opened_between(
-        self, cycle_ids: Collection[uuid.UUID], start: datetime, end: datetime
-    ) -> list[AppraisalCheckIn]:
-        """Check-ins in these cycles created in ``[start, end)`` and still open."""
+    async def unannounced(self, cycle_ids: Collection[uuid.UUID]) -> list[AppraisalCheckIn]:
+        """Open check-ins in these cycles whose person hasn't been told, unless withdrawn."""
         if not cycle_ids:
             return []
         result = await self._db.execute(
-            self._scoped(select(AppraisalCheckIn)).where(
+            self._scoped(select(AppraisalCheckIn))
+            .join(
+                Appraisal,
+                and_(
+                    Appraisal.cycle_id == AppraisalCheckIn.cycle_id,
+                    Appraisal.profile_id == AppraisalCheckIn.profile_id,
+                ),
+            )
+            .where(
                 AppraisalCheckIn.cycle_id.in_(list(cycle_ids)),
-                AppraisalCheckIn.created_at >= start,
-                AppraisalCheckIn.created_at < end,
                 AppraisalCheckIn.closed_at.is_(None),
+                AppraisalCheckIn.notified_at.is_(None),
+                Appraisal.status != AppraisalStatus.WITHDRAWN,
             )
         )
         return list(result.scalars().all())
+
+    async def mark_notified(self, ids: Collection[uuid.UUID], at: datetime) -> None:
+        """Record that these check-ins' people were told."""
+        if ids:
+            await self._db.execute(
+                update(AppraisalCheckIn)
+                .where(AppraisalCheckIn.org_id == self._org, AppraisalCheckIn.id.in_(list(ids)))
+                .values(notified_at=at)
+            )
 
     async def for_person_in_cycle(
         self, profile_id: uuid.UUID, cycle_id: uuid.UUID

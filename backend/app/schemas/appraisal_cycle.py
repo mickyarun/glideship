@@ -66,7 +66,7 @@ class CycleUpdate(BaseModel):
     self_due: date | None = None
     manager_due: date | None = None
     ack_due: date | None = None
-    feedback_due_days: int | None = Field(None, ge=0, le=60)
+    feedback_due_days: int | None = Field(None, ge=1, le=60)
     reminder_offsets: list[int] | None = Field(None, max_length=6)
     checkin_cadence: CheckInCadence | None = None
     feedback_cadence: FeedbackCadence | None = None

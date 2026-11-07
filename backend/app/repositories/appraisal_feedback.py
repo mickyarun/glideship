@@ -16,13 +16,16 @@
 
 import uuid
 from collections.abc import Collection
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.appraisal_enums import FeedbackStatus
+from app.models.appraisal import Appraisal
+from app.models.appraisal_cycle import AppraisalCycle
+from app.models.appraisal_enums import AppraisalStatus, CycleStatus, FeedbackStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
+from app.repositories.appraisal import OPEN
 from app.repositories.base import BaseRepository, rowcount
 
 
@@ -69,26 +72,109 @@ class AppraisalFeedbackRepository(BaseRepository[AppraisalManagerFeedback]):
         return list(result.scalars().all())
 
     async def covering(
-        self, profile_id: uuid.UUID, period_end: date
+        self, cycle_id: uuid.UUID, profile_id: uuid.UUID, period_end: date
     ) -> AppraisalManagerFeedback | None:
-        """The item whose period ends with a check-in's: the feedback shown on it."""
+        """The cycle's item whose period ends with a check-in's: the feedback shown on it."""
         result = await self._db.execute(
             self._scoped(select(AppraisalManagerFeedback)).where(
+                AppraisalManagerFeedback.cycle_id == cycle_id,
                 AppraisalManagerFeedback.profile_id == profile_id,
                 AppraisalManagerFeedback.period_end == period_end,
             )
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
+
+    async def profile_ids_for_period(
+        self, cycle_id: uuid.UUID, period_start: date
+    ) -> set[uuid.UUID]:
+        """Who already has an item for this period in this cycle."""
+        result = await self._db.execute(
+            select(AppraisalManagerFeedback.profile_id).where(
+                AppraisalManagerFeedback.org_id == self._org,
+                AppraisalManagerFeedback.cycle_id == cycle_id,
+                AppraisalManagerFeedback.period_start == period_start,
+            )
+        )
+        return set(result.scalars().all())
+
+    async def with_open_items(
+        self, cycle_ids: Collection[uuid.UUID]
+    ) -> list[AppraisalManagerFeedback]:
+        """Items in each (manager, cycle, period) group that still has one open.
+
+        People who were withdrawn are left out altogether: their items can't
+        be written any more, so nobody is reminded about them.
+        """
+        if not cycle_ids:
+            return []
+        item = AppraisalManagerFeedback
+        live = and_(
+            Appraisal.cycle_id == item.cycle_id,
+            Appraisal.profile_id == item.profile_id,
+            Appraisal.status != AppraisalStatus.WITHDRAWN,
+        )
+        in_cycles = and_(item.org_id == self._org, item.cycle_id.in_(list(cycle_ids)))
+        open_group = (
+            select(item.manager_user_id, item.cycle_id, item.period_start)
+            .join(Appraisal, live)
+            .where(in_cycles, item.status == FeedbackStatus.OPEN)
+            .distinct()
+            .subquery()
+        )
+        result = await self._db.execute(
+            select(item)
+            .join(Appraisal, live)
+            .join(
+                open_group,
+                and_(
+                    item.manager_user_id == open_group.c.manager_user_id,
+                    item.cycle_id == open_group.c.cycle_id,
+                    item.period_start == open_group.c.period_start,
+                ),
+            )
+            .where(in_cycles)
+        )
+        return list(result.scalars().all())
+
+    async def mark_notified(self, ids: Collection[uuid.UUID], at: datetime) -> None:
+        """Record that these items' opening was announced."""
+        if ids:
+            await self._db.execute(
+                update(AppraisalManagerFeedback)
+                .where(
+                    AppraisalManagerFeedback.org_id == self._org,
+                    AppraisalManagerFeedback.id.in_(list(ids)),
+                )
+                .values(notified_at=at)
+            )
 
     async def move_open(self, profile_id: uuid.UUID, manager_user_id: uuid.UUID) -> int:
-        """Hand the person's open feedback items to a new manager."""
-        result = await self._db.execute(
-            update(AppraisalManagerFeedback)
+        """Hand the person's open items to a new manager, where they now score.
+
+        Only items whose appraisal moved with them: still in progress, in a
+        cycle that hasn't closed, and scored by ``manager_user_id``. An item
+        on a shared appraisal stays put, since the writer must be its scorer.
+        """
+        item = AppraisalManagerFeedback
+        scored_by_new = (
+            select(Appraisal.cycle_id)
+            .join(AppraisalCycle, AppraisalCycle.id == Appraisal.cycle_id)
             .where(
-                AppraisalManagerFeedback.org_id == self._org,
-                AppraisalManagerFeedback.profile_id == profile_id,
-                AppraisalManagerFeedback.status == FeedbackStatus.OPEN,
-                AppraisalManagerFeedback.manager_user_id != manager_user_id,
+                Appraisal.org_id == self._org,
+                Appraisal.profile_id == profile_id,
+                Appraisal.manager_user_id == manager_user_id,
+                Appraisal.status.in_(OPEN),
+                AppraisalCycle.status != CycleStatus.CLOSED,
+            )
+        )
+        result = await self._db.execute(
+            update(item)
+            .where(
+                item.org_id == self._org,
+                item.profile_id == profile_id,
+                item.status == FeedbackStatus.OPEN,
+                item.manager_user_id != manager_user_id,
+                item.cycle_id.in_(scored_by_new),
             )
             .values(manager_user_id=manager_user_id)
         )

@@ -20,8 +20,9 @@ from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
+from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import FeedbackStatus, GoalOrigin, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
@@ -270,3 +271,87 @@ async def test_monthly_items_refuse_goal_statuses(
     )
     assert refused.status_code == 422
     assert NOV_2.date() < item.due_on
+
+
+async def _audits(factory: Factory, org: uuid.UUID, action: EmployeeAuditAction) -> list[str]:
+    async with factory() as db:
+        rows = await db.scalars(
+            select(EmployeeAuditEvent).where(
+                EmployeeAuditEvent.org_id == org, EmployeeAuditEvent.action == action
+            )
+        )
+        return [r.target for r in rows]
+
+
+async def test_edits_after_the_person_could_read_them_are_audited(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    item = await _emp_item(pg_session_factory, m)
+    mgr = as_user(m.people["mgr"], m.org)
+    url = f"{FEEDBACK}/{item.id}"
+    lines = {"keep": "Clear PRs", "try_next": "Pair on UAT"}
+    await client.put(url, json=lines, headers=mgr)
+    assert await _audits(pg_session_factory, m.org, EmployeeAuditAction.APPRAISAL_CHANGED) == []
+    first = (await client.post(f"{url}/done", headers=mgr)).json()
+    second = (await client.post(f"{url}/done", headers=mgr)).json()
+    assert first["done_at"] == second["done_at"]
+    given = await _audits(pg_session_factory, m.org, EmployeeAuditAction.APPRAISAL_FEEDBACK_GIVEN)
+    assert given == [str(item.id)]
+    edited = await client.put(url, json={**lines, "keep": "Clear PRs early"}, headers=mgr)
+    assert edited.json()["status"] == "done" and edited.json()["done_at"] == first["done_at"]
+    changed = await _audits(pg_session_factory, m.org, EmployeeAuditAction.APPRAISAL_CHANGED)
+    assert changed == [str(item.id)]
+    await client.put(url, json={**lines, "keep": "Clear PRs early"}, headers=mgr)
+    assert (
+        len(await _audits(pg_session_factory, m.org, EmployeeAuditAction.APPRAISAL_CHANGED)) == 1
+    )
+
+
+async def test_open_items_follow_a_new_manager_and_finished_ones_stay(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    mgr = as_user(m.people["mgr"], m.org)
+    rows = {
+        r["person_name"]: r for r in (await client.get(f"{FEEDBACK}/team", headers=mgr)).json()
+    }
+    done_url = f"{FEEDBACK}/{rows['Meena']['id']}"
+    await client.put(done_url, json={"keep": "a", "try_next": "b"}, headers=mgr)
+    await client.post(f"{done_url}/done", headers=mgr)
+    hr = as_user(m.people["hr"], m.org)
+    for who in ("emp", "quiet"):
+        moved = await client.put(
+            f"/api/v1/employees/{m.people[who]}/managers",
+            json={"managers": [{"user_id": str(m.people["stranger"]), "is_primary": True}]},
+            headers=hr,
+        )
+        assert moved.status_code == 200, moved.text
+    by_id = {i.id: i for i in await _items(pg_session_factory, m.org)}
+    assert by_id[uuid.UUID(rows["Priya"]["id"])].manager_user_id == m.people["stranger"]
+    assert by_id[uuid.UUID(rows["Meena"]["id"])].manager_user_id == m.people["mgr"]
+    new_mgr = as_user(m.people["stranger"], m.org)
+    priya = f"{FEEDBACK}/{rows['Priya']['id']}"
+    taken = await client.put(priya, json={"keep": "x", "try_next": "y"}, headers=new_mgr)
+    assert taken.status_code == 200
+    assert (await client.put(priya, json={"keep": "z"}, headers=mgr)).status_code == 404
+
+
+async def test_a_weekend_due_date_moves_to_the_next_working_day(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    async with pg_session_factory() as db:
+        for item in await db.scalars(
+            select(AppraisalManagerFeedback).where(AppraisalManagerFeedback.org_id == m.org)
+        ):
+            await db.delete(item)
+        await db.execute(
+            update(AppraisalCycle)
+            .where(AppraisalCycle.org_id == m.org)
+            .values(feedback_due_days=7)
+        )
+        await db.commit()
+    await run_tick(pg_session_factory, m.org, datetime(2026, 11, 3, 6, tzinfo=UTC))
+    # 31 October + 7 is Saturday 7 November.
+    assert {i.due_on for i in await _items(pg_session_factory, m.org)} == {date(2026, 11, 9)}

@@ -28,7 +28,8 @@ from app.core.deps import get_db
 from app.schemas.appraisal_feedback import FeedbackBody, FeedbackRead, FeedbackRow
 from app.services.appraisals.context import Caller
 from app.services.appraisals.feedback import feedback_context, mark_done, save_feedback
-from app.services.appraisals.feedback_read import read_feedback, team_feedback
+from app.services.appraisals.feedback_read import read_feedback
+from app.services.appraisals.feedback_team import team_feedback
 
 router = APIRouter(tags=["appraisals"])
 

@@ -25,6 +25,7 @@ from datetime import date
 
 from app.models.appraisal_enums import CheckInCadence
 from app.services.appraisals.reminders import Moment
+from app.services.slack_mrkdwn import escape_mrkdwn
 
 TEAM_PATH = "/appraisals/team"
 MY_MONTH_PATH = "/appraisals"
@@ -89,7 +90,8 @@ def check_in_ready_text(labels: Sequence[str], base_url: str) -> str:
 
 def hr_overdue_text(managers: Sequence[tuple[str, int]], base_url: str) -> str:
     """HR's one list: managers with feedback still open past its due date."""
-    listed = ", ".join(f"{name or 'Unnamed'} {count}" for name, count in managers)
+    # Names are people's own display names: escaped, so one can't ping or link.
+    listed = ", ".join(f"{escape_mrkdwn(name) or 'Unnamed'} {count}" for name, count in managers)
     return (
         f"Manager feedback still open past its due date: {listed}. "
         f"{_link(base_url, CYCLES_PATH, 'Open cycles')}"

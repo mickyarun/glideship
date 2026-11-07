@@ -39,8 +39,13 @@ class AppraisalsConfig(BaseSettings):
     max_retries: int = Field(
         default=3, ge=0, description="Times a failed or stuck reminder DM is sent again."
     )
+    # Above the longest send of one kind in a large org, so a second instance
+    # never takes over a claim that is still being sent.
     stale_minutes: int = Field(
-        default=30, gt=0, description="A claim still unfinished after this is retried."
+        default=90, gt=0, description="A claim still unfinished after this is retried."
+    )
+    org_concurrency: int = Field(
+        default=4, gt=0, description="Orgs whose reminders are sent at the same time."
     )
     dm_concurrency: int = Field(
         default=2, gt=0, description="Reminder DMs in flight at once within one org."

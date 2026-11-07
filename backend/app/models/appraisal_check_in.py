@@ -127,3 +127,6 @@ class AppraisalCheckIn(BaseModel):
     # Set when the next check-in opens (or the self-review, for the last one);
     # after that the fact list is frozen and nobody edits it.
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the person was told it is ready (or had no way to be told). Empty
+    # means the next reminder pass says so, however late it opened.
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -27,6 +27,7 @@ from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import CycleStatus, DraftingMode
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_identity import AppraisalIdentityRepository
+from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.employee_reporting_manager import EmployeeReportingManagerRepository
 from app.repositories.organization import OrganizationRepository
 from app.repositories.user import UserRepository
@@ -34,7 +35,7 @@ from app.schemas.appraisal_cycle import IdentityFlag, PersonRef, Readiness
 from app.services.appraisals.draft_runner import provider_refusal
 from app.services.appraisals.enrolment import in_scope, primary_link
 from app.services.appraisals.identity import Person, possible_duplicates
-from app.services.appraisals.role_templates import ensure_seeded, match_template
+from app.services.appraisals.role_templates import match_template
 from app.services.appraisals.settings import load_appraisal_settings
 
 
@@ -48,13 +49,14 @@ async def _ai_note(db: AsyncSession, cycle: AppraisalCycle) -> str | None:
     return provider_refusal(org.ai_provider if org else None)
 
 
-async def readiness(db: AsyncSession, cycle: AppraisalCycle, actor_id: uuid.UUID) -> Readiness:
+async def readiness(db: AsyncSession, cycle: AppraisalCycle) -> Readiness:
     """The cycle's readiness, worked out from today's people and settings.
 
     For a cycle that has opened, it describes who would be enrolled now.
     """
     org_id = cycle.org_id
-    templates = await ensure_seeded(db, org_id, actor_id)
+    # Seeded when the cycle was created; a read never writes.
+    templates = await AppraisalRoleTemplateRepository(db, org_id=org_id).list_for_org()
     exclude: list[uuid.UUID] = []
     if cycle.status is not CycleStatus.DRAFT:
         exclude = [
@@ -85,7 +87,7 @@ async def readiness(db: AsyncSession, cycle: AppraisalCycle, actor_id: uuid.UUID
         ref = PersonRef(user_id=profile.user_id, name=user.name if user else "")
         if primary_link(links.get(profile.id, [])) is None:
             no_manager.append(ref)
-        elif template is None:
+        if template is None:
             no_template.append(ref)
         if user is not None:
             person = Person(user.id, user.name, user.email, user.github_username)

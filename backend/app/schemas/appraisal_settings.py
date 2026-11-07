@@ -30,7 +30,8 @@ class AppraisalSettings(BaseModel):
     feedback_cadence: FeedbackCadence = FeedbackCadence.MONTHLY
     # Off means everyone gets the manual check-in, whatever the provider.
     ai_enabled: bool = True
-    feedback_due_days: int = Field(10, ge=0, le=60)
+    # At least a day: an item opens after its period, so 0 would be overdue at once.
+    feedback_due_days: int = Field(10, ge=1, le=60)
     self_due_days: int = Field(7, ge=0, le=60)
     manager_due_days: int = Field(14, ge=0, le=90)
     ack_due_days: int = Field(28, ge=0, le=120)

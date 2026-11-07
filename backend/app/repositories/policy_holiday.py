@@ -52,6 +52,27 @@ class PolicyHolidayRepository(BaseRepository[PolicyHoliday]):
         result = await self._db.execute(stmt.order_by(PolicyHoliday.date))
         return list(result.scalars().all())
 
+    async def mandatory_between(
+        self, policy_ids: Collection[uuid.UUID], start: date, end: date
+    ) -> dict[uuid.UUID, set[date]]:
+        """Each policy's mandatory holiday dates from ``start`` to ``end``, in one query."""
+        if not policy_ids:
+            return {}
+        result = await self._db.execute(
+            self._scoped(
+                select(PolicyHoliday.policy_id, PolicyHoliday.date).where(
+                    PolicyHoliday.policy_id.in_(list(policy_ids)),
+                    PolicyHoliday.date >= start,
+                    PolicyHoliday.date <= end,
+                    PolicyHoliday.kind == HolidayKind.MANDATORY,
+                )
+            )
+        )
+        out: dict[uuid.UUID, set[date]] = {pid: set() for pid in policy_ids}
+        for policy_id, day in result.all():
+            out[policy_id].add(day)
+        return out
+
     async def existing_dates(self, policy_id: uuid.UUID, dates: Sequence[date]) -> set[date]:
         """Which of ``dates`` already have a holiday on the policy."""
         if not dates:

@@ -113,7 +113,7 @@ async def get_readiness(
     db: AsyncSession = Depends(get_db),
 ) -> Readiness:
     """AI or manual, people HR should look at, and possible duplicate accounts."""
-    return await readiness(db, await _cycle(db, caller, cycle_id), caller.user_id)
+    return await readiness(db, await _cycle(db, caller, cycle_id))
 
 
 @router.post("/cycles/{cycle_id}/activate", response_model=EnrolmentReport)
@@ -133,7 +133,7 @@ async def get_progress(
     db: AsyncSession = Depends(get_db),
 ) -> CycleProgress:
     """Who's done and who's overdue."""
-    return await cycle_progress(db, await _cycle(db, caller, cycle_id))
+    return await cycle_progress(db, caller, await _cycle(db, caller, cycle_id))
 
 
 @router.post("/cycles/{cycle_id}/close", response_model=CycleRead)
