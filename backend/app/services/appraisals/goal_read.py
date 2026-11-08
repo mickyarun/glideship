@@ -18,7 +18,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.appraisal_enums import GoalRevisionKind, GoalStatus
+from app.models.appraisal_enums import DraftingMode, GoalOrigin, GoalRevisionKind, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
@@ -66,6 +66,9 @@ def _goal(
         replaces=uuid.UUID(replaces) if replaces else None,
         dismiss_reason=crypto.unseal(goal, "dismiss_reason"),
         reword_note=rewords[-1].reason if rewords else None,
+        why=(crypto.unseal_json(goal, "original") or {}).get("why")
+        if goal.origin is GoalOrigin.AI_SUGGESTED
+        else None,
         history=[
             HistoryRead(
                 kind=h.kind,
@@ -112,6 +115,9 @@ async def list_goals(db: AsyncSession, ctx: AppraisalContext) -> GoalsRead:
         accepted=sum(g.status is GoalStatus.ACCEPTED for g in goals),
         can_propose=rights.employee,
         can_add=rights.manager,
+        can_suggest=(rights.employee or rights.manager)
+        and ctx.appraisal.drafting_mode is DraftingMode.AI,
+        suggest_status=ctx.appraisal.suggest_status,
         goals=[_goal(g, by_goal[g.id], names, pending, ctx) for g in goals],
     )
 

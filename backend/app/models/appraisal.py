@@ -70,6 +70,11 @@ class Appraisal(BaseModel):
             "summary_claimed_at",
             postgresql_where="period_summary_status = 'pending'",
         ),
+        Index(
+            "ix_appraisals_pending_suggestions",
+            "suggest_claimed_at",
+            postgresql_where="suggest_status = 'pending'",
+        ),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(
@@ -110,6 +115,17 @@ class Appraisal(BaseModel):
     )
     # An error code, never the provider's message.
     summary_error: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # Suggested goals for the period: the same run states as the summary.
+    suggest_status: Mapped[DraftStatus] = mapped_column(
+        pg_enum(DraftStatus, "appraisal_draft_status"),
+        nullable=False,
+        default=DraftStatus.NONE,
+    )
+    suggest_attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    suggest_claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    suggest_error: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     self_band: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     self_reason: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)

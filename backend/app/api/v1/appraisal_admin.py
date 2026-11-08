@@ -26,12 +26,14 @@ from app.api.v1._appraisal_deps import get_caller
 from app.core.deps import get_db
 from app.core.permission_deps import require_permissions
 from app.core.permissions_people import APPRAISALS_MANAGE
-from app.schemas.appraisal_role_template import RoleTemplateBody, RoleTemplateRead
+from app.schemas.appraisal_role_template import RoleTemplateBody, RoleTemplateRead, Trend
 from app.schemas.appraisal_settings import AppraisalSettings
-from app.services.appraisals import role_template_admin
+from app.schemas.jobs import JobCreatedResponse
+from app.services.appraisals import role_template_admin, role_trends
 from app.services.appraisals.context import Caller
 from app.services.appraisals.role_templates import ensure_seeded
 from app.services.appraisals.settings import load_appraisal_settings, save_appraisal_settings
+from app.services.appraisals.trend_draft_job import queue_trend_draft
 
 router = APIRouter(
     tags=["appraisals"], dependencies=[Depends(require_permissions(APPRAISALS_MANAGE))]
@@ -100,3 +102,41 @@ async def delete_template(
     """Delete a role template (not the general fallback)."""
     await role_template_admin.delete_template(db, caller.org_id, template_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/role-templates/{template_id}/trends", response_model=RoleTemplateRead)
+async def put_trends(
+    template_id: uuid.UUID,
+    body: list[Trend],
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> RoleTemplateRead:
+    """Replace the role's trends by hand; they wait for approval."""
+    template = await role_trends.save_trends(db, caller.org_id, template_id, body[:6])
+    return RoleTemplateRead.model_validate(template)
+
+
+@router.post("/role-templates/{template_id}/trends/approve", response_model=RoleTemplateRead)
+async def approve_trends(
+    template_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> RoleTemplateRead:
+    """Approve the draft as the next version; suggestions use it from now."""
+    template = await role_trends.approve_trends(db, caller.org_id, template_id, caller.user_id)
+    return RoleTemplateRead.model_validate(template)
+
+
+@router.post(
+    "/role-templates/{template_id}/trends/draft",
+    response_model=JobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def draft_trends(
+    template_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> JobCreatedResponse:
+    """Ask the AI for a draft list with sources; follow the job for the result."""
+    await role_template_admin.get_template(db, caller.org_id, template_id)
+    return JobCreatedResponse(job_id=queue_trend_draft(caller.org_id, template_id, caller.user_id))

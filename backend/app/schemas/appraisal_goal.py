@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.models.appraisal_enums import (
     AppraisalStatus,
+    DraftStatus,
     GoalOrigin,
     GoalResult,
     GoalRevisionKind,
@@ -100,6 +101,8 @@ class GoalRead(BaseModel):
     replaces: uuid.UUID | None
     dismiss_reason: str | None
     reword_note: str | None
+    # For an AI suggestion: what it builds on, in one line.
+    why: str | None
     history: list[HistoryRead]
     actions: GoalActionsRead
 
@@ -117,6 +120,9 @@ class GoalsRead(BaseModel):
     accepted: int
     can_propose: bool
     can_add: bool
+    # AI suggestions: whether the caller may ask, and how the last run went.
+    can_suggest: bool
+    suggest_status: DraftStatus
     goals: list[GoalRead]
 
 

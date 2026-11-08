@@ -41,6 +41,10 @@ from app.services.claude_runner import (
 )
 
 TIMEOUT_SECONDS = 240
+# Researching a role's trends: web search and fetch only, a few turns.
+RESEARCH_TOOLS = ["WebSearch", "WebFetch"]
+RESEARCH_TURNS = 10
+RESEARCH_TIMEOUT_SECONDS = 600
 # One reply, no tool loop.
 MAX_TURNS = 1
 # Retrying can't help until someone changes the setup: go to the manual view.
@@ -98,6 +102,28 @@ async def run_draft(org_id: uuid.UUID, prompt: str) -> ClaudeRunResult:
     """One tool-less run for this org."""
     session_id = str(uuid.uuid4())
     config = draft_config(session_id)
+    with content_free_logs():
+        try:
+            return await run_agent_for_org_id(org_id, prompt, NO_REPO_CONTEXT, config)
+        finally:
+            forget_transcript(session_id)
+
+
+async def run_research(org_id: uuid.UUID, prompt: str) -> ClaudeRunResult:
+    """One run with web search and fetch only, for a role's market trends.
+
+    The one exception to tool-less runs: the prompt holds a role's name and
+    headings and nothing about any person, and there are still no MCP
+    servers and no repository.
+    """
+    session_id = str(uuid.uuid4())
+    config = ClaudeRunnerConfig(
+        max_turns=RESEARCH_TURNS,
+        timeout_seconds=RESEARCH_TIMEOUT_SECONDS,
+        builtin_tools=list(RESEARCH_TOOLS),
+        private_run=True,
+        cli_session_id=session_id,
+    )
     with content_free_logs():
         try:
             return await run_agent_for_org_id(org_id, prompt, NO_REPO_CONTEXT, config)

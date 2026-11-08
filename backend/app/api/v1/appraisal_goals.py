@@ -38,6 +38,7 @@ from app.services.appraisals.appraisal_context import appraisal_context, goal_co
 from app.services.appraisals.appraisal_lists import my_appraisals, team_appraisals
 from app.services.appraisals.context import Caller
 from app.services.appraisals.goal_read import goal_options, list_goals
+from app.services.appraisals.goal_suggest_queue import suggest_for
 
 router = APIRouter(tags=["appraisals"])
 
@@ -166,4 +167,21 @@ async def suggest_change(
     """The employee proposes new wording for a confirmed goal."""
     goal, ctx = await goal_context(db, caller, goal_id)
     await goal_writes.suggest_change(db, ctx, goal, body)
+    return await list_goals(db, ctx)
+
+
+@router.post(
+    "/{appraisal_id}/suggest-goals",
+    response_model=GoalsRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def suggest_goals(
+    appraisal_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> GoalsRead:
+    """Ask the AI for suggested goals; they appear when the run finishes."""
+    ctx = await appraisal_context(db, caller, appraisal_id)
+    await suggest_for(db, ctx)
+    await db.refresh(ctx.appraisal)
     return await list_goals(db, ctx)

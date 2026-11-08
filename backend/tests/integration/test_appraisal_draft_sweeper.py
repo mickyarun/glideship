@@ -18,7 +18,6 @@ import json
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import pytest
 from httpx import AsyncClient
@@ -38,49 +37,20 @@ from app.services.appraisals.enrolment import withdraw_on_exit
 from app.services.claude_errors import ClaudeErrorCode
 from app.services.claude_runner import ClaudeRunResult
 from app.services.file_storage import FileStorage
+from tests.integration.appraisal_model import Model, model
 from tests.integration.appraisal_month import Month, october
 from tests.integration.hr_support import configure_hr_storage
 from tests.integration.leave_support import Factory, as_user
 
 pytestmark = pytest.mark.integration
+__all__ = ["model"]  # the fixture, imported for pytest to find
 CHECK_INS = "/api/v1/check-ins"
-
-
-class Model:
-    """Stands in for the model; ``calls`` counts every run."""
-
-    def __init__(self) -> None:
-        self.calls: list[str] = []
-        self.reply: Any = lambda _p: ClaudeRunResult(success=False, output="", error="x")
-
-    async def __call__(self, _org: uuid.UUID, prompt: str) -> ClaudeRunResult:
-        self.calls.append(prompt)
-        result = self.reply(prompt)
-        return await result if hasattr(result, "__await__") else result
 
 
 @pytest.fixture
 def hr_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FileStorage:
     """The shared test HR key (see ``hr_support``)."""
     return configure_hr_storage(monkeypatch, tmp_path)
-
-
-@pytest.fixture
-async def model(monkeypatch: pytest.MonkeyPatch, pg_session_factory: Factory) -> Model:
-    """A stand-in model, with other tests' waiting drafts cleared out of its way."""
-    stand_in = Model()
-    monkeypatch.setattr(draft_sweeper, "AsyncSessionLocal", pg_session_factory)
-    monkeypatch.setattr(draft_sweeper, "run_draft", stand_in)
-    async with pg_session_factory() as db:
-        for table, column in (
-            (AppraisalCheckIn, AppraisalCheckIn.draft_status),
-            (Appraisal, Appraisal.period_summary_status),
-        ):
-            await db.execute(
-                update(table).where(column == DraftStatus.PENDING).values({column.key: "none"})
-            )
-        await db.commit()
-    return stand_in
 
 
 def _good(ids: list[str], section: str = "team") -> ClaudeRunResult:

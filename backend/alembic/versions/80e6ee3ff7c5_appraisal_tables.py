@@ -1,8 +1,8 @@
 """Appraisal tables, their enums, new audit and reminder values, and the goal-history trigger.
 
-Revision ID: b84759073e69
+Revision ID: 80e6ee3ff7c5
 Revises: a1e8aeee2202
-Create Date: 2026-11-08 07:21:32.595824
+Create Date: 2026-11-08 07:30:01.943288
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "b84759073e69"
+revision: str = "80e6ee3ff7c5"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -63,7 +63,11 @@ _ENUMS = {
         "draft", "approved", name="appraisal_trends_status", create_type=False
     ),
     "appraisal_draft_kind": postgresql.ENUM(
-        "check_in", "period_summary", name="appraisal_draft_kind", create_type=False
+        "check_in",
+        "period_summary",
+        "goal_suggestions",
+        name="appraisal_draft_kind",
+        create_type=False,
     ),
     "appraisal_draft_status": postgresql.ENUM(
         "none", "pending", "ready", "failed", name="appraisal_draft_status", create_type=False
@@ -524,6 +528,10 @@ def upgrade() -> None:
         sa.Column("summary_attempts", sa.SmallInteger(), nullable=False),
         sa.Column("summary_claimed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("summary_error", sa.String(length=60), nullable=True),
+        sa.Column("suggest_status", _ENUMS["appraisal_draft_status"], nullable=False),
+        sa.Column("suggest_attempts", sa.SmallInteger(), nullable=False),
+        sa.Column("suggest_claimed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("suggest_error", sa.String(length=60), nullable=True),
         sa.Column("self_band", sa.SmallInteger(), nullable=True),
         sa.Column("self_reason", sa.LargeBinary(), nullable=True),
         sa.Column("self_evidence", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -586,6 +594,13 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_appraisals_manager", "appraisals", ["org_id", "manager_user_id"], unique=False
+    )
+    op.create_index(
+        "ix_appraisals_pending_suggestions",
+        "appraisals",
+        ["suggest_claimed_at"],
+        unique=False,
+        postgresql_where="suggest_status = 'pending'",
     )
     op.create_index(
         "ix_appraisals_pending_summary",
@@ -758,6 +773,11 @@ def downgrade() -> None:
         "ix_appraisals_pending_summary",
         table_name="appraisals",
         postgresql_where="period_summary_status = 'pending'",
+    )
+    op.drop_index(
+        "ix_appraisals_pending_suggestions",
+        table_name="appraisals",
+        postgresql_where="suggest_status = 'pending'",
     )
     op.drop_index("ix_appraisals_manager", table_name="appraisals")
     op.drop_table("appraisals")

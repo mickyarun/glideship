@@ -53,7 +53,8 @@ class DraftLine:
     fact_ids: list[str]
 
 
-def _payload(output: str) -> dict[str, Any]:
+def read_payload(output: str) -> dict[str, Any]:
+    """The JSON object in a run's output, fences and chatter around it ignored."""
     text = _FENCE.sub("", output.strip())
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
@@ -65,6 +66,11 @@ def _payload(output: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise DraftUnreadableError("Expected a JSON object.")
     return data
+
+
+def is_forbidden(text: str) -> bool:
+    """The text scores, compares, judges or links."""
+    return bool(_FORBIDDEN.search(text))
 
 
 def _line(raw: Any, sections: Collection[str], known: Collection[str]) -> DraftLine | None:
@@ -85,7 +91,7 @@ def checked_lines(
     output: str, sections: Collection[str], known: Collection[str], limit: int
 ) -> list[DraftLine]:
     """The lines that pass the citation check, up to ``limit``."""
-    raw = _payload(output).get("lines")
+    raw = read_payload(output).get("lines")
     if not isinstance(raw, list):
         raise DraftUnreadableError("Expected a list of lines.")
     lines = [line for item in raw if (line := _line(item, sections, known))]

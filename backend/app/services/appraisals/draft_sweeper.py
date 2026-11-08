@@ -42,11 +42,13 @@ from app.repositories.organization import OrganizationRepository
 from app.services.appraisals import crypto
 from app.services.appraisals.draft_result import (
     CHECK_IN,
+    GOALS,
     MAX_ATTEMPTS,
     SUMMARY,
     Row,
     Slot,
     save_result,
+    settle,
 )
 from app.services.appraisals.draft_runner import run_draft, sweep_leftovers
 from app.services.scheduling.tick_loop import run_tick_loop
@@ -93,7 +95,11 @@ async def process(slot: Slot, claim: Claim) -> None:
         # Someone else took it, or it was cancelled, while this one ran.
         if row is None or getattr(row, slot.claimed) != claim.claimed_at:
             return
-        code = save_result(slot, row, data, result, claim.claimed_at)
+        if slot.save is None:
+            code = save_result(slot, row, data, result, claim.claimed_at)
+        else:
+            code, permanent = await slot.save(db, row, data, result)
+            settle(slot, row, code, permanent=permanent)
         if code is None and isinstance(row, AppraisalCheckIn):
             row.ai_model = provider
         run = AppraisalAiRun(
@@ -115,7 +121,7 @@ async def _next(served: set[uuid.UUID], now: datetime) -> tuple[Slot, Claim] | N
     """Claim one draft, giving each org a turn before any has a second."""
     stale = now - STALE_AFTER
     async with AsyncSessionLocal() as db:
-        for slot in (CHECK_IN, SUMMARY):
+        for slot in (CHECK_IN, SUMMARY, GOALS):
             columns = (
                 getattr(slot.model, slot.status),
                 getattr(slot.model, slot.claimed),

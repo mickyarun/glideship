@@ -46,8 +46,8 @@ Rules:
 """
 
 
-def _data(payload: Mapping[str, Any]) -> str:
-    # Escaped so a typed "</DATA>" can't close the block.
+def data_block(payload: Mapping[str, Any]) -> str:
+    """The payload in its marked block, escaped so a typed "</DATA>" can't close it."""
     text = json.dumps(payload, ensure_ascii=False, indent=1)
     text = text.replace("<", "\\u003c").replace(">", "\\u003e")
     return f"<DATA>\n{text}\n</DATA>"
@@ -75,7 +75,7 @@ def check_in_prompt(
     return (
         f"{_RULES}\nWrite up to {CHECK_IN_LINES} lines about this month's work, each under one "
         "of the headings. Leave a heading out if nothing in the data belongs there.\n\n"
-        f"{_data(payload)}\n\n"
+        f"{data_block(payload)}\n\n"
         'Reply with JSON only: {"lines": [{"section": "<heading>", "text": "...", '
         '"fact_ids": ["..."]}]}'
     )
@@ -97,6 +97,6 @@ def summary_prompt(
         f'heading for what got done and how it went; "goal:<id>" for the facts that relate to a '
         f'goal; "{BLOCKERS_SECTION}" for what the person said was blocking them and whether it '
         'got better, citing the "check_in" id of the months it comes from.\n\n'
-        f"{_data(payload)}\n\n"
+        f"{data_block(payload)}\n\n"
         'Reply with JSON only: {"lines": [{"section": "...", "text": "...", "fact_ids": ["..."]}]}'
     )

@@ -177,6 +177,7 @@ class DraftKind(StrEnum):
 
     CHECK_IN = "check_in"
     PERIOD_SUMMARY = "period_summary"
+    GOAL_SUGGESTIONS = "goal_suggestions"
 
 
 class TrendsStatus(StrEnum):

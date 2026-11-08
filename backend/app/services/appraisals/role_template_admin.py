@@ -29,9 +29,10 @@ from app.services.appraisals.errors import (
 TAKEN = "Another template already has that name."
 
 
-async def _get(
+async def get_template(
     db: AsyncSession, org_id: uuid.UUID, template_id: uuid.UUID
 ) -> AppraisalRoleTemplate:
+    """The org's template, or "not found"."""
     template = await AppraisalRoleTemplateRepository(db, org_id=org_id).get_by_id(template_id)
     if template is None:
         raise AppraisalNotFoundError("Role template not found.")
@@ -59,7 +60,7 @@ async def update_template(
     body: RoleTemplateBody,
 ) -> AppraisalRoleTemplate:
     """Replace a template's contents. Enrolled appraisals keep pointing at it."""
-    template = await _get(db, org_id, template_id)
+    template = await get_template(db, org_id, template_id)
     clash = await AppraisalRoleTemplateRepository(db, org_id=org_id).get_by_name(body.name)
     if clash is not None and clash.id != template.id:
         raise AppraisalConflictError(TAKEN)
@@ -72,7 +73,7 @@ async def update_template(
 
 async def delete_template(db: AsyncSession, org_id: uuid.UUID, template_id: uuid.UUID) -> None:
     """Delete a template; the general fallback stays."""
-    template = await _get(db, org_id, template_id)
+    template = await get_template(db, org_id, template_id)
     if template.is_default:
         raise AppraisalConflictError("The general template is the fallback and can't be deleted.")
     await AppraisalRoleTemplateRepository(db, org_id=org_id).delete(template)

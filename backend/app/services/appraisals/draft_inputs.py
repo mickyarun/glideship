@@ -73,7 +73,7 @@ async def _meanings(db: AsyncSession, appraisal: Appraisal) -> dict[str, str]:
     return dict(template.heading_meanings) if template else {}
 
 
-async def _ai_allowed(db: AsyncSession, appraisal: Appraisal | None) -> bool:
+async def ai_allowed(db: AsyncSession, appraisal: Appraisal | None) -> bool:
     """AI mode, still in progress, its cycle not closed, and AI still on for the org."""
     if (
         appraisal is None
@@ -96,7 +96,7 @@ async def check_in_input(db: AsyncSession, check_in: AppraisalCheckIn) -> DraftI
         check_in.profile_id, check_in.cycle_id
     )
     facts = check_in.fact_refs or []
-    if appraisal is None or not facts or not await _ai_allowed(db, appraisal):
+    if appraisal is None or not facts or not await ai_allowed(db, appraisal):
         return None
     cycle = await AppraisalCycleRepository(db, org_id=org_id).get_by_id(check_in.cycle_id)
     start = cycle.period_start if cycle else check_in.period_start
@@ -131,7 +131,7 @@ async def _month(db: AsyncSession, check_in: AppraisalCheckIn) -> dict[str, Any]
 async def summary_input(db: AsyncSession, appraisal: Appraisal) -> DraftInput | None:
     """The period's prompt, or None when there is nothing to draft."""
     org_id = appraisal.org_id
-    if not await _ai_allowed(db, appraisal):
+    if not await ai_allowed(db, appraisal):
         return None
     cycle = await AppraisalCycleRepository(db, org_id=org_id).get_by_id(appraisal.cycle_id)
     profile = await EmployeeProfileRepository(db, org_id=org_id).get_by_id(appraisal.profile_id)

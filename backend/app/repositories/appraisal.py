@@ -183,3 +183,21 @@ class AppraisalRepository(BaseRepository[Appraisal]):
                 .where(Appraisal.org_id == self._org, Appraisal.id.in_(list(ids)))
                 .values({column: at})
             )
+
+    async def queue_suggestions(
+        self, cycle_id: uuid.UUID, appraisal_ids: Collection[uuid.UUID] | None = None
+    ) -> int:
+        """Mark AI-mode appraisals whose goals are still open for a suggestion run."""
+        stmt = update(Appraisal).where(
+            Appraisal.org_id == self._org,
+            Appraisal.cycle_id == cycle_id,
+            Appraisal.drafting_mode == DraftingMode.AI,
+            Appraisal.status == AppraisalStatus.ENROLLED,
+            Appraisal.suggest_status != DraftStatus.PENDING,
+        )
+        if appraisal_ids is not None:
+            stmt = stmt.where(Appraisal.id.in_(list(appraisal_ids)))
+        result = await self._db.execute(
+            stmt.values(suggest_status=DraftStatus.PENDING, suggest_attempts=0, suggest_error=None)
+        )
+        return rowcount(result)

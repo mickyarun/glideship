@@ -42,6 +42,7 @@ from app.services.appraisals.calibration import calibration
 from app.services.appraisals.context import Caller
 from app.services.appraisals.enrolment import activate
 from app.services.appraisals.errors import AppraisalNotFoundError
+from app.services.appraisals.goal_suggest_queue import suggest_for_cycle
 from app.services.appraisals.progress import cycle_progress
 from app.services.appraisals.readiness import readiness
 from app.services.appraisals.review_start import start_review
@@ -177,3 +178,14 @@ async def post_share_all(
 ) -> dict[str, int]:
     """Share every review waiting for HR that the caller may act on."""
     return {"shared": await sharing.share_all(db, caller, await _cycle(db, caller, cycle_id))}
+
+
+@router.post("/cycles/{cycle_id}/suggest-goals", status_code=status.HTTP_202_ACCEPTED)
+async def post_suggest_goals(
+    cycle_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Queue AI goal suggestions for everyone in AI mode whose goals are still open."""
+    cycle = await _cycle(db, caller, cycle_id)
+    return {"queued": await suggest_for_cycle(db, caller.org_id, cycle.id)}

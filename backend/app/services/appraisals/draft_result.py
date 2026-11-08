@@ -28,6 +28,8 @@ from app.services.appraisals import crypto
 from app.services.appraisals.draft_check import DraftUnreadableError, as_stored, checked_lines
 from app.services.appraisals.draft_inputs import DraftInput, check_in_input, summary_input
 from app.services.appraisals.draft_runner import PERMANENT
+from app.services.appraisals.goal_suggest_input import suggest_input
+from app.services.appraisals.goal_suggest_save import save_suggestions
 from app.services.claude_runner import ClaudeRunResult
 
 MAX_ATTEMPTS = 3
@@ -35,6 +37,7 @@ UNREADABLE = "unreadable"
 NO_CITED_LINES = "no_cited_lines"
 
 Row = AppraisalCheckIn | Appraisal
+SaveFn = Callable[[AsyncSession, Any, Any, ClaudeRunResult], Awaitable[tuple[str | None, bool]]]
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,12 @@ class Slot:
     claimed: str
     text: str
     build: Callable[[AsyncSession, Any], Awaitable[DraftInput | None]]
+    # Kinds whose result isn't text in one column save it themselves:
+    # (session, row, input, result) -> (error code or None, permanent).
+    save: (
+        Callable[[AsyncSession, Any, Any, ClaudeRunResult], Awaitable[tuple[str | None, bool]]]
+        | None
+    ) = None
 
 
 CHECK_IN = Slot(
@@ -71,6 +80,17 @@ SUMMARY = Slot(
     "ai_period_summary",
     summary_input,
 )
+GOALS = Slot(
+    DraftKind.GOAL_SUGGESTIONS,
+    Appraisal,
+    "suggest_status",
+    "suggest_attempts",
+    "suggest_error",
+    "suggest_claimed_at",
+    "",
+    suggest_input,
+    save_suggestions,
+)
 
 
 def after_failure(attempts: int, *, permanent: bool) -> DraftStatus:
@@ -80,10 +100,24 @@ def after_failure(attempts: int, *, permanent: bool) -> DraftStatus:
     return DraftStatus.FAILED if attempts >= MAX_ATTEMPTS else DraftStatus.PENDING
 
 
+def settle(slot: Slot, row: Row, code: str | None, *, permanent: bool) -> None:
+    """Record how a run ended: ready, back in the queue, or given up."""
+    if code is None:
+        setattr(row, slot.status, DraftStatus.READY)
+        setattr(row, slot.error, None)
+        setattr(row, slot.claimed, None)
+        return
+    status = after_failure(getattr(row, slot.attempts), permanent=permanent)
+    setattr(row, slot.status, status)
+    setattr(row, slot.error, code)
+    if status is not DraftStatus.PENDING:
+        setattr(row, slot.claimed, None)
+
+
 def save_result(
     slot: Slot, row: Row, data: DraftInput, result: ClaudeRunResult, now: datetime
 ) -> str | None:
-    """Apply a run's result to the row; the error code, if it failed."""
+    """Apply a text run's result to the row; the error code, if it failed."""
     code = str(result.error_code.value) if result.error_code else "unknown"
     permanent = result.error_code in PERMANENT
     lines = []
@@ -95,15 +129,9 @@ def save_result(
             code = UNREADABLE
     if lines:
         crypto.seal_json(row, slot.text, as_stored(lines))
-        setattr(row, slot.status, DraftStatus.READY)
-        setattr(row, slot.error, None)
-        setattr(row, slot.claimed, None)
         if isinstance(row, AppraisalCheckIn):
             row.ai_generated_at = now
+        settle(slot, row, None, permanent=False)
         return None
-    status = after_failure(getattr(row, slot.attempts), permanent=permanent)
-    setattr(row, slot.status, status)
-    setattr(row, slot.error, code)
-    if status is not DraftStatus.PENDING:
-        setattr(row, slot.claimed, None)
+    settle(slot, row, code, permanent=permanent)
     return code

@@ -138,6 +138,8 @@ async def activate(
     report = await enrol(db, cycle, templates, profiles)
     cycle.status = CycleStatus.ACTIVE
     await db.flush()
+    if cycle.suggest_goals_on_open:
+        await AppraisalRepository(db, org_id=org_id).queue_suggestions(cycle.id)
     return report
 
 
