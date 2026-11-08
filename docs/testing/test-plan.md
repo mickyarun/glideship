@@ -609,7 +609,7 @@ Mar 31, Feb 29) are used instead of `date.today()`-relative ones.
   manager treated as unlinked; malformed/other action ids -> `test_leave_slack_edges.py`
 
 ##### Google Calendar sync (mocked)
-- Existing: unit reconcile (`_apply`) and event shapes.
+- Existing: unit reconcile (`apply_events`) and event shapes.
 - Gaps filled: respx-level client: list asks only for our private tag on every page, all
   event types, 409 create -> PUT, delete 404/410 is done, errors carry Google's message
   -> `tests/services/test_leave_calendar_api.py`; end to end `sync_request` against the
@@ -617,6 +617,13 @@ Mar 31, Feb 29) are used instead of `date.today()`-relative ones.
   working day (holiday skipped), idempotent re-run, cancel removes only that request's
   entries, pending or other org's request opens no calendar
   -> `test_leave_calendar_sync_flow.py`
+- Public holidays as Out of office: one event per working-day holiday on everyone on the
+  policy, deleted holiday comes off, past ones stay, sync off clears them, a leaver's come
+  off once, a new holiday inside a WFH drops that day's Home
+  -> `test_leave_calendar_holidays.py`; holiday add/edit/delete, assigning people, a new
+  timezone or default start the sync, a refused change or a rename doesn't
+  -> `test_leave_calendar_holiday_triggers.py`; a rate limit isn't taken for an edition
+  without status events -> `tests/services/test_leave_calendar_reconcile.py`
 
 #### Coverage matrix (after this work)
 

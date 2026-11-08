@@ -17,7 +17,8 @@ Leave (and an optional holiday) is one "Out of office" event over the
 whole range: Google requires it to be timed, so it runs midnight to
 midnight in the requester's timezone, or to/from midday for a half day.
 WFH is a "Home" working location on each working day: an all-day one
-can't span days, and weekends and holidays aren't WFH.
+can't span days, and weekends and holidays aren't WFH. Each public holiday
+of the person's policy is an "Out of office" of its own, tagged ``holiday``.
 
 Titles never say the leave type or reason; anyone who can see the
 calendar sees only "Out of office".
@@ -37,6 +38,8 @@ from app.services.leave.calendar_math import iter_dates
 OOO_TITLE = "Out of office"
 HOME_TITLE = "Home"
 DESCRIPTION = "Added by Glideship from an approved request."
+HOLIDAY_TAG = "holiday"
+HOLIDAY_DESCRIPTION = "Added by Glideship: a public holiday where you work."
 
 
 @dataclass(frozen=True)
@@ -83,11 +86,8 @@ def _base(shape: RequestShape) -> Event:
     }
 
 
-def _out_of_office(shape: RequestShape, options: CalendarSyncOptions, midday: time) -> Event:
-    start, end = _span(shape, midday)
+def _out_of_office_fields(options: CalendarSyncOptions) -> Event:
     return {
-        **_base(shape),
-        **_timed(start, end, shape.timezone),
         "summary": OOO_TITLE,
         "eventType": "outOfOffice",
         "transparency": "opaque",
@@ -97,6 +97,37 @@ def _out_of_office(shape: RequestShape, options: CalendarSyncOptions, midday: ti
             else "declineNone",
             "declineMessage": options.decline_message,
         },
+    }
+
+
+def _out_of_office(shape: RequestShape, options: CalendarSyncOptions, midday: time) -> Event:
+    start, end = _span(shape, midday)
+    return {**_base(shape), **_timed(start, end, shape.timezone), **_out_of_office_fields(options)}
+
+
+def holiday_event_id(day: date) -> str:
+    """Our id for a holiday's event; never hex, so it can't clash with a request's."""
+    return f"bohol{day:%Y%m%d}"
+
+
+def holiday_events(
+    holidays: Mapping[date, str], timezone: str, options: CalendarSyncOptions
+) -> dict[str, Event]:
+    """Event id → body: an Out of office over each holiday, midnight to midnight."""
+    zone = ZoneInfo(timezone)
+    return {
+        holiday_event_id(day): {
+            **_timed(
+                datetime.combine(day, time(0), zone),
+                datetime.combine(day + timedelta(days=1), time(0), zone),
+                timezone,
+            ),
+            **_out_of_office_fields(options),
+            "summary": f"{OOO_TITLE}: {name}",
+            "description": HOLIDAY_DESCRIPTION,
+            "extendedProperties": {"private": {TAG: HOLIDAY_TAG}},
+        }
+        for day, name in holidays.items()
     }
 
 

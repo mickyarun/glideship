@@ -37,7 +37,7 @@ class FakeCalendar:
         self.puts: list[tuple[str, bool]] = []
         self.deletes: list[str] = []
 
-    async def tagged_event_ids(self, _token: str, _tag: str) -> set[str]:
+    async def tagged_event_ids(self, _token: str, _tag: str, **_kw: object) -> set[str]:
         return set(self.existing)
 
     async def put_event(self, _token: str, event_id: str, _body: Event, *, exists: bool) -> None:
@@ -62,14 +62,14 @@ def calendar(monkeypatch: pytest.MonkeyPatch) -> FakeCalendar:
 
 async def test_updates_wanted_creates_missing_and_removes_the_rest(calendar: FakeCalendar) -> None:
     active = CalendarSync(options=CalendarSyncOptions(enabled=True), key=KEY)
-    await sync._apply(active, "ravi@co.com", "tag", {"keep": {}, "new": {}})
+    await sync.apply_events(active, "ravi@co.com", "tag", {"keep": {}, "new": {}})
     assert sorted(calendar.puts) == [("keep", True), ("new", False)]
     assert calendar.deletes == ["stale"]
 
 
 async def test_nothing_wanted_clears_the_request(calendar: FakeCalendar) -> None:
     active = CalendarSync(options=CalendarSyncOptions(enabled=True), key=KEY)
-    await sync._apply(active, "ravi@co.com", "tag", {})
+    await sync.apply_events(active, "ravi@co.com", "tag", {})
     assert calendar.puts == []
     assert sorted(calendar.deletes) == ["keep", "stale"]
 
@@ -140,3 +140,19 @@ async def test_other_google_errors_are_not_hidden(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(sync.calendar_api, "put_event", put_event)
     with pytest.raises(CalendarApiError):
         await sync._put("tok", "bo1", {"eventType": "outOfOffice"}, exists=False)
+
+
+async def test_a_rate_limit_is_not_taken_for_an_edition_without_status_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    written: list[Event] = []
+
+    async def put_event(_token: str, _id: str, body: Event, *, exists: bool) -> None:
+        if body.get("eventType") == "outOfOffice":
+            raise CalendarApiError(403, "Rate Limit Exceeded", "rateLimitExceeded")
+        written.append(body)
+
+    monkeypatch.setattr(sync.calendar_api, "put_event", put_event)
+    with pytest.raises(CalendarApiError):
+        await sync._put("tok", "bo1", {"eventType": "outOfOffice"}, exists=False)
+    assert written == []

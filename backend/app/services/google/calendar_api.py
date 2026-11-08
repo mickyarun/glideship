@@ -17,6 +17,7 @@ Events carry our own ids and a private tag, so writes are idempotent and
 we can find every event we made for a request without storing anything.
 """
 
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -27,6 +28,7 @@ TAG = "bodhiorchardRequest"
 # Out of office and working location aren't returned unless asked for.
 _EVENT_TYPES = ("default", "outOfOffice", "workingLocation")
 HTTP_TIMEOUT_SECONDS = 15
+_RATE_LIMITS = {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}
 
 Event = dict[str, Any]
 
@@ -34,11 +36,18 @@ Event = dict[str, Any]
 class CalendarApiError(Exception):
     """Google answered with an error we can't treat as success."""
 
-    def __init__(self, status: int, detail: str) -> None:
+    def __init__(self, status: int, detail: str, reason: str = "") -> None:
         super().__init__(f"{status}: {detail}")
         self.status = status
         # Google's own message, e.g. that the Calendar API is disabled in the project.
         self.detail = detail
+        # Google's short code, e.g. "rateLimitExceeded".
+        self.reason = reason
+
+    @property
+    def rate_limited(self) -> bool:
+        """Google is throttling us: try again later, don't change what we write."""
+        return self.status == 429 or self.reason in _RATE_LIMITS
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -49,20 +58,28 @@ def _raise_for(response: httpx.Response) -> None:
     if response.is_success:
         return
     try:
-        detail = str(response.json().get("error", {}).get("message", ""))
-    except ValueError:
-        detail = response.text[:200]
-    raise CalendarApiError(response.status_code, detail)
+        error = response.json().get("error", {})
+        detail = str(error.get("message", ""))
+        reason = str((error.get("errors") or [{}])[0].get("reason", ""))
+    except (ValueError, AttributeError):
+        detail, reason = response.text[:200], ""
+    raise CalendarApiError(response.status_code, detail, reason)
 
 
-async def tagged_event_ids(token: str, tag_value: str) -> set[str]:
-    """Ids of live events tagged with ``tag_value`` (one request's events)."""
+async def tagged_event_ids(
+    token: str, tag_value: str, *, since: datetime | None = None
+) -> set[str]:
+    """Ids of live events tagged with ``tag_value`` (one request's events).
+
+    With ``since``, only events still running at or after it.
+    """
     ids: set[str] = set()
     params = httpx.QueryParams(
         [
             ("privateExtendedProperty", f"{TAG}={tag_value}"),
             ("maxResults", "250"),
             *(("eventTypes", kind) for kind in _EVENT_TYPES),
+            *((("timeMin", since.isoformat()),) if since else ()),
         ]
     )
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
