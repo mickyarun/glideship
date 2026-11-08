@@ -52,16 +52,21 @@ export function entriesOnDay(entries: CalendarEntry[], iso: string): CalendarEnt
     })
 }
 
-function daysOf(entry: CalendarEntry): string[] {
+/** The entry's days from `first` through `last`. */
+function daysBetween(entry: CalendarEntry, first: string, last: string): string[] {
   const days: string[] = []
-  for (let iso = entry.start_date; iso <= entry.end_date; iso = addDays(iso, 1)) days.push(iso)
+  const end = entry.end_date < last ? entry.end_date : last
+  for (let iso = entry.start_date > first ? entry.start_date : first; iso <= end; iso = addDays(iso, 1)) {
+    days.push(iso)
+  }
   return days
 }
 
-/** Without WFH that approved leave has replaced on every one of its days. */
-export function withoutReplacedWfh(entries: CalendarEntry[]): CalendarEntry[] {
+/** Without WFH that approved leave has replaced on every one of its days
+ *  from `first` through `last`: days outside that window don't keep it. */
+export function withoutReplacedWfh(entries: CalendarEntry[], first: string, last: string): CalendarEntry[] {
   return entries.filter(
-    e => e.kind !== 'wfh' || daysOf(e).some(iso => entriesOnDay(entries, iso).includes(e)),
+    e => e.kind !== 'wfh' || daysBetween(e, first, last).some(iso => entriesOnDay(entries, iso).includes(e)),
   )
 }
 
@@ -78,7 +83,7 @@ export function monthSummary(entries: CalendarEntry[], month: MonthRef): string 
   const out = new Set<string>()
   const home = new Set<string>()
   let pending = false
-  for (const e of withoutReplacedWfh(entries)) {
+  for (const e of withoutReplacedWfh(entries, first, last)) {
     if (e.is_own || e.end_date < first || e.start_date > last) continue
     if (e.status !== 'approved' && e.status !== 'pending') continue
     ;(e.kind === 'wfh' ? home : out).add(e.user.user_id)

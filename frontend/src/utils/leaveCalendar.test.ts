@@ -121,6 +121,15 @@ describe('entriesOnDay', () => {
       )
     })
 
+    it('judges only the month shown: October days don’t keep a WFH in November', () => {
+      const across = entry('wfh', { user, kind: 'wfh', start_date: '2026-10-30', end_date: '2026-11-02' })
+      const monday = entry('leave', { user, start_date: '2026-11-02', end_date: '2026-11-02' })
+      expect(monthSummary([across, monday], NOVEMBER)).toBe('1 other out in November')
+      expect(monthSummary([across, monday], { year: 2026, month: 10 })).toBe(
+        '1 working from home',
+      )
+    })
+
     it('leaves a colleague’s WFH alone', () => {
       const list = entriesOnDay(
         [entry('colleague', { kind: 'wfh' }), entry('leave', {})],

@@ -42,7 +42,7 @@ export function outSoon(
   limit: number,
 ): { rows: OutRow[]; more: number } {
   const last = addDays(today, days - 1)
-  const all = withoutReplacedWfh(entries)
+  const all = withoutReplacedWfh(entries, today, last)
     .filter(e => !e.is_own && (e.status === 'approved' || e.status === 'pending'))
     .filter(e => e.end_date >= today && e.start_date <= last)
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.user.name.localeCompare(b.user.name))
