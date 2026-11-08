@@ -66,6 +66,7 @@ import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import FeedbackGoals from '@/components/appraisals/FeedbackGoals.vue'
 import { useManagerFeedbackStore } from '@/stores/managerFeedback'
 import type { FeedbackBody, GoalCheck } from '@/types/appraisalFeedback'
@@ -132,6 +133,7 @@ watch(
   () => route.params.id,
   id => {
     message.value = ''
+    void useAppraisalGuide().showOnFirstVisit()
     if (typeof id === 'string') void store.fetchOne(id)
   },
   { immediate: true },

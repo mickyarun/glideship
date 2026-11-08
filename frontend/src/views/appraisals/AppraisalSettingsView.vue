@@ -67,6 +67,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import CadenceFields from '@/components/appraisals/CadenceFields.vue'
 import ReminderFields from '@/components/appraisals/ReminderFields.vue'
 import YearPreview from '@/components/appraisals/YearPreview.vue'
@@ -101,6 +102,7 @@ async function save(): Promise<void> {
 }
 
 onMounted(() => {
+  void useAppraisalGuide().showOnFirstVisit()
   void store.fetchSettings()
 })
 </script>

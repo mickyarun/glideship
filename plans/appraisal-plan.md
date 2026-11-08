@@ -339,8 +339,9 @@ checks to AI-assisted test generation"). Suggestions may cite them, so a goal ca
 somewhere new instead of only repeating last period.
 
 - **Refreshing them.** Once per cycle, HR can ask the AI to draft an updated list for a template.
-  The run uses the provider's web search where the org's provider has it, and every item must
-  carry a source link; items without one are dropped. The draft goes to HR, who edits and
+  The run uses the provider's web search only (no page fetching from the server), treats search
+  results as data, and every item must carry an https source link; items without one are dropped.
+  The draft is kept apart from the approved list, which stays in use until HR approves the draft. The draft goes to HR, who edits and
   approves it. Nothing reaches a suggestion until HR approves it, and the approved list is
   versioned so each suggestion records which version it used.
 - **Manual mode.** HR writes the list by hand, and the goal picker shows trend-based goals from
@@ -352,7 +353,9 @@ Each suggestion is an outcome, a measure and where the measure comes from, for e
 response under 4 hours on 90% of tickets · helpdesk weekly report". Rules:
 
 - Suggestions are labelled AI-suggested and stay suggestions until the employee or the manager
-  accepts one, edits it or dismisses it. Accepting is a person's act and is audited.
+  accepts one, edits it or dismisses it. A suggestion the employee takes up becomes their proposal
+  for the manager to confirm, so nobody confirms their own goal by steering the suggestions.
+  Confirming is a person's act and is audited.
 - At most three goals can be accepted per period.
 - The prompt gets no name, age, gender or office, and never compares the person with colleagues.
 - A suggestion built on last period's facts cites them, using the same citation check as the
@@ -511,6 +514,13 @@ because they are game currency, not performance.
 ### Leave
 
 Every check-in shows availability. Leave reasons are never read.
+
+### Period facts
+
+Retrospectives, estimates and new skills belong to the whole period. They are gathered when HR
+starts the review and saved on the appraisal, so the AI summary, the evidence timeline and the
+evidence picker show the same chips. They come from BUDs and code, so they follow the BUD rule:
+viewers with engineering access see them, everyone else sees a private record.
 
 ## Roles outside engineering
 
@@ -793,7 +803,7 @@ using partial unique indexes only (the local database is Postgres 14).
 | `GET/POST /role-templates`, `PATCH/DELETE /role-templates/{id}` | HR |
 | `POST /role-templates/{id}/trends/draft` → `202` (AI mode), `POST /role-templates/{id}/trends/approve` | HR |
 | `GET /mine`, `GET /team`, `GET /{id}` | per access table |
-| `PUT /{id}/goals` | manager, or employee and manager together in the growth conversation |
+| `PUT /{id}/growth`, `POST /{id}/next-goals`, `POST /{id}/next-goals/{goal_id}/accept`, `DELETE /{id}/next-goals/{goal_id}` | the employee and their primary manager, once the result is shared |
 | `PUT /{id}/self`, `POST /{id}/self/submit` | employee |
 | `PUT /{id}/manager`, `POST /{id}/manager/submit` | primary manager |
 | `POST /{id}/send-back`, `POST /{id}/share` (also bulk on the cycle) | HR |

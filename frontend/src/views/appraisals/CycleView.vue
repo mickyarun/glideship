@@ -65,6 +65,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
 import CycleProgressTable from '@/components/appraisals/CycleProgressTable.vue'
 import CycleReadiness from '@/components/appraisals/CycleReadiness.vue'
@@ -138,6 +139,7 @@ watch(
   () => route.params.id,
   id => {
     message.value = ''
+    void useAppraisalGuide().showOnFirstVisit()
     if (typeof id === 'string') void store.fetchCycle(id)
   },
   { immediate: true },
