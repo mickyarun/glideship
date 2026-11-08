@@ -49,6 +49,7 @@ import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import GoalDialog from '@/components/appraisals/GoalDialog.vue'
 import GoalOptions from '@/components/appraisals/GoalOptions.vue'
 import GoalSection from '@/components/appraisals/GoalSection.vue'
@@ -153,6 +154,7 @@ watch(
   () => route.params.id,
   id => {
     message.value = ''
+    void useAppraisalGuide().showOnFirstVisit()
     if (typeof id === 'string') void store.fetch(id)
   },
   { immediate: true },

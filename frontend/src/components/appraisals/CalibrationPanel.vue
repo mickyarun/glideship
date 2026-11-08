@@ -20,7 +20,8 @@
 <template>
   <section class="calib" aria-labelledby="calib-title">
     <h2 id="calib-title" class="calib__title">Calibration</h2>
-    <div class="calib__scroll">
+    <p v-if="!calibration.teams.length" class="calib__empty">No manager has submitted a review yet.</p>
+    <div v-else class="calib__scroll">
       <table class="calib__table">
         <thead>
           <tr><th>Manager</th><th>Reviewed</th><th v-for="b in 5" :key="b">{{ b }}</th><th>Kept self-score</th><th>Gaps of 2+</th><th></th></tr>
@@ -79,6 +80,11 @@ defineProps<{ calibration: Calibration }>()
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+}
+.calib__empty {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 .calib__scroll {
   overflow-x: auto;

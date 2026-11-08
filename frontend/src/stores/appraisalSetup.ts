@@ -32,6 +32,10 @@ import { extractApiError } from '@/utils/errors'
 
 const BASE = '/v1/appraisals'
 
+function people(n: number): string {
+  return n === 1 ? '1 person' : `${n} people`
+}
+
 export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   const settings = ref<AppraisalSettings | null>(null)
   const cycles = ref<CycleRead[]>([])
@@ -68,11 +72,16 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
     cycle.value = await load<CycleRead>(`cycles/${id}`, "Couldn't load this cycle.")
     readiness.value = null
     progress.value = null
+    calibration.value = null
     if (!cycle.value) return
     if (cycle.value.status === 'draft') {
       readiness.value = await load<Readiness>(`cycles/${id}/readiness`, "Couldn't check readiness.")
-    } else {
-      progress.value = await load<CycleProgress>(`cycles/${id}/progress`, "Couldn't load progress.")
+      return
+    }
+    progress.value = await load<CycleProgress>(`cycles/${id}/progress`, "Couldn't load progress.")
+    // Calibration starts once the review has opened.
+    if (cycle.value.status !== 'active') {
+      calibration.value = await load<Calibration>(`cycles/${id}/calibration`, "Couldn't load calibration.")
     }
   }
 
@@ -138,11 +147,11 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   }
 
   const startReview = (id: string) =>
-    count(id, 'start-review', n => `Review opened for ${n} people.`, "Couldn't open the review.")
+    count(id, 'start-review', n => `Review opened for ${people(n)}.`, "Couldn't open the review.")
   const shareAll = (id: string) =>
-    count(id, 'share', n => `Shared ${n} results.`, "Couldn't share the results.")
+    count(id, 'share', n => `Shared ${n === 1 ? '1 result' : `${n} results`}.`, "Couldn't share the results.")
   const suggestAll = (id: string) =>
-    count(id, 'suggest-goals', n => `Asked for suggested goals for ${n} people.`, "Couldn't ask for suggestions.")
+    count(id, 'suggest-goals', n => `Asked for suggested goals for ${people(n)}.`, "Couldn't ask for suggestions.")
 
   return {
     calibration,

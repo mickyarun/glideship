@@ -151,7 +151,8 @@ watch(
   gap: 16px;
   align-items: start;
 }
-@media (max-width: 960px) {
+/* The setup form needs the width for its rows of dates; readiness goes below. */
+@media (max-width: 1200px) {
   .cycle__draft {
     grid-template-columns: 1fr;
   }

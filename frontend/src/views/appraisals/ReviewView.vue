@@ -34,9 +34,10 @@
     <template v-if="review">
       <AppCallout v-if="waiting" variant="info">{{ waiting }}</AppCallout>
       <ReviewEvidence :review="review" />
+      <SelfSubmitted v-if="isSelf && review.self_score?.submitted_at && !review.shared_at" :review="review" />
       <SelfReviewForm v-if="review.can.edit_self" :key="`self-${review.id}`" :review="review" :options="options" :busy="busy === 'save' || busy === 'submit' ? busy : null" @save="b => run('save', store.saveSelf(review!.id, b))" @submit="submitSelf" />
       <ManagerReviewForm v-else-if="review.can.edit_manager" :key="`mgr-${review.id}`" :review="review" :options="options" :busy="busy === 'save' || busy === 'submit' ? busy : null" @save="b => run('save', store.saveManager(review!.id, b))" @submit="b => run('submit', store.submitManager(review!.id, b))" />
-      <ReviewResult v-else-if="review.manager_score?.final_band && (review.shared_at || !isSelf)" :review="review" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
+      <ReviewResult v-else-if="review.manager_score?.final_band && (review.shared_at || !isSelf)" :review="review" :is-self="isSelf" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
       <GrowthSection
         v-if="review.growth.open"
         :growth="review.growth"
@@ -74,14 +75,18 @@ import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import ReviewEvidence from '@/components/appraisals/ReviewEvidence.vue'
 import ReviewResult from '@/components/appraisals/ReviewResult.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
+import SelfSubmitted from '@/components/appraisals/SelfSubmitted.vue'
+import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAuthStore } from '@/stores/auth'
 import type { GoalBody } from '@/types/appraisalGoals'
 import type { SelfBody } from '@/types/appraisalReview'
+import type { AppraisalStatus } from '@/types/appraisalSetup'
 import { evidenceOptions } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
 type Busy = 'save' | 'submit' | 'share' | 'back' | 'ack'
+const ACTIVE: AppraisalStatus[] = ['self_review', 'manager_review', 'calibration', 'shared']
 
 const route = useRoute()
 const store = useAppraisalReviewStore()
@@ -109,6 +114,7 @@ const subtitle = computed(() => {
 const waiting = computed(() => {
   const r = review.value
   if (!r || r.can.edit_self || r.can.edit_manager || r.can.acknowledge) return ''
+  if (r.status === 'enrolled') return 'This review opens after the period ends. Until then, the work goes in your check-ins and goals.'
   if (r.status === 'manager_review' && isSelf.value) return `Waiting for ${r.manager_name || 'your manager'}.`
   if (r.status === 'calibration' && isSelf.value) return "With HR. You'll see the result when it's shared."
   return ''
@@ -145,9 +151,11 @@ watch(
   () => route.params.id,
   async id => {
     message.value = ''
+    void useAppraisalGuide().showOnFirstVisit()
     if (typeof id === 'string') return store.fetchOne(id)
     await store.fetchLists()
-    const latest = store.mine[0]
+    // The review waiting on them first, else the newest.
+    const latest = store.mine.find(r => ACTIVE.includes(r.status)) ?? store.mine[0]
     if (latest) await store.fetchOne(latest.id)
     else store.current = null
   },

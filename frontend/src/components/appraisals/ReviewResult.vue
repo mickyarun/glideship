@@ -25,7 +25,7 @@
     <ul class="result__goals">
       <li v-for="goal in review.goals" :key="goal.id">
         <strong>{{ goal.title }}</strong> · {{ resultLabel(goal.result) }}
-        <template v-if="goal.manager_reason"> (you said {{ resultLabel(goal.self_result) }}; {{ goal.manager_reason }})</template>
+        <template v-if="goal.manager_reason"> ({{ said }} {{ resultLabel(goal.self_result) }}; {{ goal.manager_reason }})</template>
       </li>
     </ul>
     <template v-if="review.can.acknowledge">
@@ -46,11 +46,12 @@ import type { AppraisalRead } from '@/types/appraisalReview'
 import { bandLabel } from '@/utils/appraisalBands'
 import { resultLabel } from '@/utils/appraisalGoals'
 
-const props = defineProps<{ review: AppraisalRead; busy: boolean }>()
+const props = defineProps<{ review: AppraisalRead; busy: boolean; isSelf: boolean }>()
 const emit = defineEmits<{ acknowledge: [reply: string] }>()
 const reply = ref('')
 const score = computed(() => props.review.manager_score)
 const bandChanged = computed(() => Boolean(score.value?.reason))
+const said = computed(() => (props.isSelf ? 'you said' : `${props.review.person_name.split(' ')[0]} said`))
 
 function bandText(band: number | null): string {
   return band ? `${bandLabel(band)} (${band})` : 'not scored'

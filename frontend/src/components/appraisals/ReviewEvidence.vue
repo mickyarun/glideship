@@ -29,7 +29,7 @@
       </ul>
     </div>
     <details v-for="month in review.timeline" :key="month.check_in_id" class="review-evidence__month" :open="review.timeline.length === 1">
-      <summary>{{ monthTitle(month.period_start) }} · {{ statusLabel(month.status, true) }} · {{ month.facts.length }} items</summary>
+      <summary>{{ monthTitle(month.period_start) }} · {{ statusLabel(month.status, false) }} · {{ month.facts.length }} items</summary>
       <ul class="review-evidence__facts">
         <li v-for="fact in month.facts" :key="fact.id">
           <a v-if="safeHref(fact.url)" :href="safeHref(fact.url) ?? undefined" target="_blank" rel="noopener noreferrer">{{ fact.key }}</a>
