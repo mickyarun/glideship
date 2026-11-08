@@ -18,7 +18,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import api from '@/services/api'
-import type { AppraisalSummary } from '@/types/appraisalGoals'
+import type { AppraisalSummary, GoalBody } from '@/types/appraisalGoals'
 import type { AppraisalRead, ManagerBody, SelfBody } from '@/types/appraisalReview'
 import { extractApiError } from '@/utils/errors'
 
@@ -82,7 +82,17 @@ export const useAppraisalReviewStore = defineStore('appraisalReview', () => {
   const acknowledge = (id: string, reply: string) =>
     act(() => api.post<AppraisalRead>(url(id, '/acknowledge'), { reply }), "Couldn't save your reply.")
 
+  const saveGrowth = (id: string, strength: string, focus: string) =>
+    act(() => api.put<AppraisalRead>(url(id, '/growth'), { strength, focus }), "Couldn't save the conversation.")
+  const addNextGoal = (id: string, body: GoalBody) =>
+    act(() => api.post<AppraisalRead>(url(id, '/next-goals'), body), "Couldn't add the goal.")
+  const acceptNextGoal = (id: string, goalId: string) =>
+    act(() => api.post<AppraisalRead>(url(id, `/next-goals/${goalId}/accept`)), "Couldn't confirm the goal.")
+  const removeNextGoal = (id: string, goalId: string) =>
+    act(() => api.delete<AppraisalRead>(url(id, `/next-goals/${goalId}`)), "Couldn't take the goal back.")
+
   return {
+    saveGrowth, addNextGoal, acceptNextGoal, removeNextGoal,
     mine, team, current, error, loading, fetchLists, fetchOne,
     saveSelf, submitSelf, saveManager, submitManager, sendBack, share, acknowledge,
   }

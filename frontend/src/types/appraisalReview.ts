@@ -72,6 +72,28 @@ export interface ReviewActions {
   acknowledge: boolean
 }
 
+export interface NextGoal {
+  id: string
+  title: string
+  measure: string
+  status: 'proposed' | 'accepted'
+  origin: string
+  proposed_by_name: string
+  can_accept: boolean
+  can_remove: boolean
+}
+
+/** The growth conversation, open once the result is shared; no band here. */
+export interface GrowthRead {
+  open: boolean
+  can_edit: boolean
+  strength: string
+  focus: string
+  next_period_start: string
+  limit: number
+  goals: NextGoal[]
+}
+
 export interface AppraisalRead {
   id: string
   user_id: string
@@ -98,6 +120,7 @@ export interface AppraisalRead {
   reply: string | null
   shared_at: string | null
   acknowledged_at: string | null
+  growth: GrowthRead
   can: ReviewActions
 }
 

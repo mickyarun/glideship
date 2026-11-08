@@ -38,6 +38,7 @@ SHARED_MODULES = frozenset(
         "app.api.v1.appraisal_cycles",
         "app.api.v1.appraisal_feedback",
         "app.api.v1.appraisal_goals",
+        "app.api.v1.appraisal_growth",
         "app.api.v1.appraisal_reviews",
         "app.api.v1.employee_documents",
         "app.api.v1.employee_login",

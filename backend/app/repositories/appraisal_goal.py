@@ -18,13 +18,13 @@ import uuid
 from collections.abc import Collection
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_enums import GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_goal_revision import AppraisalGoalRevision
-from app.repositories.base import BaseRepository
+from app.repositories.base import BaseRepository, rowcount
 
 
 class AppraisalGoalRepository(BaseRepository[AppraisalGoal]):
@@ -122,3 +122,16 @@ class AppraisalGoalRepository(BaseRepository[AppraisalGoal]):
             )
         )
         return {(r[0], r[1], r[2]): int(r[3]) for r in result.all()}
+
+    async def attach_to_cycle(self, cycle_id: uuid.UUID, period_start: date) -> int:
+        """Give goals set ahead of a cycle (in a growth conversation) their cycle."""
+        result = await self._db.execute(
+            update(AppraisalGoal)
+            .where(
+                AppraisalGoal.org_id == self._org,
+                AppraisalGoal.cycle_id.is_(None),
+                AppraisalGoal.target_period_start == period_start,
+            )
+            .values(cycle_id=cycle_id)
+        )
+        return rowcount(result)

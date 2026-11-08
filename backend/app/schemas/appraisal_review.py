@@ -27,6 +27,7 @@ from app.models.appraisal_enums import (
     GoalResult,
 )
 from app.schemas.appraisal_check_in import AiLine, CheckInNote, FactView, LinkRead
+from app.schemas.appraisal_growth import GrowthRead
 
 Band = int
 
@@ -126,6 +127,7 @@ class AppraisalRead(BaseModel):
     reply: str | None
     shared_at: datetime | None
     acknowledged_at: datetime | None
+    growth: GrowthRead
     can: ReviewActions
 
 

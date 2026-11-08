@@ -41,6 +41,7 @@ from app.api.v1.appraisal_check_ins import router as appraisal_check_ins_router
 from app.api.v1.appraisal_cycles import router as appraisal_cycles_router
 from app.api.v1.appraisal_feedback import router as appraisal_feedback_router
 from app.api.v1.appraisal_goals import router as appraisal_goals_router
+from app.api.v1.appraisal_growth import router as appraisal_growth_router
 from app.api.v1.appraisal_reviews import router as appraisal_reviews_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.backlash import internal_router as backlash_internal_router
@@ -180,6 +181,9 @@ api_router.include_router(
 )
 api_router.include_router(
     appraisal_goals_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
+)
+api_router.include_router(
+    appraisal_growth_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
 )
 # Last under this prefix: its "/{appraisal_id}" would otherwise swallow "/mine".
 api_router.include_router(

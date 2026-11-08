@@ -37,6 +37,16 @@
       <SelfReviewForm v-if="review.can.edit_self" :key="`self-${review.id}`" :review="review" :options="options" :busy="busy === 'save' || busy === 'submit' ? busy : null" @save="b => run('save', store.saveSelf(review!.id, b))" @submit="submitSelf" />
       <ManagerReviewForm v-else-if="review.can.edit_manager" :key="`mgr-${review.id}`" :review="review" :options="options" :busy="busy === 'save' || busy === 'submit' ? busy : null" @save="b => run('save', store.saveManager(review!.id, b))" @submit="b => run('submit', store.submitManager(review!.id, b))" />
       <ReviewResult v-else-if="review.manager_score?.final_band && (review.shared_at || !isSelf)" :review="review" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
+      <GrowthSection
+        v-if="review.growth.open"
+        :growth="review.growth"
+        :busy="busy"
+        @save="(s, f) => run('save', store.saveGrowth(review!.id, s, f))"
+        @add="adding = true"
+        @accept="g => run('save', store.acceptNextGoal(review!.id, g))"
+        @remove="g => run('save', store.removeNextGoal(review!.id, g))"
+      />
+      <GoalDialog :mode="adding ? 'next' : null" :busy="busy === 'save'" :error="message" @close="adding = false" @submit="addNext" />
     </template>
     <v-dialog v-model="sendingBack" max-width="520">
       <v-card>
@@ -58,12 +68,15 @@ import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import GoalDialog from '@/components/appraisals/GoalDialog.vue'
+import GrowthSection from '@/components/appraisals/GrowthSection.vue'
 import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import ReviewEvidence from '@/components/appraisals/ReviewEvidence.vue'
 import ReviewResult from '@/components/appraisals/ReviewResult.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAuthStore } from '@/stores/auth'
+import type { GoalBody } from '@/types/appraisalGoals'
 import type { SelfBody } from '@/types/appraisalReview'
 import { evidenceOptions } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
@@ -80,6 +93,7 @@ const busy = ref<Busy | null>(null)
 const message = ref('')
 const sendingBack = ref(false)
 const note = ref('')
+const adding = ref(false)
 
 const title = computed(() =>
   review.value ? `${isSelf.value ? 'Your' : `${review.value.person_name}'s`} ${review.value.cycle_name} review` : 'Review',
@@ -110,6 +124,10 @@ async function run(kind: Busy, action: Promise<string | null>): Promise<boolean>
 async function submitSelf(body: SelfBody): Promise<void> {
   const id = review.value?.id
   if (id && (await run('save', store.saveSelf(id, body)))) await run('submit', store.submitSelf(id))
+}
+
+async function addNext(body: GoalBody): Promise<void> {
+  if (review.value && (await run('save', store.addNextGoal(review.value.id, body)))) adding.value = false
 }
 
 async function share(): Promise<void> {

@@ -16,6 +16,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
+import GrowthSection from '@/components/appraisals/GrowthSection.vue'
 import GoalCard from '@/components/appraisals/GoalCard.vue'
 import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
@@ -50,6 +51,7 @@ function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
     goals: [{ id: 'g1', position: 1, title: 'Ship refunds', measure: '', added_mid_period: false, accepted_at: null, self_result: null, self_reason: null, self_evidence: [], result: null, draft_result: null, manager_reason: null }],
     self_score: { band: null, reason: '', evidence: [], submitted_at: null },
     manager_score: null, manager_only: null, send_back_note: null, reply: null, shared_at: null, acknowledged_at: null,
+    growth: { open: false, can_edit: false, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3, goals: [] },
     can: { edit_self: true, edit_manager: false, send_back: false, share: false, acknowledge: false },
     ...overrides,
   }
@@ -179,5 +181,27 @@ describe('review fixes', () => {
     expect(full.find('button').attributes('disabled')).toBeDefined()
     const change = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: { ...proposal, replaces: 'g0' }, managerName: 'Ravi', asEmployee: false, full: true } })
     expect(change.find('button').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('growth conversation', () => {
+  it('shows no band, and offers confirm and take back by right', async () => {
+    const { plugins } = await appraisalPlugins()
+    const wrapper = mount(GrowthSection, {
+      global: { plugins: plugins as never[] },
+      props: {
+        busy: null,
+        growth: {
+          open: true, can_edit: true, strength: 'Early regressions', focus: 'Plan UAT', next_period_start: '2027-01-01', limit: 3,
+          goals: [
+            { id: 'n1', title: 'UAT at 90%', measure: '', status: 'proposed', origin: 'employee_own', proposed_by_name: 'Priya', can_accept: true, can_remove: true },
+          ],
+        },
+      },
+    })
+    expect(wrapper.text()).not.toMatch(/band|exceeds|meets/i)
+    expect(wrapper.text()).toContain('Proposed by Priya')
+    await wrapper.findAll('button').find(b => b.text() === 'Confirm')?.trigger('click')
+    expect(wrapper.emitted('accept')![0]).toEqual(['n1'])
   })
 })

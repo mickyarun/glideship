@@ -17,7 +17,7 @@
 import type { Goal, GoalHistory, GoalResult, SuggestionBasis } from '@/types/appraisalGoals'
 
 /** Which goal form the dialog shows. */
-export type GoalDialogMode = 'propose' | 'add' | 'edit' | 'edit-reason' | 'suggest-change' | 'reword' | 'decline'
+export type GoalDialogMode = 'propose' | 'add' | 'next' | 'edit' | 'edit-reason' | 'suggest-change' | 'reword' | 'decline'
 
 export const BASIS_LABELS: Record<SuggestionBasis, string> = {
   feedback: 'From your feedback',

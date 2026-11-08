@@ -38,6 +38,7 @@ from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.context import Caller
 from app.services.appraisals.evidence import ids_of
 from app.services.appraisals.fact_view import board_ids, for_viewer
+from app.services.appraisals.growth import read_growth
 
 
 def _goal(goal: AppraisalGoal, access: AppraisalAccess) -> ReviewGoal:
@@ -182,5 +183,6 @@ async def read_review(
         else None,
         shared_at=appraisal.shared_at,
         acknowledged_at=appraisal.acknowledged_at,
+        growth=await read_growth(db, ctx),
         can=_actions(ctx),
     )

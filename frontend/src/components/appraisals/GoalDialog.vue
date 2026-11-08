@@ -62,6 +62,7 @@ interface ModeText {
 const TEXT: Record<GoalDialogMode, ModeText> = {
   propose: { title: 'Add my own goal', action: 'Send to my manager', words: true },
   add: { title: 'Add a goal', action: 'Add goal', words: true, reason: 'Why now (they see this)', needsReason: true },
+  next: { title: 'A goal for next period', action: 'Add goal', words: true },
   edit: { title: 'Edit the goal', action: 'Save', words: true },
   'edit-reason': { title: 'Change the goal', action: 'Save change', words: true, reason: 'Why it changed (they see this)', needsReason: true },
   'suggest-change': { title: 'Suggest a change', action: 'Send to my manager', words: true, reason: 'Why (optional)' },

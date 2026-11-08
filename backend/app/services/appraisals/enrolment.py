@@ -36,6 +36,7 @@ from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
+from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.employee_reporting_manager import (
     EmployeeReportingManagerRepository,
     ManagerLink,
@@ -117,6 +118,10 @@ async def enrol(
         )
         report.enrolled += 1
     await db.flush()
+    # Goals agreed in last period's growth conversation join this cycle.
+    await AppraisalGoalRepository(db, org_id=cycle.org_id).attach_to_cycle(
+        cycle.id, cycle.period_start
+    )
     return report
 
 
