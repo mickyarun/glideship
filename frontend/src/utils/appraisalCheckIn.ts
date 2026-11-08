@@ -37,7 +37,13 @@ const SOURCE_LABELS: Record<string, string> = {
   code_reviews: 'Code reviews',
   qa_evidence: 'Test evidence',
   hr_records: 'People records',
+  learnings: 'Retrospectives',
+  estimates: 'Estimates',
+  skills: 'New skills',
 }
+
+/** Every record source a role template can count, in the order HR sees them. */
+export const FACT_SOURCES = Object.keys(SOURCE_LABELS)
 
 const STATUS_LABELS: Record<CheckInStatus, string> = {
   open: 'Not started',

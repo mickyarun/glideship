@@ -22,6 +22,7 @@
     <template #actions><AppraisalGuide /></template>
     <AppCallout v-if="feedback.teamError" variant="error">{{ feedback.teamError }}</AppCallout>
     <TeamFeedbackList v-if="feedback.team.length" :rows="feedback.team" />
+    <TeamReviewsList v-if="reviews.team.length" :rows="reviews.team" />
     <h2 class="team__heading">Latest check-ins</h2>
     <AppCallout v-if="store.listError" variant="error">{{ store.listError }}</AppCallout>
     <v-progress-linear v-if="store.listLoading" indeterminate color="primary" />
@@ -43,6 +44,8 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
 import TeamFeedbackList from '@/components/appraisals/TeamFeedbackList.vue'
+import TeamReviewsList from '@/components/appraisals/TeamReviewsList.vue'
+import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import { useManagerFeedbackStore } from '@/stores/managerFeedback'
 import { useCheckInsStore } from '@/stores/checkIns'
@@ -50,10 +53,12 @@ import { monthTitle, statusLabel } from '@/utils/appraisalCheckIn'
 
 const store = useCheckInsStore()
 const feedback = useManagerFeedbackStore()
+const reviews = useAppraisalReviewStore()
 
 onMounted(() => {
   void store.fetchTeam()
   void feedback.fetchTeam()
+  void reviews.fetchLists()
   void useAppraisalGuide().showOnFirstVisit()
 })
 </script>

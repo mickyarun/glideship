@@ -34,6 +34,7 @@ function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
     fact_tags: {}, note: { lines: {}, blocking: '', next_month: '' }, links: [], goals: [],
     identity_warnings: [],
     feedback: null,
+    appraisal_id: null,
     ...overrides,
   }
 }

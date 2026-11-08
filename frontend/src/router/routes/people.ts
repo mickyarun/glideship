@@ -88,6 +88,28 @@ export const peopleRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/appraisals/AppraisalSettingsView.vue'),
   },
   {
+    path: 'appraisals/role-templates',
+    name: 'appraisal-role-templates',
+    component: () => import('@/views/appraisals/RoleTemplatesView.vue'),
+  },
+  {
+    // The person, their managers and HR; the API decides what each sees.
+    path: 'appraisals/goals/:id',
+    name: 'appraisal-goals',
+    component: () => import('@/views/appraisals/GoalsView.vue'),
+  },
+  {
+    // The caller's latest review.
+    path: 'appraisals/review',
+    name: 'appraisal-my-review',
+    component: () => import('@/views/appraisals/ReviewView.vue'),
+  },
+  {
+    path: 'appraisals/reviews/:id',
+    name: 'appraisal-review',
+    component: () => import('@/views/appraisals/ReviewView.vue'),
+  },
+  {
     path: 'settings/leave',
     name: 'settings-leave',
     meta: { permission: 'leave:configure' },

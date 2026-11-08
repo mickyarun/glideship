@@ -36,7 +36,7 @@ function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
     period_start: '2026-10-01', period_end: '2026-10-31', working_days: 22, available_days: '20',
     status: 'open', closed: false, can_edit: true, drafting_mode: 'manual', draft_status: 'none',
     ai_lines: [], ai_hidden: false, can_regenerate: false, heading_meanings: {}, facts: [], fact_tags: {},
-    note: { lines: {}, blocking: '', next_month: '' }, links: [], goals: [], identity_warnings: [], feedback: null,
+    note: { lines: {}, blocking: '', next_month: '' }, links: [], goals: [], identity_warnings: [], feedback: null, appraisal_id: null,
     ...overrides,
   }
 }

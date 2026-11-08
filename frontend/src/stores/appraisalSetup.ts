@@ -27,6 +27,7 @@ import type {
   EnrolmentReport,
   Readiness,
 } from '@/types/appraisalSetup'
+import type { Calibration } from '@/types/appraisalReview'
 import { extractApiError } from '@/utils/errors'
 
 const BASE = '/v1/appraisals'
@@ -37,6 +38,7 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   const cycle = ref<CycleRead | null>(null)
   const readiness = ref<Readiness | null>(null)
   const progress = ref<CycleProgress | null>(null)
+  const calibration = ref<Calibration | null>(null)
   const error = ref('')
   const loading = ref(false)
 
@@ -128,7 +130,25 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
     return problem
   }
 
+  /** A cycle action with a count back; the message to show. */
+  async function count(id: string, path: string, ok: (n: number) => string, fallback: string): Promise<string> {
+    const [data, problem] = await attempt(() => api.post<Record<string, number>>(`${BASE}/cycles/${id}/${path}`), fallback)
+    if (data) await fetchCycle(id)
+    return problem ?? ok(Object.values(data ?? {})[0] ?? 0)
+  }
+
+  const startReview = (id: string) =>
+    count(id, 'start-review', n => `Review opened for ${n} people.`, "Couldn't open the review.")
+  const shareAll = (id: string) =>
+    count(id, 'share', n => `Shared ${n} results.`, "Couldn't share the results.")
+  const suggestAll = (id: string) =>
+    count(id, 'suggest-goals', n => `Asked for suggested goals for ${n} people.`, "Couldn't ask for suggestions.")
+
   return {
+    calibration,
+    startReview,
+    shareAll,
+    suggestAll,
     settings,
     cycles,
     cycle,

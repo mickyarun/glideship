@@ -21,6 +21,8 @@
     <template #eyebrow><span class="my-month__eyebrow">Monthly check-in</span></template>
     <template #actions>
       <AppPillToggle v-if="store.mine.length > 1" :model-value="selected ?? ''" :options="monthOptions" aria-label="Month" @update:model-value="v => pick(String(v))" />
+      <v-btn v-if="store.current?.appraisal_id" variant="text" :to="{ name: 'appraisal-goals', params: { id: store.current.appraisal_id } }">My goals</v-btn>
+      <v-btn variant="text" :to="{ name: 'appraisal-my-review' }">My review</v-btn>
       <AppraisalGuide />
     </template>
     <AppCallout v-if="store.listError || store.error" variant="error">{{ store.listError || store.error }}</AppCallout>

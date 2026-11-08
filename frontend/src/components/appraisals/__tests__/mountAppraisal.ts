@@ -34,6 +34,10 @@ const NAMES: [string, string][] = [
   ['/appraisals/cycles', 'appraisal-cycles'],
   ['/appraisals/cycles/:id', 'appraisal-cycle'],
   ['/appraisals/settings', 'appraisal-settings'],
+  ['/appraisals/role-templates', 'appraisal-role-templates'],
+  ['/appraisals/goals/:id', 'appraisal-goals'],
+  ['/appraisals/review', 'appraisal-my-review'],
+  ['/appraisals/reviews/:id', 'appraisal-review'],
 ]
 
 export async function appraisalPlugins(start = '/'): Promise<{ pinia: Pinia; router: Router; plugins: unknown[] }> {

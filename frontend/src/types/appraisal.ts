@@ -93,6 +93,8 @@ export interface CheckInRead {
   links: CheckInLink[]
   goals: CheckInGoal[]
   identity_warnings: { user_id: string; name: string }[]
+  /** The review this check-in belongs to: its goals page hangs off it. */
+  appraisal_id: string | null
   /** The manager's feedback answering this check-in, once some is written. */
   feedback: FeedbackShown | null
 }

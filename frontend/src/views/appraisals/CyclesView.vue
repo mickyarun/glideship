@@ -20,6 +20,7 @@
   <AppPage title="Appraisal cycles" subtitle="Set up a cycle, check who's ready, open it and follow it through.">
     <template #actions>
       <v-btn variant="text" :to="{ name: 'appraisal-settings' }">Settings</v-btn>
+      <v-btn variant="text" :to="{ name: 'appraisal-role-templates' }">Role templates</v-btn>
       <AppraisalGuide />
       <v-btn color="primary" prepend-icon="mdi-plus" :loading="creating" @click="create">New cycle</v-btn>
     </template>

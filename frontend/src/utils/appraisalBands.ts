@@ -30,3 +30,6 @@ export const BANDS: Band[] = [
 export function bandLabel(value: number | null): string {
   return BANDS.find(b => b.value === value)?.label ?? ''
 }
+
+/** The bands as pill options: label first, number second. */
+export const BAND_OPTIONS = BANDS.map(b => ({ label: `${b.label} (${b.value})`, value: b.value }))

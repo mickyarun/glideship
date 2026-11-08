@@ -60,6 +60,12 @@
     rounded="lg"
   />
   <v-list-item
+    prepend-icon="mdi-clipboard-check-outline"
+    title="My review"
+    to="/appraisals/review"
+    rounded="lg"
+  />
+  <v-list-item
     v-if="leaveStore.approvalCount.has_reports"
     prepend-icon="mdi-account-group-outline"
     title="Team appraisals"

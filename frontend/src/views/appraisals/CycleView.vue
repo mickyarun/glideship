@@ -25,7 +25,12 @@
         <v-btn variant="outlined" color="error" :loading="busy === 'delete'" @click="remove">Delete draft</v-btn>
         <v-btn color="primary" :loading="busy === 'open'" @click="open">Open cycle</v-btn>
       </template>
-      <v-btn v-else-if="cycle && cycle.status !== 'closed'" variant="outlined" @click="confirmClose = true">Close cycle</v-btn>
+      <template v-else-if="cycle && cycle.status !== 'closed'">
+        <v-btn v-if="cycle.ai_drafting && cycle.status === 'active'" variant="text" :loading="busy === 'suggest'" @click="count('suggest', store.suggestAll(cycle.id))">Suggest goals for everyone</v-btn>
+        <v-btn v-if="cycle.status === 'active'" color="primary" :loading="busy === 'review'" @click="count('review', store.startReview(cycle.id))">Start the review</v-btn>
+        <v-btn v-if="cycle.status === 'reviewing'" color="primary" :loading="busy === 'share'" @click="count('share', store.shareAll(cycle.id))">Share all ready results</v-btn>
+        <v-btn variant="outlined" @click="confirmClose = true">Close cycle</v-btn>
+      </template>
     </template>
     <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
     <AppCallout v-if="message" :variant="messageKind">{{ message }}</AppCallout>
@@ -34,7 +39,10 @@
       <CycleSetupForm :cycle="cycle" :saving="busy === 'save'" @save="save" />
       <CycleReadiness v-if="store.readiness" :readiness="store.readiness" />
     </div>
-    <CycleProgressTable v-else-if="store.progress" :progress="store.progress" />
+    <template v-else>
+      <CalibrationPanel v-if="store.calibration" :calibration="store.calibration" />
+      <CycleProgressTable v-if="store.progress" :progress="store.progress" />
+    </template>
     <v-dialog v-model="confirmClose" max-width="480">
       <v-card>
         <v-card-title>Close {{ cycle?.name }}?</v-card-title>
@@ -57,6 +65,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
 import CycleProgressTable from '@/components/appraisals/CycleProgressTable.vue'
 import CycleReadiness from '@/components/appraisals/CycleReadiness.vue'
 import CycleSetupForm from '@/components/appraisals/CycleSetupForm.vue'
@@ -68,7 +77,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useAppraisalSetupStore()
 const cycle = computed(() => store.cycle)
-const busy = ref<'save' | 'open' | 'delete' | 'close' | null>(null)
+const busy = ref<'save' | 'open' | 'delete' | 'close' | 'suggest' | 'review' | 'share' | null>(null)
 const confirmClose = ref(false)
 const message = ref('')
 const messageKind = ref<'error' | 'success'>('success')
@@ -82,6 +91,14 @@ const subtitle = computed(() =>
 function report(problem: string | null, ok: string): void {
   message.value = problem ?? ok
   messageKind.value = problem ? 'error' : 'success'
+}
+
+async function count(kind: 'suggest' | 'review' | 'share', action: Promise<string>): Promise<void> {
+  busy.value = kind
+  const text = await action
+  busy.value = null
+  message.value = text
+  messageKind.value = text.startsWith("Couldn't") ? 'error' : 'success'
 }
 
 async function save(form: CycleUpdate): Promise<void> {
