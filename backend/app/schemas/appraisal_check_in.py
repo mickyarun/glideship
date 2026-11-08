@@ -155,6 +155,8 @@ class CheckInRead(BaseModel):
     links: list[LinkRead]
     goals: list[GoalPanelItem]
     identity_warnings: list[dict[str, str]]
+    # The review this check-in belongs to: its goals page hangs off it.
+    appraisal_id: uuid.UUID | None = None
     # The manager's feedback answering this check-in, once some is written.
     feedback: FeedbackShown | None = None
 

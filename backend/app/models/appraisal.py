@@ -143,3 +143,18 @@ class Appraisal(BaseModel):
     acknowledged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Facts that belong to the whole period (retrospectives, estimates, new
+    # skills), gathered when the review opens, as in ``AppraisalCheckIn.fact_refs``.
+    period_facts: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    # When each reminder stream last announced this appraisal's step: the
+    # self-review opening, the manager's review (again after a send-back),
+    # the shared result. Empty means the next reminder pass says so.
+    self_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    result_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

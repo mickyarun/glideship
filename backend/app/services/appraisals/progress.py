@@ -32,31 +32,19 @@ from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
-from app.repositories.employee_profile import EmployeeProfileRepository
-from app.repositories.employee_reporting_manager import EmployeeReportingManagerRepository
 from app.repositories.user import UserRepository
 from app.schemas.appraisal_cycle import CycleProgress, ManagerOverdue, ProgressRow
 from app.services.appraisals.context import Caller
 from app.services.appraisals.feedback_read import is_overdue
+from app.services.appraisals.hr_scope import hidden_users
 from app.services.appraisals.org_clock import org_today
-
-
-async def _hidden_users(db: AsyncSession, caller: Caller) -> set[uuid.UUID]:
-    """The caller and their own managers."""
-    own = await EmployeeProfileRepository(db, org_id=caller.org_id).get_by_user(caller.user_id)
-    if own is None:
-        return {caller.user_id}
-    links = await EmployeeReportingManagerRepository(db, org_id=caller.org_id).list_for_profiles(
-        [own.id]
-    )
-    return {caller.user_id} | {m.user_id for m in links.get(own.id, [])}
 
 
 async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -> CycleProgress:
     """Each enrolled person's check-ins and feedback, and managers with overdue items."""
     org_id = cycle.org_id
     repo = AppraisalRepository(db, org_id=org_id)
-    hidden = await _hidden_users(db, caller)
+    hidden = await hidden_users(db, caller)
     everyone = await repo.for_cycle(cycle.id)
     profiles = {
         pid: p

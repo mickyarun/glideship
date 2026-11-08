@@ -36,6 +36,10 @@ ENGINEERING_SOURCES = frozenset(
         FactSource.CODE_REVIEWS.value,
         FactSource.BUGS.value,
         FactSource.QA_EVIDENCE.value,
+        # Drawn from BUDs and code: retrospectives, estimates, new skills.
+        FactSource.LEARNINGS.value,
+        FactSource.ESTIMATES.value,
+        FactSource.SKILLS.value,
     }
 )
 HR_RECORDS_PERMISSION = EMPLOYEES_MANAGE

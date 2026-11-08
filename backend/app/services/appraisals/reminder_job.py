@@ -33,11 +33,14 @@ import structlog
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.digest_claim import DigestClaimKind, DigestClaimStatus
+from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import CycleOrg, orgs_with_running_cycles
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.digest_claim import DigestClaimRepository
-from app.services.appraisals.reminder_stage import Outbox, compose_day
+from app.services.appraisals.reminder_message import Outbox
+from app.services.appraisals.reminder_stage import compose_day
+from app.services.appraisals.review_reminder_stage import NOTIFIED
 from app.services.leave.digest_settings import org_zone
 from app.services.notifications import NotificationCategory
 from app.services.scheduling.claim_outcome import claim_outcome
@@ -51,6 +54,9 @@ KINDS = (
     DigestClaimKind.APPRAISAL_CHECK_IN_READY,
     DigestClaimKind.APPRAISAL_FEEDBACK_DUE,
     DigestClaimKind.APPRAISAL_HR_OVERDUE,
+    DigestClaimKind.APPRAISAL_SELF_DUE,
+    DigestClaimKind.APPRAISAL_REVIEW_DUE,
+    DigestClaimKind.APPRAISAL_ACK_DUE,
 )
 
 
@@ -91,6 +97,7 @@ async def _send(org_id: uuid.UUID, kind: DigestClaimKind, outbox: Outbox, day: d
         claims = DigestClaimRepository(db, org_id=org_id)
         told_check_ins: list[uuid.UUID] = []
         told_feedback: list[uuid.UUID] = []
+        told_appraisals: list[uuid.UUID] = []
         for user_id, message in outbox.items():
             status = claim_outcome(reached.get(user_id))
             error = "slack_failed" if status is DigestClaimStatus.FAILED else None
@@ -98,8 +105,13 @@ async def _send(org_id: uuid.UUID, kind: DigestClaimKind, outbox: Outbox, day: d
             if status is not DigestClaimStatus.FAILED:
                 told_check_ins += message.check_ins
                 told_feedback += message.feedback
+                told_appraisals += message.appraisals
         await AppraisalCheckInRepository(db, org_id=org_id).mark_notified(told_check_ins, now)
         await AppraisalFeedbackRepository(db, org_id=org_id).mark_notified(told_feedback, now)
+        if kind in NOTIFIED:
+            await AppraisalRepository(db, org_id=org_id).mark_notified(
+                told_appraisals, NOTIFIED[kind], now
+            )
         await db.commit()
     logger.info(
         "appraisal_reminders_sent",

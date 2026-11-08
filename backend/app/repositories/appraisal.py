@@ -16,7 +16,8 @@
 
 import uuid
 from collections.abc import Collection
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,9 @@ from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.models.employee_reporting_manager import EmployeeReportingManager
 from app.models.user import User
 from app.repositories.base import BaseRepository, rowcount
+
+# Which reminder stream's announcement an update records.
+NotifiedColumn = Literal["self_notified_at", "review_notified_at", "result_notified_at"]
 
 # Appraisals still in progress: a manager change or an exit affects them.
 OPEN = (
@@ -147,3 +151,35 @@ class AppraisalRepository(BaseRepository[Appraisal]):
             .values(period_summary_status=DraftStatus.PENDING, summary_attempts=0)
         )
         return rowcount(result)
+
+    async def for_profiles(self, profile_ids: Collection[uuid.UUID]) -> list[Appraisal]:
+        """These people's appraisals in every cycle that has opened."""
+        if not profile_ids:
+            return []
+        result = await self._db.execute(
+            self._scoped(select(Appraisal)).where(Appraisal.profile_id.in_(list(profile_ids)))
+        )
+        return list(result.scalars().all())
+
+    async def live_in_cycles(self, cycle_ids: Collection[uuid.UUID]) -> list[Appraisal]:
+        """Every appraisal in these cycles that hasn't been withdrawn."""
+        if not cycle_ids:
+            return []
+        result = await self._db.execute(
+            self._scoped(select(Appraisal)).where(
+                Appraisal.cycle_id.in_(list(cycle_ids)),
+                Appraisal.status != AppraisalStatus.WITHDRAWN,
+            )
+        )
+        return list(result.scalars().all())
+
+    async def mark_notified(
+        self, ids: Collection[uuid.UUID], column: NotifiedColumn, at: datetime
+    ) -> None:
+        """Record that one step of these appraisals was announced."""
+        if ids:
+            await self._db.execute(
+                update(Appraisal)
+                .where(Appraisal.org_id == self._org, Appraisal.id.in_(list(ids)))
+                .values({column: at})
+            )

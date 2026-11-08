@@ -55,7 +55,8 @@ def period_label(start: date, cadence: CheckInCadence) -> str:
     return f"{start:%B}"
 
 
-def _link(base_url: str, path: str, label: str) -> str:
+def link(base_url: str, path: str, label: str) -> str:
+    """A Slack link to a page in the app."""
     return f"<{base_url.rstrip('/')}{path}|{label}>"
 
 
@@ -76,7 +77,7 @@ def feedback_line(moment: Moment, batch: FeedbackBatch) -> str:
 
 def feedback_text(lines: Sequence[str], base_url: str) -> str:
     """A manager's whole reminder: every period due today, one link."""
-    return "\n".join([*lines, _link(base_url, TEAM_PATH, "Open team")])
+    return "\n".join([*lines, link(base_url, TEAM_PATH, "Open team")])
 
 
 def check_in_ready_text(labels: Sequence[str], base_url: str) -> str:
@@ -84,7 +85,7 @@ def check_in_ready_text(labels: Sequence[str], base_url: str) -> str:
     which = " and ".join(labels)
     return (
         f"Your {which} check-in is ready. Add anything Glideship missed. "
-        f"{_link(base_url, MY_MONTH_PATH, 'Open My month')}"
+        f"{link(base_url, MY_MONTH_PATH, 'Open My month')}"
     )
 
 
@@ -94,5 +95,5 @@ def hr_overdue_text(managers: Sequence[tuple[str, int]], base_url: str) -> str:
     listed = ", ".join(f"{escape_mrkdwn(name) or 'Unnamed'} {count}" for name, count in managers)
     return (
         f"Manager feedback still open past its due date: {listed}. "
-        f"{_link(base_url, CYCLES_PATH, 'Open cycles')}"
+        f"{link(base_url, CYCLES_PATH, 'Open cycles')}"
     )

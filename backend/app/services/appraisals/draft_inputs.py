@@ -18,9 +18,7 @@ Returns None when there is nothing to draft: AI is off for this person, or
 there are no facts to write about. The caller then shows the manual view.
 """
 
-import uuid
 from dataclasses import dataclass
-from datetime import UTC
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +33,6 @@ from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.employee_profile import EmployeeProfileRepository
-from app.repositories.work_facts_period import PeriodFactsRepository
 from app.services.appraisals import crypto
 from app.services.appraisals.draft_prompt import (
     BLOCKERS_SECTION,
@@ -46,8 +43,6 @@ from app.services.appraisals.draft_prompt import (
     prompt_fact,
     summary_prompt,
 )
-from app.services.appraisals.facts import as_ref, bounds
-from app.services.appraisals.identity import identity_set
 from app.services.appraisals.settings import load_appraisal_settings
 
 
@@ -146,14 +141,8 @@ async def summary_input(db: AsyncSession, appraisal: Appraisal) -> DraftInput | 
     if cycle is None or profile is None or not check_ins:
         return None
     months = [await _month(db, c) for c in check_ins]
-    first, after = bounds(cycle.period_start, cycle.period_end, UTC)
-    people: list[uuid.UUID] = await identity_set(db, org_id, profile.user_id)
-    repo = PeriodFactsRepository(db, org_id=org_id)
-    extra = [
-        as_ref(row)
-        for row in await repo.learnings_and_estimates(people, first, after)
-        + await repo.skills(people, first, after)
-    ]
+    # Saved when the review opened, so the summary cites what the page shows.
+    extra = list(appraisal.period_facts or [])
     months.append({"check_in": None, "period_facts": [prompt_fact(f) for f in extra]})
     goals = await AppraisalGoalRepository(db, org_id=org_id).accepted_for_period(
         appraisal.profile_id, cycle.period_start

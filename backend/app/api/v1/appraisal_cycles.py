@@ -36,12 +36,15 @@ from app.schemas.appraisal_cycle import (
     EnrolmentReport,
     Readiness,
 )
-from app.services.appraisals import cycles
+from app.schemas.appraisal_review import Calibration
+from app.services.appraisals import cycles, sharing
+from app.services.appraisals.calibration import calibration
 from app.services.appraisals.context import Caller
 from app.services.appraisals.enrolment import activate
 from app.services.appraisals.errors import AppraisalNotFoundError
 from app.services.appraisals.progress import cycle_progress
 from app.services.appraisals.readiness import readiness
+from app.services.appraisals.review_start import start_review
 
 router = APIRouter(
     tags=["appraisals"], dependencies=[Depends(require_permissions(APPRAISALS_MANAGE))]
@@ -144,3 +147,33 @@ async def close_cycle(
 ) -> CycleRead:
     """Close a running cycle; everything in it becomes read-only."""
     return cycles.cycle_read(await cycles.close_cycle(db, caller.org_id, cycle_id))
+
+
+@router.post("/cycles/{cycle_id}/start-review", status_code=status.HTTP_202_ACCEPTED)
+async def post_start_review(
+    cycle_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Open the self-reviews; AI period summaries follow in the background."""
+    return {"opened": await start_review(db, caller.org_id, cycle_id)}
+
+
+@router.get("/cycles/{cycle_id}/calibration", response_model=Calibration)
+async def get_calibration(
+    cycle_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> Calibration:
+    """Each manager's bands, agreement and big gaps."""
+    return await calibration(db, caller, await _cycle(db, caller, cycle_id))
+
+
+@router.post("/cycles/{cycle_id}/share")
+async def post_share_all(
+    cycle_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Share every review waiting for HR that the caller may act on."""
+    return {"shared": await sharing.share_all(db, caller, await _cycle(db, caller, cycle_id))}

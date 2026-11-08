@@ -15,7 +15,7 @@
 """Appraisal reminder DMs: what goes to whom on which day, once, and only with Slack."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +24,7 @@ from httpx import AsyncClient
 from sqlalchemy import select, update
 
 from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.digest_claim import DigestClaim, DigestClaimKind, DigestClaimStatus
 from app.repositories.appraisal_cycle import CycleOrg, orgs_with_running_cycles
@@ -285,3 +286,34 @@ async def test_only_orgs_with_slack_get_anything(
         ).all()
     assert theirs == []
     assert all("Ravi" not in text for text in sent.values() if text.startswith("Manager"))
+
+
+async def test_review_steps_are_announced_once_each(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage, slack: Slack
+) -> None:
+    m, ids = await _month(client, pg_session_factory)
+    hr, mgr, emp = (as_user(m.people[p], m.org) for p in ("hr", "mgr", "emp"))
+    (cycle,) = (await client.get("/api/v1/appraisals/cycles", headers=hr)).json()
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(AppraisalCycle)
+            .where(AppraisalCycle.org_id == m.org)
+            .values(period_end=date(2026, 10, 31))
+        )
+        await db.commit()
+    await client.post(f"/api/v1/appraisals/cycles/{cycle['id']}/start-review", headers=hr)
+    org = await _org(pg_session_factory, m.org)
+    opened = await _sent(slack, org, at(9))
+    assert opened[ids["emp"]].startswith("Your Q4 2026 review is open.")
+    assert ids["mgr"] not in opened or not opened[ids["mgr"]].startswith("Q4 2026:")
+    assert ids["emp"] not in await _sent(slack, org, at(10))
+    mine = (await client.get("/api/v1/appraisals/mine", headers=emp)).json()[0]["id"]
+    await client.put(f"/api/v1/appraisals/{mine}/self", json={"band": 3}, headers=emp)
+    await client.post(f"/api/v1/appraisals/{mine}/self/submit", headers=emp)
+    waiting = await _sent(slack, org, at(11))
+    assert waiting[ids["mgr"]].startswith("Q4 2026: 1 review is ready for you. Due Thu 14 Jan.")
+    body = {"agree": True, "goals": []}
+    await client.post(f"/api/v1/appraisals/{mine}/manager/submit", json=body, headers=mgr)
+    await client.post(f"/api/v1/appraisals/{mine}/share", headers=hr)
+    result = await _sent(slack, org, at(12))
+    assert result[ids["emp"]].startswith("Your Q4 2026 result is ready.")

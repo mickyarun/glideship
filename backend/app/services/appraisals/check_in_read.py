@@ -130,6 +130,7 @@ async def read_check_in(
         identity_warnings=(
             check_in.identity_warnings if is_self or caller.perms.has(APPRAISALS_MANAGE) else []
         ),
+        appraisal_id=ctx.appraisal.id if ctx.appraisal else None,
         feedback=await shown_on_check_in(db, ctx),
     )
 

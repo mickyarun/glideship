@@ -56,6 +56,7 @@ from app.services.appraisals.cadence import CADENCE_MONTHS, slices
 from app.services.appraisals.check_in_builder import create_check_in, refresh_check_in
 from app.services.appraisals.enrolment import enrol_late_joiners
 from app.services.appraisals.feedback_open import feedback_pass
+from app.services.appraisals.review_start import pass_self_due
 from app.services.leave.digest_settings import org_zone
 from app.services.scheduling.tick_loop import run_tick_loop
 
@@ -179,6 +180,7 @@ async def cycle_pass(db: AsyncSession, cycle: AppraisalCycle, tick: Tick) -> Non
                 "appraisal_check_in_person_failed", org_id=str(org_id), profile_id=str(profile.id)
             )
     await feedback_pass(db, cycle, appraisals, profiles, tick.today, tick.working)
+    await pass_self_due(db, cycle, tick.today)
 
 
 async def org_pass(db: AsyncSession, org: CycleOrg, now: datetime) -> None:

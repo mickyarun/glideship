@@ -14,9 +14,10 @@
 
 """What each person's appraisal reminder says today, for one org (reads only).
 
-Three streams, each a claim kind: "your check-in is ready" on the first
-pass after it opens; one feedback reminder per manager covering all their
-reports and periods; and HR's overdue list. Each message records which
+One stream per claim kind: "your check-in is ready" on the first pass
+after it opens; one feedback reminder per manager covering all their
+reports and periods; HR's overdue list; and the review steps
+(:mod:`.review_reminder_stage`). Each message records which
 check-ins and items it announces, so the opening line is sent exactly
 once even when an item opens after the day's reminder went out. People
 already reached today are skipped before anything is composed for them.
@@ -27,7 +28,6 @@ holding ``appraisals:manage`` and is counted on the org's default one.
 import uuid
 from collections import Counter, defaultdict
 from collections.abc import Collection
-from dataclasses import dataclass, field
 from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,9 @@ from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.employee_reporting_manager import EmployeeReportingManagerRepository
 from app.repositories.user import UserRepository
 from app.services.appraisals import reminder_text
+from app.services.appraisals.reminder_message import Message, Outbox
 from app.services.appraisals.reminders import Schedule, hr_list_today, moment
+from app.services.appraisals.review_reminder_stage import review_streams
 from app.services.appraisals.work_calendar import load_calendars
 from app.services.notifications import NotificationCategory, category_default
 
@@ -53,18 +55,6 @@ GroupKey = tuple[uuid.UUID, uuid.UUID, date]
 READY = DigestClaimKind.APPRAISAL_CHECK_IN_READY
 FEEDBACK = DigestClaimKind.APPRAISAL_FEEDBACK_DUE
 HR_LIST = DigestClaimKind.APPRAISAL_HR_OVERDUE
-
-
-@dataclass
-class Message:
-    """One person's DM of one kind, and what it announces once delivered."""
-
-    text: str
-    check_ins: list[uuid.UUID] = field(default_factory=list)
-    feedback: list[uuid.UUID] = field(default_factory=list)
-
-
-Outbox = dict[uuid.UUID, Message]
 
 
 async def _ready(
@@ -198,4 +188,5 @@ async def compose_day(
         READY: await _ready(db, org_id, cycles, skip.get(READY, set())),
         FEEDBACK: feedback,
         HR_LIST: await _hr(db, org_id, overdue, skip.get(HR_LIST, set())),
+        **await review_streams(db, org_id, cycles, day, skip),
     }
