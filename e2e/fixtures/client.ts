@@ -97,6 +97,11 @@ export class StackClient {
     await body('recording a release', await this.backend.post(`/__e2e/orgs/${org.id}/buds/${budId}/releases`, { data: release }))
   }
 
+  /** Runs the appraisal check-in tick for the org as if it were `at` (an ISO time). */
+  async runAppraisalTick(orgId: string, at: string): Promise<void> {
+    await body('running the appraisal tick', await this.backend.post(`/__e2e/orgs/${orgId}/appraisal-tick`, { data: { at } }))
+  }
+
   /** Empties the database (only the wizard's stack is ever reset). */
   async reset(): Promise<void> {
     await body('resetting the database', await this.backend.post('/__e2e/reset'))

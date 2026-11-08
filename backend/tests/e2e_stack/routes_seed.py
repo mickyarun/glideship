@@ -21,10 +21,13 @@ loopback and backed by a throwaway database.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Response
+from pydantic import BaseModel
 
 from app.database import AsyncSessionLocal
+from tests.e2e_stack.seed_appraisals import run_check_in_tick
 from tests.e2e_stack.seed_content import add_features, open_quiz
 from tests.e2e_stack.seed_org import seed_org
 from tests.e2e_stack.specs import FeaturesSpec, OrgSpec, QuizSpec, SeededOrg
@@ -52,4 +55,18 @@ async def create_open_quiz(org_id: uuid.UUID, spec: QuizSpec) -> Response:
     """Open today's quiz for the org."""
     async with AsyncSessionLocal() as db:
         await open_quiz(db, org_id, spec)
+    return Response(status_code=204)
+
+
+class AppraisalTick(BaseModel):
+    """When the check-in tick should think it is (an aware datetime)."""
+
+    at: datetime
+
+
+@router.post("/{org_id}/appraisal-tick", status_code=204, response_class=Response)
+async def appraisal_tick(org_id: uuid.UUID, spec: AppraisalTick) -> Response:
+    """Open the org's check-ins and feedback items as of ``spec.at``."""
+    async with AsyncSessionLocal() as db:
+        await run_check_in_tick(db, org_id, spec.at)
     return Response(status_code=204)

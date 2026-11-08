@@ -26,6 +26,7 @@ update_job(state=FAILED) instead.
 import os
 
 from app.config import settings
+from app.services.appraisals.trend_draft_job import JOB_APPRAISAL_TRENDS, handle_trend_draft_job
 from app.services.boards.agents.run_handler import handle_board_agent_run_job
 from app.services.bud_agent_handler import handle_bud_agent_job
 from app.services.imports.pipeline import handle_import_discover_job, handle_import_run_job
@@ -128,6 +129,9 @@ def setup_job_handlers() -> None:
     # (``services/pr_merge_worker.py``) so dispatcher + narrow synth
     # share one consumer task and the Phase-4 lock-handoff race is
     # structurally eliminated.
+
+    # Appraisals: HR's AI draft of a role's market trends (web search only).
+    register_job_type(JOB_APPRAISAL_TRENDS, handle_trend_draft_job, worker_count=1)
 
     # Bulk GitHub-App repo onboard (Settings → Code "Bulk import" tab)
     register_job_type(JOB_REPO_BULK_ONBOARD, handle_bulk_onboard_job, worker_count=1)

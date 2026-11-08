@@ -61,6 +61,8 @@ ProgressCallback = Callable[[str, dict[str, Any]], None]  # (tool_name, tool_inp
 # git/gh-using caller ever forgets to pass ``working_dir``.
 NO_REPO_CONTEXT: str = "<no-repo-context>"
 _NO_REPO_SCRATCH_DIR: str = str(Path(tempfile.gettempdir()) / "bodhiorchard-no-repo")
+# Each private run's throwaway directory starts with this.
+PRIVATE_RUN_DIR_PREFIX: str = "bodhiorchard-private-"
 
 # Absolute path to the MCP stdio bridge script — passed to the Claude CLI
 # via ``--mcp-config`` so the bridge subprocess can be launched with the
@@ -152,6 +154,12 @@ class ClaudeRunnerConfig:
     # leaves the CLI's defaults; a list (``[]`` for none) takes every other
     # built-in away and leaves only the MCP tools (``claude_guard.tool_scope``).
     builtin_tools: list[str] | None = None
+    # For prompts that hold people data. No MCP servers at all, not even the
+    # host's or a repo's (an empty ``--strict-mcp-config``); the prompt goes
+    # over stdin, not argv, where ``ps`` could read it; and a no-repo run gets
+    # its own throwaway directory instead of the shared scratch one, so a
+    # file planted there can't steer it. Batch mode only.
+    private_run: bool = False
 
 
 def _find_tool_uses(obj: Any, callback: ProgressCallback) -> None:
@@ -650,6 +658,12 @@ async def run_claude_code(
     # request bodies. We still validate strictly: the resolved path must
     # be an existing directory and must NOT alias a credential or system
     # root, so even a buggy caller can't widen the sandbox.
+    private_dir: str | None = None
+    if config.private_run:
+        progress_callback = None
+        if working_dir == NO_REPO_CONTEXT:
+            private_dir = tempfile.mkdtemp(prefix=PRIVATE_RUN_DIR_PREFIX)
+            working_dir = private_dir
     cwd = _validate_working_dir(working_dir)
 
     # Force stream-json when a progress callback is provided
@@ -662,7 +676,7 @@ async def run_claude_code(
     cmd = [
         "claude",
         "-p",
-        prompt,
+        *([] if config.private_run else [prompt]),
         "--output-format",
         output_format,
         "--dangerously-skip-permissions",
@@ -750,6 +764,7 @@ async def run_claude_code(
 
     # Write temporary MCP config if tools are needed
     mcp_config_file = None
+    mcp_json: dict[str, Any] | None = {"mcpServers": {}} if config.private_run else None
     if config.mcp:
         mcp_json = {
             "mcpServers": {
@@ -765,6 +780,7 @@ async def run_claude_code(
                 },
             },
         }
+    if mcp_json is not None:
         with tempfile.NamedTemporaryFile(
             suffix=".json",
             prefix="bodhiorchard_mcp_",
@@ -836,13 +852,14 @@ async def run_claude_code(
             *cmd,
             cwd=cwd,
             env=sub_env,
+            stdin=asyncio.subprocess.PIPE if config.private_run else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             # guard: same rlimits + setsid the streaming path uses.
             preexec_fn=apply_subprocess_rlimits(),
         )
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(),
+            proc.communicate(prompt.encode()) if config.private_run else proc.communicate(),
             timeout=config.timeout_seconds,
         )
 
@@ -989,6 +1006,8 @@ async def run_claude_code(
     finally:
         if mcp_config_file is not None:
             mcp_config_file.unlink(missing_ok=True)
+        if private_dir is not None:
+            shutil.rmtree(private_dir, ignore_errors=True)
 
 
 def _extract_event_error(event: dict[str, Any]) -> str | None:

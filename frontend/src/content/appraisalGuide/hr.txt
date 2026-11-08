@@ -1,0 +1,11 @@
+## Setting up a cycle
+
+Create the cycle from the org settings, then check readiness before you open it: people without a primary manager aren't enrolled, people without a matching role template get the general one, and possible duplicate accounts should be merged first so their work shows.
+
+## Role templates
+
+Each template says what the four headings mean for a role, which records count and which goals it suggests. People are matched by department or designation; you can override the match for a cycle.
+
+## Reading calibration
+
+Look at the spread of bands for each manager, how often they agreed with their reports, and the large gaps. Send a review back with a note when it needs another look, then share results.

@@ -1,0 +1,252 @@
+[
+  {
+    "name": "Engineering",
+    "match_departments": ["Engineering", "Technology", "Development"],
+    "match_designations": ["Engineer", "Developer", "Architect", "SDE", "DevOps"],
+    "heading_meanings": {
+      "delivery_quality": "Work shipped to production, with few bugs found in it afterwards.",
+      "initiative": "Problems found and fixed without being asked; tooling and tech debt.",
+      "team": "Code reviews, pairing, unblocking others and clean handovers.",
+      "growth": "New parts of the codebase, languages or skills taken on."
+    },
+    "fact_sources": ["buds", "pull_requests", "code_reviews", "bugs", "board_cards", "learnings", "estimates", "skills"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "Ship the agreed BUDs for the period", "measure": "BUDs closed against the plan at the start of the period", "measure_source": "BUDs in Glideship"},
+      {"title": "Fewer bugs found in shipped work", "measure": "Bugs linked to their shipped BUDs, down on last period", "measure_source": "Bug links in Glideship"},
+      {"title": "Estimates that hold", "measure": "Closed BUDs within 25% of their estimate", "measure_source": "BUD learnings"},
+      {"title": "Reviews that unblock the team", "measure": "Code reviews given within one working day", "measure_source": "Code reviews in Glideship"},
+      {"title": "Own a part of the system end to end", "measure": "A named module where they answer most questions and changes", "measure_source": "Links marked for the goal"},
+      {"title": "Reduce on-call noise", "measure": "Alerts or incidents from their area, down on last period", "measure_source": "Links marked for the goal"},
+      {"title": "Learn a new part of the stack", "measure": "Work merged in a language or module new to them", "measure_source": "Skills in Glideship"},
+      {"title": "Leave things better documented", "measure": "Runbooks or docs written for their area", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "QA",
+    "match_departments": ["QA", "Quality"],
+    "match_designations": ["QA", "Test", "Quality"],
+    "heading_meanings": {
+      "delivery_quality": "Testing finished on time, with few bugs escaping to production.",
+      "initiative": "Automation added, flaky tests fixed, gaps in coverage found.",
+      "team": "Clear bug reports, test plans others can follow, helping developers reproduce.",
+      "growth": "New tools, products or kinds of testing they can now do on their own."
+    },
+    "fact_sources": ["bugs", "board_cards", "qa_evidence", "buds", "learnings"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "Fewer bugs reaching production", "measure": "Production bugs in features they tested, down on last period", "measure_source": "Bug links in Glideship"},
+      {"title": "Testing that keeps pace", "measure": "BUDs out of testing within the planned time", "measure_source": "BUDs in Glideship"},
+      {"title": "More of the regression suite automated", "measure": "Share of regression cases automated", "measure_source": "Goal value with a report link"},
+      {"title": "Bug reports that need no follow-up", "measure": "Bugs fixed without questions back to the reporter", "measure_source": "Bug comments in Glideship"},
+      {"title": "Test evidence on every release", "measure": "Releases with test evidence uploaded", "measure_source": "QA evidence in Glideship"},
+      {"title": "Fix flaky tests", "measure": "Flaky tests fixed or removed", "measure_source": "Links marked for the goal"},
+      {"title": "Test a new kind of risk", "measure": "Performance, security or accessibility testing added for one area", "measure_source": "Links marked for the goal"},
+      {"title": "Help developers test their own work", "measure": "Sessions or guides given to the team", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "Product",
+    "match_departments": ["Product"],
+    "match_designations": ["Product Manager", "Product Owner", "PM"],
+    "heading_meanings": {
+      "delivery_quality": "Clear specs that shipped as planned and did what they set out to do.",
+      "initiative": "Problems spotted in data or feedback and turned into work.",
+      "team": "Unblocking engineering and design, keeping stakeholders informed.",
+      "growth": "New areas of the product or new skills such as research or analytics."
+    },
+    "fact_sources": ["buds", "board_cards", "bugs", "learnings", "estimates"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "Ship the planned roadmap items", "measure": "Planned BUDs shipped in the period", "measure_source": "BUDs in Glideship"},
+      {"title": "Specs that don't change late", "measure": "BUDs that reached testing without a spec rewrite", "measure_source": "BUD history in Glideship"},
+      {"title": "Measure what shipped", "measure": "Shipped features with a stated success metric and a result", "measure_source": "Links marked for the goal"},
+      {"title": "Fewer surprises in estimates", "measure": "Closed BUDs within 25% of their estimate", "measure_source": "BUD learnings"},
+      {"title": "Talk to customers", "measure": "Customer conversations written up", "measure_source": "Links marked for the goal"},
+      {"title": "A backlog the team trusts", "measure": "Top of the backlog specced two weeks ahead", "measure_source": "BUDs in Glideship"},
+      {"title": "Close the loop on bugs", "measure": "Customer-reported bugs triaged within two working days", "measure_source": "Bugs in Glideship"},
+      {"title": "Grow a product skill", "measure": "A course, research study or analysis done and shared", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "Design",
+    "match_departments": ["Design"],
+    "match_designations": ["Designer", "UX", "UI"],
+    "heading_meanings": {
+      "delivery_quality": "Designs ready when engineering needed them, and built as designed.",
+      "initiative": "Usability problems found and fixed; the design system improved.",
+      "team": "Reviews and pairing with engineers and product.",
+      "growth": "New tools, research methods or kinds of design work."
+    },
+    "fact_sources": ["buds", "board_cards"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "Designs ready before build starts", "measure": "BUDs with designs approved before development", "measure_source": "BUDs in Glideship"},
+      {"title": "Shipped as designed", "measure": "Design review issues fixed before release", "measure_source": "Links marked for the goal"},
+      {"title": "Grow the design system", "measure": "Components added or documented", "measure_source": "Links marked for the goal"},
+      {"title": "Test with real users", "measure": "Usability sessions run and written up", "measure_source": "Links marked for the goal"},
+      {"title": "Fix the worst usability problems", "measure": "Top usability issues from research resolved", "measure_source": "Links marked for the goal"},
+      {"title": "Accessible by default", "measure": "Screens checked against WCAG AA", "measure_source": "Links marked for the goal"},
+      {"title": "Faster handover", "measure": "Questions from engineering per design, down on last period", "measure_source": "Goal value"},
+      {"title": "Learn a new design skill", "measure": "Motion, research or data work shown in a project", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "HR",
+    "match_departments": ["HR", "Human Resources", "People"],
+    "match_designations": ["HR", "People", "Recruiter", "Talent"],
+    "heading_meanings": {
+      "delivery_quality": "People processes run on time and correctly: hiring, onboarding, leave, records.",
+      "initiative": "Policies improved, manual work automated, problems fixed before they grow.",
+      "team": "Support for managers and employees; clear answers and handovers.",
+      "growth": "New areas of HR or law they can now handle on their own."
+    },
+    "fact_sources": ["board_cards", "hr_records"],
+    "ai_drafting": false,
+    "goal_library": [
+      {"title": "Fill open roles faster", "measure": "Days from opening to offer accepted", "measure_source": "Hiring tracker link"},
+      {"title": "Onboarding done in week one", "measure": "New joiners with the onboarding checklist done in their first week", "measure_source": "Goal value with a checklist link"},
+      {"title": "Policy reviews on schedule", "measure": "Policies reviewed by their due date", "measure_source": "Links marked for the goal"},
+      {"title": "Accurate leave and records", "measure": "Leave policies and employee records set up before they're needed", "measure_source": "People module in Glideship"},
+      {"title": "Hear from employees", "measure": "Engagement survey run and actions agreed", "measure_source": "Survey result link"},
+      {"title": "Faster answers to people questions", "measure": "HR board cards closed within three working days", "measure_source": "Board cards in Glideship"},
+      {"title": "Lower early attrition", "measure": "Joiners still here after six months", "measure_source": "Goal value"},
+      {"title": "Train managers", "measure": "Manager sessions run on a people topic", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "Support",
+    "match_departments": ["Support", "Customer Support", "Customer Success"],
+    "match_designations": ["Support", "Customer Success"],
+    "heading_meanings": {
+      "delivery_quality": "Tickets resolved well and on time; escalations closed end to end.",
+      "initiative": "Help articles, fixes to recurring problems, bugs reported with clear steps.",
+      "team": "Training new joiners, covering shifts, handing over cleanly.",
+      "growth": "New products or flows they can now support on their own."
+    },
+    "fact_sources": ["board_cards", "bugs"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "Fast first response", "measure": "Under 4 h on 90% of tickets", "measure_source": "Helpdesk weekly report"},
+      {"title": "Customers happy with help", "measure": "CSAT 4.5 or higher", "measure_source": "Helpdesk CSAT report"},
+      {"title": "Fewer escalations", "measure": "80% resolved without engineering", "measure_source": "Helpdesk + Slack intake bugs"},
+      {"title": "Self-serve help", "measure": "8 help articles in the period", "measure_source": "Links marked for the goal"},
+      {"title": "Clear bug reports", "measure": "Most intake bugs need no follow-up questions", "measure_source": "Bug comments in Glideship"},
+      {"title": "Cover a new product", "measure": "Handles tickets for a new product or flow alone for a month", "measure_source": "Goal value"},
+      {"title": "Shorter resolution time", "measure": "Median time to resolve, down on last period", "measure_source": "Helpdesk weekly report"},
+      {"title": "Train new joiners", "measure": "A new joiner handles a ticket type alone after their sessions", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "SEO & content",
+    "match_departments": ["Marketing", "Content", "Growth"],
+    "match_designations": ["SEO", "Content", "Writer", "Marketing"],
+    "heading_meanings": {
+      "delivery_quality": "Pages and articles published on schedule and to standard.",
+      "initiative": "Ranking or traffic problems found and fixed; new topics found.",
+      "team": "Briefs others can use, reviews of others' content, working with design and engineering.",
+      "growth": "New channels, tools or kinds of content."
+    },
+    "fact_sources": ["board_cards", "buds"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "More organic clicks to target pages", "measure": "Organic clicks up 25% on target pages", "measure_source": "Search console export"},
+      {"title": "Rank for target terms", "measure": "Target terms in the top 10", "measure_source": "Rank tracker link"},
+      {"title": "Publish on schedule", "measure": "Articles published against the content plan", "measure_source": "Board cards in Glideship"},
+      {"title": "Fix technical SEO issues", "measure": "Site audit errors on target pages, down to zero", "measure_source": "Site audit link"},
+      {"title": "Refresh content that's slipping", "measure": "Pages updated after losing traffic", "measure_source": "Links marked for the goal"},
+      {"title": "Content that converts", "measure": "Sign-ups from content pages", "measure_source": "Analytics report link"},
+      {"title": "Faster site changes", "measure": "Site-change BUDs raised and shipped", "measure_source": "BUDs in Glideship"},
+      {"title": "Try a new channel", "measure": "A new channel tested with a written result", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "Compliance",
+    "match_departments": ["Compliance", "Risk", "Legal"],
+    "match_designations": ["Compliance", "Risk", "Audit", "Legal"],
+    "heading_meanings": {
+      "delivery_quality": "Audits, reviews and filings done on time and correctly.",
+      "initiative": "Risks found early; controls improved or automated.",
+      "team": "Clear guidance for other teams; training that sticks.",
+      "growth": "New regulations, frameworks or areas they can now cover."
+    },
+    "fact_sources": ["board_cards", "buds"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "Audit findings closed on time", "measure": "Findings closed by their due date", "measure_source": "Auditor tracker link"},
+      {"title": "Policy reviews on schedule", "measure": "Policies reviewed by their due date", "measure_source": "Board cards in Glideship"},
+      {"title": "Staff training completed", "measure": "Staff who finished required training", "measure_source": "Training completion export"},
+      {"title": "A risk register that's current", "measure": "Risks reviewed this period", "measure_source": "Risk register link"},
+      {"title": "Controls built into the product", "measure": "Control BUDs raised and shipped", "measure_source": "BUDs in Glideship"},
+      {"title": "No late filings", "measure": "Regulatory filings submitted on time", "measure_source": "Goal value"},
+      {"title": "Faster answers to other teams", "measure": "Compliance requests answered within three working days", "measure_source": "Board cards in Glideship"},
+      {"title": "Cover a new framework", "measure": "Gap analysis done for a new standard", "measure_source": "Links marked for the goal"}
+    ]
+  },
+  {
+    "name": "Sales",
+    "match_departments": ["Sales", "Business Development"],
+    "match_designations": ["Sales", "Account", "Business Development"],
+    "heading_meanings": {
+      "delivery_quality": "Pipeline and revenue against target; accounts handed over cleanly.",
+      "initiative": "New markets, partners or ways of selling tried.",
+      "team": "Sharing what works, helping colleagues close, feedback to product.",
+      "growth": "New products, segments or skills they can now sell on their own."
+    },
+    "fact_sources": ["board_cards"],
+    "ai_drafting": false,
+    "goal_library": [
+      {"title": "Create pipeline", "measure": "Qualified pipeline created against target", "measure_source": "CRM report link"},
+      {"title": "Close against target", "measure": "Revenue closed against quota", "measure_source": "CRM report link"},
+      {"title": "Shorter sales cycle", "measure": "Median days from first call to close", "measure_source": "CRM report link"},
+      {"title": "Win back lost accounts", "measure": "Lapsed accounts reactivated", "measure_source": "Goal value"},
+      {"title": "Clean handovers", "measure": "Closed deals handed to onboarding with notes in a week", "measure_source": "Board cards in Glideship"},
+      {"title": "Feedback to product", "measure": "Customer asks written up for product", "measure_source": "Links marked for the goal"},
+      {"title": "Open a new segment", "measure": "First deals in a new segment or region", "measure_source": "Goal value"},
+      {"title": "Better forecasts", "measure": "Forecast within 10% of actual", "measure_source": "CRM report link"}
+    ]
+  },
+  {
+    "name": "Finance & ops",
+    "match_departments": ["Finance", "Operations", "Accounts"],
+    "match_designations": ["Finance", "Accountant", "Operations", "Ops"],
+    "heading_meanings": {
+      "delivery_quality": "Close, payroll, payments and reports done on time and correctly.",
+      "initiative": "Manual steps automated; costs and risks spotted early.",
+      "team": "Clear answers to other teams; vendors and auditors kept informed.",
+      "growth": "New tools, regulations or areas of finance they can now handle."
+    },
+    "fact_sources": ["board_cards"],
+    "ai_drafting": false,
+    "goal_library": [
+      {"title": "Faster month-end close", "measure": "Month-end close in 5 working days", "measure_source": "Close checklist"},
+      {"title": "Invoices paid on time", "measure": "Vendor invoices paid by their due date", "measure_source": "Payables report link"},
+      {"title": "Audit findings closed on time", "measure": "Findings closed by their due date", "measure_source": "Auditor tracker link"},
+      {"title": "Payroll without corrections", "measure": "Payroll runs with no correction afterwards", "measure_source": "Goal value"},
+      {"title": "Automate a manual process", "measure": "A recurring manual step moved to a tool", "measure_source": "Links marked for the goal"},
+      {"title": "Lower costs", "measure": "Savings found and agreed", "measure_source": "Goal value"},
+      {"title": "Reports leaders use", "measure": "Monthly reports out by the fifth working day", "measure_source": "Links marked for the goal"},
+      {"title": "Faster answers to other teams", "measure": "Ops board cards closed within three working days", "measure_source": "Board cards in Glideship"}
+    ]
+  },
+  {
+    "name": "General",
+    "is_default": true,
+    "match_departments": [],
+    "match_designations": [],
+    "heading_meanings": {
+      "delivery_quality": "The work they're responsible for, done well and on time.",
+      "initiative": "Problems spotted and fixed without being asked.",
+      "team": "Help given to colleagues, clear handovers.",
+      "growth": "New skills or areas they can now handle on their own."
+    },
+    "fact_sources": ["board_cards", "bugs"],
+    "ai_drafting": true,
+    "goal_library": [
+      {"title": "Deliver the agreed work", "measure": "Planned board cards done in the period", "measure_source": "Board cards in Glideship"},
+      {"title": "Improve one process", "measure": "A recurring problem fixed for good", "measure_source": "Links marked for the goal"},
+      {"title": "Help a colleague grow", "measure": "Someone they trained works alone on a task", "measure_source": "Links marked for the goal"},
+      {"title": "Learn a new skill", "measure": "A course or project in a new area finished", "measure_source": "Links marked for the goal"}
+    ]
+  }
+]

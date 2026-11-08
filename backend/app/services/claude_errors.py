@@ -28,6 +28,7 @@ settings, role-aware CTAs); the message is the safety net for callers
 that don't pass the code through.
 """
 
+import re
 from enum import StrEnum
 
 _DEFAULT_TURNS_PLACEHOLDER = "?"
@@ -45,6 +46,8 @@ class ClaudeErrorCode(StrEnum):
     BINARY_MISSING = "binary_missing"
     # The org's provider can't run this (capability gate).
     UNSUPPORTED = "unsupported"
+    # The provider refused the login: retrying won't help until someone fixes it.
+    AUTH = "auth"
     UNKNOWN = "unknown"
 
 
@@ -54,6 +57,14 @@ class ClaudeErrorCode(StrEnum):
 _SUBTYPE_TO_CODE: dict[str, ClaudeErrorCode] = {
     "error_max_turns": ClaudeErrorCode.MAX_TURNS,
 }
+
+
+# How the CLIs word a refused login.
+_AUTH_FAILURE = re.compile(
+    r"not logged in|please run /login|invalid api key|authentication[_ ](failed|error)|"
+    r"unauthorized|http 401|status 401",
+    re.IGNORECASE,
+)
 
 
 def _max_turns_message(turns: int | None) -> str:
@@ -108,4 +119,6 @@ def from_returncode(returncode: int, detail: str | None) -> tuple[ClaudeErrorCod
     """Translate a non-zero CLI exit code with an optional diagnostic detail."""
     suffix = f"exit code {returncode}"
     full_detail = f"{suffix}; {detail}" if detail else suffix
+    if detail and _AUTH_FAILURE.search(detail):
+        return ClaudeErrorCode.AUTH, _unknown_message(full_detail)
     return ClaudeErrorCode.UNKNOWN, _unknown_message(full_detail)

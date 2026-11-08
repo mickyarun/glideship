@@ -88,6 +88,7 @@ CAPABILITIES: dict[AIProvider, ProviderCapabilities] = {
         auth_modes=(_HOST_CLAUDE, _API_KEY_CLAUDE, _SUBSCRIPTION_CLAUDE),
         version_cmd=("claude", "--version"),
         install_hint="Install: curl -fsSL https://claude.ai/install.sh | bash",
+        isolates_mcp=True,
         docs_url="https://docs.claude.com/en/docs/claude-code",
     ),
     AIProvider.copilot: ProviderCapabilities(
@@ -155,6 +156,7 @@ CAPABILITIES: dict[AIProvider, ProviderCapabilities] = {
         # rather than letting them return plausible emptiness.
         supports_mcp=True,
         supports_files=False,
+        isolates_mcp=True,
         supports_resume=False,
         dynamic_models=True,
         requires_base_url=True,
