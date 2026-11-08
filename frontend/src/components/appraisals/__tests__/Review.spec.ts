@@ -21,8 +21,9 @@ import GoalCard from '@/components/appraisals/GoalCard.vue'
 import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import type { Goal } from '@/types/appraisalGoals'
-import type { AppraisalRead } from '@/types/appraisalReview'
-import { evidenceOptions, selfProblem } from '@/utils/appraisalReview'
+import type { AppraisalRead, NextGoal } from '@/types/appraisalReview'
+import type { AppraisalSummary } from '@/types/appraisalGoals'
+import { evidenceOptions, pickReview, reviewChoices, selfProblem } from '@/utils/appraisalReview'
 import { goalSections, historyLine } from '@/utils/appraisalGoals'
 import { appraisalPlugins } from './mountAppraisal'
 
@@ -51,7 +52,7 @@ function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
     goals: [{ id: 'g1', position: 1, title: 'Ship refunds', measure: '', added_mid_period: false, accepted_at: null, self_result: null, self_reason: null, self_evidence: [], result: null, draft_result: null, manager_reason: null }],
     self_score: { band: null, reason: '', evidence: [], submitted_at: null },
     manager_score: null, manager_only: null, send_back_note: null, reply: null, shared_at: null, acknowledged_at: null,
-    growth: { open: false, can_edit: false, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3, goals: [] },
+    growth: { open: false, can_edit: false, is_self: true, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3, goals: [] },
     can: { edit_self: true, edit_manager: false, send_back: false, share: false, acknowledge: false },
     ...overrides,
   }
@@ -192,7 +193,7 @@ describe('growth conversation', () => {
       props: {
         busy: null,
         growth: {
-          open: true, can_edit: true, strength: 'Early regressions', focus: 'Plan UAT', next_period_start: '2027-01-01', limit: 3,
+          open: true, can_edit: true, is_self: false, strength: 'Early regressions', focus: 'Plan UAT', next_period_start: '2027-01-01', limit: 3,
           goals: [
             { id: 'n1', title: 'UAT at 90%', measure: '', status: 'proposed', origin: 'employee_own', proposed_by_name: 'Priya', can_accept: true, can_remove: true },
           ],
@@ -203,5 +204,48 @@ describe('growth conversation', () => {
     expect(wrapper.text()).toContain('Proposed by Priya')
     await wrapper.findAll('button').find(b => b.text() === 'Confirm')?.trigger('click')
     expect(wrapper.emitted('accept')![0]).toEqual(['n1'])
+  })
+})
+
+describe('growth conversation by role', () => {
+  const growth = {
+    open: true, strength: 'Early regressions', focus: 'Plan UAT', next_period_start: '2027-01-01', limit: 1,
+    goals: [{ id: 'n1', title: 'UAT at 90%', measure: '', status: 'accepted', origin: 'manager_added', proposed_by_name: 'Ravi', can_accept: false, can_remove: false }] as NextGoal[],
+  }
+
+  it('is read-only for anyone who may not write it', async () => {
+    const { plugins } = await appraisalPlugins()
+    const wrapper = mount(GrowthSection, { global: { plugins: plugins as never[] }, props: { busy: null, growth: { ...growth, can_edit: false, is_self: false } } })
+    expect(wrapper.findAll('textarea').every(t => t.attributes('readonly') !== undefined)).toBe(true)
+    expect(wrapper.findAll('button')).toHaveLength(0)
+  })
+
+  it('lets the employee propose at the limit, but not the manager add', async () => {
+    const { plugins } = await appraisalPlugins()
+    const add = (isSelf: boolean) =>
+      mount(GrowthSection, { global: { plugins: plugins as never[] }, props: { busy: null, growth: { ...growth, can_edit: true, is_self: isSelf } } })
+        .findAll('button').find(b => b.text().includes('Add'))!
+    expect(add(true).attributes('disabled')).toBeUndefined()
+    expect(add(false).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('which review opens', () => {
+  const row = (id: string, status: AppraisalSummary['status']): AppraisalSummary => ({
+    id, user_id: 'u1', person_name: 'Priya', cycle_name: id, period_start: '2026-10-01', period_end: '2026-12-31',
+    status, goals_accepted: 0, goals_proposed: 0,
+  })
+
+  it('prefers one in progress, then the newest finished, over a cycle not yet reviewed', () => {
+    const next = row('next', 'enrolled')
+    expect(pickReview([next, row('q4', 'manager_review'), row('q3', 'acknowledged')])?.id).toBe('q4')
+    expect(pickReview([next, row('q4', 'acknowledged'), row('q3', 'acknowledged')])?.id).toBe('q4')
+    expect(pickReview([next])?.id).toBe('next')
+    expect(pickReview([])).toBeNull()
+  })
+
+  it('offers only opened reviews to switch between', () => {
+    const rows = [row('next', 'enrolled'), row('q4', 'acknowledged'), row('q2', 'withdrawn')]
+    expect(reviewChoices(rows).map(r => r.id)).toEqual(['q4'])
   })
 })

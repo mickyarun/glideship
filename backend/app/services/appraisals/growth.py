@@ -17,56 +17,48 @@
 The person and their primary manager agree one strength to use more,
 one thing to work on, and two or three goals for the next period. No
 band is part of it. Next period's goals are kept against that period's
-first day: they join its cycle at once if it is already running, or
-when it opens. The manager confirms what the employee proposes, as
-for any goal, and a goal can be taken back until it locks.
+first day: they join the person's own next cycle at once if it is
+already running, or when it enrols them. The manager confirms what the
+employee proposes, as for any goal; the rules are in :mod:`.growth_rules`.
 """
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.appraisal_enums import AppraisalStatus, GoalOrigin, GoalRevisionKind, GoalStatus
+from app.models.appraisal_enums import GoalOrigin, GoalRevisionKind, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
-from app.repositories.appraisal import AppraisalRepository
-from app.repositories.appraisal_cycle import AppraisalCycleRepository
+from app.models.employee_audit_event import EmployeeAuditAction
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.user import UserRepository
 from app.schemas.appraisal_goal import GoalBody
 from app.schemas.appraisal_growth import GrowthBody, GrowthRead, NextGoal
-from app.services.appraisals import crypto, goal_history
+from app.services.appraisals import audit, crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalNotFoundError
 from app.services.appraisals.goal_history import GoalText
-from app.services.appraisals.goal_rules import MAX_GOALS, next_position
-from app.services.appraisals.goal_writes import FULL, audit_goal, flush_or_full
+from app.services.appraisals.goal_rules import MAX_GOALS
+from app.services.appraisals.goal_writes import audit_goal, flush_or_full
+from app.services.appraisals.growth_rules import (
+    MAX_LIVE,
+    can_edit,
+    can_remove,
+    free_position,
+    is_open,
+    next_start,
+    open_next_cycle,
+    require_edit,
+)
 
-OPEN_AT = frozenset({AppraisalStatus.SHARED, AppraisalStatus.ACKNOWLEDGED})
-
-
-def is_open(ctx: AppraisalContext) -> bool:
-    """The result has been shared."""
-    return ctx.appraisal.status in OPEN_AT
-
-
-def can_edit(ctx: AppraisalContext) -> bool:
-    """The person or their acting primary manager, once it is open."""
-    return is_open(ctx) and (
-        (ctx.is_self and ctx.access.edit_check_ins) or ctx.access.manage_goals
-    )
-
-
-def next_start(ctx: AppraisalContext) -> date:
-    """The first day of the next period."""
-    return ctx.cycle.period_end + timedelta(days=1)
+LIVE = (GoalStatus.ACCEPTED, GoalStatus.PROPOSED)
 
 
 async def _goals(db: AsyncSession, ctx: AppraisalContext) -> list[AppraisalGoal]:
     goals = await AppraisalGoalRepository(db, org_id=ctx.cycle.org_id).for_period(
         ctx.profile.id, next_start(ctx)
     )
-    return [g for g in goals if g.status in (GoalStatus.ACCEPTED, GoalStatus.PROPOSED)]
+    return [g for g in goals if g.status in LIVE]
 
 
 async def read_growth(db: AsyncSession, ctx: AppraisalContext) -> GrowthRead:
@@ -74,10 +66,11 @@ async def read_growth(db: AsyncSession, ctx: AppraisalContext) -> GrowthRead:
     goals = await _goals(db, ctx) if is_open(ctx) else []
     people = {g.proposed_by for g in goals if g.proposed_by}
     names = {u.id: u.name for u in await UserRepository(db).get_many_by_ids(list(people))}
-    editable, manager = can_edit(ctx), can_edit(ctx) and not ctx.is_self
+    manager = can_edit(ctx) and not ctx.is_self
     return GrowthRead(
         open=is_open(ctx),
-        can_edit=editable,
+        can_edit=can_edit(ctx),
+        is_self=ctx.is_self,
         strength=crypto.unseal(ctx.appraisal, "growth_strength") or "",
         focus=crypto.unseal(ctx.appraisal, "growth_focus") or "",
         next_period_start=next_start(ctx),
@@ -91,7 +84,7 @@ async def read_growth(db: AsyncSession, ctx: AppraisalContext) -> GrowthRead:
                 origin=g.origin,
                 proposed_by_name=names.get(g.proposed_by, "") if g.proposed_by else "",
                 can_accept=manager and g.status is GoalStatus.PROPOSED,
-                can_remove=editable and (manager or g.proposed_by == ctx.caller_id),
+                can_remove=can_remove(ctx, g),
             )
             for g in goals
         ],
@@ -99,50 +92,42 @@ async def read_growth(db: AsyncSession, ctx: AppraisalContext) -> GrowthRead:
 
 
 async def save_growth(db: AsyncSession, ctx: AppraisalContext, body: GrowthBody) -> None:
-    """Store the strength and the focus."""
-    if not can_edit(ctx):
-        raise AppraisalConflictError("The growth conversation opens once the result is shared.")
-    crypto.seal(ctx.appraisal, "growth_strength", body.strength.strip())
-    crypto.seal(ctx.appraisal, "growth_focus", body.focus.strip())
+    """Store the strength and the focus; a change is audited (ids only)."""
+    require_edit(ctx)
+    appraisal = ctx.appraisal
+    before = (
+        crypto.unseal(appraisal, "growth_strength"),
+        crypto.unseal(appraisal, "growth_focus"),
+    )
+    strength, focus = body.strength.strip(), body.focus.strip()
+    crypto.seal(appraisal, "growth_strength", strength)
+    crypto.seal(appraisal, "growth_focus", focus)
+    if before != (strength or None, focus or None):
+        audit.record(
+            db,
+            org_id=appraisal.org_id,
+            actor_id=ctx.caller_id,
+            subject_user_id=ctx.profile.user_id,
+            profile_id=ctx.profile.id,
+            action=EmployeeAuditAction.APPRAISAL_CHANGED,
+            target=appraisal.id,
+        )
     await db.flush()
-
-
-async def _check_goals_open(db: AsyncSession, ctx: AppraisalContext) -> None:
-    """Refuse once the next period's own review has opened: its goals are locked."""
-    if not can_edit(ctx):
-        raise AppraisalConflictError("The growth conversation opens once the result is shared.")
-    cycle = await AppraisalCycleRepository(db, org_id=ctx.cycle.org_id).opened_for_period(
-        next_start(ctx)
-    )
-    if cycle is None:
-        return
-    nxt = await AppraisalRepository(db, org_id=ctx.cycle.org_id).for_profile_in_cycle(
-        ctx.profile.id, cycle.id
-    )
-    if nxt is not None and nxt.status is not AppraisalStatus.ENROLLED:
-        raise AppraisalConflictError("Next period's goals have locked: its review has opened.")
-
-
-async def _position(db: AsyncSession, ctx: AppraisalContext) -> int:
-    accepted = [g for g in await _goals(db, ctx) if g.status is GoalStatus.ACCEPTED]
-    position = next_position({g.position for g in accepted if g.position is not None})
-    if position is None:
-        raise AppraisalConflictError(FULL)
-    return position
 
 
 async def add_next_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody) -> None:
     """The manager adds a confirmed goal; the employee proposes one."""
-    await _check_goals_open(db, ctx)
+    cycle_id = await open_next_cycle(db, ctx)
+    goals = await _goals(db, ctx)
+    if len(goals) >= MAX_LIVE:
+        raise AppraisalConflictError("That's plenty of goals for one period.")
     as_manager = not ctx.is_self
-    start = next_start(ctx)
-    cycle = await AppraisalCycleRepository(db, org_id=ctx.cycle.org_id).opened_for_period(start)
     goal = AppraisalGoal(
         id=uuid.uuid4(),
         org_id=ctx.cycle.org_id,
         profile_id=ctx.profile.id,
-        cycle_id=cycle.id if cycle else None,
-        target_period_start=start,
+        cycle_id=cycle_id,
+        target_period_start=next_start(ctx),
         origin=GoalOrigin.MANAGER_ADDED if as_manager else GoalOrigin.EMPLOYEE_OWN,
         proposed_by=ctx.caller_id,
         added_mid_period=False,
@@ -150,7 +135,7 @@ async def add_next_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody)
         suggestion_refs={},
     )
     if as_manager:
-        goal.status, goal.position = GoalStatus.ACCEPTED, await _position(db, ctx)
+        goal.status, goal.position = GoalStatus.ACCEPTED, free_position(goals)
         goal.accepted_by, goal.accepted_at = ctx.caller_id, datetime.now(UTC)
     words = GoalText(body.title.strip(), body.measure.strip())
     crypto.seal(goal, "title", words.title)
@@ -160,6 +145,8 @@ async def add_next_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody)
     goal_history.record(
         db, goal, ctx.caller_id, GoalRevisionKind.CREATED, after=words, reason=reason
     )
+    if as_manager:
+        audit_goal(db, ctx, goal)
     await flush_or_full(db)
 
 
@@ -172,11 +159,11 @@ async def _goal(db: AsyncSession, ctx: AppraisalContext, goal_id: uuid.UUID) -> 
 
 async def accept_next_goal(db: AsyncSession, ctx: AppraisalContext, goal_id: uuid.UUID) -> None:
     """The manager confirms a goal the employee proposed."""
-    await _check_goals_open(db, ctx)
+    await open_next_cycle(db, ctx)
     goal = await _goal(db, ctx, goal_id)
-    if not (not ctx.is_self and goal.status is GoalStatus.PROPOSED):
+    if ctx.is_self or goal.status is not GoalStatus.PROPOSED:
         raise AppraisalConflictError("Only the manager confirms a proposed goal.")
-    goal.status, goal.position = GoalStatus.ACCEPTED, await _position(db, ctx)
+    goal.status, goal.position = GoalStatus.ACCEPTED, free_position(await _goals(db, ctx))
     goal.accepted_by, goal.accepted_at = ctx.caller_id, datetime.now(UTC)
     goal_history.record(db, goal, ctx.caller_id, GoalRevisionKind.CONFIRMED)
     audit_goal(db, ctx, goal)
@@ -184,14 +171,14 @@ async def accept_next_goal(db: AsyncSession, ctx: AppraisalContext, goal_id: uui
 
 
 async def remove_next_goal(db: AsyncSession, ctx: AppraisalContext, goal_id: uuid.UUID) -> None:
-    """Take a goal back: the manager any, the employee their own proposal."""
-    await _check_goals_open(db, ctx)
+    """Take a goal back: the manager any, the employee only their own proposal."""
+    await open_next_cycle(db, ctx)
     goal = await _goal(db, ctx, goal_id)
-    own = goal.proposed_by == ctx.caller_id
-    if ctx.is_self and not own:
+    if not can_remove(ctx, goal):
         raise AppraisalConflictError("This goal can't be taken back now.")
+    before = GoalText.of(goal)
     goal.status, goal.position = GoalStatus.DISMISSED, None
-    goal_history.record(
-        db, goal, ctx.caller_id, GoalRevisionKind.REMOVED, before=GoalText.of(goal)
-    )
+    goal_history.record(db, goal, ctx.caller_id, GoalRevisionKind.REMOVED, before=before)
+    if not ctx.is_self:
+        audit_goal(db, ctx, goal)
     await db.flush()

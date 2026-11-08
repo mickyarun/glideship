@@ -36,7 +36,7 @@
         <v-btn v-if="goal.can_remove" size="small" variant="text" @click="emit('remove', goal.id)">Take back</v-btn>
       </li>
     </ul>
-    <v-btn v-if="growth.can_edit" size="small" variant="outlined" prepend-icon="mdi-plus" :disabled="accepted >= growth.limit" @click="emit('add')">
+    <v-btn v-if="growth.can_edit" size="small" variant="outlined" prepend-icon="mdi-plus" :disabled="atLimit" @click="emit('add')">
       Add a goal for next period
     </v-btn>
   </section>
@@ -52,16 +52,13 @@ const emit = defineEmits<{ save: [strength: string, focus: string]; add: []; acc
 
 const strength = ref('')
 const focus = ref('')
-watch(
-  () => [props.growth.strength, props.growth.focus],
-  ([s, f]) => {
-    strength.value = s
-    focus.value = f
-  },
-  { immediate: true },
-)
+// Each field follows its own saved value, so saving one doesn't reset an edit to the other.
+watch(() => props.growth.strength, s => (strength.value = s), { immediate: true })
+watch(() => props.growth.focus, f => (focus.value = f), { immediate: true })
 const dirty = computed(() => strength.value.trim() !== props.growth.strength || focus.value.trim() !== props.growth.focus)
 const accepted = computed(() => props.growth.goals.filter(g => g.status === 'accepted').length)
+// The employee can still propose at the limit; only the manager's adds take a slot.
+const atLimit = computed(() => !props.growth.is_self && accepted.value >= props.growth.limit)
 </script>
 
 <style scoped>

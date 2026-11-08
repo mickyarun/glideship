@@ -175,7 +175,10 @@ CASES = [(n, p, r, s, _HR_SUBMITTED if n == "owner submitted" else e) for n, p, 
 def test_access_matrix(
     perms: PermissionSet, relation: Relation, stage: Stage, expected: dict[str, bool]
 ) -> None:
-    assert access_for(perms, relation, stage) == AppraisalAccess(**expected)
+    primary = relation.is_primary_manager and bool(expected)
+    assert access_for(perms, relation, stage) == AppraisalAccess(
+        **expected, is_primary_manager=primary
+    )
 
 
 @pytest.mark.parametrize("stage", [DRAFT, SELF_DONE, MGR_DONE, SHARED, LOCKED])

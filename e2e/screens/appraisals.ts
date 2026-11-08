@@ -15,7 +15,7 @@
 /** Appraisal screens: the guide, check-ins, feedback, the review and the growth conversation. */
 import { expect, type Page } from '@playwright/test'
 
-/** The quarter before today's, and the first weekday after it ends (06:00 UTC). */
+/** The quarter before today's, and the first weekday after it ends, at noon UTC so the date is the same in any org time zone. */
 export function lastQuarter(today = new Date()): { start: string, end: Date, tickAt: string } {
   const quarter = Math.floor(today.getUTCMonth() / 3)
   const startMonth = (quarter + 3) % 4 * 3
@@ -25,7 +25,7 @@ export function lastQuarter(today = new Date()): { start: string, end: Date, tic
   const tick = new Date(end)
   do tick.setUTCDate(tick.getUTCDate() + 1)
   while ([0, 6].includes(tick.getUTCDay()))
-  tick.setUTCHours(6)
+  tick.setUTCHours(12)
   return { start: start.toISOString().slice(0, 10), end, tickAt: tick.toISOString() }
 }
 

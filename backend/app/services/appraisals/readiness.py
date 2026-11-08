@@ -33,7 +33,7 @@ from app.repositories.organization import OrganizationRepository
 from app.repositories.user import UserRepository
 from app.schemas.appraisal_cycle import IdentityFlag, PersonRef, Readiness
 from app.services.appraisals.draft_runner import provider_refusal
-from app.services.appraisals.enrolment import in_scope, primary_link
+from app.services.appraisals.enrolment_rules import in_scope, primary_link
 from app.services.appraisals.identity import Person, possible_duplicates
 from app.services.appraisals.role_templates import match_template
 from app.services.appraisals.settings import load_appraisal_settings

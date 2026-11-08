@@ -21,6 +21,14 @@
 <template>
   <AppPage :title="title" :subtitle="subtitle">
     <template #actions>
+      <v-menu v-if="others.length">
+        <template #activator="{ props: menu }">
+          <v-btn v-bind="menu" variant="text" append-icon="mdi-chevron-down">Other reviews</v-btn>
+        </template>
+        <v-list density="compact">
+          <v-list-item v-for="r in others" :key="r.id" :title="r.cycle_name" :to="{ name: 'appraisal-review', params: { id: r.id } }" />
+        </v-list>
+      </v-menu>
       <v-btn v-if="review" variant="text" :to="{ name: 'appraisal-goals', params: { id: review.id } }">Goals</v-btn>
       <template v-if="review?.can.share">
         <v-btn variant="outlined" @click="sendingBack = true">Send back</v-btn>
@@ -81,12 +89,10 @@ import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAuthStore } from '@/stores/auth'
 import type { GoalBody } from '@/types/appraisalGoals'
 import type { SelfBody } from '@/types/appraisalReview'
-import type { AppraisalStatus } from '@/types/appraisalSetup'
-import { evidenceOptions } from '@/utils/appraisalReview'
+import { evidenceOptions, pickReview, reviewChoices } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
 type Busy = 'save' | 'submit' | 'share' | 'back' | 'ack'
-const ACTIVE: AppraisalStatus[] = ['self_review', 'manager_review', 'calibration', 'shared']
 
 const route = useRoute()
 const store = useAppraisalReviewStore()
@@ -99,6 +105,8 @@ const message = ref('')
 const sendingBack = ref(false)
 const note = ref('')
 const adding = ref(false)
+// The caller's own other reviews; someone else's open by link from the team list.
+const others = computed(() => reviewChoices(store.mine).filter(r => r.id !== review.value?.id))
 
 const title = computed(() =>
   review.value ? `${isSelf.value ? 'Your' : `${review.value.person_name}'s`} ${review.value.cycle_name} review` : 'Review',
@@ -152,10 +160,12 @@ watch(
   async id => {
     message.value = ''
     void useAppraisalGuide().showOnFirstVisit()
-    if (typeof id === 'string') return store.fetchOne(id)
+    if (typeof id === 'string') {
+      if (!store.mine.length) void store.fetchLists()
+      return store.fetchOne(id)
+    }
     await store.fetchLists()
-    // The review waiting on them first, else the newest.
-    const latest = store.mine.find(r => ACTIVE.includes(r.status)) ?? store.mine[0]
+    const latest = pickReview(store.mine)
     if (latest) await store.fetchOne(latest.id)
     else store.current = null
   },

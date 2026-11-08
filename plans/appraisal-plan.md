@@ -421,7 +421,12 @@ The growth conversation is a separate section, opened after sharing:
 - one thing to work on,
 - next period's two or three goals.
 
-No band is shown on this screen.
+No band is shown on this screen. Only the person and their primary manager write it; anyone else
+who may see the review reads it. It stays open after the cycle closes. The manager's goals are
+confirmed at once and take a slot; the employee's are proposals the manager confirms, and the
+employee can take back only their own proposals. Next period's goals join the person's own next
+appraisal as soon as one exists (only cycles that enrol them pick them up), and lock when that
+review opens or that cycle closes; the strength and focus stay editable.
 
 ## The period summary
 

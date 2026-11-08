@@ -48,6 +48,9 @@ async def reset() -> Response:
         )
         tables = sorted(set(rows.scalars()) - set(_KEEP_TABLES))
         quoted = ", ".join(f'"{name}"' for name in tables)
+        # Guard triggers (append-only goal history refuses TRUNCATE) protect
+        # real data; this throwaway database skips them for this transaction.
+        await db.execute(text("SET LOCAL session_replication_role = replica"))
         await db.execute(text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
         await seed_permissions(db)
         await db.commit()

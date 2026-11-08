@@ -123,14 +123,21 @@ class AppraisalGoalRepository(BaseRepository[AppraisalGoal]):
         )
         return {(r[0], r[1], r[2]): int(r[3]) for r in result.all()}
 
-    async def attach_to_cycle(self, cycle_id: uuid.UUID, period_start: date) -> int:
-        """Give goals set ahead of a cycle (in a growth conversation) their cycle."""
+    async def attach_to_cycle(
+        self, cycle_id: uuid.UUID, period_start: date, profile_ids: Collection[uuid.UUID]
+    ) -> int:
+        """Give these people's goals set ahead of a cycle (in a growth conversation)
+        their cycle: only people the cycle enrolled, so a cycle for another office
+        or team that starts the same day never takes them."""
+        if not profile_ids:
+            return 0
         result = await self._db.execute(
             update(AppraisalGoal)
             .where(
                 AppraisalGoal.org_id == self._org,
                 AppraisalGoal.cycle_id.is_(None),
                 AppraisalGoal.target_period_start == period_start,
+                AppraisalGoal.profile_id.in_(list(profile_ids)),
             )
             .values(cycle_id=cycle_id)
         )

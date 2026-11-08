@@ -23,7 +23,8 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
-from app.models.appraisal_enums import AppraisalStatus, DraftingMode, DraftStatus
+from app.models.appraisal_cycle import AppraisalCycle
+from app.models.appraisal_enums import AppraisalStatus, CycleStatus, DraftingMode, DraftStatus
 from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.models.employee_reporting_manager import EmployeeReportingManager
 from app.models.user import User
@@ -235,3 +236,29 @@ class AppraisalRepository(BaseRepository[Appraisal]):
             )
             .values(suggest_status=DraftStatus.NONE, suggest_claimed_at=None)
         )
+
+    async def for_profile_in_period(
+        self, profile_id: uuid.UUID, period_start: date
+    ) -> tuple[Appraisal, AppraisalCycle] | None:
+        """The person's own appraisal in an opened cycle for that period, and the cycle.
+
+        Running cycles win over closed ones, so a re-run of the same period
+        is the one that counts.
+        """
+        result = await self._db.execute(
+            select(Appraisal, AppraisalCycle)
+            .join(AppraisalCycle, AppraisalCycle.id == Appraisal.cycle_id)
+            .where(
+                Appraisal.org_id == self._org,
+                Appraisal.profile_id == profile_id,
+                AppraisalCycle.period_start == period_start,
+                AppraisalCycle.status != CycleStatus.DRAFT,
+            )
+            .order_by(
+                (AppraisalCycle.status == CycleStatus.CLOSED).asc(),
+                AppraisalCycle.created_at.desc(),
+            )
+            .limit(1)
+        )
+        row = result.first()
+        return (row[0], row[1]) if row else None

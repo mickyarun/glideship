@@ -23,6 +23,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.appraisal_cycle import orgs_with_running_cycles
@@ -33,6 +34,6 @@ async def run_check_in_tick(db: AsyncSession, org_id: uuid.UUID, at: datetime) -
     """One check-in tick for one org, as if it were ``at``."""
     org = next((o for o in await orgs_with_running_cycles(db) if o.org_id == org_id), None)
     if org is None:
-        raise ValueError("The org has no running appraisal cycle.")
+        raise HTTPException(status_code=409, detail="The org has no running appraisal cycle.")
     await org_pass(db, org, at)
     await db.commit()

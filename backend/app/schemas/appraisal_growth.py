@@ -47,6 +47,8 @@ class GrowthRead(BaseModel):
 
     open: bool
     can_edit: bool
+    # Whether the viewer is the person: their adds are proposals, a manager's take a slot.
+    is_self: bool
     strength: str
     focus: str
     next_period_start: date

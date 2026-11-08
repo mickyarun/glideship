@@ -39,38 +39,18 @@ from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.employee_reporting_manager import (
     EmployeeReportingManagerRepository,
-    ManagerLink,
 )
 from app.schemas.appraisal_cycle import EnrolmentReport
 from app.services.appraisals import audit
 from app.services.appraisals.cycles import draft_cycle
 from app.services.appraisals.drafting_mode import drafting_mode
+from app.services.appraisals.enrolment_rules import in_scope, primary_link
 from app.services.appraisals.errors import AppraisalConflictError
 from app.services.appraisals.role_templates import ensure_seeded, match_template
 from app.services.appraisals.settings import load_appraisal_settings
 
 # Moving to either status withdraws the person's appraisals in progress.
 LEAVING = frozenset({EmployeeStatus.ON_NOTICE, EmployeeStatus.EXITED})
-
-
-def primary_link(links: Sequence[ManagerLink]) -> ManagerLink | None:
-    """The person's active primary manager link, if any."""
-    return next((m for m in links if m.is_primary and m.is_active), None)
-
-
-def in_scope(
-    cycle: AppraisalCycle, profile: EmployeeProfile, template: AppraisalRoleTemplate | None
-) -> bool:
-    """Whether the cycle's offices, departments and templates cover the person."""
-    scope = cycle.scope or {}
-    offices = set(scope.get("offices") or [])
-    departments = {d.lower() for d in scope.get("departments") or []}
-    templates = set(scope.get("templates") or [])
-    return (
-        (not offices or str(profile.office_id) in offices)
-        and (not departments or (profile.department or "").lower() in departments)
-        and (not templates or (template is not None and str(template.id) in templates))
-    )
 
 
 async def enrol(
@@ -87,6 +67,7 @@ async def enrol(
     )
     enrolled_ids = {a.profile_id for a in await repo.for_cycle(cycle.id)}
     report = EnrolmentReport(enrolled=0, already_enrolled=0, no_primary_manager=[], no_template=[])
+    enrolled: list[uuid.UUID] = []
     for profile in profiles:
         template = match_template(
             templates, profile.department, profile.designation, cycle.template_overrides
@@ -117,10 +98,12 @@ async def enrol(
             )
         )
         report.enrolled += 1
+        enrolled.append(profile.id)
     await db.flush()
-    # Goals agreed in last period's growth conversation join this cycle.
+    # Goals agreed in last period's growth conversation join this cycle, for
+    # the people it enrolled only.
     await AppraisalGoalRepository(db, org_id=cycle.org_id).attach_to_cycle(
-        cycle.id, cycle.period_start
+        cycle.id, cycle.period_start, enrolled
     )
     return report
 

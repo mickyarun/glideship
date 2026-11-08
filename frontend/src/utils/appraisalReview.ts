@@ -14,7 +14,9 @@
 
 /** Evidence chips and the submit checks on the review forms (pure). */
 
+import type { AppraisalSummary } from '@/types/appraisalGoals'
 import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalReview'
+import type { AppraisalStatus } from '@/types/appraisalSetup'
 import { sourceLabel } from '@/utils/appraisalCheckIn'
 
 export const HIGH_BANDS = [1, 2]
@@ -50,4 +52,23 @@ export function selfProblem(body: SelfBody, goalIds: string[]): string {
   const scored = new Set(body.goals.filter(g => g.result).map(g => g.goal_id))
   if (goalIds.some(id => !scored.has(id))) return 'Score each goal: achieved, partly or not yet.'
   return ''
+}
+
+const ACTIVE: AppraisalStatus[] = ['self_review', 'manager_review', 'calibration', 'shared']
+const HIDDEN: AppraisalStatus[] = ['enrolled', 'withdrawn']
+
+/** The reviews worth switching between: opened, and not withdrawn (newest first). */
+export function reviewChoices(mine: AppraisalSummary[]): AppraisalSummary[] {
+  return mine.filter(r => !HIDDEN.includes(r.status))
+}
+
+/**
+ * Which of the caller's appraisals the review page opens without an id:
+ * one waiting on someone, else the newest finished one (its growth
+ * conversation stays open), else the newest at all.
+ */
+export function pickReview(mine: AppraisalSummary[]): AppraisalSummary | null {
+  return (
+    mine.find(r => ACTIVE.includes(r.status)) ?? mine.find(r => r.status === 'acknowledged') ?? mine[0] ?? null
+  )
 }

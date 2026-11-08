@@ -39,6 +39,8 @@ function item(overrides: Partial<FeedbackRead> = {}): FeedbackRead {
 }
 
 beforeEach(() => {
+  // The guide opens on a first visit; these specs are about the page under it.
+  localStorage.setItem('appraisal-guide-seen', '1')
   apiGet.mockReset()
   apiPut.mockReset()
   apiPost.mockReset()

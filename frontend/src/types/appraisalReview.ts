@@ -87,6 +87,7 @@ export interface NextGoal {
 export interface GrowthRead {
   open: boolean
   can_edit: boolean
+  is_self: boolean
   strength: string
   focus: string
   next_period_start: string

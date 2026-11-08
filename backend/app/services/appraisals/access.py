@@ -85,6 +85,9 @@ class AppraisalAccess:
     view_calibration: bool = False
     send_back: bool = False
     share: bool = False
+    # Still the primary manager, whether or not the record can change: the
+    # growth conversation follows the reporting line past the cycle's close.
+    is_primary_manager: bool = False
 
     @property
     def any(self) -> bool:
@@ -151,4 +154,5 @@ def access_for(perms: PermissionSet, relation: Relation, stage: Stage) -> Apprai
         view_calibration=primary or hr,
         send_back=hr and stage.editable and stage.manager_submitted and not stage.shared,
         share=hr and stage.editable and stage.manager_submitted and not stage.shared,
+        is_primary_manager=primary,
     )

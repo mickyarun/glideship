@@ -106,18 +106,6 @@ class AppraisalCycleRepository(BaseRepository[AppraisalCycle]):
         )
         return list(result.scalars().all())
 
-    async def opened_for_period(self, period_start: date) -> AppraisalCycle | None:
-        """The cycle for a period once it has opened (not a draft), if any."""
-        result = await self._db.execute(
-            self._scoped(select(AppraisalCycle))
-            .where(
-                AppraisalCycle.period_start == period_start,
-                AppraisalCycle.status != CycleStatus.DRAFT,
-            )
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
-
     async def running_on(self, day: date) -> list[AppraisalCycle]:
         """Active cycles whose period contains ``day``."""
         result = await self._db.execute(
