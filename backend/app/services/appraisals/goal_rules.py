@@ -18,9 +18,9 @@ Three accepted goals a period at most. The employee proposes their own
 goals, withdraws or rewords a proposal, and suggests a change to a
 confirmed goal; the primary manager confirms, asks for a rewording,
 declines with a reason, edits with a reason, adds and removes their own.
-Suggested goals (AI or role library) can be taken up or dismissed by
-either. Everything locks when the self-review opens, so nobody moves the
-target while it's being scored.
+Suggested goals can be edited, taken up or dismissed by either; one the
+employee takes up still goes to the manager to confirm. Everything locks
+when the self-review opens, so nobody moves the target while it's scored.
 """
 
 from dataclasses import dataclass
@@ -75,7 +75,7 @@ def actions(goal: AppraisalGoal, rights: GoalRights, pending_change: bool) -> Go
         dismiss=(either and (own_proposal or suggested)),
         ask_reword=rights.manager and own_proposal,
         edit=(rights.manager and status is not GoalStatus.DISMISSED)
-        or (rights.employee and own_proposal),
+        or (rights.employee and (own_proposal or suggested)),
         remove=rights.manager
         and status is GoalStatus.ACCEPTED
         and origin is GoalOrigin.MANAGER_ADDED,

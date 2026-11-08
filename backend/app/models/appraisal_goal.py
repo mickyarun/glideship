@@ -119,6 +119,11 @@ class AppraisalGoal(BaseModel):
     self_evidence: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
+    # The manager's pick while drafting; never shown to the employee.
+    manager_result: Mapped[GoalResult | None] = mapped_column(
+        pg_enum(GoalResult, "appraisal_goal_result"), nullable=True
+    )
+    # Fixed when the manager submits, cleared if HR sends the review back.
     final_result: Mapped[GoalResult | None] = mapped_column(
         pg_enum(GoalResult, "appraisal_goal_result"), nullable=True
     )

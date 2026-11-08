@@ -28,8 +28,14 @@ from app.database import AsyncSessionLocal
 from app.schemas.jobs import JobState
 from app.services.appraisals.draft_check import DraftUnreadableError
 from app.services.appraisals.draft_runner import run_research
+from app.services.appraisals.errors import AppraisalConflictError
 from app.services.appraisals.role_template_admin import get_template
-from app.services.appraisals.role_trends import checked_trends, save_trends, trend_prompt
+from app.services.appraisals.role_trends import (
+    checked_trends,
+    require_ai,
+    save_trends,
+    trend_prompt,
+)
 from app.services.job_queue import create_job, update_job
 
 logger = structlog.get_logger(__name__)
@@ -47,6 +53,11 @@ async def handle_trend_draft_job(job_id: str, payload: dict[str, Any]) -> None:
     org_id, template_id = uuid.UUID(payload["org_id"]), uuid.UUID(payload["template_id"])
     update_job(job_id, state=JobState.RUNNING, status_message="Researching the role")
     async with AsyncSessionLocal() as db:
+        try:
+            await require_ai(db, org_id)
+        except AppraisalConflictError as exc:
+            update_job(job_id, state=JobState.FAILED, error=str(exc), error_code="ai_off")
+            return
         prompt = trend_prompt(await get_template(db, org_id, template_id))
     result = await run_research(org_id, prompt)
     trends = []

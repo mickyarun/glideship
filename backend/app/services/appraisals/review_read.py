@@ -53,6 +53,7 @@ def _goal(goal: AppraisalGoal, access: AppraisalAccess) -> ReviewGoal:
         self_reason=crypto.unseal(goal, "self_reason") if own else None,
         self_evidence=ids_of(goal.self_evidence) if own else [],
         result=goal.final_result if manager else None,
+        draft_result=goal.manager_result if access.edit_manager_score else None,
         manager_reason=crypto.unseal(goal, "manager_reason") if manager else None,
     )
 
@@ -98,6 +99,7 @@ async def read_review(
         shown = for_viewer(facts, is_self=ctx.is_self, perms=caller.perms, boards=boards)
         return [FactView.model_validate(f) for f in shown]
 
+    links = await repo.links_for([c.id for c in months])
     timeline = [
         TimelineMonth(
             check_in_id=c.id,
@@ -113,7 +115,7 @@ async def read_review(
                     heading=link.heading,
                     goal_id=link.goal_id,
                 )
-                for link in await repo.links(c.id)
+                for link in links[c.id]
             ],
         )
         for c in months

@@ -15,9 +15,11 @@
 """The manager's review: agree or change each goal and the band, then submit to HR.
 
 While drafting, the manager's picks are kept on the row (``manager_band``
-and each goal's ``final_result``); only submitting fixes the final band
-and results, so a later change in code can't move a shared result. The
-two questions only the manager answers are saved with it.
+and each goal's ``manager_result``); only submitting fixes the final band
+and results, so a later change in code can't move a shared result. Only
+a submitted self-score can be agreed with. The two questions only the
+manager answers are saved with it. The row is locked first, so a
+send-back can't cross a submit.
 """
 
 from datetime import UTC, datetime
@@ -26,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_enums import AppraisalStatus
 from app.models.employee_audit_event import EmployeeAuditAction
+from app.repositories.appraisal import AppraisalRepository
 from app.schemas.appraisal_review import ManagerBody
 from app.services.appraisals import audit, crypto
 from app.services.appraisals.appraisal_context import AppraisalContext
@@ -38,6 +41,8 @@ from app.services.appraisals.review_rules import (
     final_band,
     final_result,
     goal_problem,
+    submitted_band,
+    submitted_result,
 )
 from app.services.appraisals.self_review import period_goals
 
@@ -52,8 +57,10 @@ def _open(ctx: AppraisalContext) -> None:
 async def _apply(
     db: AsyncSession, ctx: AppraisalContext, body: ManagerBody, *, submit: bool
 ) -> None:
+    await AppraisalRepository(db, org_id=ctx.appraisal.org_id).lock_row(ctx.appraisal.id)
     _open(ctx)
     appraisal = ctx.appraisal
+    own_band = submitted_band(appraisal)
     pool = await evidence_pool(db, appraisal)
     goals = await period_goals(db, ctx)
     evidence = pick(pool, body.evidence)
@@ -69,12 +76,13 @@ async def _apply(
             if item
             else GoalDecision(False, None, "")
         )
-        goal.final_result = final_result(goal.self_result, decision)
+        own = submitted_result(appraisal, goal)
+        goal.manager_result = final_result(own, decision)
         crypto.seal(
             goal, "manager_reason", decision.reason.strip() if not decision.agree else None
         )
-        problems.append(goal_problem(goal.self_result, decision))
-    appraisal.manager_band = final_band(appraisal.self_band, band)
+        problems.append(goal_problem(own, decision))
+    appraisal.manager_band = final_band(own_band, band)
     crypto.seal(appraisal, "manager_reason", body.reason.strip() if not body.agree else None)
     appraisal.manager_evidence = evidence
     appraisal.ready_next_level = body.ready_next_level
@@ -83,9 +91,11 @@ async def _apply(
         appraisal, "concern_note", body.concern_note.strip() if body.performance_concern else None
     )
     if submit:
-        problem = band_problem(appraisal.self_band, band) or next((p for p in problems if p), None)
+        problem = band_problem(own_band, band) or next((p for p in problems if p), None)
         if problem:
             raise AppraisalInvalidError(problem)
+        for goal in goals.values():
+            goal.final_result = goal.manager_result
         appraisal.final_band = appraisal.manager_band
         appraisal.manager_submitted_at = datetime.now(UTC)
         appraisal.status = AppraisalStatus.CALIBRATION

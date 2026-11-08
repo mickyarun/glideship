@@ -201,3 +201,37 @@ class AppraisalRepository(BaseRepository[Appraisal]):
             stmt.values(suggest_status=DraftStatus.PENDING, suggest_attempts=0, suggest_error=None)
         )
         return rowcount(result)
+
+    async def lock_row(self, appraisal_id: uuid.UUID) -> Appraisal | None:
+        """Lock the appraisal for this transaction and reload it, so two status
+        changes can't both pass their checks on the same row."""
+        result = await self._db.execute(
+            self._scoped(select(Appraisal))
+            .where(Appraisal.id == appraisal_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def shared_cycles(self, profile_id: uuid.UUID) -> set[uuid.UUID]:
+        """Cycles whose result the person has already been shown."""
+        result = await self._db.execute(
+            select(Appraisal.cycle_id).where(
+                Appraisal.org_id == self._org,
+                Appraisal.profile_id == profile_id,
+                Appraisal.status.in_([AppraisalStatus.SHARED, AppraisalStatus.ACKNOWLEDGED]),
+            )
+        )
+        return set(result.scalars().all())
+
+    async def cancel_suggestions(self, cycle_id: uuid.UUID) -> None:
+        """Stop waiting suggestion runs in a cycle: its goals have locked."""
+        await self._db.execute(
+            update(Appraisal)
+            .where(
+                Appraisal.org_id == self._org,
+                Appraisal.cycle_id == cycle_id,
+                Appraisal.suggest_status == DraftStatus.PENDING,
+            )
+            .values(suggest_status=DraftStatus.NONE, suggest_claimed_at=None)
+        )

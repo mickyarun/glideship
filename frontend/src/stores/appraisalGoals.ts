@@ -32,18 +32,20 @@ export const useAppraisalGoalsStore = defineStore('appraisalGoals', () => {
   async function fetch(appraisalId: string): Promise<void> {
     loading.value = true
     error.value = ''
+    options.value = []
     try {
-      const [goals, picks] = await Promise.all([
-        api.get<GoalsRead>(`${BASE}/${appraisalId}/goals`),
-        api.get<GoalOption[]>(`${BASE}/${appraisalId}/goal-options`),
-      ])
-      current.value = goals.data
-      options.value = picks.data
+      current.value = (await api.get<GoalsRead>(`${BASE}/${appraisalId}/goals`)).data
     } catch (err) {
       current.value = null
       error.value = extractApiError(err, "Couldn't load the goals. Reload to try again.")
     } finally {
       loading.value = false
+    }
+    // Starting points are a help, not the page: without them the goals still show.
+    try {
+      options.value = (await api.get<GoalOption[]>(`${BASE}/${appraisalId}/goal-options`)).data
+    } catch {
+      options.value = []
     }
   }
 

@@ -41,8 +41,9 @@ from app.services.claude_runner import (
 )
 
 TIMEOUT_SECONDS = 240
-# Researching a role's trends: web search and fetch only, a few turns.
-RESEARCH_TOOLS = ["WebSearch", "WebFetch"]
+# Researching a role's trends: web search only (it runs at the provider),
+# never fetch, which would reach URLs from this host.
+RESEARCH_TOOLS = ["WebSearch"]
 RESEARCH_TURNS = 10
 RESEARCH_TIMEOUT_SECONDS = 600
 # One reply, no tool loop.
@@ -110,7 +111,7 @@ async def run_draft(org_id: uuid.UUID, prompt: str) -> ClaudeRunResult:
 
 
 async def run_research(org_id: uuid.UUID, prompt: str) -> ClaudeRunResult:
-    """One run with web search and fetch only, for a role's market trends.
+    """One run with web search only, for a role's market trends.
 
     The one exception to tool-less runs: the prompt holds a role's name and
     headings and nothing about any person, and there are still no MCP

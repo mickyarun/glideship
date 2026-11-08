@@ -54,12 +54,13 @@ async def start_review(db: AsyncSession, org_id: uuid.UUID, cycle_id: uuid.UUID)
     profiles = await repo.profiles_by_id([a.profile_id for a in appraisals])
     for appraisal in appraisals:
         profile = profiles.get(appraisal.profile_id)
-        if profile is None:
-            continue
+        if profile is not None:
+            await save_period_facts(db, appraisal, cycle, profile)
+        # Everyone still in progress moves on, so nobody's goals stay open.
         appraisal.status = AppraisalStatus.SELF_REVIEW
-        await save_period_facts(db, appraisal, cycle, profile)
     cycle.status = CycleStatus.REVIEWING
     await db.flush()
+    await repo.cancel_suggestions(cycle.id)
     await repo.queue_summaries(cycle.id)
     return len(appraisals)
 

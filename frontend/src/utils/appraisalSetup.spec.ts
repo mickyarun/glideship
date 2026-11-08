@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest'
 import type { FeedbackRow } from '@/types/appraisalFeedback'
 import type { GuideRead } from '@/types/appraisalSetup'
 import { feedbackGroups, feedbackPeriod } from '@/utils/appraisalFeedback'
+import { safeHref } from '@/utils/appraisalCheckIn'
 import { guideDates, guideGlance } from '@/utils/appraisalGuide'
 import { cadenceProblem, dmPreview, longDate, offsetLabel, parseOffsets, yearPreview } from '@/utils/appraisalSetup'
 import { guideBlocks } from '@/utils/guideText'
@@ -123,5 +124,15 @@ describe('the guide', () => {
     )
     expect(guideDates(guide)).toBe('Q4 2026: self-review due Thu 7 Jan 2027, manager review due Thu 14 Jan 2027.')
     expect(guideDates({ ...guide, cycle_name: null })).toBe('')
+  })
+})
+
+describe('safeHref', () => {
+  it('keeps app paths and web links, and refuses links that leave the site', () => {
+    expect(safeHref('/buds/1')).toBe('/buds/1')
+    expect(safeHref('https://a.test')).toBe('https://a.test')
+    expect(safeHref('//evil.test')).toBeNull()
+    expect(safeHref('/\\evil.test')).toBeNull()
+    expect(safeHref('javascript:alert(1)')).toBeNull()
   })
 })

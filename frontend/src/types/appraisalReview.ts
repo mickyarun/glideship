@@ -38,6 +38,8 @@ export interface ReviewGoal {
   self_reason: string | null
   self_evidence: string[]
   result: GoalResult | null
+  /** The manager's pick while drafting; only on the manager's own form. */
+  draft_result: GoalResult | null
   manager_reason: string | null
 }
 

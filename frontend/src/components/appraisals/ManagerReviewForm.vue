@@ -104,8 +104,8 @@ const form = reactive<ManagerBody>({
   evidence: [...(mine?.evidence ?? [])],
   goals: props.review.goals.map(g => ({
     goal_id: g.id,
-    agree: g.self_result !== null && (g.result === null || g.result === g.self_result) && !g.manager_reason,
-    result: g.result,
+    agree: g.self_result !== null && (g.draft_result === null || g.draft_result === g.self_result) && !g.manager_reason,
+    result: g.draft_result,
     reason: g.manager_reason ?? '',
   })),
   ready_next_level: props.review.manager_only?.ready_next_level ?? null,

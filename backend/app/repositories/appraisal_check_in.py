@@ -130,6 +130,25 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
             .values(draft_status=DraftStatus.NONE, draft_claimed_at=None)
         )
 
+    async def links_for(
+        self, check_in_ids: Collection[uuid.UUID]
+    ) -> dict[uuid.UUID, list[AppraisalEvidenceLink]]:
+        """The links on these check-ins, by check-in, oldest first, in one query."""
+        out: dict[uuid.UUID, list[AppraisalEvidenceLink]] = {cid: [] for cid in check_in_ids}
+        if not check_in_ids:
+            return out
+        result = await self._db.execute(
+            select(AppraisalEvidenceLink)
+            .where(
+                AppraisalEvidenceLink.org_id == self._org,
+                AppraisalEvidenceLink.check_in_id.in_(list(check_in_ids)),
+            )
+            .order_by(AppraisalEvidenceLink.created_at)
+        )
+        for link in result.scalars().all():
+            out.setdefault(link.check_in_id, []).append(link)
+        return out
+
     async def links(self, check_in_id: uuid.UUID) -> list[AppraisalEvidenceLink]:
         """The links on one check-in, oldest first."""
         result = await self._db.execute(

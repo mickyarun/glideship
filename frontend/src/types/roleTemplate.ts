@@ -46,6 +46,8 @@ export interface RoleTemplate extends RoleTemplateBody {
   id: string
   is_default: boolean
   trends: Trend[]
+  /** A draft waiting for approval; `trends` stays in use until then. */
+  trends_draft: Trend[]
   trends_version: number
   trends_status: TrendsStatus
   updated_at: string

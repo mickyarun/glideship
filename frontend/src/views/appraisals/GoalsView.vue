@@ -24,11 +24,12 @@
         Suggest goals
       </v-btn>
       <v-btn v-if="goals?.can_propose" color="primary" prepend-icon="mdi-plus" @click="open('propose')">Add my own goal</v-btn>
-      <v-btn v-if="goals?.can_add" color="primary" prepend-icon="mdi-plus" @click="open('add')">Add a goal</v-btn>
+      <v-btn v-if="goals?.can_add" color="primary" prepend-icon="mdi-plus" :disabled="full" @click="open('add')">Add a goal</v-btn>
       <AppraisalGuide />
     </template>
     <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
     <AppCallout v-if="message" variant="error">{{ message }}</AppCallout>
+    <AppCallout v-if="suggestNote" variant="info">{{ suggestNote }}</AppCallout>
     <AppCallout v-if="goals?.locked" variant="info">Goals are locked: the review has opened, so nobody moves the target while it's scored.</AppCallout>
     <v-progress-linear v-if="store.loading && !goals" indeterminate color="primary" />
     <template v-if="goals">
@@ -73,7 +74,13 @@ const subtitle = computed(() =>
     ? `${longDate(goals.value.period_start)} – ${longDate(goals.value.period_end)} · ${goals.value.accepted} of ${goals.value.limit} confirmed`
     : '',
 )
-const cardProps = computed(() => ({ managerName: goals.value?.manager_name ?? null, asEmployee: Boolean(goals.value?.can_propose) }))
+const full = computed(() => Boolean(goals.value && goals.value.accepted >= goals.value.limit))
+const cardProps = computed(() => ({
+  managerName: goals.value?.manager_name ?? null,
+  asEmployee: Boolean(goals.value?.can_propose),
+  full: full.value,
+}))
+const suggestNote = ref('')
 
 function open(mode: GoalDialogMode, goal: Goal | null = null, words: Partial<GoalBody> = {}): void {
   target.value = goal
@@ -92,8 +99,9 @@ const cardEvents = {
   reword: (goal: Goal) => open('reword', goal),
   dismiss: (goal: Goal) =>
     goal.status === 'proposed' && !goals.value?.can_propose ? open('decline', goal) : run(store.dismiss(goal.id, '')),
+  // A manager always says why; the employee rewords their own proposal freely.
   edit: (goal: Goal) =>
-    open(goal.status === 'accepted' ? 'edit-reason' : 'edit', goal, { title: goal.title, measure: goal.measure }),
+    open(goals.value?.can_add ? 'edit-reason' : 'edit', goal, { title: goal.title, measure: goal.measure }),
   'suggest-change': (goal: Goal) => open('suggest-change', goal, { title: goal.title, measure: goal.measure }),
 }
 
@@ -125,14 +133,21 @@ async function submitDialog(body: GoalBody): Promise<void> {
 let poll: ReturnType<typeof setInterval> | undefined
 watch(
   () => goals.value?.suggest_status,
-  status => {
+  (status, before) => {
     clearInterval(poll)
     if (status === 'pending') poll = setInterval(() => void store.refresh(), 10_000)
+    if (before === 'pending' && (status === 'failed' || status === 'none')) {
+      suggestNote.value = "No suggestions came back this time. Pick from the list below or write your own."
+    }
   },
+  { immediate: true },
 )
 onBeforeUnmount(() => clearInterval(poll))
 
-const suggest = () => run(store.suggest())
+const suggest = () => {
+  suggestNote.value = ''
+  return run(store.suggest())
+}
 
 watch(
   () => route.params.id,

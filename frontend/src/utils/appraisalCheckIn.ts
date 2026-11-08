@@ -125,7 +125,8 @@ export function safeHref(url: string | null): string | null {
   if (!url) return null
   const lowered = url.trim().toLowerCase()
   if (lowered.startsWith('https://') || lowered.startsWith('http://')) return url
-  return url.startsWith('/') && !url.startsWith('//') ? url : null
+  // A path in the app only: "//host" and "/\\host" both leave the site.
+  return url.startsWith('/') && !['/', '\\'].includes(url.charAt(1)) ? url : null
 }
 
 /** Which headings have nothing in them yet (no lines, links or tagged items). */

@@ -24,9 +24,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_enums import AppraisalStatus
 from app.models.appraisal_goal import AppraisalGoal
+from app.models.employee_audit_event import EmployeeAuditAction
+from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.schemas.appraisal_review import SelfBody
-from app.services.appraisals import crypto
+from app.services.appraisals import audit, crypto
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalInvalidError
 from app.services.appraisals.evidence import evidence_pool, pick
@@ -43,6 +45,7 @@ async def period_goals(db: AsyncSession, ctx: AppraisalContext) -> dict[str, App
 
 async def save_self(db: AsyncSession, ctx: AppraisalContext, body: SelfBody) -> None:
     """Store the self-review as it stands."""
+    await AppraisalRepository(db, org_id=ctx.appraisal.org_id).lock_row(ctx.appraisal.id)
     appraisal = ctx.appraisal
     if not (ctx.access.edit_self_score and appraisal.status is AppraisalStatus.SELF_REVIEW):
         raise AppraisalConflictError("The self-review isn't open for changes.")
@@ -63,6 +66,7 @@ async def save_self(db: AsyncSession, ctx: AppraisalContext, body: SelfBody) -> 
 
 async def submit_self(db: AsyncSession, ctx: AppraisalContext) -> None:
     """Hand the self-review to the manager once it meets the rules."""
+    await AppraisalRepository(db, org_id=ctx.appraisal.org_id).lock_row(ctx.appraisal.id)
     appraisal = ctx.appraisal
     if not (ctx.access.edit_self_score and appraisal.status is AppraisalStatus.SELF_REVIEW):
         raise AppraisalConflictError("The self-review isn't open for changes.")
@@ -76,4 +80,13 @@ async def submit_self(db: AsyncSession, ctx: AppraisalContext) -> None:
         raise AppraisalInvalidError(problem)
     appraisal.self_submitted_at = datetime.now(UTC)
     appraisal.status = AppraisalStatus.MANAGER_REVIEW
+    audit.record(
+        db,
+        org_id=appraisal.org_id,
+        actor_id=ctx.caller_id,
+        subject_user_id=ctx.profile.user_id,
+        profile_id=ctx.profile.id,
+        action=EmployeeAuditAction.APPRAISAL_SELF_SUBMITTED,
+        target=appraisal.id,
+    )
     await db.flush()

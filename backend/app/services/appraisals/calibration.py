@@ -25,7 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import FeedbackStatus
+from app.models.appraisal_enums import AppraisalStatus, FeedbackStatus
+from app.models.employee_profile import EmployeeProfile
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.user import UserRepository
@@ -33,29 +34,28 @@ from app.schemas.appraisal_review import Calibration, CalibrationPerson, Calibra
 from app.services.appraisals.calibration_math import Scored, figures
 from app.services.appraisals.context import Caller
 from app.services.appraisals.hr_scope import hidden_users
+from app.services.appraisals.review_rules import submitted_band
 
 
 async def visible_appraisals(
     db: AsyncSession, caller: Caller, cycle: AppraisalCycle
-) -> list[Appraisal]:
-    """The cycle's appraisals HR may act on: not their own, not their manager's."""
+) -> tuple[list[Appraisal], dict[uuid.UUID, EmployeeProfile]]:
+    """The cycle's appraisals HR may act on (not their own, not their manager's),
+    and the profiles behind them."""
     repo = AppraisalRepository(db, org_id=cycle.org_id)
     hidden = await hidden_users(db, caller)
     everyone = await repo.for_cycle(cycle.id)
-    profiles = await repo.profiles_by_id([a.profile_id for a in everyone])
-    return [
-        a
-        for a in everyone
-        if (p := profiles.get(a.profile_id)) is not None and p.user_id not in hidden
-    ]
+    profiles = {
+        pid: p
+        for pid, p in (await repo.profiles_by_id([a.profile_id for a in everyone])).items()
+        if p.user_id not in hidden
+    }
+    return [a for a in everyone if a.profile_id in profiles], profiles
 
 
 async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -> Calibration:
     """Per-manager figures and one row per reviewed person."""
-    appraisals = await visible_appraisals(db, caller, cycle)
-    profiles = await AppraisalRepository(db, org_id=cycle.org_id).profiles_by_id(
-        [a.profile_id for a in appraisals]
-    )
+    appraisals, profiles = await visible_appraisals(db, caller, cycle)
     items = await AppraisalFeedbackRepository(db, org_id=cycle.org_id).for_cycles([cycle.id])
     feedback: dict[uuid.UUID, list[bool]] = defaultdict(list)
     for item in items:
@@ -66,8 +66,10 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
     teams: dict[uuid.UUID, list[Scored]] = defaultdict(list)
     for a in appraisals:
         final = a.final_band if a.manager_submitted_at else None
-        if final is not None:
-            teams[a.manager_user_id].append(Scored(a.self_band, final))
+        own = submitted_band(a)
+        # Withdrawn people keep their row but leave the team's figures.
+        if final is not None and a.status is not AppraisalStatus.WITHDRAWN:
+            teams[a.manager_user_id].append(Scored(own, final))
         done = feedback[a.profile_id]
         rows.append(
             CalibrationPerson(
@@ -75,12 +77,9 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
                 name=names.get(profiles[a.profile_id].user_id, ""),
                 manager_name=names.get(a.manager_user_id, ""),
                 status=a.status,
-                self_band=a.self_band if a.self_submitted_at else None,
+                self_band=own,
                 final_band=final,
-                gap=final is not None
-                and a.self_submitted_at is not None
-                and a.self_band is not None
-                and abs(a.self_band - final) >= 2,
+                gap=final is not None and own is not None and abs(own - final) >= 2,
                 feedback=len(done),
                 feedback_done=sum(done),
             )

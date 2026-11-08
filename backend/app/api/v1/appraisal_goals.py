@@ -91,7 +91,7 @@ async def post_goal(
     """The employee proposes a goal; the manager adds a confirmed one."""
     ctx = await appraisal_context(db, caller, appraisal_id)
     await goal_writes.add_goal(db, ctx, body)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)
 
 
 @router.patch("/goals/{goal_id}", response_model=GoalsRead)
@@ -104,7 +104,7 @@ async def patch_goal(
     """Reword a goal (a manager changing a confirmed one gives a reason)."""
     goal, ctx = await goal_context(db, caller, goal_id)
     await goal_writes.edit_goal(db, ctx, goal, body)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)
 
 
 @router.delete("/goals/{goal_id}", response_model=GoalsRead)
@@ -116,7 +116,7 @@ async def delete_goal(
     """Remove a goal the manager added, before the review opens."""
     goal, ctx = await goal_context(db, caller, goal_id)
     await goal_writes.remove_goal(db, ctx, goal)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)
 
 
 @router.post("/goals/{goal_id}/accept", response_model=GoalsRead)
@@ -128,7 +128,7 @@ async def accept(
     """Confirm a proposal or take up a suggestion."""
     goal, ctx = await goal_context(db, caller, goal_id)
     await goal_decisions.accept_goal(db, ctx, goal)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)
 
 
 @router.post("/goals/{goal_id}/dismiss", response_model=GoalsRead)
@@ -141,7 +141,7 @@ async def dismiss(
     """Decline a proposal with a reason, withdraw one, or drop a suggestion."""
     goal, ctx = await goal_context(db, caller, goal_id)
     await goal_decisions.dismiss_goal(db, ctx, goal, body)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)
 
 
 @router.post("/goals/{goal_id}/ask-reword", response_model=GoalsRead)
@@ -154,7 +154,7 @@ async def ask_reword(
     """Send a proposal back to the employee with what to change."""
     goal, ctx = await goal_context(db, caller, goal_id)
     await goal_decisions.ask_reword(db, ctx, goal, body)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)
 
 
 @router.post("/goals/{goal_id}/suggest-change", response_model=GoalsRead)
@@ -167,7 +167,7 @@ async def suggest_change(
     """The employee proposes new wording for a confirmed goal."""
     goal, ctx = await goal_context(db, caller, goal_id)
     await goal_writes.suggest_change(db, ctx, goal, body)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)
 
 
 @router.post(
@@ -184,4 +184,4 @@ async def suggest_goals(
     ctx = await appraisal_context(db, caller, appraisal_id)
     await suggest_for(db, ctx)
     await db.refresh(ctx.appraisal)
-    return await list_goals(db, ctx)
+    return await list_goals(db, ctx, log_view=False)

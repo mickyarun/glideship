@@ -25,7 +25,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
-from app.models.appraisal_enums import DraftStatus, GoalOrigin, GoalStatus
+from app.models.appraisal_enums import AppraisalStatus, GoalOrigin, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
@@ -37,6 +37,7 @@ from app.services.appraisals.goal_suggest_prompt import Suggestion, checked_sugg
 from app.services.claude_runner import ClaudeRunResult
 
 NO_CITED_GOALS = "no_cited_goals"
+LOCKED = "goals_locked"
 UNREADABLE = "unreadable"
 
 
@@ -76,7 +77,13 @@ async def _replace(
 async def save_suggestions(
     db: AsyncSession, appraisal: Appraisal, data: SuggestInput, result: ClaudeRunResult
 ) -> tuple[str | None, bool]:
-    """Apply a run; its error code (None when saved) and whether that's permanent."""
+    """Apply a run; its error code (None when saved) and whether that's permanent.
+
+    Goals lock when the review opens and a run takes minutes, so the row is
+    checked again here: a run that finishes too late saves nothing.
+    """
+    if appraisal.status is not AppraisalStatus.ENROLLED:
+        return LOCKED, True
     if not result.success:
         code = str(result.error_code.value) if result.error_code else "unknown"
         return code, result.error_code in PERMANENT
@@ -87,5 +94,4 @@ async def save_suggestions(
     if not found:
         return NO_CITED_GOALS, False
     await _replace(db, appraisal, found, data)
-    appraisal.suggest_status = DraftStatus.READY
     return None, False

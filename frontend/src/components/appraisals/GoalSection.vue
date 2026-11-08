@@ -20,14 +20,14 @@
     <details v-if="collapsed">
       <summary class="goal-section__title">{{ title }} ({{ goals.length }})</summary>
       <div class="goal-section__list">
-        <GoalCard v-for="goal in goals" :key="goal.id" :goal="goal" :manager-name="managerName" :as-employee="asEmployee" v-on="bound(goal)" />
+        <GoalCard v-for="goal in goals" :key="goal.id" :goal="goal" :manager-name="managerName" :as-employee="asEmployee" :full="full" v-on="bound(goal)" />
       </div>
     </details>
     <template v-else>
       <h2 class="goal-section__title">{{ title }}</h2>
       <p v-if="!goals.length && empty" class="goal-section__empty">{{ empty }}</p>
       <div class="goal-section__list">
-        <GoalCard v-for="goal in goals" :key="goal.id" :goal="goal" :manager-name="managerName" :as-employee="asEmployee" v-on="bound(goal)" />
+        <GoalCard v-for="goal in goals" :key="goal.id" :goal="goal" :manager-name="managerName" :as-employee="asEmployee" :full="full" v-on="bound(goal)" />
       </div>
     </template>
   </section>
@@ -42,6 +42,7 @@ defineProps<{
   goals: Goal[]
   managerName: string | null
   asEmployee: boolean
+  full?: boolean
   empty?: string
   collapsed?: boolean
 }>()

@@ -15,18 +15,18 @@
 """The end-of-period review: start, self-score, manager review, calibration, result."""
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from app.models.appraisal import Appraisal
-from app.models.appraisal_cycle import AppraisalCycle
 from app.models.employee_audit_event import EmployeeAuditAction, EmployeeAuditEvent
 from app.services.file_storage import FileStorage
-from tests.integration.appraisal_month import Month, october, run_tick
+from tests.integration.appraisal_month import run_tick
+from tests.integration.appraisal_review_support import started
 from tests.integration.hr_support import configure_hr_storage
 from tests.integration.leave_support import Factory, as_user
 
@@ -40,27 +40,6 @@ def hr_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FileStorage:
     return configure_hr_storage(monkeypatch, tmp_path)
 
 
-async def _ids(client: AsyncClient, m: Month) -> dict[str, str]:
-    rows = (await client.get(f"{BASE}/team", headers=as_user(m.people["mgr"], m.org))).json()
-    return {r["person_name"]: str(r["id"]) for r in rows}
-
-
-async def _cycle_id(client: AsyncClient, m: Month) -> str:
-    (cycle,) = (await client.get(f"{BASE}/cycles", headers=as_user(m.people["hr"], m.org))).json()
-    return str(cycle["id"])
-
-
-async def _end_period_early(factory: Factory, org: uuid.UUID) -> None:
-    """Real time is inside Q4 2026; let the period end with October instead."""
-    async with factory() as db:
-        await db.execute(
-            update(AppraisalCycle)
-            .where(AppraisalCycle.org_id == org)
-            .values(period_end=date(2026, 10, 31))
-        )
-        await db.commit()
-
-
 async def _actions(factory: Factory, org: uuid.UUID, action: EmployeeAuditAction) -> int:
     async with factory() as db:
         rows = await db.scalars(
@@ -71,30 +50,10 @@ async def _actions(factory: Factory, org: uuid.UUID, action: EmployeeAuditAction
         return len(rows.all())
 
 
-async def _started(client: AsyncClient, factory: Factory) -> tuple[Month, dict[str, str], str]:
-    """October with two goals for Priya, then the review opened."""
-    m = await october(client, factory)
-    ids, cycle = await _ids(client, m), await _cycle_id(client, m)
-    mgr, hr = as_user(m.people["mgr"], m.org), as_user(m.people["hr"], m.org)
-    for title in ("Ship refunds", "Automate UAT"):
-        added = await client.post(
-            f"{BASE}/{ids['Priya']}/goals",
-            json={"title": title, "reason": "Q4 focus"},
-            headers=mgr,
-        )
-        assert added.status_code == 201
-    early = await client.post(f"{BASE}/cycles/{cycle}/start-review", headers=hr)
-    assert early.status_code == 409
-    await _end_period_early(factory, m.org)
-    started = await client.post(f"{BASE}/cycles/{cycle}/start-review", headers=hr)
-    assert started.status_code == 202 and started.json() == {"opened": 2}
-    return m, ids, cycle
-
-
 async def test_a_review_from_self_score_to_acknowledgement(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
-    m, ids, cycle = await _started(client, pg_session_factory)
+    m, ids, cycle = await started(client, pg_session_factory)
     emp, mgr = as_user(m.people["emp"], m.org), as_user(m.people["mgr"], m.org)
     hr = as_user(m.people["hr"], m.org)
     url = f"{BASE}/{ids['Priya']}"
@@ -187,7 +146,7 @@ async def test_a_review_from_self_score_to_acknowledgement(
 async def test_no_self_score_by_the_due_date_goes_to_the_manager_who_scores_from_scratch(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
-    m, ids, cycle = await _started(client, pg_session_factory)
+    m, ids, cycle = await started(client, pg_session_factory)
     await run_tick(pg_session_factory, m.org, datetime(2027, 1, 8, 6, tzinfo=UTC))
     async with pg_session_factory() as db:
         status = await db.scalar(
@@ -208,7 +167,7 @@ async def test_no_self_score_by_the_due_date_goes_to_the_manager_who_scores_from
 async def test_only_the_right_people_act(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
-    m, ids, _ = await _started(client, pg_session_factory)
+    m, ids, _ = await started(client, pg_session_factory)
     url = f"{BASE}/{ids['Priya']}"
     stranger = as_user(m.people["stranger"], m.org)
     assert (await client.get(url, headers=stranger)).status_code == 404

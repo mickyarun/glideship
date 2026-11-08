@@ -20,14 +20,29 @@ or changes a value with a reason the employee will read; moving to band
 1 or 2 needs two pieces of evidence and to band 5 at least one. With no
 self-score, the manager scores from scratch under the same rules and
 says why. The final value is the employee's when the manager agrees,
-the manager's when they change it.
+the manager's when they change it. A self-score saved but never
+submitted counts as no self-score at all.
 """
 
 from dataclasses import dataclass
 
+from app.models.appraisal import Appraisal
 from app.models.appraisal_enums import GoalResult
+from app.models.appraisal_goal import AppraisalGoal
 
 HIGH_BANDS = frozenset({1, 2})
+
+
+def submitted_band(appraisal: Appraisal) -> int | None:
+    """The self-score's band, only once submitted: a draft is nobody else's business."""
+    return appraisal.self_band if appraisal.self_submitted_at else None
+
+
+def submitted_result(appraisal: Appraisal, goal: AppraisalGoal) -> GoalResult | None:
+    """A goal's self-score, only once the self-review was submitted."""
+    return goal.self_result if appraisal.self_submitted_at else None
+
+
 LOW_BAND = 5
 HIGH_EVIDENCE = 2
 

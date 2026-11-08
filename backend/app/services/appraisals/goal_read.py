@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_enums import DraftingMode, GoalOrigin, GoalRevisionKind, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
+from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.user import UserRepository
@@ -31,7 +32,7 @@ from app.schemas.appraisal_goal import (
     GoalWords,
     HistoryRead,
 )
-from app.services.appraisals import crypto, goal_history
+from app.services.appraisals import audit, crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.goal_history import GoalText, HistoryEntry
 from app.services.appraisals.goal_rules import MAX_GOALS, actions, is_locked
@@ -84,8 +85,22 @@ def _goal(
     )
 
 
-async def list_goals(db: AsyncSession, ctx: AppraisalContext) -> GoalsRead:
-    """Every goal for the period, confirmed first, with history and what the caller may do."""
+async def list_goals(
+    db: AsyncSession, ctx: AppraisalContext, *, log_view: bool = True
+) -> GoalsRead:
+    """Every goal for the period, confirmed first, with history and what the caller may do.
+
+    Someone else opening a person's goals is logged, as for the review.
+    """
+    if log_view:
+        await audit.record_view(
+            db,
+            org_id=ctx.cycle.org_id,
+            actor_id=ctx.caller_id,
+            subject_user_id=ctx.profile.user_id,
+            profile_id=ctx.profile.id,
+            target=ctx.appraisal.id,
+        )
     repo = AppraisalGoalRepository(db, org_id=ctx.cycle.org_id)
     goals = await repo.for_period(ctx.profile.id, ctx.cycle.period_start)
     by_goal: dict[uuid.UUID, list[HistoryEntry]] = {g.id: [] for g in goals}
@@ -126,6 +141,7 @@ async def goal_options(db: AsyncSession, ctx: AppraisalContext) -> list[GoalOpti
     """The role library and last period's goals to carry over; no AI involved."""
     options: list[GoalOption] = []
     repo = AppraisalGoalRepository(db, org_id=ctx.cycle.org_id)
+    shared = await AppraisalRepository(db, org_id=ctx.cycle.org_id).shared_cycles(ctx.profile.id)
     for goal in await repo.latest_accepted_before(ctx.profile.id, ctx.cycle.period_start):
         options.append(
             GoalOption(
@@ -133,7 +149,8 @@ async def goal_options(db: AsyncSession, ctx: AppraisalContext) -> list[GoalOpti
                 title=crypto.unseal(goal, "title") or "",
                 measure=crypto.unseal(goal, "measure") or "",
                 measure_source="",
-                last_result=goal.final_result,
+                # Only a result the person has already been shown.
+                last_result=goal.final_result if goal.cycle_id in shared else None,
             )
         )
     template_id = ctx.appraisal.role_template_id

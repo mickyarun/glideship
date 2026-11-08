@@ -42,9 +42,10 @@ async def evidence_pool(
     if months is None:
         months = await repo.for_person_in_cycle(appraisal.profile_id, appraisal.cycle_id)
     pool: Pool = {}
+    links = await repo.links_for([c.id for c in months])
     for check_in in months:
         pool.update({str(f["id"]): f for f in check_in.fact_refs or []})
-        for link in await repo.links(check_in.id):
+        for link in links[check_in.id]:
             key = f"{LINK}{link.id}"
             pool[key] = {"source": "link", "id": key}
     pool.update({str(f["id"]): f for f in appraisal.period_facts or []})

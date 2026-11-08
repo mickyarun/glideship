@@ -1,8 +1,8 @@
 """Appraisal tables, their enums, new audit and reminder values, and the goal-history trigger.
 
-Revision ID: 80e6ee3ff7c5
+Revision ID: 172dace6afc9
 Revises: a1e8aeee2202
-Create Date: 2026-11-08 07:30:01.943288
+Create Date: 2026-11-08 08:34:16.126161
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "80e6ee3ff7c5"
+revision: str = "172dace6afc9"
 down_revision: str | None = "a1e8aeee2202"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -255,6 +255,7 @@ def upgrade() -> None:
         ),
         sa.Column("goal_library", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("trends", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("trends_draft", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("trends_version", sa.Integer(), nullable=False),
         sa.Column("trends_status", _ENUMS["appraisal_trends_status"], nullable=False),
         sa.Column("trends_approved_by", sa.UUID(), nullable=True),
@@ -417,6 +418,7 @@ def upgrade() -> None:
         sa.Column("self_result", _ENUMS["appraisal_goal_result"], nullable=True),
         sa.Column("self_reason", sa.LargeBinary(), nullable=True),
         sa.Column("self_evidence", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("manager_result", _ENUMS["appraisal_goal_result"], nullable=True),
         sa.Column("final_result", _ENUMS["appraisal_goal_result"], nullable=True),
         sa.Column("manager_reason", sa.LargeBinary(), nullable=True),
         sa.Column("id", sa.UUID(), nullable=False),
@@ -699,6 +701,9 @@ def upgrade() -> None:
         "appraisal_shared",
         "appraisal_goal_accepted",
         "appraisal_feedback_given",
+        "appraisal_self_submitted",
+        "appraisal_acknowledged",
+        "appraisal_goal_changed",
     ):
         op.execute(f"ALTER TYPE employee_audit_action ADD VALUE IF NOT EXISTS '{action}'")
     for kind in (

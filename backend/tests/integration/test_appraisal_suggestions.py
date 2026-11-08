@@ -98,8 +98,12 @@ async def test_a_new_joiner_gets_library_suggestions_that_wait_for_a_person(
     assert suggested["why"] == "Builds on what came before"
     assert suggested["measure"] == "90% of tickets · helpdesk report"
     assert goals["accepted"] == 0 and goals["suggest_status"] == "ready"
+    # Taking one up proposes it; the manager confirms it.
     taken = await client.post(f"{BASE}/goals/{suggested['id']}/accept", headers=emp)
-    assert taken.json()["accepted"] == 1
+    assert taken.json()["accepted"] == 0
+    mgr = as_user(m.people["mgr"], m.org)
+    confirmed = await client.post(f"{BASE}/goals/{suggested['id']}/accept", headers=mgr)
+    assert confirmed.json()["accepted"] == 1
     async with pg_session_factory() as db:
         kinds = (
             await db.scalars(select(AppraisalAiRun.kind).where(AppraisalAiRun.org_id == m.org))
@@ -187,7 +191,8 @@ async def test_a_trend_draft_keeps_only_sourced_items(
     async with pg_session_factory() as db:
         row = await db.get(AppraisalRoleTemplate, uuid.UUID(template_id))
     assert row is not None and row.trends_status.value == "draft"
-    assert [t["text"] for t in row.trends] == ["Tests are generated"]
+    assert [t["text"] for t in row.trends_draft] == ["Tests are generated"]
+    assert row.trends == []
     emp = as_user(m.people["emp"], m.org)
     assert (
         await client.post(f"{BASE}/role-templates/{template_id}/trends/draft", headers=emp)

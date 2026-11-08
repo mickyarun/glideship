@@ -41,7 +41,7 @@
       </ul>
     </details>
     <div v-if="hasActions" class="goal__actions">
-      <v-btn v-if="goal.actions.accept" size="small" color="primary" @click="emit('accept')">
+      <v-btn v-if="goal.actions.accept" size="small" color="primary" :disabled="slotsFull" @click="emit('accept')">
         {{ goal.status === 'suggested' ? 'Use this goal' : 'Confirm' }}
       </v-btn>
       <v-btn v-if="goal.actions.ask_reword" size="small" variant="outlined" @click="emit('reword')">Ask to reword</v-btn>
@@ -61,7 +61,7 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import type { Goal } from '@/types/appraisalGoals'
 import { BASIS_LABELS, historyLine, originLine } from '@/utils/appraisalGoals'
 
-const props = defineProps<{ goal: Goal; managerName: string | null; asEmployee: boolean }>()
+const props = defineProps<{ goal: Goal; managerName: string | null; asEmployee: boolean; full?: boolean }>()
 const emit = defineEmits<{
   accept: []
   reword: []
@@ -71,6 +71,9 @@ const emit = defineEmits<{
   remove: []
 }>()
 
+// Confirming takes a slot; an agreed change reuses its goal's, and an employee
+// taking up a suggestion only proposes it.
+const slotsFull = computed(() => Boolean(props.full) && !props.goal.replaces && !props.asEmployee)
 const hasActions = computed(() => Object.values(props.goal.actions).some(Boolean))
 const dismissLabel = computed(() => {
   if (props.goal.status === 'suggested') return 'Dismiss'

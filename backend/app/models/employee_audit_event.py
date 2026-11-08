@@ -45,6 +45,9 @@ class EmployeeAuditAction(StrEnum):
     APPRAISAL_SHARED = "appraisal_shared"
     APPRAISAL_GOAL_ACCEPTED = "appraisal_goal_accepted"
     APPRAISAL_FEEDBACK_GIVEN = "appraisal_feedback_given"
+    APPRAISAL_SELF_SUBMITTED = "appraisal_self_submitted"
+    APPRAISAL_ACKNOWLEDGED = "appraisal_acknowledged"
+    APPRAISAL_GOAL_CHANGED = "appraisal_goal_changed"
 
 
 # The employee record's access log shows everything but appraisal events,

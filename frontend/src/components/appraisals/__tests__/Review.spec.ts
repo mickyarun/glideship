@@ -47,7 +47,7 @@ function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
       facts: [{ source: 'board_cards', id: 'f1', key: 'OPS-1', title: 'Close', url: '/b', verb: 'done', done_at: null, private: false }],
       links: [{ id: 'l1', url: 'https://doc.test', title: 'Spec', heading: 'team', goal_id: null }],
     }],
-    goals: [{ id: 'g1', position: 1, title: 'Ship refunds', measure: '', added_mid_period: false, accepted_at: null, self_result: null, self_reason: null, self_evidence: [], result: null, manager_reason: null }],
+    goals: [{ id: 'g1', position: 1, title: 'Ship refunds', measure: '', added_mid_period: false, accepted_at: null, self_result: null, self_reason: null, self_evidence: [], result: null, draft_result: null, manager_reason: null }],
     self_score: { band: null, reason: '', evidence: [], submitted_at: null },
     manager_score: null, manager_only: null, send_back_note: null, reply: null, shared_at: null, acknowledged_at: null,
     can: { edit_self: true, edit_manager: false, send_back: false, share: false, acknowledge: false },
@@ -153,5 +153,31 @@ describe('calibration', () => {
     expect(wrapper.text()).toContain('100%')
     expect(wrapper.text()).toContain('Agreed with every self-score.')
     expect(wrapper.find('.calib__gap').exists()).toBe(true)
+  })
+})
+
+describe('review fixes', () => {
+  it('keeps a reopened "change" draft as a change, with its reason box', async () => {
+    const { plugins } = await appraisalPlugins()
+    const drafted = review({
+      status: 'manager_review',
+      self_score: { band: 3, reason: '', evidence: [], submitted_at: '2027-01-05T10:00:00Z' },
+      goals: [{ ...review().goals[0], self_result: 'achieved', draft_result: 'partly', manager_reason: 'Half shipped' }],
+      can: { ...review().can, edit_self: false, edit_manager: true },
+    })
+    const wrapper = mount(ManagerReviewForm, { global: { plugins: plugins as never[] }, props: { review: drafted, options: [], busy: null } })
+    expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Half shipped')
+    await wrapper.findAll('button').find(b => b.text() === 'Submit to HR')?.trigger('click')
+    const [body] = wrapper.emitted('submit')![0] as [{ goals: { agree: boolean; result: string }[] }]
+    expect(body.goals[0]).toMatchObject({ agree: false, result: 'partly' })
+  })
+
+  it("won't confirm into a full period unless the goal replaces one", async () => {
+    const { plugins } = await appraisalPlugins()
+    const proposal = goal({ actions: { ...NONE, accept: true } })
+    const full = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: proposal, managerName: 'Ravi', asEmployee: false, full: true } })
+    expect(full.find('button').attributes('disabled')).toBeDefined()
+    const change = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: { ...proposal, replaces: 'g0' }, managerName: 'Ravi', asEmployee: false, full: true } })
+    expect(change.find('button').attributes('disabled')).toBeUndefined()
   })
 })

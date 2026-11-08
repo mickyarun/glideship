@@ -41,6 +41,13 @@ class Trend(BaseModel):
     source_url: HttpUrl
     as_of: str = Field(max_length=20)
 
+    @field_validator("source_url")
+    @classmethod
+    def _https(cls, url: HttpUrl) -> HttpUrl:
+        if url.scheme != "https":
+            raise ValueError("A trend's source must be an https page.")
+        return url
+
 
 class RoleTemplateBody(BaseModel):
     """What HR edits (and what the seed file holds)."""
@@ -83,6 +90,7 @@ class RoleTemplateRead(RoleTemplateBody):
     id: uuid.UUID
     is_default: bool
     trends: list[Trend]
+    trends_draft: list[Trend]
     trends_version: int
     trends_status: TrendsStatus
     updated_at: datetime

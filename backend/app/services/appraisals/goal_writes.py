@@ -20,17 +20,20 @@ from datetime import UTC, datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.appraisal_enums import GoalOrigin, GoalRevisionKind, GoalStatus
+from app.models.appraisal_enums import GoalOrigin, GoalRevisionKind, GoalStatus, SuggestionBasis
 from app.models.appraisal_goal import AppraisalGoal
+from app.models.employee_audit_event import EmployeeAuditAction
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.schemas.appraisal_goal import GoalBody, GoalEdit
-from app.services.appraisals import crypto, goal_history
+from app.services.appraisals import audit, crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalInvalidError
 from app.services.appraisals.goal_history import GoalText
 from app.services.appraisals.goal_rules import GoalRights, actions, is_locked, next_position
+from app.services.appraisals.org_clock import org_today
 
 FULL = "This period already has three confirmed goals. Remove or change one first."
+TAKEN = "Someone just confirmed a goal into that slot. Reload and try again."
 
 
 def goal_rights(ctx: AppraisalContext) -> GoalRights:
@@ -51,12 +54,25 @@ async def taken_positions(db: AsyncSession, ctx: AppraisalContext) -> set[int]:
 
 
 async def flush_or_full(db: AsyncSession) -> None:
-    """Flush; two confirmations racing for the last slot lose one to the index."""
+    """Flush; two confirmations racing for one slot lose one to the index."""
     try:
         async with db.begin_nested():
             await db.flush()
     except IntegrityError as exc:
-        raise AppraisalConflictError(FULL) from exc
+        raise AppraisalConflictError(TAKEN) from exc
+
+
+def audit_goal(db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGoal) -> None:
+    """Log a manager's change to someone's goal (ids only)."""
+    audit.record(
+        db,
+        org_id=goal.org_id,
+        actor_id=ctx.caller_id,
+        subject_user_id=ctx.profile.user_id,
+        profile_id=ctx.profile.id,
+        action=EmployeeAuditAction.APPRAISAL_GOAL_CHANGED,
+        target=goal.id,
+    )
 
 
 async def add_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody) -> AppraisalGoal:
@@ -67,19 +83,23 @@ async def add_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody) -> A
     words = GoalText(body.title.strip(), body.measure.strip())
     reason = body.reason.strip() or None
     as_manager = rights.manager and not ctx.is_self
+    library = body.source == "role_library"
     goal = AppraisalGoal(
         id=uuid.uuid4(),
         org_id=ctx.cycle.org_id,
         profile_id=ctx.profile.id,
         cycle_id=ctx.cycle.id,
         target_period_start=ctx.cycle.period_start,
-        origin=GoalOrigin.ROLE_LIBRARY
-        if body.source == "role_library"
-        else GoalOrigin.MANAGER_ADDED
+        # A manager's goal is theirs (and theirs to remove), wherever its
+        # words came from; the library is kept as its basis.
+        origin=GoalOrigin.MANAGER_ADDED
         if as_manager
+        else GoalOrigin.ROLE_LIBRARY
+        if library
         else GoalOrigin.EMPLOYEE_OWN,
+        suggestion_basis=SuggestionBasis.ROLE_LIBRARY if library else None,
         proposed_by=ctx.caller_id,
-        added_mid_period=datetime.now(UTC).date() > ctx.cycle.period_start,
+        added_mid_period=await org_today(db, ctx.cycle.org_id) > ctx.cycle.period_start,
         status=GoalStatus.PROPOSED,
         suggestion_refs={},
     )
@@ -108,18 +128,21 @@ async def edit_goal(
     if not actions(goal, goal_rights(ctx), pending_change=False).edit:
         raise AppraisalConflictError("This goal can't be changed now.")
     reason = body.reason.strip() or None
-    if goal.status is GoalStatus.ACCEPTED and reason is None:
+    as_manager = not ctx.is_self
+    if as_manager and reason is None:
         raise AppraisalInvalidError("Say why the goal changed; they'll see it.")
     before, after = GoalText.of(goal), GoalText(body.title.strip(), body.measure.strip())
     if before == after:
         return
-    if goal.origin is GoalOrigin.AI_SUGGESTED and goal.original is None:
+    if goal.status is GoalStatus.SUGGESTED and goal.original is None:
         crypto.seal_json(goal, "original", before.as_json())
     crypto.seal(goal, "title", after.title)
     crypto.seal(goal, "measure", after.measure or None)
     goal_history.record(
         db, goal, ctx.caller_id, GoalRevisionKind.EDITED, before=before, after=after, reason=reason
     )
+    if as_manager:
+        audit_goal(db, ctx, goal)
     await db.flush()
 
 

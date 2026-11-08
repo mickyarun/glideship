@@ -17,7 +17,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.appraisal_enums import (
     AppraisalStatus,
@@ -54,8 +54,10 @@ class ReviewGoal(BaseModel):
     self_result: GoalResult | None
     self_reason: str | None
     self_evidence: list[str]
-    # The manager's result: shown to the employee once the result is shared.
+    # The submitted result: shown to the employee once the result is shared.
     result: GoalResult | None
+    # The manager's pick while drafting, for the manager's own form only.
+    draft_result: GoalResult | None
     manager_reason: str | None
 
 
@@ -171,6 +173,13 @@ class NoteBody(BaseModel):
     """HR's note when sending a review back; the manager reads it."""
 
     note: str = Field(min_length=1, max_length=600)
+
+    @field_validator("note")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Say what to look at again.")
+        return value
 
 
 class ReplyBody(BaseModel):

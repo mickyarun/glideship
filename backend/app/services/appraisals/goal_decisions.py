@@ -14,8 +14,10 @@
 
 """Deciding on a goal: confirming it, asking for a rewording, or declining it.
 
-Confirming is a person's act, so it is audited. A confirmed suggested
-change takes the place of the goal it replaces.
+Confirming is a person's act, so it is audited. A suggestion the employee
+takes up becomes their proposal for the manager to confirm, so nobody
+confirms their own goal by steering the suggestions. A confirmed
+suggested change takes the place of the goal it replaces.
 """
 
 import uuid
@@ -33,13 +35,30 @@ from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalInvalidError
 from app.services.appraisals.goal_history import GoalText
 from app.services.appraisals.goal_rules import actions, next_position
-from app.services.appraisals.goal_writes import FULL, flush_or_full, goal_rights, taken_positions
+from app.services.appraisals.goal_writes import (
+    FULL,
+    audit_goal,
+    flush_or_full,
+    goal_rights,
+    taken_positions,
+)
 
 
 async def accept_goal(db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGoal) -> None:
     """Confirm a proposal, or take up a suggestion, into a free slot."""
     if not actions(goal, goal_rights(ctx), pending_change=False).accept:
         raise AppraisalConflictError("This goal can't be confirmed now.")
+    if ctx.is_self:
+        goal.status, goal.proposed_by = GoalStatus.PROPOSED, ctx.caller_id
+        goal_history.record(
+            db,
+            goal,
+            ctx.caller_id,
+            GoalRevisionKind.CREATED,
+            reason="Picked from the suggestions.",
+        )
+        await db.flush()
+        return
     replaces = goal.suggestion_refs.get("replaces")
     old = (
         await AppraisalGoalRepository(db, org_id=goal.org_id).get_by_id(_uuid(replaces))
@@ -91,6 +110,8 @@ async def dismiss_goal(
     crypto.seal(goal, "dismiss_reason", reason)
     kind = GoalRevisionKind.REMOVED if ctx.is_self else GoalRevisionKind.DECLINED
     goal_history.record(db, goal, ctx.caller_id, kind, reason=reason)
+    if not ctx.is_self:
+        audit_goal(db, ctx, goal)
     await db.flush()
 
 

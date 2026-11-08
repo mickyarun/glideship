@@ -37,6 +37,8 @@ async def suggest_for(db: AsyncSession, ctx: AppraisalContext) -> None:
         raise AppraisalConflictError("Goals can't be suggested now.")
     if ctx.appraisal.drafting_mode is not DraftingMode.AI:
         raise AppraisalConflictError("AI suggestions are off; pick from the role library instead.")
+    if ctx.appraisal.role_template_id is None:
+        raise AppraisalConflictError("There is no role template to suggest from; ask HR.")
     repo = AppraisalRepository(db, org_id=ctx.cycle.org_id)
     await repo.queue_suggestions(ctx.cycle.id, [ctx.appraisal.id])
 

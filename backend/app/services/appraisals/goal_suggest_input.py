@@ -25,7 +25,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
-from app.models.appraisal_enums import AppraisalStatus, GoalCheck, TrendsStatus
+from app.models.appraisal_enums import AppraisalStatus, GoalCheck
+from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -95,23 +96,22 @@ async def suggest_input(db: AsyncSession, appraisal: Appraisal) -> SuggestInput 
         {"id": f"lib:{i}", **{k: item.get(k, "") for k in ("title", "measure", "measure_source")}}
         for i, item in enumerate(template.goal_library or [])
     ]
+    shared = await AppraisalRepository(db, org_id=org_id).shared_cycles(appraisal.profile_id)
     last = [
         {
             "id": f"goal:{g.id}",
             "title": crypto.unseal(g, "title") or "",
             "measure": crypto.unseal(g, "measure") or "",
-            "result": g.final_result.value if g.final_result else None,
+            # Only a result already shared with the person can shape a goal for them.
+            "result": g.final_result.value if g.final_result and g.cycle_id in shared else None,
         }
         for g in await AppraisalGoalRepository(db, org_id=org_id).latest_accepted_before(
             appraisal.profile_id, cycle.period_start
         )
     ]
-    approved = template.trends_status is TrendsStatus.APPROVED
-    trends = (
-        [{"id": f"trend:{t['id']}", "text": t["text"]} for t in template.trends or []]
-        if approved
-        else []
-    )
+    # ``trends`` only ever holds an approved list; a draft waits elsewhere.
+    approved = template.trends_version > 0
+    trends = [{"id": f"trend:{t['id']}", "text": t["text"]} for t in template.trends or []]
     feedback, blockers = await _feedback(db, appraisal), await _blockers(db, appraisal)
     if not (library or last or feedback or blockers or trends):
         return None

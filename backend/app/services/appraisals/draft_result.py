@@ -54,10 +54,7 @@ class Slot:
     build: Callable[[AsyncSession, Any], Awaitable[DraftInput | None]]
     # Kinds whose result isn't text in one column save it themselves:
     # (session, row, input, result) -> (error code or None, permanent).
-    save: (
-        Callable[[AsyncSession, Any, Any, ClaudeRunResult], Awaitable[tuple[str | None, bool]]]
-        | None
-    ) = None
+    save: SaveFn | None = None
 
 
 CHECK_IN = Slot(

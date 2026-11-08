@@ -62,9 +62,12 @@ class AppraisalRoleTemplate(BaseModel):
     )
     # Each: title, measure, measure_source, trend_id.
     goal_library: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
-    # Each: id, text, source_url, as_of.
+    # The approved list, each: id, text, source_url, as_of. Only this reaches
+    # goal suggestions; a draft waits in ``trends_draft`` until HR approves it.
     trends: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    trends_draft: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     trends_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # "draft" while a draft waits for approval, "approved" otherwise.
     trends_status: Mapped[TrendsStatus] = mapped_column(
         pg_enum(TrendsStatus, "appraisal_trends_status"),
         nullable=False,

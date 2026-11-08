@@ -48,7 +48,8 @@ const rows = ref<Trend[]>([])
 watch(
   () => props.template,
   t => {
-    rows.value = t.trends.map(x => ({ ...x }))
+    // Edit the waiting draft if there is one, else start from the approved list.
+    rows.value = (t.trends_status === 'draft' ? t.trends_draft : t.trends).map(x => ({ ...x }))
   },
   { immediate: true },
 )

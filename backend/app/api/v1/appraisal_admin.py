@@ -18,8 +18,9 @@ Every route needs ``appraisals:manage``.
 """
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Body, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._appraisal_deps import get_caller
@@ -107,12 +108,12 @@ async def delete_template(
 @router.put("/role-templates/{template_id}/trends", response_model=RoleTemplateRead)
 async def put_trends(
     template_id: uuid.UUID,
-    body: list[Trend],
+    body: Annotated[list[Trend], Body(max_length=role_trends.MAX_TRENDS)],
     caller: Caller = Depends(get_caller),
     db: AsyncSession = Depends(get_db),
 ) -> RoleTemplateRead:
-    """Replace the role's trends by hand; they wait for approval."""
-    template = await role_trends.save_trends(db, caller.org_id, template_id, body[:6])
+    """Save a draft of the role's trends by hand; it waits for approval."""
+    template = await role_trends.save_trends(db, caller.org_id, template_id, body)
     return RoleTemplateRead.model_validate(template)
 
 
@@ -139,4 +140,5 @@ async def draft_trends(
 ) -> JobCreatedResponse:
     """Ask the AI for a draft list with sources; follow the job for the result."""
     await role_template_admin.get_template(db, caller.org_id, template_id)
+    await role_trends.require_ai(db, caller.org_id)
     return JobCreatedResponse(job_id=queue_trend_draft(caller.org_id, template_id, caller.user_id))
