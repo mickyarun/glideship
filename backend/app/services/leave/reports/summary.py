@@ -22,14 +22,12 @@ These are "taken in range", not the leave-year "used" that balances show.
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.leave_request import LeaveKind, LeaveRequest, LeaveStatus
 from app.models.leave_type import LeaveType
-from app.repositories.leave_policy import LeavePolicyRepository
 from app.repositories.leave_report import LeaveReportRepository
 from app.repositories.leave_request import ACTIVE
 from app.repositories.leave_request_filter import RequestFilter
@@ -39,12 +37,12 @@ from app.schemas.leave_reports import NamedRef, SummaryReport, SummaryRow
 from app.services.leave.calendar_math import leave_year_bounds
 from app.services.leave.errors import LeaveInvalidError
 from app.services.leave.high_leave import assess, taken_this_year
-from app.services.leave.policies import mandatory_holidays
 from app.services.leave.report_scope import ReportScope
 from app.services.leave.reports.attribution import InRange, Span, within
 from app.services.leave.reports.balance_lines import balance_lines
 from app.services.leave.reports.population import Person, people, scoped_ids
 from app.services.leave.reports.type_columns import type_columns
+from app.services.leave.reports.wfh_taken_over import booked_calendars, wfh_taken_over
 from app.services.leave.type_privacy import shown, visible
 
 REQUEST_CAP = 20_000
@@ -57,14 +55,7 @@ async def _in_range(
 ) -> dict[uuid.UUID, InRange]:
     """Each request's days inside the range, recounting only those that cross an edge."""
     crossing = [r for r in requests if r.start_date < f.start or r.end_date > f.end]
-    policies = await LeavePolicyRepository(db, org_id=org_id).by_ids(
-        {r.policy_id for r in crossing}
-    )
-    holidays: dict[uuid.UUID, dict[date, str]] = {}
-    for policy in policies.values():
-        own = [r for r in crossing if r.policy_id == policy.id]
-        first, last = min(r.start_date for r in own), max(r.end_date for r in own)
-        holidays[policy.id] = await mandatory_holidays(db, policy, first, last)
+    policies, holidays = await booked_calendars(db, org_id, crossing)
     out = {r.id: InRange(r.days, r.lop_days) for r in requests}
     for r in crossing:
         # policy_id is required and org-scoped, so the policy is always found.
@@ -136,6 +127,8 @@ async def summary_report(
     hidden = await _hidden_types(db, org_id, requests, scope.sees_restricted)
     requests = [r for r in requests if r.user_id in wanted and r.leave_type_id not in hidden]
     parts = await _in_range(db, org_id, requests, f)
+    # After the hidden types go: a hidden leave mustn't show as a WFH shortfall.
+    taken_over = await wfh_taken_over(db, org_id, requests, f)
     sums: dict[uuid.UUID, dict[str, Decimal]] = defaultdict(lambda: defaultdict(lambda: ZERO))
     by_type: dict[uuid.UUID, dict[uuid.UUID, Decimal]] = defaultdict(
         lambda: defaultdict(lambda: ZERO)
@@ -147,7 +140,8 @@ async def summary_report(
             if r.kind == LeaveKind.LEAVE:
                 row["pending"] += part.days
         elif r.kind == LeaveKind.WFH:
-            row["wfh"] += part.days
+            # Stored days can drift from today's calendar (see attribution).
+            row["wfh"] += max(part.days - taken_over.get(r.id, ZERO), ZERO)
         elif r.kind == LeaveKind.OPTIONAL_HOLIDAY:
             row["optional"] += part.days
         else:

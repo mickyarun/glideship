@@ -13,8 +13,8 @@
 // limitations under the License.
 
 /** Who's out on a given day, for the team calendar. */
-import type { CalendarEntry, HolidayRead } from '@/types/leave'
-import { isWithin, MONTH_NAMES, monthDays, type MonthRef, weekdayIndex } from '@/utils/leaveDates'
+import type { CalendarEntry, HalfDay, HolidayRead } from '@/types/leave'
+import { addDays, isWithin, MONTH_NAMES, monthDays, type MonthRef, weekdayIndex } from '@/utils/leaveDates'
 
 export interface DayContext {
   /** The caller's policy holidays, shown as day labels. */
@@ -25,18 +25,49 @@ export function holidayOn(iso: string, holidays: HolidayRead[]): HolidayRead | n
   return holidays.find(h => h.date === iso) ?? null
 }
 
+function halves(entry: CalendarEntry): HalfDay[] {
+  return entry.half_day === 'none' ? ['first_half', 'second_half'] : [entry.half_day]
+}
+
 /** Entries covering `iso`, each skipped on its owner's weekly days off (a
  *  week of leave doesn't paint the weekend). The owner's working days, not
  *  the viewer's: a colleague on another policy may work when you don't.
+ *  Approved leave replaces a person's WFH when it covers all of that WFH.
  *  Leave first, then WFH; by name within each. */
 export function entriesOnDay(entries: CalendarEntry[], iso: string): CalendarEntry[] {
   const weekday = weekdayIndex(iso)
-  return entries
-    .filter(e => e.working_days.includes(weekday) && isWithin(iso, e.start_date, e.end_date))
+  const covering = entries.filter(
+    e => e.working_days.includes(weekday) && isWithin(iso, e.start_date, e.end_date),
+  )
+  const off = new Set(
+    covering
+      .filter(e => e.kind !== 'wfh' && e.status === 'approved')
+      .flatMap(e => halves(e).map(half => `${e.user.user_id}:${half}`)),
+  )
+  return covering
+    .filter(e => e.kind !== 'wfh' || !halves(e).every(half => off.has(`${e.user.user_id}:${half}`)))
     .sort((a, b) => {
       const kindOrder = Number(a.kind === 'wfh') - Number(b.kind === 'wfh')
       return kindOrder || a.user.name.localeCompare(b.user.name)
     })
+}
+
+/** The entry's days from `first` through `last`. */
+function daysBetween(entry: CalendarEntry, first: string, last: string): string[] {
+  const days: string[] = []
+  const end = entry.end_date < last ? entry.end_date : last
+  for (let iso = entry.start_date > first ? entry.start_date : first; iso <= end; iso = addDays(iso, 1)) {
+    days.push(iso)
+  }
+  return days
+}
+
+/** Without WFH that approved leave has replaced on every one of its days
+ *  from `first` through `last`: days outside that window don't keep it. */
+export function withoutReplacedWfh(entries: CalendarEntry[], first: string, last: string): CalendarEntry[] {
+  return entries.filter(
+    e => e.kind !== 'wfh' || daysBetween(e, first, last).some(iso => entriesOnDay(entries, iso).includes(e)),
+  )
 }
 
 /**
@@ -52,7 +83,7 @@ export function monthSummary(entries: CalendarEntry[], month: MonthRef): string 
   const out = new Set<string>()
   const home = new Set<string>()
   let pending = false
-  for (const e of entries) {
+  for (const e of withoutReplacedWfh(entries, first, last)) {
     if (e.is_own || e.end_date < first || e.start_date > last) continue
     if (e.status !== 'approved' && e.status !== 'pending') continue
     ;(e.kind === 'wfh' ? home : out).add(e.user.user_id)

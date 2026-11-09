@@ -28,7 +28,9 @@ from app.schemas.leave import PersonRef
 from app.schemas.leave_config import ConfigEventRead
 from app.schemas.leave_policy import PolicyAssign, PolicyRead, PolicyWrite
 from app.schemas.leave_policy_members import PolicyMemberRead
+from app.services.background import spawn
 from app.services.leave import policy_admin
+from app.services.leave.calendar_sync.holiday_sync import sync_holidays
 from app.services.leave.config_history import config_history
 from app.services.leave.permissions import CONFIGURE
 from app.services.leave.policies import ensure_default_policy
@@ -65,9 +67,16 @@ async def update_policy(
     current_user: User = Depends(require_permissions(CONFIGURE)),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyRead:
-    """Change a policy. The leave-year start is fixed once requests exist."""
+    """Change a policy. The leave-year start is fixed once requests exist.
+
+    A new timezone or work week moves or drops its people's holiday events.
+    """
     policy = await load_policy(db, current_user.org_id, policy_id)
+    calendar = (policy.timezone, list(policy.working_days))
     await policy_admin.update_policy(db, policy, current_user.id, body)
+    if (policy.timezone, list(policy.working_days)) != calendar:
+        await db.commit()
+        spawn(sync_holidays(current_user.org_id, policy_id=policy.id))
     return await policy_read(db, policy)
 
 
@@ -77,9 +86,13 @@ async def make_default(
     current_user: User = Depends(require_permissions(CONFIGURE)),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyRead:
-    """Make this the policy for everyone without one of their own."""
+    """Make this the policy for everyone without one of their own (and its holidays)."""
     policy = await load_policy(db, current_user.org_id, policy_id)
+    was_default = policy.is_default
     await policy_admin.make_default(db, policy, current_user.id)
+    if not was_default:
+        await db.commit()
+        spawn(sync_holidays(current_user.org_id))
     return await policy_read(db, policy)
 
 
@@ -137,11 +150,17 @@ async def assign_policy(
     perms: PermissionSet = Depends(get_permission_set),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
-    """Move employees onto this policy from today (never yourself, unless owner)."""
+    """Move employees onto this policy from today (never yourself, unless owner).
+
+    Their calendars then get this policy's holidays instead of the old one's.
+    """
     policy = await load_policy(db, current_user.org_id, policy_id)
     result = await policy_admin.assign_employees(
         db, policy, current_user.id, body.user_ids, actor_is_owner=perms.is_owner
     )
+    if result.assigned:
+        await db.commit()
+        spawn(sync_holidays(current_user.org_id, user_ids=body.user_ids))
     return {"assigned": result.assigned, "pending_elsewhere": result.pending_elsewhere}
 
 

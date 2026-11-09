@@ -14,12 +14,11 @@
 
 /** Leave reports: everyone's for HR, direct reports' for a manager, none otherwise. */
 import { readFileSync } from 'node:fs'
-import type { Page } from '@playwright/test'
 import { approveLeave, requestLeave } from '../fixtures/api.ts'
 import type { StackClient } from '../fixtures/client.ts'
 import { upcomingWeekdays, type LeaveDays } from '../fixtures/dates.ts'
 import { expect, test } from '../fixtures/test.ts'
-import { pickOption } from '../screens/forms.ts'
+import { onlyThoseDays } from '../screens/leave.ts'
 import { navLink } from '../screens/shell.ts'
 
 async function teamWithLeave(stack: StackClient, days: LeaveDays) {
@@ -34,13 +33,6 @@ async function teamWithLeave(stack: StackClient, days: LeaveDays) {
   const request = await requestLeave(await stack.api(org.members.emp), org.leaveTypes.CL, days, 'Family wedding')
   await approveLeave(await stack.api(org.members.mgr), request.id)
   return org
-}
-
-/** Narrows the report to exactly the leave's dates, so no month boundary matters. */
-async function onlyThoseDays(page: Page, days: LeaveDays): Promise<void> {
-  await pickOption(page, 'Dates', /^Custom/)
-  await page.getByLabel('From', { exact: true }).fill(days.from)
-  await page.getByLabel('To', { exact: true }).fill(days.to)
 }
 
 test('HR sees everyone, switches reports and exports a CSV', async ({ signedIn, stack }) => {

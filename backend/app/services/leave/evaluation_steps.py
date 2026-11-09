@@ -26,7 +26,7 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.leave_policy import LeavePolicy
-from app.models.leave_request import HalfDay, LeaveKind, LeaveRequest
+from app.models.leave_request import HalfDay, LeaveKind, LeaveRequest, LeaveStatus
 from app.models.leave_type import LeaveType
 from app.models.policy_holiday import PolicyHoliday
 from app.repositories.leave_request import LeaveRequestRepository
@@ -42,6 +42,7 @@ from app.services.leave.monthly_limit import first_month_over, limit_message
 from app.services.leave.optional_holidays import pick_optional_holiday
 from app.services.leave.over_balance import refusal
 from app.services.leave.policies import MemberPolicy
+from app.services.leave.wfh_overlap import TIME_OFF, HeldDays, already_held
 
 ZERO = Decimal("0")
 
@@ -115,25 +116,35 @@ async def check_overlap(
     org_id: uuid.UUID,
     user_id: uuid.UUID,
     result: Evaluation,
+    kind: LeaveKind,
     half_day: HalfDay,
+    held: HeldDays | None = None,
 ) -> None:
     """Refuse dates already covered by another pending or approved request.
 
-    A morning and an afternoon of the same day don't clash.
+    A morning and an afternoon of the same day don't clash. Time off can land
+    on a WFH day and takes it over; WFH can't land on time off, except on days
+    a WFH being changed already ``held``.
     """
     clashes = [
         clash
         for clash in await LeaveRequestRepository(db, org_id=org_id).active_between(
-            [user_id], result.start, result.end
+            [user_id],
+            result.start,
+            result.end,
+            kinds=None if kind == LeaveKind.WFH else TIME_OFF,
         )
         if not _other_half(clash, result.start, result.end, half_day)
+        and not (held and already_held(clash, held, result.start, result.end, half_day))
     ]
     if clashes:
         first = clashes[0]
-        when = f"{first.start_date:%a %d %b}"
+        # The first day that clashes, not where the other request happens to start.
+        when = f"{max(first.start_date, result.start):%a %d %b}"
+        article = "an" if first.status == LeaveStatus.APPROVED else "a"
         result.problem(
             "overlap",
-            f"You already have a {first.status.value} request covering {when}. "
+            f"You already have {article} {first.status.value} request covering {when}. "
             "Change your dates or cancel that request first.",
         )
 

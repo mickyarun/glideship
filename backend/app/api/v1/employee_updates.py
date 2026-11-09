@@ -41,6 +41,7 @@ from app.schemas.employee import (
     ManagersUpdate,
     NameUpdate,
 )
+from app.services.background import spawn
 from app.services.employees.access import MANAGE, access_for
 from app.services.employees.lifecycle import apply_exit
 from app.services.employees.managers import (
@@ -50,6 +51,7 @@ from app.services.employees.managers import (
 )
 from app.services.employees.offices import check_office, follow_office_policy
 from app.services.employees.views import employee_read
+from app.services.leave.calendar_sync.holiday_sync import sync_holidays
 
 CODE_CONSTRAINT = "uq_employee_profiles_org_code"
 OFFICE_CONSTRAINT = "fk_employee_profiles_office"
@@ -106,6 +108,7 @@ async def update_work(
         )
     office = await check_office(db, org_id, body.office_id)
     previous_status, previous_office_id = profile.status, profile.office_id
+    previous_policy_id = profile.leave_policy_id
     for field, value in body.model_dump().items():
         setattr(profile, field, value)
     revoked = await apply_exit(
@@ -138,6 +141,10 @@ async def update_work(
         actor_id=current_user.id,
         perms=perms,
     )
+    if profile.leave_policy_id != previous_policy_id or profile.status != previous_status:
+        # Another office's holidays, or none once they've left.
+        await db.commit()
+        spawn(sync_holidays(org_id, user_ids=[user_id]))
     return await employee_read(
         db, org_id=org_id, profile=profile, user=user, access=access, access_revoked=revoked
     )

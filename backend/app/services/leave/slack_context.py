@@ -71,7 +71,10 @@ async def _wfh_lines(db: AsyncSession, org_id: uuid.UUID, request: LeaveRequest)
     year = leave_year_bounds(start, policy.year_start_month)
     # Approved + pending, so this request is in it. A request crossing the
     # year boundary brings its outside months along; only count the year's.
-    by_month = await wfh_days_by_month(db, policy, request.user_id, year.start, year.end)
+    # The same DM goes to every approver, so hidden leave doesn't change it.
+    by_month = await wfh_days_by_month(
+        db, policy, request.user_id, year.start, year.end, sees_all=False
+    )
     month_days = by_month.get((start.year, start.month), ZERO)
     year_days = sum(
         (days for (y, m), days in by_month.items() if year.start <= date(y, m, 1) <= year.end),
