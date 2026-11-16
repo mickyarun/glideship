@@ -82,7 +82,8 @@ describe('TeamFeedbackList', () => {
         ],
       },
     })
-    expect(wrapper.find('.team-feedback__title').text()).toBe('October feedback · due Tue 10 Nov 2026 · 1 of 2 done')
+    expect(wrapper.find('.team-feedback__title').text()).toBe('October feedback')
+    expect(wrapper.find('.team-feedback__detail').text()).toBe('Monthly, for your reports · due Tue 10 Nov 2026 · 1 of 2 written')
     expect(wrapper.find('.team-feedback__late').text()).toBe('Overdue')
     const links = wrapper.findAll('a')
     expect(links.map(a => a.text())).toEqual(['Write feedback', 'Open'])

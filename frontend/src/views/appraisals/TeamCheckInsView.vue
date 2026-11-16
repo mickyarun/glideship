@@ -18,7 +18,7 @@
      latest check-in. Feedback is written on its own page, never in the
      check-in. -->
 <template>
-  <AppPage title="Your team" subtitle="Feedback to write, and the latest month for each person who reports to you.">
+  <AppPage title="Your team" subtitle="Monthly feedback to write, each person's goals and review, and their latest check-in.">
     <template #actions><AppraisalGuide /></template>
     <AppCallout v-if="feedback.teamError" variant="error">{{ feedback.teamError }}</AppCallout>
     <TeamFeedbackList v-if="feedback.team.length" :rows="feedback.team" />

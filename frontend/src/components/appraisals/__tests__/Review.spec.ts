@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest'
 import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
 import GrowthSection from '@/components/appraisals/GrowthSection.vue'
 import GoalCard from '@/components/appraisals/GoalCard.vue'
+import TeamReviewsList from '@/components/appraisals/TeamReviewsList.vue'
 import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import type { Goal } from '@/types/appraisalGoals'
@@ -247,5 +248,21 @@ describe('which review opens', () => {
   it('offers only opened reviews to switch between', () => {
     const rows = [row('next', 'enrolled'), row('q4', 'acknowledged'), row('q2', 'withdrawn')]
     expect(reviewChoices(rows).map(r => r.id)).toEqual(['q4'])
+  })
+})
+
+describe('team reviews list', () => {
+  const summary = (status: AppraisalSummary['status']): AppraisalSummary => ({
+    id: 'a1', user_id: 'u1', person_name: 'Priya', cycle_name: 'Q4 2026', period_start: '2026-10-01', period_end: '2026-12-31',
+    status, goals_accepted: 6, goals_proposed: 0,
+  })
+
+  it('offers Goals only until the review exists, and names the stage in words', async () => {
+    const { plugins } = await appraisalPlugins()
+    const wrapper = mount(TeamReviewsList, { global: { plugins: plugins as never[] }, props: { rows: [summary('enrolled')] } })
+    expect(wrapper.text()).toContain('Q4 2026 · Goals and check-ins · 6 goals')
+    expect(wrapper.findAll('a, button').map(b => b.text())).toEqual(['Goals'])
+    const open = mount(TeamReviewsList, { global: { plugins: plugins as never[] }, props: { rows: [summary('self_review')] } })
+    expect(open.findAll('a, button').map(b => b.text())).toEqual(['Goals', 'Review'])
   })
 })

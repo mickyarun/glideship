@@ -35,7 +35,7 @@ export const CYCLE_STATUS: Record<CycleStatus, string> = {
   closed: 'Closed',
 }
 export const STATUS_LABELS: Record<AppraisalStatus, string> = {
-  enrolled: 'Check-ins',
+  enrolled: 'Goals and check-ins',
   self_review: 'Self-review',
   manager_review: 'Manager review',
   calibration: 'Calibration',

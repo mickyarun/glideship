@@ -355,3 +355,20 @@ async def test_a_weekend_due_date_moves_to_the_next_working_day(
     await run_tick(pg_session_factory, m.org, datetime(2026, 11, 3, 6, tzinfo=UTC))
     # 31 October + 7 is Saturday 7 November.
     assert {i.due_on for i in await _items(pg_session_factory, m.org)} == {date(2026, 11, 9)}
+
+
+async def test_an_item_opened_after_its_usual_date_is_not_born_overdue(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    async with pg_session_factory() as db:
+        for item in await db.scalars(
+            select(AppraisalManagerFeedback).where(AppraisalManagerFeedback.org_id == m.org)
+        ):
+            await db.delete(item)
+        await db.commit()
+    # A cycle opened on Monday 16 Nov: October's usual due date (10 Nov) has passed.
+    await run_tick(pg_session_factory, m.org, datetime(2026, 11, 16, 6, tzinfo=UTC))
+    items = await _items(pg_session_factory, m.org)
+    assert len(items) == 2
+    assert {i.due_on for i in items} == {date(2026, 11, 26)}
