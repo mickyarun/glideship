@@ -111,6 +111,9 @@ def test_goal_actions_by_role() -> None:
 
 
 def test_next_position() -> None:
-    assert next_position(set()) == 1
-    assert next_position({1, 3}) == 2
-    assert next_position({1, 2, 3}) is None
+    assert next_position(set(), 3) == 1
+    assert next_position({1, 3}, 3) == 2
+    assert next_position({1, 2, 3}, 3) is None
+    assert next_position({1, 2, 3}, 5) == 4
+    # Lowered after goals were confirmed: slot 2 is empty but four are confirmed.
+    assert next_position({1, 3, 4, 5}, 2) is None

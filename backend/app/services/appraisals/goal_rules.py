@@ -30,17 +30,21 @@ from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import AppraisalStatus, CycleStatus, GoalOrigin, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
 
-MAX_GOALS = 3
-
 
 def is_locked(appraisal: Appraisal, cycle: AppraisalCycle) -> bool:
     """The self-review has opened, or the cycle is over."""
     return appraisal.status is not AppraisalStatus.ENROLLED or cycle.status is CycleStatus.CLOSED
 
 
-def next_position(taken: set[int]) -> int | None:
-    """The first free slot from 1 to 3, or None when all three are used."""
-    return next((p for p in range(1, MAX_GOALS + 1) if p not in taken), None)
+def next_position(taken: set[int], limit: int) -> int | None:
+    """The first free slot, or None once ``limit`` goals are confirmed.
+
+    Counting matters as well as the slots: after the limit is lowered, goals
+    confirmed earlier can sit above it while a lower slot is empty.
+    """
+    if len(taken) >= limit:
+        return None
+    return next(p for p in range(1, limit + 1) if p not in taken)
 
 
 @dataclass(frozen=True)

@@ -30,12 +30,15 @@ from app.models.appraisal_goal import AppraisalGoal
 from app.repositories.appraisal import AppraisalRepository
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError
-from app.services.appraisals.goal_rules import MAX_GOALS, is_locked, next_position
+from app.services.appraisals.goal_rules import is_locked, next_position
 from app.services.appraisals.goal_writes import FULL
 
 OPEN_AT = frozenset({AppraisalStatus.SHARED, AppraisalStatus.ACKNOWLEDGED})
-# Proposals don't take a slot, but there's no reason for more than this many.
-MAX_LIVE = MAX_GOALS * 2
+
+
+def max_live(limit: int) -> int:
+    """Proposals don't take a slot, but there's no reason for more than this many."""
+    return limit * 2
 
 
 def is_open(ctx: AppraisalContext) -> bool:
@@ -88,10 +91,10 @@ async def open_next_cycle(db: AsyncSession, ctx: AppraisalContext) -> uuid.UUID 
     return cycle.id
 
 
-def free_position(goals: list[AppraisalGoal]) -> int:
+def free_position(goals: list[AppraisalGoal], limit: int) -> int:
     """The next free slot among next period's confirmed goals."""
     taken = {g.position for g in goals if g.status is GoalStatus.ACCEPTED and g.position}
-    position = next_position(taken)
+    position = next_position(taken, limit)
     if position is None:
         raise AppraisalConflictError(FULL)
     return position

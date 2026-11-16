@@ -15,7 +15,7 @@
 """The growth conversation, opened once a result is shared.
 
 The person and their primary manager agree one strength to use more,
-one thing to work on, and two or three goals for the next period. No
+one thing to work on, and a few goals for the next period. No
 band is part of it. Next period's goals are kept against that period's
 first day: they join the person's own next cycle at once if it is
 already running, or when it enrols them. The manager confirms what the
@@ -38,18 +38,18 @@ from app.services.appraisals import audit, crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalNotFoundError
 from app.services.appraisals.goal_history import GoalText
-from app.services.appraisals.goal_rules import MAX_GOALS
 from app.services.appraisals.goal_writes import audit_goal, flush_or_full
 from app.services.appraisals.growth_rules import (
-    MAX_LIVE,
     can_edit,
     can_remove,
     free_position,
     is_open,
+    max_live,
     next_start,
     open_next_cycle,
     require_edit,
 )
+from app.services.appraisals.settings import goal_limit
 
 LIVE = (GoalStatus.ACCEPTED, GoalStatus.PROPOSED)
 
@@ -74,7 +74,7 @@ async def read_growth(db: AsyncSession, ctx: AppraisalContext) -> GrowthRead:
         strength=crypto.unseal(ctx.appraisal, "growth_strength") or "",
         focus=crypto.unseal(ctx.appraisal, "growth_focus") or "",
         next_period_start=next_start(ctx),
-        limit=MAX_GOALS,
+        limit=await goal_limit(db, ctx.cycle.org_id),
         goals=[
             NextGoal(
                 id=g.id,
@@ -119,7 +119,8 @@ async def add_next_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody)
     """The manager adds a confirmed goal; the employee proposes one."""
     cycle_id = await open_next_cycle(db, ctx)
     goals = await _goals(db, ctx)
-    if len(goals) >= MAX_LIVE:
+    limit = await goal_limit(db, ctx.cycle.org_id)
+    if len(goals) >= max_live(limit):
         raise AppraisalConflictError("That's plenty of goals for one period.")
     as_manager = not ctx.is_self
     goal = AppraisalGoal(
@@ -135,7 +136,7 @@ async def add_next_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody)
         suggestion_refs={},
     )
     if as_manager:
-        goal.status, goal.position = GoalStatus.ACCEPTED, free_position(goals)
+        goal.status, goal.position = GoalStatus.ACCEPTED, free_position(goals, limit)
         goal.accepted_by, goal.accepted_at = ctx.caller_id, datetime.now(UTC)
     words = GoalText(body.title.strip(), body.measure.strip())
     crypto.seal(goal, "title", words.title)
@@ -163,7 +164,8 @@ async def accept_next_goal(db: AsyncSession, ctx: AppraisalContext, goal_id: uui
     goal = await _goal(db, ctx, goal_id)
     if ctx.is_self or goal.status is not GoalStatus.PROPOSED:
         raise AppraisalConflictError("Only the manager confirms a proposed goal.")
-    goal.status, goal.position = GoalStatus.ACCEPTED, free_position(await _goals(db, ctx))
+    limit = await goal_limit(db, ctx.cycle.org_id)
+    goal.status, goal.position = GoalStatus.ACCEPTED, free_position(await _goals(db, ctx), limit)
     goal.accepted_by, goal.accepted_at = ctx.caller_id, datetime.now(UTC)
     goal_history.record(db, goal, ctx.caller_id, GoalRevisionKind.CONFIRMED)
     audit_goal(db, ctx, goal)

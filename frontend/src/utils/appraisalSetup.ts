@@ -50,6 +50,13 @@ const PERIOD_MONTHS: Record<ReviewPeriod, number> = { quarterly: 3, half_yearly:
  * Why a combination can't run, or null. The same rules as the backend's
  * `cadence_error`; the server still checks, this only greys out options.
  */
+export const MAX_GOAL_LIMIT = 20
+
+/** What's wrong with a goals-per-person value, or null (the backend allows 1 to 20). */
+export function goalLimitProblem(n: number): string | null {
+  return Number.isInteger(n) && n >= 1 && n <= MAX_GOAL_LIMIT ? null : `A whole number from 1 to ${MAX_GOAL_LIMIT}.`
+}
+
 export function cadenceProblem(review: ReviewPeriod, checkIns: Cadence, feedback: FeedbackCadence): string | null {
   if (checkIns === 'quarterly' && review === 'quarterly') return 'Quarterly check-ins need half-yearly or yearly reviews.'
   if (feedback === 'in_review') {

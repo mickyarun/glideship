@@ -19,7 +19,7 @@ import type { GuideRead } from '@/types/appraisalSetup'
 import { feedbackGroups, feedbackPeriod } from '@/utils/appraisalFeedback'
 import { safeHref } from '@/utils/appraisalCheckIn'
 import { guideDates, guideGlance } from '@/utils/appraisalGuide'
-import { cadenceProblem, dmPreview, longDate, offsetLabel, parseOffsets, yearPreview } from '@/utils/appraisalSetup'
+import { cadenceProblem, dmPreview, goalLimitProblem, longDate, offsetLabel, parseOffsets, yearPreview } from '@/utils/appraisalSetup'
 import { guideBlocks } from '@/utils/guideText'
 
 describe('cadenceProblem', () => {
@@ -134,5 +134,12 @@ describe('safeHref', () => {
     expect(safeHref('//evil.test')).toBeNull()
     expect(safeHref('/\\evil.test')).toBeNull()
     expect(safeHref('javascript:alert(1)')).toBeNull()
+  })
+})
+
+describe('goal limit', () => {
+  it('takes a whole number from 1 to 20', () => {
+    expect([1, 3, 20].map(goalLimitProblem)).toEqual([null, null, null])
+    expect([0, 21, 2.5, Number.NaN].map(n => goalLimitProblem(n) !== null)).toEqual([true, true, true, true])
   })
 })

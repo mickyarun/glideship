@@ -31,8 +31,9 @@ from app.services.appraisals.errors import AppraisalConflictError, AppraisalInva
 from app.services.appraisals.goal_history import GoalText
 from app.services.appraisals.goal_rules import GoalRights, actions, is_locked, next_position
 from app.services.appraisals.org_clock import org_today
+from app.services.appraisals.settings import goal_limit
 
-FULL = "This period already has three confirmed goals. Remove or change one first."
+FULL = "This period has all the confirmed goals your org allows. Remove or change one first."
 TAKEN = "Someone just confirmed a goal into that slot. Reload and try again."
 
 
@@ -106,7 +107,8 @@ async def add_goal(db: AsyncSession, ctx: AppraisalContext, body: GoalBody) -> A
     if as_manager:
         if reason is None:
             raise AppraisalInvalidError("Say why this goal matters now; they'll see it.")
-        position = next_position(await taken_positions(db, ctx))
+        limit = await goal_limit(db, ctx.cycle.org_id)
+        position = next_position(await taken_positions(db, ctx), limit)
         if position is None:
             raise AppraisalConflictError(FULL)
         goal.status, goal.position = GoalStatus.ACCEPTED, position

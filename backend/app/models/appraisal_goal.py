@@ -63,7 +63,7 @@ class AppraisalGoal(BaseModel):
             postgresql_where="status = 'accepted'",
         ),
         Index("ix_appraisal_goals_profile_period", "org_id", "profile_id", "target_period_start"),
-        CheckConstraint("position BETWEEN 1 AND 3", name="ck_appraisal_goals_position"),
+        CheckConstraint("position >= 1", name="ck_appraisal_goals_position"),
         CheckConstraint(
             "status <> 'accepted' OR position IS NOT NULL",
             name="ck_appraisal_goals_accepted_position",

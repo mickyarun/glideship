@@ -25,7 +25,7 @@
       <v-btn variant="outlined" :disabled="!dirty" :loading="busy === 'save'" @click="emit('save', strength.trim(), focus.trim())">Save</v-btn>
     </div>
     <h3 class="growth__heading">Goals for the period from {{ longDate(growth.next_period_start) }} ({{ accepted }} of {{ growth.limit }})</h3>
-    <p v-if="!growth.goals.length" class="growth__muted">None yet. Two or three is plenty.</p>
+    <p v-if="!growth.goals.length" class="growth__muted">None yet. A few that matter beat a long list.</p>
     <ul class="growth__goals">
       <li v-for="goal in growth.goals" :key="goal.id" class="growth__goal">
         <div>
