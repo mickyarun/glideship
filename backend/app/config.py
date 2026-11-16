@@ -21,6 +21,7 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app import instance_secrets
+from app.config_appraisals import AppraisalsConfig
 from app.config_boards import BoardsConfig
 from app.config_bud_agents import BudAgentConfig
 from app.config_followups import FollowupsConfig
@@ -424,6 +425,7 @@ class Settings(BaseSettings):
     ws: WebSocketConfig = WebSocketConfig()
     boards: BoardsConfig = BoardsConfig()
     followups: FollowupsConfig = FollowupsConfig()
+    appraisals: AppraisalsConfig = AppraisalsConfig()
     bud_agents: BudAgentConfig = BudAgentConfig()
     colyseus: ColyseusConfig = ColyseusConfig()
 

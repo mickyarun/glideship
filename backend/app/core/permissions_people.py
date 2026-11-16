@@ -24,6 +24,10 @@ from app.core.permission_types import CategoryDef, PermissionDef
 # People-only roles such as ``sales`` don't hold it.
 WORKSPACE_ENGINEERING = "workspace:engineering"
 
+# HR's appraisal permission. Employees and managers need none: their access
+# comes from the record being theirs or their report's.
+APPRAISALS_MANAGE = "appraisals:manage"
+
 PEOPLE_PERMISSION_CATEGORIES: list[CategoryDef] = [
     CategoryDef(
         key="WORKSPACE",
@@ -79,6 +83,20 @@ PEOPLE_PERMISSION_CATEGORIES: list[CategoryDef] = [
                 "employees:documents",
                 "Manage Employee Documents",
                 "View, upload and delete any employee's documents",
+                sensitive=True,
+            ),
+        ],
+    ),
+    CategoryDef(
+        key="APPRAISALS",
+        name="Appraisals",
+        description="Running appraisal cycles and reading everyone's reviews",
+        permissions=[
+            PermissionDef(
+                APPRAISALS_MANAGE,
+                "Manage Appraisals",
+                "Cycles, settings, role templates, calibration and sharing. "
+                "Reads every check-in and review.",
                 sensitive=True,
             ),
         ],

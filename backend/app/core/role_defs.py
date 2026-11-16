@@ -183,8 +183,8 @@ _BASE_SYSTEM_ROLES: list[RoleDef] = [
     ),
     RoleDef(
         name="hr",
-        description="HR: approves leave, manages employee records and documents",
-        permission_specs=["leave:*", "employees:*", "team:view", "team:invite"],
+        description="HR: approves leave, manages employee records, documents and appraisals",
+        permission_specs=["leave:*", "employees:*", "appraisals:*", "team:view", "team:invite"],
     ),
     RoleDef(
         name="sales",

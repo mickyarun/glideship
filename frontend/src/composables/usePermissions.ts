@@ -67,6 +67,8 @@ export function usePermissions() {
   const canApproveLeave = computed(() => hasPermission('leave:approve'))
   const canConfigureLeave = computed(() => hasPermission('leave:configure'))
   const canViewLeaveReports = computed(() => hasPermission('leave:reports'))
+  // Appraisals: HR sets up cycles and settings and follows progress.
+  const canManageAppraisals = computed(() => hasPermission('appraisals:manage'))
 
   // Sidebar visibility
   const canApprove = computed(() => hasPermission('backlog:approve'))
@@ -141,6 +143,7 @@ export function usePermissions() {
     canApproveLeave,
     canConfigureLeave,
     canViewLeaveReports,
+    canManageAppraisals,
     canApprove,
     canCreateBuds,
     canEditBuds,

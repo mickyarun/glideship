@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AI-facing code must never import people data (leave, employee records).
+"""AI-facing code must never import people data (leave, employee records, appraisals).
 
 MCP tools and agent runs act on content from repos, Jira and Slack, which
 can carry prompt injection. Keeping HR modules out of their import graph
@@ -25,7 +25,7 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[2] / "app"
 AI_PACKAGES = ("mcp", "agents")
-FORBIDDEN_PARTS = ("employee", "leave")
+FORBIDDEN_PARTS = ("employee", "leave", "appraisal")
 
 
 def _imported_modules(path: Path) -> list[str]:
@@ -61,4 +61,5 @@ def test_ai_packages_do_not_import_people_modules() -> None:
 def test_detector_flags_people_modules() -> None:
     assert _touches_people_data("app.repositories.leave_request")
     assert _touches_people_data("app.models.employee_profile")
+    assert _touches_people_data("app.services.appraisals.access")
     assert not _touches_people_data("app.repositories.bud")

@@ -59,6 +59,7 @@ class NotificationCategory(StrEnum):
     BOARD_HANDOVERS = "board_handovers"
     BOARD_DUE_REMINDERS = "board_due_reminders"
     DAILY_FOLLOWUPS = "daily_followups"
+    APPRAISAL_REMINDERS = "appraisal_reminders"
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,12 @@ NOTIFICATION_CATEGORIES: tuple[CategoryDef, ...] = (
         description="Your overdue and due-soon cards and BUDs, once a day at a time you pick.",
         group="Your work",
         own_card=True,
+    ),
+    CategoryDef(
+        category=NotificationCategory.APPRAISAL_REMINDERS,
+        label="Appraisal reminders",
+        description="Check-ins ready, and feedback or reviews coming due. Counts and dates only.",
+        group="Appraisals",
     ),
 )
 

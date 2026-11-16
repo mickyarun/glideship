@@ -51,6 +51,7 @@ from testcontainers.postgres import PostgresContainer
 
 from alembic import command
 from app.api.router import api_router
+from app.api.v1._appraisal_errors import register_appraisal_errors
 from app.api.v1._board_errors import register_board_errors
 from app.api.v1._hr_errors import register_hr_errors
 from app.api.v1._leave_errors import register_leave_errors
@@ -170,6 +171,7 @@ async def client(
     app = FastAPI()
     app.include_router(api_router)
     register_leave_errors(app)
+    register_appraisal_errors(app)
     register_hr_errors(app)
     register_board_errors(app)
 

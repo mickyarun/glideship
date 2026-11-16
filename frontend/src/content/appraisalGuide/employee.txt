@@ -1,0 +1,18 @@
+## Writing a good check-in line
+
+Say what happened and what came of it. Short and specific beats long and vague.
+
+- Thin: "Doing my best on testing."
+- Good: "Ran the daily suite; caught 3 regressions before UAT."
+- Thin: "Helped the team."
+- Good: "Paired with Sam on the refunds API until it passed review."
+
+Add what Glideship missed: a link, a win nobody filed, a blocker. If a heading is empty, say so or leave it; an empty month is shown as missed and never held against you.
+
+## Picking goals
+
+Up to three a period. Each one says what done looks like and where the number comes from, for example "UAT automation at 80%, from the test report".
+
+## Scoring yourself
+
+Pick the band that fits and say why. Bands 1 and 2 need at least two pieces of evidence: records from your check-ins, links or goal values.

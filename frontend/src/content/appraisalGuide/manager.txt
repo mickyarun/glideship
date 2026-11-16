@@ -1,0 +1,16 @@
+## Giving feedback
+
+Write about the work, not the person. One line to keep doing, one to try next.
+
+- Thin: "Good attitude."
+- Good: "Keep: catching regressions before UAT. Try: pair on the refunds UAT next month."
+
+Your report sees what you save straight away. Feedback you never write stays "not done" on the team list and in calibration. It never blocks the review.
+
+## Agreeing or changing a score
+
+Agree when the evidence supports their band. Change it when it doesn't, and write a reason they will read: name the records or goals that moved you. Moving to band 1, 2 or 5 needs evidence or a written reason.
+
+## Due dates and reminders
+
+Each piece of work has a due date. You get one Slack message per reminder covering all your reports, with counts and dates only, never names or notes. Reminders stop as soon as everything is done.
