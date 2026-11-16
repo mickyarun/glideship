@@ -14,7 +14,8 @@
  * limitations under the License.
  -->
 
-<!-- The manager's reports' reviews: where each has got to, with their goals. -->
+<!-- The manager's reports' reviews: where each has got to, with their goals.
+     The review itself opens after the period, so until then only Goals. -->
 <template>
   <section class="team-reviews" aria-labelledby="team-reviews">
     <h2 id="team-reviews" class="team-reviews__title">Goals and reviews</h2>
@@ -25,7 +26,7 @@
           {{ row.cycle_name }} · {{ STATUS_LABELS[row.status] }} · {{ row.goals_accepted }} goals<template v-if="row.goals_proposed"> · {{ row.goals_proposed }} to confirm</template>
         </span>
         <v-btn size="small" variant="text" :to="{ name: 'appraisal-goals', params: { id: row.id } }">Goals</v-btn>
-        <v-btn size="small" variant="outlined" :to="{ name: 'appraisal-review', params: { id: row.id } }">Review</v-btn>
+        <v-btn v-if="row.status !== 'enrolled'" size="small" variant="outlined" :to="{ name: 'appraisal-review', params: { id: row.id } }">Review</v-btn>
       </li>
     </ul>
   </section>

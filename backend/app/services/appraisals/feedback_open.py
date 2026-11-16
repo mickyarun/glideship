@@ -18,10 +18,11 @@ On the first working day after a feedback period ends, each enrolled
 person gets an item for their primary manager, due ``feedback_due_days``
 after the period ends, moved to the manager's next working day when that
 falls on a weekend or holiday, so the app and the reminders agree. As
-with check-ins, only the latest ended period opens, so someone enrolled
-late isn't handed items that are already overdue. Items never
-close on their own: one the manager never writes stays "not done" and
-never blocks the review.
+with check-ins, only the latest ended period opens, and an item that
+opens after its usual due date (a cycle opened late, someone enrolled
+late) gets a fresh window from the day it opens, so nobody is handed
+feedback that is already overdue. Items never close on their own: one
+the manager never writes stays "not done" and never blocks the review.
 """
 
 import uuid
@@ -47,6 +48,16 @@ def latest_feedback_period(cycle: AppraisalCycle, today: date) -> tuple[date, da
     periods = feedback_periods(cycle.period_start, cycle.period_end, cycle.feedback_cadence)
     ended = [p for p in periods if p[1] < today]
     return ended[-1] if ended else None
+
+
+def feedback_due_from(period_end: date, today: date, due_days: int) -> date:
+    """The day to count the due date from, before the manager's calendar (pure).
+
+    The usual date is ``due_days`` after the period ends. When the item
+    opens after that, the window starts today instead of being over.
+    """
+    usual = period_end + timedelta(days=due_days)
+    return usual if usual >= today else today + timedelta(days=due_days)
 
 
 def should_open_feedback(
@@ -96,7 +107,7 @@ async def feedback_pass(
     for appraisal in due:
         profile = profiles[appraisal.profile_id]
         due_on = calendars.of(appraisal.manager_user_id).shift(
-            period[1] + timedelta(days=cycle.feedback_due_days), 0
+            feedback_due_from(period[1], today, cycle.feedback_due_days), 0
         )
         try:
             async with db.begin_nested():

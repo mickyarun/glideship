@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FeedbackRow } from '@/types/appraisalFeedback'
 import type { GuideRead } from '@/types/appraisalSetup'
-import { feedbackGroups, feedbackPeriod } from '@/utils/appraisalFeedback'
+import { checkInLine, feedbackGroups, feedbackPeriod } from '@/utils/appraisalFeedback'
 import { safeHref } from '@/utils/appraisalCheckIn'
 import { guideDates, guideGlance } from '@/utils/appraisalGuide'
 import { cadenceProblem, dmPreview, goalLimitProblem, longDate, offsetLabel, parseOffsets, yearPreview } from '@/utils/appraisalSetup'
@@ -89,11 +89,19 @@ describe('feedback groups', () => {
       row({ id: 'b', person_name: 'Meena' }),
       row({ id: 'c', period_start: '2026-09-01', due_on: '2026-10-10' }),
     ])
-    expect(groups.map(g => g.title)).toEqual([
-      'October feedback · due Tue 10 Nov 2026 · 1 of 2 done',
-      'September feedback · due Sat 10 Oct 2026 · 0 of 1 done',
+    expect(groups.map(g => g.title)).toEqual(['October feedback', 'September feedback'])
+    expect(groups.map(g => g.detail)).toEqual([
+      'Monthly, for your reports · due Tue 10 Nov 2026 · 1 of 2 written',
+      'Monthly, for your reports · due Sat 10 Oct 2026 · 0 of 1 written',
     ])
     expect(groups[0].rows.map(r => r.person_name)).toEqual(['Meena', 'Sam'])
+  })
+
+  it('says in words whether the check-in was filled in', () => {
+    expect(checkInLine(row({ check_ins: 1, check_ins_added: 0 }))).toBe('Check-in not filled in yet')
+    expect(checkInLine(row({ check_ins: 1, check_ins_added: 1 }))).toBe('Check-in filled in')
+    expect(checkInLine(row({ check_ins: 3, check_ins_added: 2 }))).toBe('2 of 3 check-ins filled in')
+    expect(checkInLine(row({ check_ins: 0, check_ins_added: 0 }))).toBe('No check-in for this period')
   })
 
   it('names quarters', () => {

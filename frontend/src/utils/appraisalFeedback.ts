@@ -32,11 +32,23 @@ export function feedbackPeriod(start: string, cadence: Cadence): string {
 
 export interface FeedbackGroup {
   key: string
+  /** "October feedback". */
   title: string
+  /** "Monthly, for your reports · due Thu 26 Nov 2026 · 1 of 2 written". */
+  detail: string
   rows: FeedbackRow[]
 }
 
-/** The team's feedback items by period, newest first: "October feedback · due … · 1 of 2 done". */
+const CADENCE_WORD: Record<Cadence, string> = { monthly: 'Monthly', quarterly: 'Quarterly' }
+
+/** What a row says about the person's check-ins, in words ("0/1" reads like an error). */
+export function checkInLine(row: FeedbackRow): string {
+  if (row.check_ins === 0) return 'No check-in for this period'
+  if (row.check_ins === 1) return row.check_ins_added ? 'Check-in filled in' : 'Check-in not filled in yet'
+  return `${row.check_ins_added} of ${row.check_ins} check-ins filled in`
+}
+
+/** The team's feedback items by period, newest first: "October feedback", then when it is due and how many are written. */
 export function feedbackGroups(rows: FeedbackRow[]): FeedbackGroup[] {
   const groups = new Map<string, FeedbackRow[]>()
   for (const row of rows) {
@@ -51,7 +63,8 @@ export function feedbackGroups(rows: FeedbackRow[]): FeedbackGroup[] {
       const sorted = [...items].sort((a, b) => a.person_name.localeCompare(b.person_name))
       return {
         key,
-        title: `${feedbackPeriod(first.period_start, first.cadence)} feedback · due ${longDate(first.due_on)} · ${done} of ${items.length} done`,
+        title: `${feedbackPeriod(first.period_start, first.cadence)} feedback`,
+        detail: `${CADENCE_WORD[first.cadence]}, for your reports · due ${longDate(first.due_on)} · ${done} of ${items.length} written`,
         rows: sorted,
       }
     })
