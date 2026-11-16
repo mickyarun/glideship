@@ -17,7 +17,7 @@
 <!-- HR's appraisal settings: the defaults every new cycle copies. A running
      cycle keeps the settings it started with. -->
 <template>
-  <AppPage title="Appraisal settings" subtitle="Every new cycle starts from these. Running cycles keep their own.">
+  <AppPage title="Appraisal settings" subtitle="Every new cycle starts from these. Running cycles keep their own, except the goal limit.">
     <template #actions>
       <v-btn variant="text" :to="{ name: 'appraisal-cycles' }">Cycles</v-btn>
       <AppraisalGuide />
@@ -54,6 +54,8 @@
         <v-switch v-model="form.ai_enabled" color="primary" label="AI drafts check-ins and period summaries" hide-details />
         <p class="settings__hint">Off means everyone gets the manual check-in, whatever AI provider is connected.</p>
         <v-switch v-model="form.suggest_goals_on_open" color="primary" label="Suggest goals for everyone when a cycle opens" hide-details />
+        <v-text-field v-model.number="form.max_goals" type="number" min="1" :max="MAX_GOAL_LIMIT" label="Confirmed goals per person per period" :error-messages="goalsProblem ?? undefined" />
+        <p class="settings__hint">Applies to running cycles too. Lowering it keeps goals already confirmed; it only stops new ones.</p>
       </section>
       <div class="settings__save">
         <v-btn type="submit" color="primary" :loading="saving" :disabled="Boolean(problem)">Save settings</v-btn>
@@ -73,7 +75,7 @@ import ReminderFields from '@/components/appraisals/ReminderFields.vue'
 import YearPreview from '@/components/appraisals/YearPreview.vue'
 import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import type { AppraisalSettings } from '@/types/appraisalSetup'
-import { cadenceProblem } from '@/utils/appraisalSetup'
+import { MAX_GOAL_LIMIT, cadenceProblem, goalLimitProblem } from '@/utils/appraisalSetup'
 
 const store = useAppraisalSetupStore()
 const form = ref<AppraisalSettings | null>(null)
@@ -81,9 +83,12 @@ const saving = ref(false)
 const message = ref('')
 const messageKind = ref<'error' | 'success'>('success')
 
-const problem = computed(() =>
-  form.value ? cadenceProblem(form.value.review_period, form.value.checkin_cadence, form.value.feedback_cadence) : null,
-)
+const goalsProblem = computed(() => (form.value ? goalLimitProblem(form.value.max_goals) : null))
+const problem = computed(() => {
+  const f = form.value
+  if (!f) return null
+  return goalsProblem.value ?? cadenceProblem(f.review_period, f.checkin_cadence, f.feedback_cadence)
+})
 
 watch(
   () => store.settings,

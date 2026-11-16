@@ -42,6 +42,7 @@ export interface AppraisalSettings {
   hr_overdue_list: boolean
   hr_overdue_offset: number
   suggest_goals_on_open: boolean
+  max_goals: number
 }
 
 export interface CycleScope {

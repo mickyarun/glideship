@@ -275,7 +275,7 @@ org settings and can be changed for that one cycle.
 
 ### Goals
 
-Two or three goals per person per period. Each goal is an outcome plus how you'll know you hit it,
+A few goals per person per period, up to the org's limit (Settings → Appraisals, three by default, 1 to 20). Each goal is an outcome plus how you'll know you hit it,
 for example "UAT automation coverage 80% · measured from the test report".
 
 Goals are set in the growth conversation at the end of the previous period, or by the manager when a
@@ -295,7 +295,7 @@ Employees can always write their own goals; suggestions are a starting point, no
 - **Confirming:** an own goal is labelled "Your own goal" and shows "Waiting for Ravi to confirm"
   until the manager includes it. The manager can include it, ask for a rewording, or skip it
   with a reason the employee sees. Only confirmed goals appear in the review.
-- **Limit:** own goals count towards the same three per period. A goal added mid-period is
+- **Limit:** own goals count towards the same per-period limit. A goal added mid-period is
   reviewed like any other; the review shows the date it was added so a late goal isn't judged
   on a full period.
 - **Managers can add goals too,** in the growth conversation or mid-period, labelled as theirs;
@@ -356,7 +356,7 @@ response under 4 hours on 90% of tickets · helpdesk weekly report". Rules:
   accepts one, edits it or dismisses it. A suggestion the employee takes up becomes their proposal
   for the manager to confirm, so nobody confirms their own goal by steering the suggestions.
   Confirming is a person's act and is audited.
-- At most three goals can be accepted per period.
+- At most the org's limit of goals can be accepted per period. The limit is read live, so raising it applies to a running cycle; lowering it keeps confirmed goals and only stops new ones.
 - The prompt gets no name, age, gender or office, and never compares the person with colleagues.
 - A suggestion built on last period's facts cites them, using the same citation check as the
   summaries. A suggestion taken straight from the role library says so.
@@ -720,7 +720,7 @@ suggestion before edits), dismiss_reason (bytes), accepted_by, accepted_at`. Par
 on `(profile_id, target_period_start, position) WHERE status = 'accepted'`, keyed on the period
 because `cycle_id` can still be empty; a goal set in a growth conversation takes the next cycle's
 exact `period_start`.
-Only accepted goals count towards the three-per-period limit and appear in the review.
+Only accepted goals count towards the per-period limit and appear in the review.
 
 **`appraisal_manager_feedback`**: unique `(profile_id, period_start)`
 `id, org_id, cycle_id, profile_id, manager_user_id (snapshot; moves to a new manager while open),

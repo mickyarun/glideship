@@ -158,7 +158,7 @@ CASES: list[tuple[str, Rows]] = [
     ("ck_appraisal_check_ins_period", lambda t: [_check_in(t, period_end=OCT)]),
     ("ck_appraisal_check_ins_days", lambda t: [_check_in(t, available_days=23)]),
     ("uq_appraisal_check_ins_period", lambda t: [_check_in(t), _check_in(t)]),
-    ("ck_appraisal_goals_position", lambda t: [_goal(t, position=4)]),
+    ("ck_appraisal_goals_position", lambda t: [_goal(t, position=0)]),
     (
         "ck_appraisal_goals_suggestion_basis",
         lambda t: [_goal(t, origin=GoalOrigin.AI_SUGGESTED, status=GoalStatus.SUGGESTED)],

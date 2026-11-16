@@ -42,6 +42,7 @@ from app.services.appraisals.goal_writes import (
     goal_rights,
     taken_positions,
 )
+from app.services.appraisals.settings import goal_limit
 
 
 async def accept_goal(db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGoal) -> None:
@@ -78,7 +79,8 @@ async def accept_goal(db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGo
         )
         await db.flush()
     else:
-        position = next_position(await taken_positions(db, ctx))
+        limit = await goal_limit(db, ctx.cycle.org_id)
+        position = next_position(await taken_positions(db, ctx), limit)
     if position is None:
         raise AppraisalConflictError(FULL)
     goal.status, goal.position = GoalStatus.ACCEPTED, position
