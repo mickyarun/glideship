@@ -29,6 +29,7 @@ from app.services.background import spawn
 from app.services.google import calendar_api
 from app.services.google.calendar_api import CalendarApiError
 from app.services.google.service_account import GoogleAuthError, access_token
+from app.services.leave.calendar_sync.holiday_sync import sync_holidays
 from app.services.leave.calendar_sync.settings import load_settings, load_sync, save_settings
 from app.services.leave.calendar_sync.sync import backfill
 from app.services.leave.permissions import CONFIGURE
@@ -51,7 +52,7 @@ async def put_calendar_sync(
     current_user: User = Depends(require_permissions(CONFIGURE)),
     db: AsyncSession = Depends(get_db),
 ) -> CalendarSyncSettings:
-    """Save; then re-sync upcoming approved leave (added when on, removed when off)."""
+    """Save; then re-sync upcoming approved leave and holidays (added on, removed off)."""
     org_id = current_user.org_id
     try:
         saved = await save_settings(db, org_id, body)
@@ -63,6 +64,7 @@ async def put_calendar_sync(
     if saved.service_account_email:
         # Idempotent, so re-saving just re-checks every upcoming request.
         spawn(backfill(org_id))
+        spawn(sync_holidays(org_id))
     return saved
 
 

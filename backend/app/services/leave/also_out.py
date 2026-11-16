@@ -15,17 +15,20 @@
 """Who else is out on a pending request's days, for the approvals queue."""
 
 import uuid
+from collections import defaultdict
 from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permission_deps import PermissionSet
-from app.models.leave_request import LeaveRequest
+from app.models.leave_request import LeaveKind, LeaveRequest
 from app.repositories.leave_request import LeaveRequestRepository
 from app.repositories.user import UserRepository
 from app.schemas.leave_views import AlsoOut
 from app.services.leave.approvers import Approvers
 from app.services.leave.permissions import APPROVE
+from app.services.leave.reports.wfh_taken_over import booked_calendars
+from app.services.leave.wfh_overlap import approved_time_off, replaced_between
 
 
 async def also_out(
@@ -41,7 +44,8 @@ async def also_out(
 
     A teammate shares one of the requester's managers. A manager only sees
     their own reports here (not another manager's team they happen to
-    share a report with); HR sees the whole team.
+    share a report with); HR sees the whole team. WFH that approved time off
+    replaces on the request's days is left out: that person isn't working.
     """
     own_reports = None if perms.has(APPROVE) else {who for who, boss in edges if boss == actor}
     teams: dict[uuid.UUID, set[uuid.UUID]] = {}
@@ -56,6 +60,25 @@ async def also_out(
         everyone, min(r.start_date for r in requests), max(r.end_date for r in requests)
     )
     names = await UserRepository(db).get_names_by_ids({c.user_id for c in clashes})
+    time_off: dict[uuid.UUID, list[LeaveRequest]] = defaultdict(list)
+    for clash in approved_time_off(clashes):
+        time_off[clash.user_id].append(clash)
+    policies, holidays = await booked_calendars(
+        db, org_id, [c for c in clashes if c.kind == LeaveKind.WFH and c.user_id in time_off]
+    )
+
+    def replaced(clash: LeaveRequest, request: LeaveRequest) -> bool:
+        if clash.kind != LeaveKind.WFH or clash.user_id not in time_off:
+            return False
+        return replaced_between(
+            clash,
+            time_off[clash.user_id],
+            request.start_date,
+            request.end_date,
+            working_days=policies[clash.policy_id].working_days,
+            holidays=holidays[clash.policy_id],
+        )
+
     return {
         request.id: [
             AlsoOut(
@@ -68,6 +91,7 @@ async def also_out(
             if c.user_id in teams[request.id]
             and c.start_date <= request.end_date
             and c.end_date >= request.start_date
+            and not replaced(c, request)
         ]
         for request in requests
     }

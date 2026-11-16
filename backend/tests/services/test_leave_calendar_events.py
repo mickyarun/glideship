@@ -22,8 +22,10 @@ from app.models.leave_request import HalfDay, LeaveKind
 from app.schemas.leave_calendar_sync import CalendarSyncOptions
 from app.services.google.calendar_api import TAG
 from app.services.leave.calendar_sync.events import (
+    HOLIDAY_TAG,
     RequestShape,
     desired_events,
+    holiday_events,
     plain_event,
     wanted_events,
 )
@@ -125,3 +127,27 @@ def test_plain_versions_keep_dates_tag_and_busy_free_without_status_fields() -> 
     assert plain_home["summary"] == "Working from home"
     assert plain_home["transparency"] == "transparent"
     assert "workingLocationProperties" not in plain_home
+
+
+def test_each_holiday_is_a_day_out_of_office_tagged_as_a_holiday() -> None:
+    events = holiday_events({date(2026, 11, 8): "Diwali"}, "Asia/Kolkata", CalendarSyncOptions())
+    ((event_id, body),) = events.items()
+    assert GOOGLE_ID.match(event_id)
+    assert not re.fullmatch(r"bo[0-9a-f]{32}.*", event_id)  # never a request's id
+    assert body["eventType"] == "outOfOffice"
+    assert body["summary"] == "Out of office: Diwali"
+    assert body["start"]["dateTime"] == "2026-11-08T00:00:00+05:30"
+    assert body["end"]["dateTime"] == "2026-11-09T00:00:00+05:30"
+    assert body["extendedProperties"]["private"][TAG] == HOLIDAY_TAG
+
+
+def test_a_holiday_declines_meetings_only_when_the_setting_says_so() -> None:
+    day = {date(2026, 11, 8): "Diwali"}
+    keep = holiday_events(day, "UTC", CalendarSyncOptions(decline_meetings=False))
+    decline = holiday_events(day, "UTC", CalendarSyncOptions())
+    assert [b["outOfOfficeProperties"]["autoDeclineMode"] for b in keep.values()] == [
+        "declineNone"
+    ]
+    assert [b["outOfOfficeProperties"]["autoDeclineMode"] for b in decline.values()] == [
+        "declineOnlyNewConflictingInvitations"
+    ]

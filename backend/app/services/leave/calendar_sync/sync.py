@@ -27,7 +27,9 @@ Best effort, like Slack: failures are logged, the request is already saved.
 
 import asyncio
 import uuid
-from datetime import date, timedelta
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
 
 import httpx
 import structlog
@@ -51,47 +53,49 @@ from app.services.leave.policies import mandatory_holidays, policy_for_request
 
 logger = structlog.get_logger(__name__)
 
-# One sync per request at a time, so a quick approve-then-cancel can't
-# finish in the wrong order and leave an event behind.
-# Counted so the lock is dropped only once nobody holds or awaits it.
+# Errors a sync logs and moves past: the change itself is already saved.
+SYNC_ERRORS = (GoogleAuthError, CalendarApiError, httpx.HTTPError)
+
+# One sync per key (a request, or a person's holidays) at a time, so a quick
+# approve-then-cancel can't finish in the wrong order and leave an event
+# behind. Counted so the lock is dropped only once nobody holds or awaits it.
 _locks: dict[uuid.UUID, tuple[asyncio.Lock, int]] = {}
 
 
-def _take(request_id: uuid.UUID) -> asyncio.Lock:
-    lock, users = _locks.get(request_id, (asyncio.Lock(), 0))
-    _locks[request_id] = (lock, users + 1)
-    return lock
-
-
-def _drop(request_id: uuid.UUID) -> None:
-    lock, users = _locks[request_id]
-    if users <= 1:
-        del _locks[request_id]
-    else:
-        _locks[request_id] = (lock, users - 1)
+@asynccontextmanager
+async def one_at_a_time(key: uuid.UUID) -> AsyncIterator[None]:
+    """Hold ``key``'s lock, waiting for any sync already holding it."""
+    lock, users = _locks.get(key, (asyncio.Lock(), 0))
+    _locks[key] = (lock, users + 1)
+    try:
+        async with lock:
+            yield
+    finally:
+        lock, users = _locks[key]
+        if users <= 1:
+            del _locks[key]
+        else:
+            _locks[key] = (lock, users - 1)
 
 
 async def sync_request(org_id: uuid.UUID, request_id: uuid.UUID) -> None:
     """Bring the requester's calendar in line with the request (background)."""
-    lock = _take(request_id)
     try:
-        async with lock:
+        async with one_at_a_time(request_id):
             async with AsyncSessionLocal() as db:
                 sync = await load_sync(db, org_id)
                 if sync.key is None:
                     return
                 plan = await _plan(db, org_id, request_id, sync)
             if plan is not None:
-                await _apply(sync, *plan)
-    except (GoogleAuthError, CalendarApiError, httpx.HTTPError) as exc:
+                await apply_events(sync, *plan)
+    except SYNC_ERRORS as exc:
         logger.warning(
             "leave_calendar_sync_failed",
             org_id=str(org_id),
             request_id=str(request_id),
             error=str(exc),
         )
-    finally:
-        _drop(request_id)
 
 
 async def _plan(
@@ -124,10 +128,21 @@ async def _shape(db: AsyncSession, org_id: uuid.UUID, request: LeaveRequest) -> 
     )
 
 
-async def _apply(sync: CalendarSync, email: str, tag: str, wanted: dict[str, Event]) -> None:
-    assert sync.key is not None  # checked by ``sync_request``
+async def apply_events(
+    sync: CalendarSync,
+    email: str,
+    tag: str,
+    wanted: dict[str, Event],
+    *,
+    since: datetime | None = None,
+) -> None:
+    """Make ``email``'s events tagged ``tag`` exactly ``wanted``.
+
+    With ``since``, events that ended before it are left alone.
+    """
+    assert sync.key is not None  # checked by the caller
     token = await access_token(sync.key, email, calendar_api.SCOPE)
-    existing = await calendar_api.tagged_event_ids(token, tag)
+    existing = await calendar_api.tagged_event_ids(token, tag, since=since)
     for event_id, body in wanted.items():
         await _put(token, event_id, body, exists=event_id in existing)
     for event_id in existing - wanted.keys():
@@ -146,7 +161,7 @@ async def _put(token: str, event_id: str, body: Event, *, exists: bool) -> None:
     try:
         await calendar_api.put_event(token, event_id, body, exists=exists)
     except CalendarApiError as exc:
-        if exc.status not in (400, 403):
+        if exc.status not in (400, 403) or exc.rate_limited:
             raise
         logger.info("leave_calendar_status_event_refused", status=exc.status, detail=exc.detail)
         await calendar_api.put_event(token, event_id, plain_event(body), exists=exists)

@@ -53,7 +53,7 @@ class FakeGoogle:
         self.tokens_for.append(email)
         return "tok"
 
-    async def tagged_event_ids(self, _token: str, tag: str) -> set[str]:
+    async def tagged_event_ids(self, _token: str, tag: str, **_kw: object) -> set[str]:
         return {i for i, t in self.events.items() if t == tag}
 
     async def put_event(self, _token: str, event_id: str, body: Event, *, exists: bool) -> None:

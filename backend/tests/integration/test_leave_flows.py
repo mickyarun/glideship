@@ -46,6 +46,7 @@ from tests.integration.leave_support import (
     HR,
     NOBODY,
     Factory,
+    add_request,
     future_monday,
     give_role,
     leave_body,
@@ -99,6 +100,74 @@ async def test_overlap_is_refused(pg_session_factory: Factory) -> None:
             await submit(
                 db, org, emp, LeaveRequestCreate(kind=LeaveKind.WFH, start_date=mon, end_date=mon)
             )
+
+
+async def test_the_overlap_message_names_the_day_that_clashes(
+    pg_session_factory: Factory,
+) -> None:
+    org, (emp, mgr), _ = await setup_org(pg_session_factory, "Emp", "Mgr")
+    await report_to(pg_session_factory, org, emp, mgr)
+    mon = future_monday()
+    thu = mon + timedelta(days=3)
+    await add_request(
+        pg_session_factory, org, emp, mon, mon + timedelta(days=4), "5", kind=LeaveKind.WFH
+    )
+    body = LeaveRequestCreate(kind=LeaveKind.WFH, start_date=thu, end_date=thu)
+    async with pg_session_factory() as db:
+        with pytest.raises(LeaveError, match=f"an approved request covering {thu:%a %d %b}"):
+            await submit(db, org, emp, body)
+
+
+async def test_leave_can_land_on_a_wfh_day(pg_session_factory: Factory) -> None:
+    org, (emp, mgr), casual = await setup_org(pg_session_factory, "Emp", "Mgr")
+    await report_to(pg_session_factory, org, emp, mgr)
+    mon = future_monday()
+    thu = mon + timedelta(days=3)
+    week = LeaveRequestCreate(kind=LeaveKind.WFH, start_date=mon, end_date=mon + timedelta(days=4))
+    async with pg_session_factory() as db:
+        await submit(db, org, emp, week)
+        await db.commit()
+        leave, _ = await submit(db, org, emp, leave_body(casual, thu, thu))
+        await db.commit()
+        assert leave.days == Decimal("1")
+        # Still one request per kind of day: no second WFH, no second leave.
+        with pytest.raises(LeaveError, match="already have a"):
+            await submit(
+                db, org, emp, LeaveRequestCreate(kind=LeaveKind.WFH, start_date=mon, end_date=mon)
+            )
+        with pytest.raises(LeaveError, match="already have a"):
+            await submit(db, org, emp, leave_body(casual, thu, thu))
+
+
+async def test_an_optional_holiday_can_land_on_a_wfh_day(pg_session_factory: Factory) -> None:
+    org, (emp, mgr), _ = await setup_org(pg_session_factory, "Emp", "Mgr")
+    await report_to(pg_session_factory, org, emp, mgr)
+    day = month_mondays()[0]
+    async with pg_session_factory() as db:
+        policy = (await resolve_member_policy(db, org, emp)).policy
+        policy.optional_holiday_quota = 1
+        holiday = await PolicyHolidayRepository(db, org_id=org).create(
+            PolicyHoliday(
+                org_id=org, policy_id=policy.id, date=day, name="Onam", kind=HolidayKind.OPTIONAL
+            )
+        )
+        await db.commit()
+        await submit(
+            db, org, emp, LeaveRequestCreate(kind=LeaveKind.WFH, start_date=day, end_date=day)
+        )
+        await db.commit()
+        taken, _ = await submit(
+            db,
+            org,
+            emp,
+            LeaveRequestCreate(
+                kind=LeaveKind.OPTIONAL_HOLIDAY,
+                holiday_id=holiday.id,
+                start_date=day,
+                end_date=day,
+            ),
+        )
+        assert taken.days == Decimal("1")
 
 
 async def test_nobody_decides_their_own_and_rejection_needs_a_note(

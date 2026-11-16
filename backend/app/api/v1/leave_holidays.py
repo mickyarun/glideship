@@ -15,6 +15,7 @@
 """Holiday calendars per policy, including public-holiday import."""
 
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.exc import IntegrityError
@@ -33,7 +34,9 @@ from app.schemas.leave_policy import (
     HolidayImportResult,
     HolidayWrite,
 )
+from app.services.background import spawn
 from app.services.leave.calendar_math import leave_year_by_label
+from app.services.leave.calendar_sync.holiday_sync import after_holiday_change
 from app.services.leave.errors import LeaveConflictError, LeaveNotFoundError
 from app.services.leave.holidays import (
     holiday_countries,
@@ -45,6 +48,12 @@ from app.services.leave.permissions import CONFIGURE
 router = APIRouter(tags=["leave-admin"])
 
 DUPLICATE = "There's already a holiday on that date."
+
+
+async def _resync(db: AsyncSession, org_id: uuid.UUID, policy_id: uuid.UUID, start: date) -> None:
+    """Commit, then bring calendars in line with the policy's holidays from ``start``."""
+    await db.commit()
+    spawn(after_holiday_change(org_id, policy_id, start))
 
 
 def _read(h: PolicyHoliday) -> HolidayAdminRead:
@@ -107,6 +116,7 @@ async def add_holiday(
     except IntegrityError as exc:
         raise LeaveConflictError(DUPLICATE) from exc
     await recount_requests(db, policy, holiday.date)
+    await _resync(db, policy.org_id, policy.id, holiday.date)
     return _read(holiday)
 
 
@@ -141,6 +151,7 @@ async def update_holiday(
         raise LeaveConflictError(DUPLICATE) from exc
     policy = await load_policy(db, current_user.org_id, holiday.policy_id)
     await recount_requests(db, policy, earliest)
+    await _resync(db, policy.org_id, policy.id, earliest)
     return _read(holiday)
 
 
@@ -157,6 +168,7 @@ async def delete_holiday(
     on = holiday.date
     await PolicyHolidayRepository(db, org_id=current_user.org_id).delete(holiday)
     await recount_requests(db, policy, on)
+    await _resync(db, policy.org_id, policy.id, on)
 
 
 @router.post("/policies/{policy_id}/holidays/import", response_model=HolidayImportResult)
@@ -169,4 +181,7 @@ async def import_holidays(
     """Pre-fill a year's public holidays for the policy's country and region."""
     policy = await load_policy(db, current_user.org_id, policy_id)
     added, skipped = await import_public_holidays(db, policy, body.year)
+    if added:
+        start = leave_year_by_label(body.year, policy.year_start_month).start
+        await _resync(db, policy.org_id, policy.id, start)
     return HolidayImportResult(added=added, skipped=skipped)

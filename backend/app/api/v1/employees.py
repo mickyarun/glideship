@@ -45,9 +45,11 @@ from app.schemas.employee import (
     EmployeeRead,
     MemberCandidate,
 )
+from app.services.background import spawn
 from app.services.employees.access import MANAGE, VIEW, access_for
 from app.services.employees.offices import check_office, follow_office_policy
 from app.services.employees.views import directory_entries, employee_read
+from app.services.leave.calendar_sync.holiday_sync import sync_holidays
 
 router = APIRouter(tags=["employees"])
 
@@ -138,6 +140,8 @@ async def create_employee(
         actor_id=current_user.id,
         perms=perms,
     )
+    await db.commit()
+    spawn(sync_holidays(org_id, user_ids=[body.user_id]))  # their office's holidays
     return await employee_read(db, org_id=org_id, profile=profile, user=member, access=access)
 
 
