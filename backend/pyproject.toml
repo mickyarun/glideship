@@ -51,6 +51,11 @@ dependencies = [
     "pyyaml>=6.0",
     "graphifyy[leiden]>=0.5.5,<0.6",
     "networkx>=3.2",
+    # IANA zone data, including the legacy aliases (Asia/Calcutta,
+    # US/Eastern, GB) that browsers still send. Debian and recent Ubuntu
+    # images ship only the canonical zones, so ``zoneinfo`` needs this
+    # package to resolve the rest. Mirrors the pin in requirements.txt.
+    "tzdata>=2026.5",
     # S3 backend for QA evidence uploads (``FILE_STORAGE_S3=true``).
     # ``aioboto3`` pulls in ``aiobotocore`` + ``botocore`` transitively;
     # the lazy ``import aioboto3`` inside ``file_storage.py`` would fail
