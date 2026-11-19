@@ -38,6 +38,7 @@ from typing import Any
 
 import structlog
 
+from app.models.user import UserRole
 from app.schemas.settings import (
     BUDStageSettings,
     BugAttachmentSettings,
@@ -48,6 +49,7 @@ from app.schemas.settings import (
     QuizGameSettings,
 )
 from app.services.estimation_engine import PHASE_ORDER
+from app.services.phase_roles import role_chains
 
 logger = structlog.get_logger(__name__)
 
@@ -100,6 +102,11 @@ def is_uat_enabled(org_config: dict[str, Any] | None) -> bool:
     have to import / construct the whole settings object.
     """
     return get_bud_stage_settings(org_config).uat_enabled
+
+
+def get_role_chains(org_config: dict[str, Any] | None) -> dict[str, tuple[UserRole, ...]]:
+    """Return the phase → role chain map with the org's chosen UAT owner applied."""
+    return role_chains(get_bud_stage_settings(org_config).uat_owner)
 
 
 def get_presence_settings(org_config: dict[str, Any] | None) -> PresenceSettings:

@@ -121,6 +121,7 @@ from app.services.bud_timeline import record_event
 from app.services.delivery_settings import DELIVERY_AI_OFF, delivery_ai_enabled, no_agent_reason
 from app.services.job_queue import JOB_BUD_AGENT, create_job
 from app.services.org_members import assert_new_assignee_in_org
+from app.services.phase_owner import uat_owner_is_qa
 
 logger = structlog.get_logger(__name__)
 
@@ -481,8 +482,7 @@ async def regenerate_learning(
 # Status transitions QA owns directly via PATCH. Matches the manual-testing
 # guard further down in update_bud (search for "Manual testing → uat"): QA
 # is the final gate out of testing, advancing to uat normally or to prod
-# when the org config has UAT disabled. Other transitions (uat → prod,
-# sending back to development) remain PM/dev territory.
+# when the org config has UAT disabled.
 _QA_OWNED_TRANSITIONS: frozenset[tuple[BUDStatus, BUDStatus]] = frozenset(
     {
         (BUDStatus.TESTING, BUDStatus.UAT),
@@ -490,14 +490,29 @@ _QA_OWNED_TRANSITIONS: frozenset[tuple[BUDStatus, BUDStatus]] = frozenset(
     }
 )
 
+# Added when the org makes QA the UAT owner (``bud_stages.uat_owner``): QA
+# then also signs UAT off to prod or sends the BUD back to development.
+# Otherwise those moves stay with PMs. Mirrored in the frontend's canMoveBud.
+_QA_UAT_OWNER_TRANSITIONS: frozenset[tuple[BUDStatus, BUDStatus]] = frozenset(
+    {
+        (BUDStatus.UAT, BUDStatus.PROD),
+        (BUDStatus.UAT, BUDStatus.DEVELOPMENT),
+    }
+)
+
 
 def _enforce_qa_scope(
-    perms: set[str], current_status: BUDStatus, update_data: dict[str, Any]
+    perms: set[str],
+    current_status: BUDStatus,
+    update_data: dict[str, Any],
+    *,
+    qa_owns_uat: bool = False,
 ) -> None:
     """Restrict buds:test-only callers to QA-owned status promotions.
 
     Raises 403 if a QA caller tries to update non-status fields or
-    transition to a status outside ``_QA_OWNED_TRANSITIONS``. Callers
+    transition to a status outside ``_QA_OWNED_TRANSITIONS`` (plus
+    ``_QA_UAT_OWNER_TRANSITIONS`` when the org made QA the UAT owner). Callers
     with ``buds:edit`` (PMs, owners) skip this check entirely.
     Permissions drive the decision rather than role names so custom
     roles that grant ``buds:test`` get the same scope automatically.
@@ -509,7 +524,8 @@ def _enforce_qa_scope(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="QA role can only update BUD status, not other fields.",
         )
-    if (current_status, update_data["status"]) not in _QA_OWNED_TRANSITIONS:
+    allowed = _QA_OWNED_TRANSITIONS | (_QA_UAT_OWNER_TRANSITIONS if qa_owns_uat else frozenset())
+    if (current_status, update_data["status"]) not in allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
@@ -523,8 +539,9 @@ def _enforce_qa_scope(
     "/{bud_id}",
     response_model=BUDRead,
     # buds:test is accepted so QA users can complete the testing phase
-    # (testing → uat / prod). Field-level enforcement inside the handler
-    # restricts buds:test-only callers to that single transition.
+    # (testing → uat / prod), and UAT (→ prod / development) when the org
+    # made QA its owner. Field-level enforcement inside the handler
+    # restricts buds:test-only callers to those transitions.
     dependencies=[Depends(require_permissions("buds:edit", "buds:test", mode="any"))],
 )
 async def update_bud(
@@ -591,7 +608,13 @@ async def update_bud(
     # Field-level QA gate. Runs before any side-effect-producing code
     # so a rejected QA request never mutates state.
     user_perms = await get_user_permissions(current_user, db)
-    _enforce_qa_scope(user_perms, bud.status, update_data)
+    # Only a QA-only caller moving a BUD out of UAT needs the org setting.
+    uat_by_qa = (
+        bud.status == BUDStatus.UAT
+        and "buds:edit" not in user_perms
+        and await uat_owner_is_qa(db, current_user.org_id)
+    )
+    _enforce_qa_scope(user_perms, bud.status, update_data, qa_owns_uat=uat_by_qa)
 
     # Guard: terminal BUDs cannot be moved through the normal status
     # PATCH. Placed before ANY side-effect-producing code

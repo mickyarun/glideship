@@ -98,6 +98,17 @@ describe('budDropBlock', () => {
       note: 'Only out of Testing', sentence: 'You can only move BUDs out of Testing.',
     })
   })
+
+  it('lets QA take BUDs on from UAT when QA owns UAT', () => {
+    expect(budDropBlock(at('uat'), 'prod', ALL, qa)).not.toBeNull()
+    expect(budDropBlock(at('uat'), 'prod', ALL, qa, true)).toBeNull()
+    expect(budDropBlock(at('uat'), 'testing', ALL, qa, true)).toEqual({
+      note: 'Only to Prod or Development', sentence: 'From UAT you can only move BUDs to Prod or back to Development.',
+    })
+    expect(budDropBlock(at('development'), 'code_review', ALL, qa, true)).toEqual({
+      note: 'Only out of Testing or UAT', sentence: 'You can only move BUDs out of Testing or UAT.',
+    })
+  })
 })
 
 describe('budDropBlocks', () => {

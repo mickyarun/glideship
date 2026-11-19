@@ -39,9 +39,8 @@ from app.services.assignment_policy import (
 )
 from app.services.bud_assignment_actions import assign_bud, unassign_bud
 from app.services.bud_timeline import record_event
-
-# Single source of truth for the phase→role chain — see app/services/phase_roles.py.
-from app.services.phase_roles import PHASE_ROLE_CHAIN
+from app.services.phase_owner import role_chain_for_phase
+from app.services.phase_roles import ORG_CONFIGURABLE_PHASES
 from app.services.smart_assignment import assign_best_for_role
 from app.services.team_scope import (
     TeamScopeResult,
@@ -124,8 +123,8 @@ async def auto_assign_for_phase(
 
     Flow:
       1. CODE_REVIEW retains the developer from DEVELOPMENT.
-      2. Look up the role chain from PHASE_ROLE_CHAIN; phases with no
-         chain skip.
+      2. Look up the phase's role chain (UAT's owner is an org setting);
+         phases with no chain skip.
       3. Walk the chain in order, fetching active users for each role.
          The first role with at least one candidate wins. If a non-primary
          role wins, ``assignment_via_fallback`` is set on the lifecycle
@@ -147,7 +146,7 @@ async def auto_assign_for_phase(
             db, org_id, bud, actor_id=actor_id, actor_name=actor_name
         )
 
-    chain = PHASE_ROLE_CHAIN.get(new_status.value, ())
+    chain = await role_chain_for_phase(db, org_id, new_status.value)
     if not chain:
         return bud.assignee_id
 
@@ -704,7 +703,9 @@ async def _previous_assignee_for_phase(
        assignment (i.e. ``detail.reason != 'auto_assign_skipped'``),
        respect the unassign — return None.
     3. Validate the user is still ``is_active=True`` and still holds an
-       eligible role (in ``chain``) in this org.
+       eligible role (in ``chain``) in this org. In a phase whose owner
+       the org chooses (UAT), a fallback-role holder only qualifies while
+       the chosen role has nobody.
     4. Validate they're under their role's active-BUD cap.
     5. When the BUD has impacted repos, validate the user is still in
        a team that owns at least one — staleness here (user removed
@@ -734,12 +735,21 @@ async def _previous_assignee_for_phase(
     # whose custom role got deleted is correctly excluded.
     user_repo = UserRepository(db)
     eligible_role: UserRole | None = None
+    earlier_staffed = False
     for role in chain:
         members = await user_repo.list_active_with_role(org_id, role)
         if any(m.id == user.id for m in members):
             eligible_role = role
             break
+        earlier_staffed = earlier_staffed or bool(members)
     if eligible_role is None:
+        return None
+    # In a phase whose owner the org chooses, a fallback-role holder keeps
+    # the BUD only while every role ahead of theirs is unstaffed. After an org
+    # switches UAT from PM to QA, a BUD re-entering UAT goes to QA, not back to the PM.
+    # Other phases keep the previous holder, so a deliberate manual pick
+    # (a tech lead building it, a PM doing design) survives a send-back.
+    if phase_value in ORG_CONFIGURABLE_PHASES and earlier_staffed:
         return None
 
     # Capacity check: capacity wins over continuity.

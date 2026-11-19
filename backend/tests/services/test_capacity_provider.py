@@ -25,6 +25,7 @@ from __future__ import annotations
 from app.models.user import UserRole
 from app.services.capacity_provider import RoleLoad, capacity_by_phase, phase_capacity
 from app.services.estimation_engine import MIN_CAPACITY
+from app.services.phase_roles import PHASE_ROLE_CHAIN
 
 
 def test_phase_capacity_uses_queueing_curve() -> None:
@@ -32,16 +33,16 @@ def test_phase_capacity_uses_queueing_curve() -> None:
     the old subtractive 1-active/pool. Idle pool → 1.0; equal load →
     0.5; never crosses zero however overloaded."""
     loads = {UserRole.DEVELOPER: RoleLoad(pool=4, active=0)}
-    assert phase_capacity(loads, "development") == 1.0
+    assert phase_capacity(loads, "development", PHASE_ROLE_CHAIN) == 1.0
 
     loads = {UserRole.DEVELOPER: RoleLoad(pool=4, active=4)}
-    assert phase_capacity(loads, "development") == 0.5
+    assert phase_capacity(loads, "development", PHASE_ROLE_CHAIN) == 0.5
 
     # 1 dev, 9 active: old model → 1-9 = floored to MIN; queueing → 0.1
     # but still strictly positive and never negative.
     loads = {UserRole.DEVELOPER: RoleLoad(pool=1, active=9)}
-    assert phase_capacity(loads, "development") == 0.1
-    assert phase_capacity(loads, "development") > 0
+    assert phase_capacity(loads, "development", PHASE_ROLE_CHAIN) == 0.1
+    assert phase_capacity(loads, "development", PHASE_ROLE_CHAIN) > 0
 
 
 def test_phase_capacity_pools_the_fallback_chain() -> None:
@@ -53,7 +54,7 @@ def test_phase_capacity_pools_the_fallback_chain() -> None:
         UserRole.PM: RoleLoad(pool=2, active=11),
     }
     # pool = 1 + 2 = 3, active = designer's 7 → 3/10 = 0.30
-    assert phase_capacity(loads, "design") == 3 / 10
+    assert phase_capacity(loads, "design", PHASE_ROLE_CHAIN) == 3 / 10
 
     # tech_arch chain (TECH_LEAD, DEVELOPER): a big dev pool rescues a
     # 2-person tech-lead pool that the old model floored at 0.1.
@@ -62,22 +63,22 @@ def test_phase_capacity_pools_the_fallback_chain() -> None:
         UserRole.DEVELOPER: RoleLoad(pool=26, active=7),
     }
     # pool = 2 + 26 = 28, active = tech_lead's 12 → 28/40 = 0.70
-    assert phase_capacity(loads, "tech_arch") == 28 / 40
+    assert phase_capacity(loads, "tech_arch", PHASE_ROLE_CHAIN) == 28 / 40
 
 
 def test_phase_capacity_unknown_phase_defaults_to_one() -> None:
     """Phases without a role chain must default to 1.0 (no adjustment).
     Defensive — keeps a renamed/added phase from silently breaking
     forecasting until PHASE_ROLE_CHAIN catches up."""
-    assert phase_capacity({}, "made_up") == 1.0
+    assert phase_capacity({}, "made_up", PHASE_ROLE_CHAIN) == 1.0
 
 
 def test_phase_capacity_empty_chain_pool_defaults_to_one() -> None:
     """When literally nobody staffs any role in the chain, capacity is
     1.0 (no inflation) — an unstaffable phase is the assignment banner's
     problem, not a number to silently stretch."""
-    assert phase_capacity({}, "design") == 1.0
-    assert phase_capacity({UserRole.DESIGNER: RoleLoad(0, 0)}, "design") == 1.0
+    assert phase_capacity({}, "design", PHASE_ROLE_CHAIN) == 1.0
+    assert phase_capacity({UserRole.DESIGNER: RoleLoad(0, 0)}, "design", PHASE_ROLE_CHAIN) == 1.0
 
 
 def test_capacity_by_phase_projects_each_phase() -> None:
@@ -89,7 +90,7 @@ def test_capacity_by_phase_projects_each_phase() -> None:
         UserRole.DEVELOPER: RoleLoad(pool=4, active=0),
         UserRole.TECH_LEAD: RoleLoad(pool=0, active=0),
     }
-    out = capacity_by_phase(loads, ["design", "development"])
+    out = capacity_by_phase(loads, ["design", "development"], PHASE_ROLE_CHAIN)
     # design chain (DESIGNER, PM): pool 2+2=4, active 2 → 4/6
     assert out["design"] == 4 / 6
     # development chain (DEVELOPER, TECH_LEAD): pool 4+0=4, active 0 → 1.0

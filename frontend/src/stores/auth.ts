@@ -15,6 +15,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@/types'
+import { resetBudStageSettings } from '@/composables/useBudStageSettings'
 import { useMemberDirectory } from '@/composables/useMemberDirectory'
 import api from '@/services/api'
 import { extractApiError } from '@/utils/errors'
@@ -84,6 +85,8 @@ export const useAuthStore = defineStore('auth', () => {
     forgetReturnTo()
     // Nor show them this org's people.
     useMemberDirectory().reset()
+    // Nor this org's UAT owner, which decides the stage moves QA is offered.
+    resetBudStageSettings()
   }
 
   async function fetchUser(): Promise<void> {

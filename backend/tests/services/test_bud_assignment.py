@@ -1023,3 +1023,123 @@ async def test_automated_assignment_supersedes_pending_offers(
     )
 
     supersede.assert_awaited_once_with(db, org_id, bud.id)
+
+
+@pytest.mark.asyncio
+async def test_continuity_drops_fallback_holder_when_primary_role_staffed(
+    monkeypatch: pytest.MonkeyPatch,
+    org_id: uuid.UUID,
+) -> None:
+    """A PM who held UAT keeps it only while no QA exists once QA owns UAT.
+
+    After an org switches the UAT owner to QA, a BUD re-entering UAT must go
+    to QA rather than back to the PM through continuity.
+    """
+    prev = SimpleNamespace(id=uuid.uuid4(), name="Priya", email="p@x", created_at="2026-01-01")
+    qa = SimpleNamespace(id=uuid.uuid4(), name="Quinn", email="q@x", created_at="2026-01-01")
+    _patch_continuity_world(monkeypatch, prev_user=prev, prev_role=UserRole.PM)
+
+    async def list_active(_org_id: uuid.UUID, role: object) -> list[SimpleNamespace]:
+        return {UserRole.QA: [qa], UserRole.PM: [prev]}.get(role, [])  # type: ignore[call-overload]
+
+    monkeypatch.setattr(
+        bud_assignment,
+        "UserRepository",
+        MagicMock(
+            return_value=MagicMock(list_active_with_role=AsyncMock(side_effect=list_active))
+        ),
+    )
+    db = MagicMock(name="AsyncSession")
+    db.get = AsyncMock(return_value=prev)
+
+    pick = await bud_assignment._previous_assignee_for_phase(
+        db, org_id, uuid.uuid4(), (UserRole.QA, UserRole.PM), "uat"
+    )
+
+    assert pick is None
+
+
+@pytest.mark.asyncio
+async def test_continuity_keeps_fallback_holder_when_primary_role_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    org_id: uuid.UUID,
+) -> None:
+    """With no QA in the org, the PM who held UAT keeps it on re-entry."""
+    prev = SimpleNamespace(id=uuid.uuid4(), name="Priya", email="p@x", created_at="2026-01-01")
+    _patch_continuity_world(monkeypatch, prev_user=prev, prev_role=UserRole.PM)
+    db = MagicMock(name="AsyncSession")
+    db.get = AsyncMock(return_value=prev)
+
+    pick = await bud_assignment._previous_assignee_for_phase(
+        db, org_id, uuid.uuid4(), (UserRole.QA, UserRole.PM), "uat"
+    )
+
+    assert pick is not None
+    assert pick.user is prev
+    assert pick.role is UserRole.PM
+
+
+@pytest.mark.asyncio
+async def test_continuity_keeps_manual_fallback_pick_outside_uat(
+    monkeypatch: pytest.MonkeyPatch,
+    org_id: uuid.UUID,
+) -> None:
+    """A tech lead picked for development keeps it on re-entry though developers exist.
+
+    Only UAT, whose owner the org chooses, hands a fallback holder back to the
+    chosen role; other phases honour the earlier (often manual) pick.
+    """
+    lead = SimpleNamespace(id=uuid.uuid4(), name="Lee", email="l@x", created_at="2026-01-01")
+    dev = SimpleNamespace(id=uuid.uuid4(), name="Dev", email="d@x", created_at="2026-01-01")
+    _patch_continuity_world(monkeypatch, prev_user=lead, prev_role=UserRole.TECH_LEAD)
+
+    async def list_active(_org_id: uuid.UUID, role: object) -> list[SimpleNamespace]:
+        return {UserRole.DEVELOPER: [dev], UserRole.TECH_LEAD: [lead]}.get(role, [])  # type: ignore[call-overload]
+
+    monkeypatch.setattr(
+        bud_assignment,
+        "UserRepository",
+        MagicMock(
+            return_value=MagicMock(list_active_with_role=AsyncMock(side_effect=list_active))
+        ),
+    )
+    db = MagicMock(name="AsyncSession")
+    db.get = AsyncMock(return_value=lead)
+
+    pick = await bud_assignment._previous_assignee_for_phase(
+        db, org_id, uuid.uuid4(), (UserRole.DEVELOPER, UserRole.TECH_LEAD), "development"
+    )
+
+    assert pick is not None
+    assert pick.user is lead
+    assert pick.role is UserRole.TECH_LEAD
+
+
+@pytest.mark.asyncio
+async def test_continuity_drops_a_manager_when_the_pm_ahead_of_them_is_staffed(
+    monkeypatch: pytest.MonkeyPatch,
+    org_id: uuid.UUID,
+) -> None:
+    """With QA as UAT owner and no QA, a manager who held UAT loses it to a staffed PM."""
+    mgr = SimpleNamespace(id=uuid.uuid4(), name="Mia", email="m@x", created_at="2026-01-01")
+    pm = SimpleNamespace(id=uuid.uuid4(), name="Priya", email="p@x", created_at="2026-01-01")
+    _patch_continuity_world(monkeypatch, prev_user=mgr, prev_role=UserRole.MANAGER)
+
+    async def list_active(_org_id: uuid.UUID, role: object) -> list[SimpleNamespace]:
+        return {UserRole.PM: [pm], UserRole.MANAGER: [mgr]}.get(role, [])  # type: ignore[call-overload]
+
+    monkeypatch.setattr(
+        bud_assignment,
+        "UserRepository",
+        MagicMock(
+            return_value=MagicMock(list_active_with_role=AsyncMock(side_effect=list_active))
+        ),
+    )
+    db = MagicMock(name="AsyncSession")
+    db.get = AsyncMock(return_value=mgr)
+
+    pick = await bud_assignment._previous_assignee_for_phase(
+        db, org_id, uuid.uuid4(), (UserRole.QA, UserRole.PM, UserRole.MANAGER), "uat"
+    )
+
+    assert pick is None

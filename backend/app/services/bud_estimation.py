@@ -51,7 +51,7 @@ from app.services.estimation_gates import gate_pert, gate_turnaround_days
 from app.services.estimation_heuristics import default_pert_spread, reconcile_complexity
 from app.services.estimation_llm import llm_pert_estimate
 from app.services.estimation_progress import current_phase_progress, discounted_pert
-from app.services.org_settings import get_phase_order
+from app.services.org_settings import get_phase_order, get_role_chains
 from app.services.phase_roles import is_gate_phase
 
 logger = structlog.get_logger(__name__)
@@ -100,9 +100,10 @@ async def estimate_bud_dates(
     # the queueing curve. Both the engine (post-MC divisor) and the
     # prompt (context block for the LLM) read from the same loads —
     # single source of truth.
-    role_loads = await get_role_loads(db, org_id)
-    cap_by_phase = capacity_by_phase(role_loads, remaining)
-    capacity_summary = build_capacity_summary(role_loads, remaining)
+    chains = get_role_chains(org.config if org else None)
+    role_loads = await get_role_loads(db, org_id, chains)
+    cap_by_phase = capacity_by_phase(role_loads, remaining, chains)
+    capacity_summary = build_capacity_summary(role_loads, remaining, chains)
 
     # The historical sampler is fetched once and used both by the LLM
     # call (so the prompt can mention how many past BUDs are blending in)
@@ -165,9 +166,9 @@ async def estimate_bud_dates(
             prior.most_likely,
             prior.pessimistic,
         ]
-        turnaround = gate_turnaround_days(role_loads, phase)
+        turnaround = gate_turnaround_days(role_loads, phase, chains)
         gate_turnaround_by_phase[phase] = turnaround
-        pert_estimates[phase] = gate_pert(turnaround)
+        pert_estimates[phase] = gate_pert(turnaround, phase)
         cap_by_phase[phase] = 1.0
 
     # A gate in scope but absent from pert_estimates would silently keep the

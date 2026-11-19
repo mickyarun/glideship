@@ -92,6 +92,7 @@ export function budDropBlock(
   to: BUDStatus,
   phaseOrder: readonly BUDStatus[],
   hasPermission: (p: string) => boolean,
+  qaOwnsUat = false,
 ): BudDropBlock | null {
   const ref = budRef(bud.bud_number)
   const stage = BUD_STATUS_LABELS[to]
@@ -100,8 +101,13 @@ export function budDropBlock(
   if (!neighbourStages(phaseOrder, bud.status).includes(to)) {
     return { note: 'One stage at a time', sentence: `${ref} moves one stage at a time. Open it to move it to ${stage}.` }
   }
-  if (!canMoveBud(hasPermission, bud.status, to)) {
-    return { note: 'Only out of Testing', sentence: 'You can only move BUDs out of Testing.' }
+  if (!canMoveBud(hasPermission, bud.status, to, qaOwnsUat)) {
+    if (qaOwnsUat && bud.status === 'uat') {
+      return { note: 'Only to Prod or Development', sentence: 'From UAT you can only move BUDs to Prod or back to Development.' }
+    }
+    return qaOwnsUat
+      ? { note: 'Only out of Testing or UAT', sentence: 'You can only move BUDs out of Testing or UAT.' }
+      : { note: 'Only out of Testing', sentence: 'You can only move BUDs out of Testing.' }
   }
   const sentence = needsFirst(bud, to)
   const missing = missingContent(bud, to).map(c => CONTENT_NAMES[c]).join(' and ')
@@ -114,10 +120,11 @@ export function budDropBlocks(
   columns: readonly BUDStatus[],
   phaseOrder: readonly BUDStatus[],
   hasPermission: (p: string) => boolean,
+  qaOwnsUat = false,
 ): Record<string, string> {
   const blocks: Record<string, string> = {}
   for (const to of columns) {
-    const block = budDropBlock(bud, to, phaseOrder, hasPermission)
+    const block = budDropBlock(bud, to, phaseOrder, hasPermission, qaOwnsUat)
     if (block) blocks[to] = block.note
   }
   return blocks
@@ -131,11 +138,12 @@ export function budDragSummary(
   bud: Dragged,
   phaseOrder: readonly BUDStatus[],
   hasPermission: (p: string) => boolean,
+  qaOwnsUat = false,
 ): string {
   const ref = budRef(bud.bud_number)
   const near = neighbourStages(phaseOrder, bud.status)
-  const blocked = near.map(to => budDropBlock(bud, to, phaseOrder, hasPermission)).filter(b => b !== null)
-  const open = near.filter(to => !budDropBlock(bud, to, phaseOrder, hasPermission))
+  const blocked = near.map(to => budDropBlock(bud, to, phaseOrder, hasPermission, qaOwnsUat)).filter(b => b !== null)
+  const open = near.filter(to => !budDropBlock(bud, to, phaseOrder, hasPermission, qaOwnsUat))
   const where = open.length
     ? `${ref} can go to ${open.map(s => BUD_STATUS_LABELS[s]).join(' or ')}.`
     : `${ref} can't move from here.`
