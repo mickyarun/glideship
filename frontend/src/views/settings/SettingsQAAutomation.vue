@@ -117,6 +117,8 @@
             blocked.
           </div>
 
+          <UatOwnerToggle v-if="budStages.uatEnabled" v-model="budStages.uatOwner" />
+
           <v-divider class="mb-4" />
 
           <div class="d-flex align-center mb-3">
@@ -227,6 +229,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import DeliveryAiSection from '@/components/settings/DeliveryAiSection.vue'
 import SettingsPageShell from '@/components/settings/SettingsPageShell.vue'
+import UatOwnerToggle from '@/components/settings/UatOwnerToggle.vue'
+import { resetBudStageSettings } from '@/composables/useBudStageSettings'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -353,7 +357,9 @@ const isValid = computed(() => {
 })
 
 async function save(): Promise<void> {
-  await settingsStore.saveConnections(['qaAutomation', 'budStages', 'bugAttachments'])
+  const saved = await settingsStore.saveConnections(['qaAutomation', 'budStages', 'bugAttachments'])
+  // The BUD screens cache the UAT owner; give them the one just saved.
+  if (saved) resetBudStageSettings(budStages.value.uatOwner)
 }
 
 onMounted(async () => {

@@ -46,6 +46,7 @@ for pathological overload (active ≫ pool).
 """
 
 import uuid
+from collections.abc import Mapping
 from typing import NamedTuple
 
 import structlog
@@ -55,7 +56,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.bud import BUDDocument, BUDStatus
 from app.models.user import UserRole
 from app.repositories.user import UserRepository
-from app.services.phase_roles import PHASE_ROLE_CHAIN, PHASE_ROLE_MAP
 
 logger = structlog.get_logger(__name__)
 
@@ -77,6 +77,7 @@ class RoleLoad(NamedTuple):
 async def get_role_loads(
     db: AsyncSession,
     org_id: uuid.UUID,
+    chains: Mapping[str, tuple[UserRole, ...]],
 ) -> dict[UserRole, RoleLoad]:
     """Return raw ``(pool, active)`` per role for one org.
 
@@ -109,9 +110,10 @@ async def get_role_loads(
         # comparison. Normalise before keying the phase map — matches the
         # isinstance check used in estimation_context.py:94,120.
         phase = status_value.value if isinstance(status_value, BUDStatus) else status_value
-        role = PHASE_ROLE_MAP.get(phase)
-        if role is None:
+        chain = chains.get(phase)
+        if not chain:
             continue
+        role = chain[0]
         active_by_role[role] = active_by_role.get(role, 0) + count
 
     return {
@@ -123,10 +125,11 @@ async def get_role_loads(
 def phase_capacity(
     role_loads: dict[UserRole, RoleLoad],
     phase: str,
+    chains: Mapping[str, tuple[UserRole, ...]],
 ) -> float:
     """Chain-aware queueing capacity in (0, 1] for a single phase.
 
-    Pool is summed across the phase's full ``PHASE_ROLE_CHAIN`` (primary
+    Pool is summed across the phase's full role chain from ``chains`` (primary
     owner + fallbacks); active load is the primary role's in-flight count
     (which already aggregates every phase that role owns). Returns 1.0 —
     no adjustment — for an unknown phase or one with literally nobody in
@@ -134,7 +137,7 @@ def phase_capacity(
     not a number we should silently inflate). A pool with zero active
     load yields exactly 1.0.
     """
-    chain = PHASE_ROLE_CHAIN.get(phase)
+    chain = chains.get(phase)
     if not chain:
         return 1.0
 
@@ -158,6 +161,7 @@ def phase_capacity(
 def capacity_by_phase(
     role_loads: dict[UserRole, RoleLoad],
     phase_order: list[str],
+    chains: Mapping[str, tuple[UserRole, ...]],
 ) -> dict[str, float]:
     """Project raw role loads onto a per-phase capacity dict for the engine.
 
@@ -165,4 +169,4 @@ def capacity_by_phase(
     exercised without a session. Each phase is independently scored via
     :func:`phase_capacity`.
     """
-    return {phase: phase_capacity(role_loads, phase) for phase in phase_order}
+    return {phase: phase_capacity(role_loads, phase, chains) for phase in phase_order}

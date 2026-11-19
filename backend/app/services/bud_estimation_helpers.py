@@ -21,6 +21,7 @@ helper is independently unit-testable. No DB access, no LLM calls.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -34,7 +35,6 @@ from app.services.estimation_engine import (
     pert_std_dev,
     project_buffer_days,
 )
-from app.services.phase_roles import PHASE_ROLE_MAP
 
 # Magennis-style mixing weight: each completed comparable BUD adds 10
 # percentage points of historical influence, capped at 70 % so the LLM
@@ -88,6 +88,7 @@ def historical_mix_weight(historical_by_phase: dict[str, list[float]]) -> float:
 def build_capacity_summary(
     role_loads: dict[UserRole, RoleLoad],
     remaining_phases: list[str],
+    chains: Mapping[str, tuple[UserRole, ...]],
 ) -> list[tuple[str, float, str]]:
     """Convert raw role loads into prompt-ready capacity tuples.
 
@@ -103,13 +104,13 @@ def build_capacity_summary(
     # they share a chain, so any one yields the role's capacity).
     role_phase: dict[UserRole, str] = {}
     for phase in remaining_phases:
-        role = PHASE_ROLE_MAP.get(phase)
-        if role is not None and role not in role_phase:
-            role_phase[role] = phase
+        chain = chains.get(phase)
+        if chain and chain[0] not in role_phase:
+            role_phase[chain[0]] = phase
 
     rows: list[tuple[str, float, str]] = []
     for role in sorted(role_phase, key=lambda r: r.value):
-        capacity = phase_capacity(role_loads, role_phase[role])
+        capacity = phase_capacity(role_loads, role_phase[role], chains)
         if capacity >= 1.0:
             narration = "fully available"
         elif capacity <= _HEAVILY_LOADED_CAPACITY:

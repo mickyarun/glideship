@@ -114,7 +114,7 @@ const props = defineProps<{
   draggable?: boolean
   /** The stages its menu offers. */
   stages: readonly BUDStatus[]
-  /** The viewer may move BUDs (buds:edit, or buds:test out of testing). */
+  /** The viewer may move BUDs (buds:edit, or buds:test out of testing, and out of UAT when QA owns it). */
   canMove: boolean
   /** Why it can't go to a stage yet, or null. */
   blockFor: (stage: BUDStatus) => string | null

@@ -23,6 +23,7 @@ import { computed, onScopeDispose, watch, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { dragBlocks, dragging, type CardDrop } from '@/composables/useCardDrag'
 import type { useBoardFeedback } from '@/composables/useBoardFeedback'
+import { useBudStageSettings } from '@/composables/useBudStageSettings'
 import { useBudStatusTransitions } from '@/composables/useBudStatusTransitions'
 import { usePermissions } from '@/composables/usePermissions'
 import { usePhaseOrder } from '@/composables/usePhaseOrder'
@@ -35,6 +36,7 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
   const router = useRouter()
   const { phaseOrder } = usePhaseOrder()
   const { hasPermission } = usePermissions()
+  const { qaOwnsUat } = useBudStageSettings()
 
   /** Drag needs a way to move BUDs: buds:edit, or buds:test for QA's moves. */
   const canDrag = computed(() => hasPermission('buds:edit') || hasPermission('buds:test'))
@@ -42,13 +44,13 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
   const find = (id: string) => budStore.buds.find(b => b.id === id) ?? null
   const dragged = computed(() => (dragging.value ? find(dragging.value.cardId) : null))
   const blocks = computed(() =>
-    dragged.value ? budDropBlocks(dragged.value, columns.value, phaseOrder.value, hasPermission) : {},
+    dragged.value ? budDropBlocks(dragged.value, columns.value, phaseOrder.value, hasPermission, qaOwnsUat.value) : {},
   )
   watch(blocks, next => (dragBlocks.value = next), { flush: 'sync', immediate: true })
   // The drag state is shared by every board; leave none behind.
   onScopeDispose(() => (dragBlocks.value = {}))
   watch(() => dragged.value?.id, () => {
-    if (dragged.value) feedback.announce(budDragSummary(dragged.value, phaseOrder.value, hasPermission))
+    if (dragged.value) feedback.announce(budDragSummary(dragged.value, phaseOrder.value, hasPermission, qaOwnsUat.value))
   })
 
   // The BUD the last drop asked to move; the guards take it once, through getBud.
@@ -91,7 +93,7 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
       feedback.show({ text })
       return feedback.announce(text)
     }
-    const block = budDropBlock(bud, to, phaseOrder.value, hasPermission)
+    const block = budDropBlock(bud, to, phaseOrder.value, hasPermission, qaOwnsUat.value)
     if (block) return refuse(bud, block)
     dropped = bud
     void status.updateStatus(to)
@@ -105,12 +107,12 @@ export function useBudBoardDrag(columns: Ref<BUDStatus[]>, feedback: ReturnType<
 
   /** Why a BUD can't go to a stage yet (its menu's lock), or null. */
   const blockFor = (bud: BUDListItem, to: BUDStatus) =>
-    budDropBlock(bud, to, phaseOrder.value, hasPermission)?.note ?? null
+    budDropBlock(bud, to, phaseOrder.value, hasPermission, qaOwnsUat.value)?.note ?? null
 
   /** A drag let go over a stage the BUD can't enter. */
   function blocked(budId: string, to: string): void {
     const bud = find(budId)
-    const block = bud ? budDropBlock(bud, to as BUDStatus, phaseOrder.value, hasPermission) : null
+    const block = bud ? budDropBlock(bud, to as BUDStatus, phaseOrder.value, hasPermission, qaOwnsUat.value) : null
     if (bud && block) refuse(bud, block)
   }
 

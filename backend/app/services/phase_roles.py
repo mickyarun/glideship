@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Static map from BUD lifecycle phase to the org role that owns it.
+"""Map from BUD lifecycle phase to the org role that owns it.
 
 The smart-assignment agent picks an actual person at the start of each
 phase, so per-person capacity is unknown when we estimate. Instead we
@@ -20,12 +20,14 @@ work at the role level: every phase is owned by exactly one
 ``UserRole``, and capacity for that phase is the role pool's current
 availability (see ``capacity_provider``).
 
+The UAT owner is the one per-org choice (see ``role_chains``).
 This map is the single source of truth — adding or renaming phases
 should never need a parallel update elsewhere. Keep it sorted to match
 ``estimation_engine.PHASE_ORDER`` so reviewers can scan both at once.
 """
 
 from app.models.user import UserRole
+from app.schemas.settings import UATOwner
 
 # Ordered fallback chain per phase. The PRIMARY role is the canonical
 # owner; subsequent entries are degrade-by-adjacency fallbacks for orgs
@@ -57,12 +59,24 @@ PHASE_ROLE_CHAIN: dict[str, tuple[UserRole, ...]] = {
     "prod": (UserRole.DEVELOPER, UserRole.TECH_LEAD),
 }
 
-# Backwards-compatible single-role view. Consumers that only need the
-# canonical role (capacity_provider, estimation helpers) read this; the
-# auto-assigner reads ``PHASE_ROLE_CHAIN`` directly.
-PHASE_ROLE_MAP: dict[str, UserRole] = {
-    phase: chain[0] for phase, chain in PHASE_ROLE_CHAIN.items()
+# UAT is the one phase whose owner an org can choose
+# (``bud_stages.uat_owner``): PM sign-off by default (falling back to a
+# manager), or QA for teams where QA runs UAT (falling back to the PM, then a
+# manager, so a team without QA still gets the BUD assigned as before).
+UAT_CHAIN_BY_OWNER: dict[UATOwner, tuple[UserRole, ...]] = {
+    UATOwner.PM: PHASE_ROLE_CHAIN["uat"],
+    UATOwner.QA: (UserRole.QA, *PHASE_ROLE_CHAIN["uat"]),
 }
+
+# Phases whose chain depends on org settings. Callers outside this set can
+# read ``PHASE_ROLE_CHAIN`` without loading the org.
+ORG_CONFIGURABLE_PHASES: frozenset[str] = frozenset({"uat"})
+
+
+def role_chains(uat_owner: UATOwner = UATOwner.PM) -> dict[str, tuple[UserRole, ...]]:
+    """Return the phase → role chain map for an org's UAT owner choice."""
+    return {**PHASE_ROLE_CHAIN, "uat": UAT_CHAIN_BY_OWNER[uat_owner]}
+
 
 # How each phase consumes time.
 #
@@ -89,16 +103,6 @@ PHASE_KIND: dict[str, str] = {
     "uat": GATE_PHASE,
     "prod": BUILD_PHASE,
 }
-
-
-def get_role_for_phase(phase: str) -> UserRole | None:
-    """Return the canonical role that owns this phase, or None for unknown phases.
-
-    Returning None (rather than raising) lets callers in the estimation
-    pipeline degrade gracefully — an unknown phase produces capacity 1.0
-    (no adjustment) rather than crashing the whole forecast.
-    """
-    return PHASE_ROLE_MAP.get(phase)
 
 
 def is_gate_phase(phase: str) -> bool:

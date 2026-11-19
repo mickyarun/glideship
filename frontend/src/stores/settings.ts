@@ -20,6 +20,9 @@ import { pickSections } from '@/utils/connectionSections'
 import type { JobCreatedResponse, RepoBranchList, RepoInfo } from '@/types'
 import { GITHUB_APP_STATUS, isGitHubAppStatus, type GitHubAppStatus } from '@/types/connections'
 
+// Who a BUD is auto-assigned to on entering UAT (backend UATOwner).
+export type UatOwner = 'pm' | 'qa'
+
 export interface ConnectionsState {
   sourceCode: {
     localPath: string
@@ -63,9 +66,10 @@ export interface ConnectionsState {
     // JSON object keyed by the complexity number as a string ("1".."5").
     bugThresholdByComplexity: Record<string, number>
   }
-  // Per-org BUD lifecycle stage toggles.
+  // Per-org BUD lifecycle stage settings.
   budStages: {
     uatEnabled: boolean
+    uatOwner: UatOwner
   }
   // Per-org limits on files attached to a bug report. Mirrors the backend
   // BugAttachmentSettings Pydantic model. Accepted file types are fixed
@@ -126,6 +130,7 @@ function emptyState(): ConnectionsState {
     },
     budStages: {
       uatEnabled: true,
+      uatOwner: 'pm',
     },
     // Mirrors backend BugAttachmentSettings defaults.
     bugAttachments: {

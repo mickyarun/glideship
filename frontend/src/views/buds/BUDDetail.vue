@@ -135,6 +135,7 @@ import { useBudDetailTabs } from '@/composables/useBudDetailTabs'
 import { useBudHistoryDrawer } from '@/composables/useBudHistoryDrawer'
 import { useBudSectionEditors } from '@/composables/useBudSectionEditors'
 import { useBudSectionFiles } from '@/composables/useBudSectionFiles'
+import { useBudStageSettings } from '@/composables/useBudStageSettings'
 import { useBudStatusTransitions } from '@/composables/useBudStatusTransitions'
 import { useBudTimeline } from '@/composables/useBudTimeline'
 import { usePermissions } from '@/composables/usePermissions'
@@ -205,7 +206,9 @@ const statusItems = computed(() => phaseOrder.value.map(s => ({ title: BUD_STATU
 const nextStatus = computed(() => (bud.value ? nextBudStage(phaseOrder.value, bud.value.status) : null))
 // A stage the BUD can't enter until a section is written (utils/budStageGates):
 // the menu disables it, and the Move button stays, disabled, saying why.
-const mayMoveTo = (to: BUDStatus): boolean => !!bud.value && canMoveBud(hasPermission, bud.value.status, to)
+const { qaOwnsUat } = useBudStageSettings()
+const mayMoveTo = (to: BUDStatus): boolean =>
+  !!bud.value && canMoveBud(hasPermission, bud.value.status, to, qaOwnsUat.value)
 const canMoveTo = (to: BUDStatus): boolean => !!bud.value && mayMoveTo(to) && !needsFirst(writtenNow(bud.value), to)
 const nextNeeds = computed(() =>
   bud.value && nextStatus.value && mayMoveTo(nextStatus.value)

@@ -124,7 +124,14 @@ describe('canMoveBud', () => {
     expect(canMoveBud(holds('buds:test'), 'uat', 'prod')).toBe(false)
     expect(canMoveBud(holds('buds:test'), 'testing', 'development')).toBe(false)
   })
+  it('lets QA also move a BUD out of UAT when QA owns UAT', () => {
+    expect(canMoveBud(holds('buds:test'), 'uat', 'prod', true)).toBe(true)
+    expect(canMoveBud(holds('buds:test'), 'uat', 'development', true)).toBe(true)
+    expect(canMoveBud(holds('buds:test'), 'uat', 'testing', true)).toBe(false)
+    expect(canMoveBud(holds('buds:test'), 'development', 'code_review', true)).toBe(false)
+  })
   it('refuses everyone else', () => {
     expect(canMoveBud(holds('buds:view'), 'testing', 'uat')).toBe(false)
+    expect(canMoveBud(holds('buds:view'), 'uat', 'prod', true)).toBe(false)
   })
 })

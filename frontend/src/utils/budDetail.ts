@@ -149,8 +149,21 @@ export function branchPrefix(budNumber: number | undefined): string {
  */
 const QA_OWNED_TRANSITIONS: ReadonlySet<string> = new Set(['testing>uat', 'testing>prod'])
 
+/**
+ * Added when the org makes QA the UAT owner: QA signs UAT off to prod or
+ * sends it back to development. Mirrors _QA_UAT_OWNER_TRANSITIONS.
+ */
+const QA_UAT_OWNER_TRANSITIONS: ReadonlySet<string> = new Set(['uat>prod', 'uat>development'])
+
 /** Whether someone with these permissions may move a BUD from one stage to another. */
-export function canMoveBud(hasPermission: (p: string) => boolean, from: BUDStatus, to: BUDStatus): boolean {
+export function canMoveBud(
+  hasPermission: (p: string) => boolean,
+  from: BUDStatus,
+  to: BUDStatus,
+  qaOwnsUat = false,
+): boolean {
   if (hasPermission('buds:edit')) return true
-  return hasPermission('buds:test') && QA_OWNED_TRANSITIONS.has(`${from}>${to}`)
+  if (!hasPermission('buds:test')) return false
+  const move = `${from}>${to}`
+  return QA_OWNED_TRANSITIONS.has(move) || (qaOwnsUat && QA_UAT_OWNER_TRANSITIONS.has(move))
 }

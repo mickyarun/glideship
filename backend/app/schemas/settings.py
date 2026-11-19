@@ -185,14 +185,23 @@ class QAAutomationSettings(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class BUDStageSettings(BaseModel):
-    """Org-level BUD lifecycle stage toggles.
+class UATOwner(StrEnum):
+    """Which role a BUD is auto-assigned to when it enters UAT."""
 
-    Only the UAT phase is toggle-able in v1. Other phases are required and
-    cannot be skipped at org level.
+    PM = "pm"
+    QA = "qa"
+
+
+class BUDStageSettings(BaseModel):
+    """Org-level BUD lifecycle stage settings.
+
+    Only the UAT phase is configurable: it can be switched off, and its
+    owner can be the PM (sign-off) or QA (teams where QA runs UAT). Other
+    phases are required and have a fixed owner.
     """
 
     uat_enabled: bool = Field(default=True, alias="uatEnabled")
+    uat_owner: UATOwner = Field(default=UATOwner.PM, alias="uatOwner")
 
     model_config = {"populate_by_name": True}
 

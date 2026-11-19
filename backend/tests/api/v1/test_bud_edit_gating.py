@@ -179,12 +179,54 @@ def test_qa_cannot_transition_outside_testing() -> None:
 
 
 def test_qa_cannot_promote_uat_to_prod() -> None:
-    """uat → prod remains PM territory — guard rejects it for QA."""
+    """uat → prod stays with PMs unless the org made QA the UAT owner."""
     with pytest.raises(HTTPException) as excinfo:
         bud_handlers._enforce_qa_scope(
             {"buds:view", "buds:test"},
             BUDStatus.UAT,
             {"status": BUDStatus.PROD},
+        )
+    assert excinfo.value.status_code == 403
+
+
+@pytest.mark.parametrize("target", [BUDStatus.PROD, BUDStatus.DEVELOPMENT])
+def test_qa_uat_owner_can_move_uat_to_prod_or_back_to_development(target: BUDStatus) -> None:
+    """When the org makes QA the UAT owner, QA signs UAT off or sends it back."""
+    bud_handlers._enforce_qa_scope(
+        {"buds:view", "buds:test"},
+        BUDStatus.UAT,
+        {"status": target},
+        qa_owns_uat=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        (BUDStatus.UAT, BUDStatus.TESTING),
+        (BUDStatus.UAT, BUDStatus.CLOSED),
+        (BUDStatus.DEVELOPMENT, BUDStatus.PROD),
+    ],
+)
+def test_qa_uat_owner_gets_no_other_moves(current: BUDStatus, target: BUDStatus) -> None:
+    """Owning UAT adds only uat → prod and uat → development."""
+    with pytest.raises(HTTPException) as excinfo:
+        bud_handlers._enforce_qa_scope(
+            {"buds:view", "buds:test"},
+            current,
+            {"status": target},
+            qa_owns_uat=True,
+        )
+    assert excinfo.value.status_code == 403
+
+
+def test_qa_uat_owner_still_cannot_edit_fields() -> None:
+    with pytest.raises(HTTPException) as excinfo:
+        bud_handlers._enforce_qa_scope(
+            {"buds:view", "buds:test"},
+            BUDStatus.UAT,
+            {"status": BUDStatus.PROD, "title": "QA-renamed"},
+            qa_owns_uat=True,
         )
     assert excinfo.value.status_code == 403
 

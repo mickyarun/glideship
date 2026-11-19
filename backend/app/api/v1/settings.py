@@ -306,9 +306,14 @@ async def update_connections(
     if body.qa_automation is not None:
         config["qa"] = body.qa_automation.model_dump()
 
-    # BUD stage toggles (e.g. whether UAT is part of this org's lifecycle)
+    # BUD stage settings (whether UAT is part of the lifecycle, and who owns it)
     if body.bud_stages is not None:
-        config["bud_stages"] = body.bud_stages.model_dump()
+        # Only the fields the client sent: an older client that doesn't know
+        # about uatOwner must not reset it to the default.
+        config["bud_stages"] = {
+            **(config.get("bud_stages") or {}),
+            **body.bud_stages.model_dump(mode="json", exclude_unset=True),
+        }
 
     # Bug attachment limits (per-file size, files per bug). Stored in the
     # canonical snake_case shape that ``get_bug_attachment_settings`` reads
