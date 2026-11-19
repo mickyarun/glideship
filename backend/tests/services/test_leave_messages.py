@@ -39,6 +39,7 @@ def _request(**overrides: object) -> SimpleNamespace:
         "days": Decimal("3"),
         "status": LeaveStatus.PENDING,
         "reason": "Fever",
+        "decision_note": None,
     }
     return SimpleNamespace(**{**base, **overrides})
 
@@ -82,6 +83,17 @@ def test_auto_approved_heads_up_keeps_the_high_leave_line() -> None:
 def test_decision_message() -> None:
     text = compose_decision_message(_request(status=LeaveStatus.REJECTED), "Priya")  # type: ignore[arg-type]
     assert text == "Your request for leave Mon 19 – Wed 21 Oct was rejected by Priya."
+
+
+def test_decision_message_carries_the_note() -> None:
+    rejected = _request(status=LeaveStatus.REJECTED, decision_note="Please ask Sid or Cian")
+    text = compose_decision_message(rejected, "Priya")  # type: ignore[arg-type]
+    assert text == (
+        "Your request for leave Mon 19 – Wed 21 Oct was rejected by Priya. "
+        "Note: Please ask Sid or Cian"
+    )
+    approved = _request(status=LeaveStatus.APPROVED, decision_note="Enjoy")
+    assert compose_decision_message(approved, "Priya").endswith(" Note: Enjoy")  # type: ignore[arg-type]
 
 
 def test_decisions_only_resync_requests_that_were_approved() -> None:

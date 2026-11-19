@@ -88,13 +88,15 @@ def already_decided_message(request: LeaveRequest, decider: str | None) -> str:
 
 
 def compose_decision_message(request: LeaveRequest, decider: str) -> str:
-    """Requester-facing text for a decision."""
+    """Requester-facing text for a decision, with the decider's note when there is one."""
     verb = "approved" if request.status == LeaveStatus.APPROVED else "rejected"
     what = _KIND_LABEL[request.kind]
-    return (
+    text = (
         f"Your request for {what} {format_range(request.start_date, request.end_date)} "
         f"was {verb} by {decider}."
     )
+    note = request.decision_note
+    return f"{text} Note: {note}" if note else text
 
 
 _NOUN = {
