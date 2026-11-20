@@ -23,6 +23,7 @@ import uuid
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +47,8 @@ class RequesterContext:
     balances: dict[uuid.UUID, list[Balance]] = field(default_factory=dict)
     years: dict[uuid.UUID, int] = field(default_factory=dict)
     last_leave: dict[uuid.UUID, LastLeave] = field(default_factory=dict)
+    # Approved leave days this year across every type shown, loss of pay included.
+    taken: dict[uuid.UUID, Decimal] = field(default_factory=dict)
 
 
 async def requester_context(
@@ -65,7 +68,7 @@ async def requester_context(
     if not user_ids:
         return RequesterContext()
     persons = await people(db, org_id, frozenset(user_ids), PeopleFilters())
-    balances = await balance_lines(db, org_id, persons, leave_year_for(None))
+    balances = await balance_lines(db, org_id, persons, leave_year_for(None), with_retired=True)
     # "Today" on each member's policy, as balances use; UTC ``today`` without one.
     cutoffs = {p.user_id: today_for(p.policy) if p.policy else today for p in persons}
     last = await LeaveReportRepository(db, org_id=org_id).last_taken(cutoffs)
@@ -81,6 +84,18 @@ async def requester_context(
             for user, mine in balances.items()
         },
         years={user: mine.year.label for user, mine in balances.items()},
+        taken={
+            user: sum(
+                (
+                    line.used
+                    for line in visible(
+                        mine.lines, lambda line: line.leave_type, sees_all=sees_all
+                    )
+                ),
+                mine.lop_days,
+            )
+            for user, mine in balances.items()
+        },
         last_leave={
             r.user_id: LastLeave(
                 leave_type=_type_name(types.get(r.leave_type_id), sees_all)

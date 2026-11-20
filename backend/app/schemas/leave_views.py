@@ -68,6 +68,8 @@ class ApprovalItem(BaseModel):
     balances: list[Balance] = []
     balance_year: int | None = None
     last_leave: LastLeave | None = None
+    # Approved days this leave year across all types, so an approver sees the whole.
+    taken_this_year: Decimal | None = None
     # Leave taken this year (this request included) past the policy's lines.
     high_leave: HighLeave | None = None
 

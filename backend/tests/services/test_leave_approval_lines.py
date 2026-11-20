@@ -30,6 +30,7 @@ from app.services.leave.approval_lines import (
     balances_line,
     last_leave_line,
     recent_wfh_line,
+    taken_line,
     wfh_usage_line,
 )
 from app.services.leave.slack_blocks import approval_blocks
@@ -135,3 +136,9 @@ async def test_slack_prompts_never_ask_for_gender_limited_types(
     request = SimpleNamespace(kind=LeaveKind.LEAVE, user_id=uuid.uuid4())
     await slack_context.prompt_context(None, uuid.uuid4(), request)  # type: ignore[arg-type]
     assert seen == {"sees_all": False}
+
+
+def test_taken_line_gives_the_total_across_types() -> None:
+    assert taken_line(Decimal("16")) == "Leave taken this year: 16 days"
+    assert taken_line(Decimal("1")) == "Leave taken this year: 1 day"
+    assert taken_line(None) is None

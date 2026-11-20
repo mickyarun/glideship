@@ -205,6 +205,8 @@ export interface ApprovalItem {
   balances: Balance[]
   balance_year: number | null
   last_leave: LastLeave | null
+  /** Approved days this leave year across all types. */
+  taken_this_year?: Decimalish | null
   /** This request included; pending only. */
   high_leave: HighLeave | null
 }
