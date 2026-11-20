@@ -31,7 +31,6 @@ import {
   balanceCaption,
   formatDays,
   meterPercents,
-  pluralDays,
   swatchColor,
   toNumber,
 } from '@/utils/leave'
@@ -75,9 +74,7 @@ function leaveCard(balance: Balance): Card {
       value: meter ? formatDays(available) : 'No limit',
       unit: meter ? (available === 1 ? 'day left' : 'days left') : '',
       meter,
-      caption: meter
-        ? (earningCaption(balance) ?? balanceCaption(balance))
-        : `${pluralDays(toNumber(balance.used))} taken`,
+      caption: (meter && earningCaption(balance)) || balanceCaption(balance),
       note: monthlyLimitNote(balance) || bookedAheadNote(balance),
       tag: highlight ? 'This request' : balance.is_paid ? '' : 'Unpaid',
       highlight,
