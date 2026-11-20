@@ -17,7 +17,7 @@
 import uuid
 from datetime import date, timedelta
 
-from sqlalchemy import and_, func, or_, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,3 +80,13 @@ class LeaveDigestPostRepository:
             .where(LeaveDigestPost.org_id == self._org, LeaveDigestPost.local_date == local_date)
             .values(status=status, error=error)
         )
+
+    async def status_for(self, local_date: date) -> DigestStatus | None:
+        """How the day's post ended up, or None if it hasn't been claimed."""
+        return (
+            await self._db.execute(
+                select(LeaveDigestPost.status).where(
+                    LeaveDigestPost.org_id == self._org, LeaveDigestPost.local_date == local_date
+                )
+            )
+        ).scalar_one_or_none()

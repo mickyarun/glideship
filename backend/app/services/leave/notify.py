@@ -36,6 +36,7 @@ from app.models.notification import NotificationType
 from app.schemas.leave import HighLeave
 from app.services.background import spawn
 from app.services.leave.calendar_sync.sync import sync_request
+from app.services.leave.digest_late import announce_late_request
 from app.services.leave.messages import compose_decision_message, compose_request_message
 from app.services.leave.slack_prompts import refresh_prompts, send_prompts
 from app.services.leave.slack_status.apply import refresh_after_change
@@ -58,6 +59,8 @@ class Notice(BaseNotice):
     refresh_request_id: uuid.UUID | None = None
     # Bring the requester's Google Calendar and Slack status in line with it.
     sync_request_id: uuid.UUID | None = None
+    # Newly approved: tell the who's-out channel if today's post has already gone.
+    announce_request_id: uuid.UUID | None = None
 
     def deliver(self) -> None:
         """Start the prompts or DM, then the refresh and sync. Called by ``send``."""
@@ -72,6 +75,8 @@ class Notice(BaseNotice):
         if self.sync_request_id:
             spawn(sync_request(self.org_id, self.sync_request_id))
             spawn(refresh_after_change(self.org_id, self.sync_request_id))
+        if self.announce_request_id:
+            spawn(announce_late_request(self.org_id, self.announce_request_id))
 
 
 def stage_rows(
@@ -130,6 +135,7 @@ def stage_new_request(
         prompt_request_id=None if auto_approved else request.id,
         # A pending request has nothing on the calendar yet.
         sync_request_id=request.id if auto_approved else None,
+        announce_request_id=request.id if auto_approved else None,
     )
     return stage_rows(
         db,
@@ -154,6 +160,7 @@ def stage_decision(
         refresh_request_id=request.id,
         # A rejected request never had events or a status to take off.
         sync_request_id=request.id if request.status == LeaveStatus.APPROVED else None,
+        announce_request_id=request.id if request.status == LeaveStatus.APPROVED else None,
     )
     return stage_rows(
         db,

@@ -23,6 +23,7 @@ from app.core.deps import get_db, require_permissions
 from app.models.user import User
 from app.schemas.leave_digest import DigestTestResult, LeaveDigestSettings
 from app.services.leave.digest_build import build_digest
+from app.services.leave.digest_post import post_to_channels
 from app.services.leave.digest_settings import (
     digest_zone,
     load_digest_settings,
@@ -30,7 +31,6 @@ from app.services.leave.digest_settings import (
 )
 from app.services.leave.permissions import CONFIGURE
 from app.services.slack_dm import bot_token, token_unreadable
-from app.services.slack_interactive import post_message
 
 router = APIRouter(tags=["leave-admin"])
 
@@ -64,7 +64,7 @@ async def send_test_post(
 ) -> DigestTestResult:
     """Post today's message now (or a sample if nobody is out) to the saved channel."""
     settings = await load_digest_settings(db, current_user.org_id)
-    if not settings.channel_id:
+    if not settings.channel_ids:
         return DigestTestResult(ok=False, error="no_channel", text="")
     token = await bot_token(db, current_user.org_id)
     if not token:
@@ -73,5 +73,5 @@ async def send_test_post(
         return DigestTestResult(ok=False, error=error, text="")
     today = datetime.now(await digest_zone(db, current_user.org_id, settings)).date()
     text = await build_digest(db, current_user.org_id, today) or SAMPLE
-    _channel, _ts, error = await post_message(token, settings.channel_id, text)
-    return DigestTestResult(ok=not error, error=error or None, text=text)
+    errors = await post_to_channels(token, settings.channel_ids, text)
+    return DigestTestResult(ok=not errors, error=errors[0] if errors else None, text=text)
