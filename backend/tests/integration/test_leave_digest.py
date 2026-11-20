@@ -28,7 +28,7 @@ from app.models.leave_request import HalfDay, LeaveKind, LeaveStatus
 from app.models.organization import Organization
 from app.repositories.leave_digest_post import LeaveDigestPostRepository
 from app.schemas.leave import LeaveRequestCreate
-from app.services.leave import digest_late, digest_scheduler
+from app.services.leave import digest_late, digest_post, digest_scheduler
 from app.services.leave.digest_build import build_digest
 from app.services.leave.lifecycle import decide, submit
 from tests.integration.leave_support import (
@@ -157,14 +157,19 @@ async def test_scheduler_posts_once_per_day(
 ) -> None:
     org, (asha, _b, _c, mgr), casual, mon = await _team(pg_session_factory)
     await _approved(pg_session_factory, org, asha, mgr, leave_body(casual, mon, mon))
-    settings = {"enabled": True, "channel_id": "C0123456", "post_time": "09:30", "timezone": "UTC"}
+    settings = {
+        "enabled": True,
+        "channel_ids": ["C0123456"],
+        "post_time": "09:30",
+        "timezone": "UTC",
+    }
     async with pg_session_factory() as db:
         organization = await db.get(Organization, org)
         assert organization is not None
         organization.config = {**(organization.config or {}), "leave_digest": settings}
         await db.commit()
     post = AsyncMock(return_value=("C0123456", "1.0", ""))
-    monkeypatch.setattr(digest_scheduler, "post_message", post)
+    monkeypatch.setattr(digest_post, "post_message", post)
     monkeypatch.setattr(digest_scheduler, "AsyncSessionLocal", pg_session_factory)
     token = encrypt_secret("xoxb-test")
     config = {"leave_digest": settings}
@@ -182,7 +187,12 @@ async def test_request_approved_after_the_morning_post_is_announced(
 ) -> None:
     org, (asha, bala, _c, mgr), casual, mon = await _team(pg_session_factory)
     await _approved(pg_session_factory, org, asha, mgr, leave_body(casual, mon, mon))
-    settings = {"enabled": True, "channel_id": "C0123456", "post_time": "00:00", "timezone": "UTC"}
+    settings = {
+        "enabled": True,
+        "channel_ids": ["C0123456"],
+        "post_time": "00:00",
+        "timezone": "UTC",
+    }
     async with pg_session_factory() as db:
         organization = await db.get(Organization, org)
         assert organization is not None
@@ -195,7 +205,7 @@ async def test_request_approved_after_the_morning_post_is_announced(
     token_mock = AsyncMock(return_value="xoxb-test")
     post = AsyncMock(return_value=("C0123456", "1.0", ""))
     monkeypatch.setattr(digest_late, "AsyncSessionLocal", pg_session_factory)
-    monkeypatch.setattr(digest_late, "post_message", post)
+    monkeypatch.setattr(digest_post, "post_message", post)
     monkeypatch.setattr(digest_late, "bot_token", token_mock)
     monkeypatch.setattr(
         digest_late,

@@ -38,12 +38,16 @@
       class="mb-4"
     />
     <div class="field-grid">
-      <v-text-field
-        v-model.trim="digest.settings.value.channel_id"
-        label="Channel ID"
+      <v-combobox
+        v-model="digest.settings.value.channel_ids"
+        label="Channel IDs"
         placeholder="C0123ABCD"
-        hint="In Slack: channel name → View channel details → ID at the bottom."
+        hint="One or more. In Slack: channel name → View channel details → ID at the bottom. Press Enter after each."
         persistent-hint
+        multiple
+        chips
+        closable-chips
+        hide-no-data
         v-bind="field"
       />
       <v-text-field
@@ -63,7 +67,7 @@
     <AppCallout v-else-if="message" :variant="messageVariant" class="mt-4">{{ message }}</AppCallout>
     <div class="d-flex flex-wrap ga-2 mt-5">
       <v-btn color="primary" variant="tonal" :loading="digest.saving.value" @click="save">Save</v-btn>
-      <v-btn variant="tonal" :loading="testing" :disabled="!digest.settings.value.channel_id" @click="test">
+      <v-btn variant="tonal" :loading="testing" :disabled="!digest.settings.value.channel_ids.length" @click="test">
         Send test post
       </v-btn>
     </div>

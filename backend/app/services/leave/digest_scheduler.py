@@ -31,9 +31,9 @@ from app.models.leave_digest_post import DigestStatus
 from app.repositories.leave_digest_post import LeaveDigestPostRepository
 from app.repositories.organization import OrganizationRepository
 from app.services.leave.digest_build import build_digest
+from app.services.leave.digest_post import post_to_channels
 from app.services.leave.digest_settings import digest_settings, digest_zone
 from app.services.scheduling.tick_loop import due_local_date, run_tick_loop
-from app.services.slack_interactive import post_message
 
 logger = structlog.get_logger(__name__)
 TICK_SECONDS = 60
@@ -57,7 +57,7 @@ async def _org_pass(
     org_id: uuid.UUID, encrypted_token: str, config: dict[str, Any] | None, now: datetime
 ) -> None:
     settings = digest_settings(config, org_id)
-    if not settings.enabled or not settings.channel_id:
+    if not settings.enabled or not settings.channel_ids:
         return
     async with AsyncSessionLocal() as db:
         zone = await digest_zone(db, org_id, settings)
@@ -82,7 +82,11 @@ async def _org_pass(
             return
     token = decrypt_secret(encrypted_token)
     if token:
-        _channel, _ts, error = await post_message(token, settings.channel_id, text)
+        errors = await post_to_channels(token, settings.channel_ids, text)
+        # Retry only when nothing got through, so a good channel isn't reposted.
+        error = errors[0] if len(errors) == len(settings.channel_ids) else ""
+        if errors and not error:
+            logger.warning("leave_digest_partial", org_id=str(org_id), errors=errors)
     else:
         # Don't call Slack with an empty token; say why instead.
         error = "token_unreadable"

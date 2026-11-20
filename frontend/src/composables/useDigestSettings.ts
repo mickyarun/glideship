@@ -20,7 +20,7 @@ import { extractApiError } from '@/utils/errors'
 
 export interface DigestSettings {
   enabled: boolean
-  channel_id: string
+  channel_ids: string[]
   post_time: string
   timezone: string | null
 }
@@ -33,12 +33,12 @@ export interface DigestTestResult {
 
 /** Plain words for Slack's error codes on a test post. */
 const SLACK_ERRORS: Record<string, string> = {
-  not_in_channel: 'The bot isn\'t in that channel yet. Open the channel in Slack and invite the app\'s bot with /invite.',
-  channel_not_found: 'Slack can\'t find that channel. Check the channel ID (it starts with C or G).',
+  not_in_channel: 'The bot isn\'t in one of the channels yet. Open that channel in Slack and invite the app\'s bot with /invite.',
+  channel_not_found: 'Slack can\'t find that channel. Check the channel IDs (each starts with C or G).',
   slack_not_connected: 'Slack isn\'t connected yet. Connect it in Settings → Integrations.',
   slack_token_unreadable:
     'The saved Slack bot token can\'t be read (the server\'s ENCRYPTION_KEY may have changed). Save the bot token again in Settings → Integrations.',
-  no_channel: 'Save a channel ID first.',
+  no_channel: 'Add at least one channel ID first.',
 }
 
 export function testPostMessage(result: DigestTestResult): string {
@@ -47,7 +47,7 @@ export function testPostMessage(result: DigestTestResult): string {
 }
 
 export function useDigestSettings() {
-  const settings = ref<DigestSettings>({ enabled: false, channel_id: '', post_time: '09:30', timezone: null })
+  const settings = ref<DigestSettings>({ enabled: false, channel_ids: [], post_time: '09:30', timezone: null })
   const loading = ref(false)
   const saving = ref(false)
   const error = ref('')

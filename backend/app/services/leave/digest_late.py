@@ -28,9 +28,9 @@ from app.database import AsyncSessionLocal
 from app.models.leave_digest_post import DigestStatus
 from app.repositories.leave_digest_post import LeaveDigestPostRepository
 from app.services.leave.digest_build import build_digest
+from app.services.leave.digest_post import post_to_channels
 from app.services.leave.digest_settings import digest_zone, load_digest_settings
 from app.services.slack_dm import bot_token
-from app.services.slack_interactive import post_message
 
 logger = structlog.get_logger(__name__)
 
@@ -46,7 +46,7 @@ async def announce_late_request(org_id: uuid.UUID, request_id: uuid.UUID) -> Non
     try:
         async with AsyncSessionLocal() as db:
             settings = await load_digest_settings(db, org_id)
-            if not settings.enabled or not settings.channel_id:
+            if not settings.enabled or not settings.channel_ids:
                 return
             today = datetime.now(await digest_zone(db, org_id, settings)).date()
             status = await LeaveDigestPostRepository(db, org_id=org_id).status_for(today)
@@ -56,8 +56,8 @@ async def announce_late_request(org_id: uuid.UUID, request_id: uuid.UUID) -> Non
             token = await bot_token(db, org_id)
         if text is None or not token:
             return
-        _channel, _ts, error = await post_message(token, settings.channel_id, text)
-        if error:
-            logger.warning("leave_digest_late_failed", org_id=str(org_id), error=error)
+        errors = await post_to_channels(token, settings.channel_ids, text)
+        if errors:
+            logger.warning("leave_digest_late_failed", org_id=str(org_id), errors=errors)
     except Exception:
         logger.exception("leave_digest_late_failed", org_id=str(org_id))
