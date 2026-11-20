@@ -185,6 +185,7 @@ async def approval_items(
                 balances=context.balances.get(request.user_id, []),
                 balance_year=context.years.get(request.user_id),
                 last_leave=context.last_leave.get(request.user_id),
+                taken_this_year=context.taken.get(request.user_id),
                 high_leave=high.get(request.id),
             )
         )

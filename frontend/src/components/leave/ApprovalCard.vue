@@ -33,6 +33,7 @@
     <div v-if="request.kind === 'leave' && item.balances.length" class="approval__section">
       <h3 class="approval__label">Balances · leave year {{ item.balance_year }}</h3>
       <p class="approval__note">{{ balanceNote }}</p>
+      <p v-if="takenLine" class="approval__taken">{{ takenLine }}</p>
       <BalanceGrid :balances="item.balances" compact :highlight-type-id="sameYear ? request.leave_type?.id : null" />
     </div>
 
@@ -57,6 +58,7 @@ import { inBalanceYear } from '@/utils/approvalFacts'
 import {
   firstName,
   lopLabel,
+  pluralDays,
   requestTypeLabel,
   STATUS_META,
   toNumber,
@@ -81,6 +83,13 @@ const balanceNote = computed(() =>
   sameYear.value
     ? 'Pending requests, this one included, are counted.'
     : 'Pending requests are counted. This request falls in another leave year.',
+)
+
+// "Taken this year: 16 days, all leave types together."
+const takenLine = computed(() =>
+  props.item.taken_this_year == null
+    ? ''
+    : `Taken this year: ${pluralDays(toNumber(props.item.taken_this_year))}, all leave types together.`,
 )
 
 // "Approved by Kavya Nair · “Enjoy”". A cancelled request keeps its
@@ -109,6 +118,11 @@ const lop = computed(() => lopLabel(request.value.lop_days).replace(/ loss of pa
   flex-direction: column;
   gap: 20px;
   min-width: 0;
+}
+.approval__taken {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 .approval__note,
 .approval__decided {

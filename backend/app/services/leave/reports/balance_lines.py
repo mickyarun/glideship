@@ -74,16 +74,25 @@ class PersonBalances:
 
 
 async def balance_lines(
-    db: AsyncSession, org_id: uuid.UUID, persons: Sequence[Person], year_for: YearFor
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    persons: Sequence[Person],
+    year_for: YearFor,
+    *,
+    with_retired: bool = False,
 ) -> dict[uuid.UUID, PersonBalances]:
-    """``{user_id: balances}`` for each person with a policy; ``year_for`` picks the year."""
+    """``{user_id: balances}`` for each person with a policy; ``year_for`` picks the year.
+
+    ``with_retired`` also lists a retired (inactive) type for anyone who has
+    leave on it in the year, so their total adds up.
+    """
     persons = [p for p in persons if p.policy is not None]
     if not persons:
         return {}
     policies = {p.policy.id: p.policy for p in persons if p.policy}
     years = {pid: year_for(policy) for pid, policy in policies.items()}
     types = await LeaveTypeRepository(db, org_id=org_id).list_for_policies(
-        policies, active_only=True
+        policies, active_only=not with_retired
     )
     users = {p.user_id for p in persons}
     type_ids = {t.id for per in types.values() for t in per}
@@ -111,7 +120,10 @@ async def balance_lines(
         # bookable now, with leave booked ahead counted in its own month.
         on = day_in_year(today_for(p.policy), year)
         lines = []
-        for t in usable_types(types.get(p.policy.id, []), p.profile):
+        in_use = [
+            t for t in types.get(p.policy.id, []) if t.is_active or bookings.get((p.user_id, t.id))
+        ]
+        for t in usable_types(in_use, p.profile):
             totals = ledger.get((p.user_id, t.id, year.label), NO_TOTALS)
             lines.append(
                 build_line(

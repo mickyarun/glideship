@@ -32,6 +32,7 @@ from app.services.leave.approval_lines import (
     balances_line,
     last_leave_line,
     recent_wfh_line,
+    taken_line,
     wfh_usage_line,
 )
 from app.services.leave.calendar_math import leave_year_bounds
@@ -59,6 +60,7 @@ async def _leave_lines(db: AsyncSession, org_id: uuid.UUID, request: LeaveReques
     # see them, in the app (see type_privacy).
     context = await requester_context(db, org_id, {user}, today_for(policy), sees_all=False)
     lines = [
+        taken_line(context.taken.get(user)),
         balances_line(context.balances.get(user, [])),
         last_leave_line(context.last_leave.get(user)),
     ]

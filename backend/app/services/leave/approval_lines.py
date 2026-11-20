@@ -45,6 +45,11 @@ def _worth_showing(balance: Balance) -> bool:
     return bool(balance.allocated) or balance.used > 0
 
 
+def taken_line(taken: Decimal | None) -> str | None:
+    """ "Leave taken this year: 16 days" (all types together), or None without a figure."""
+    return None if taken is None else f"Leave taken this year: {days_text(taken)}"
+
+
 def balances_line(balances: Sequence[Balance]) -> str | None:
     """ "Balances: Casual 4 of 12 left · Unpaid 3 taken · …", or None without any."""
     parts = [format_balance(b) for b in balances if _worth_showing(b)]
