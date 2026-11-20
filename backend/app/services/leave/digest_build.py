@@ -72,8 +72,18 @@ def _leave_over_wfh(requests: list[LeaveRequest]) -> list[LeaveRequest]:
     ]
 
 
-async def build_digest(db: AsyncSession, org_id: uuid.UUID, today: date) -> str | None:
-    """The day's post, or None when there's nobody to mention or nobody at work."""
+async def build_digest(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    today: date,
+    *,
+    only_request: uuid.UUID | None = None,
+) -> str | None:
+    """The day's post, or None when there's nobody to mention or nobody at work.
+
+    With ``only_request`` it's the follow-up for that one request, approved
+    after the morning post went out.
+    """
     policies = await LeavePolicyRepository(db, org_id=org_id).list_ordered()
     requests = _leave_over_wfh(
         [
@@ -84,6 +94,10 @@ async def build_digest(db: AsyncSession, org_id: uuid.UUID, today: date) -> str 
             if r.status == LeaveStatus.APPROVED
         ]
     )
+    if only_request is not None:
+        requests = [r for r in requests if r.id == only_request]
+        if not requests:
+            return None
     latest_end = max((r.end_date for r in requests), default=today)
     calendars = await _calendars(db, org_id, policies, today, latest_end + LOOKAHEAD)
     working = [c for c in calendars.values() if c.works(today)]
@@ -101,6 +115,8 @@ async def build_digest(db: AsyncSession, org_id: uuid.UUID, today: date) -> str 
     holidays = [
         f"{c.policy.name} ({c.holidays[today]})" for c in calendars.values() if today in c.holidays
     ]
+    if only_request is not None:
+        return compose(today, away, remote, [], late=True)
     return compose(today, away, remote, holidays)
 
 

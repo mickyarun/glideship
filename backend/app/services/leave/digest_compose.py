@@ -70,12 +70,21 @@ def _names(people: list[OutToday], detail: Callable[[OutToday], str]) -> str:
 
 
 def compose(
-    today: date, away: list[OutToday], remote: list[OutToday], holidays: list[str]
+    today: date,
+    away: list[OutToday],
+    remote: list[OutToday],
+    holidays: list[str],
+    *,
+    late: bool = False,
 ) -> str | None:
-    """The post for ``today``, or None when there's nothing to say."""
+    """The post for ``today``, or None when there's nothing to say.
+
+    ``late`` is the follow-up for people added after the morning post.
+    """
     if not away and not remote and not holidays:
         return None
-    lines = [f"*Who's out today, {today:%a} {today.day} {today:%b}*"]
+    title = "Added since this morning" if late else "Who's out today"
+    lines = [f"*{title}, {today:%a} {today.day} {today:%b}*"]
     if away:
         lines.append(f"On leave: {_names(away, lambda p: _when(p, today))}")
     if remote:

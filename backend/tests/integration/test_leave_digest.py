@@ -28,7 +28,7 @@ from app.models.leave_request import HalfDay, LeaveKind, LeaveStatus
 from app.models.organization import Organization
 from app.repositories.leave_digest_post import LeaveDigestPostRepository
 from app.schemas.leave import LeaveRequestCreate
-from app.services.leave import digest_scheduler
+from app.services.leave import digest_late, digest_scheduler
 from app.services.leave.digest_build import build_digest
 from app.services.leave.lifecycle import decide, submit
 from tests.integration.leave_support import (
@@ -175,3 +175,58 @@ async def test_scheduler_posts_once_per_day(
     post.assert_awaited_once()
     channel, text = post.await_args.args[1], post.await_args.args[2]
     assert channel == "C0123456" and "Asha" in text
+
+
+async def test_request_approved_after_the_morning_post_is_announced(
+    pg_session_factory: Factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    org, (asha, bala, _c, mgr), casual, mon = await _team(pg_session_factory)
+    await _approved(pg_session_factory, org, asha, mgr, leave_body(casual, mon, mon))
+    settings = {"enabled": True, "channel_id": "C0123456", "post_time": "00:00", "timezone": "UTC"}
+    async with pg_session_factory() as db:
+        organization = await db.get(Organization, org)
+        assert organization is not None
+        organization.config = {**(organization.config or {}), "leave_digest": settings}
+        await db.commit()
+    wfh = LeaveRequestCreate(kind=LeaveKind.WFH, start_date=mon, end_date=mon)
+    async with pg_session_factory() as db:
+        request, _ = await submit(db, org, bala, wfh)
+        await db.commit()
+    token_mock = AsyncMock(return_value="xoxb-test")
+    post = AsyncMock(return_value=("C0123456", "1.0", ""))
+    monkeypatch.setattr(digest_late, "AsyncSessionLocal", pg_session_factory)
+    monkeypatch.setattr(digest_late, "post_message", post)
+    monkeypatch.setattr(digest_late, "bot_token", token_mock)
+    monkeypatch.setattr(
+        digest_late,
+        "datetime",
+        type(
+            "D",
+            (),
+            {
+                "now": staticmethod(
+                    lambda tz: datetime(mon.year, mon.month, mon.day, 12, tzinfo=tz)
+                )
+            },
+        ),
+    )
+    # Morning post not sent yet: the post itself will cover them.
+    await digest_late.announce_late_request(org, request.id)
+    post.assert_not_awaited()
+    async with pg_session_factory() as db:
+        posts = LeaveDigestPostRepository(db, org_id=org)
+        await posts.claim(mon)
+        await posts.finish(mon, DigestStatus.POSTED, None)
+        await db.commit()
+    await digest_late.announce_late_request(org, request.id)
+    post.assert_not_awaited()  # still pending: not approved
+    async with pg_session_factory() as db:
+        await decide(
+            db, org_id=org, actor=mgr, perms=NOBODY, request_id=request.id, approve=True, note=None
+        )
+        await db.commit()
+    await digest_late.announce_late_request(org, request.id)
+    post.assert_awaited_once()
+    text = post.await_args.args[2]
+    assert "Added since this morning" in text and "Working from home: Bala" in text
+    assert "Asha" not in text
