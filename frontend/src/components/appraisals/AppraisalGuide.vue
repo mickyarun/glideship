@@ -21,7 +21,7 @@
      the button, never by itself, and gives focus back to it on closing. -->
 <template>
   <v-btn ref="opener" variant="text" prepend-icon="mdi-help-circle-outline" @click="show">How appraisals work</v-btn>
-  <v-dialog v-model="open" max-width="620" :aria-labelledby="titleId" @after-enter="focusTitle" @after-leave="giveBack">
+  <v-dialog v-model="open" max-width="720" :aria-labelledby="titleId" @after-enter="focusTitle" @after-leave="giveBack">
     <v-card class="guide" :elevation="0">
       <header class="guide__head">
         <h2 :id="titleId" ref="title" class="guide__title" tabindex="-1">How appraisals work</h2>
@@ -81,8 +81,8 @@ function giveBack(): void {
 .guide {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 24px;
+  gap: 10px;
+  padding: 18px 22px;
 }
 .guide__head {
   display: flex;
@@ -98,7 +98,7 @@ function giveBack(): void {
   outline: none;
 }
 .guide__heading {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 13px;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface-variant));

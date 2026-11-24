@@ -42,10 +42,10 @@ defineProps<{ heading: string; steps: GuidePart[]; lines: GuidePart[] }>()
 .role {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .role__heading {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font-size: 13px;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface-variant));
@@ -54,11 +54,12 @@ defineProps<{ heading: string; steps: GuidePart[]; lines: GuidePart[] }>()
 .role__lines {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 14px;
+  font-size: 13.5px;
+  line-height: 1.4;
 }
 .role__step {
   display: flex;
