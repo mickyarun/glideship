@@ -95,6 +95,8 @@ import type { CheckInNote, CheckInRead, EvidenceHeading, FactTag, GoalValueIn } 
 import { monthTitle } from '@/utils/appraisalCheckIn'
 
 const props = defineProps<{ checkIn: CheckInRead }>()
+// Lines not saved yet: the page holding Send waits for them.
+const emit = defineEmits<{ dirty: [dirty: boolean] }>()
 const store = useCheckInsStore()
 
 const draft = reactive<CheckInNote>({ lines: {}, blocking: '', next_month: '' })
@@ -113,6 +115,7 @@ const warningText = computed(() => {
   return `These accounts may also be ${props.checkIn.person_name || 'this person'}: ${names}. Ask HR to merge them so their work shows here.`
 })
 const dirty = computed(() => JSON.stringify(cleaned()) !== JSON.stringify(props.checkIn.note))
+watch(dirty, d => emit('dirty', d), { immediate: true })
 
 // Keyed on the note's content: a tag or redraft replaces the whole check-in,
 // and that mustn't wipe what's being typed.

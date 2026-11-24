@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import GoalCheck
+from app.models.appraisal_enums import FeedbackStatus, GoalCheck
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -34,6 +34,7 @@ from app.schemas.appraisal_feedback import (
     FeedbackShown,
 )
 from app.services.appraisals import audit, crypto
+from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller, CheckInContext
 from app.services.appraisals.due_dates import is_late
 from app.services.appraisals.feedback import FeedbackContext, sent
@@ -120,7 +121,7 @@ async def read_feedback(
             FeedbackCheckIn(
                 id=c.id,
                 period_start=c.period_start,
-                status=c.status,
+                status=shown_status(c, caller.user_id == profile.user_id),
                 closed=c.closed_at is not None,
             )
             for c in check_ins
@@ -149,7 +150,7 @@ async def shown_on_check_in(db: AsyncSession, ctx: CheckInContext) -> FeedbackSh
         period_start=item.period_start,
         period_end=item.period_end,
         cadence=item.cadence,
-        done=sent(item),
+        done=item.status is FeedbackStatus.DONE,
         keep=crypto.unseal(item, "keep_note") or "",
         try_next=crypto.unseal(item, "try_note") or "",
         goals=[g for g in await _goals(db, item, ctx.cycle) if g.status is not None],

@@ -42,3 +42,24 @@ class AppraisalGoalValueRepository:
             )
         )
         return list(result.scalars().all())
+
+    async def for_check_in(self, check_in_id: uuid.UUID) -> list[AppraisalGoalValue]:
+        """The goal values on one check-in."""
+        result = await self._db.execute(
+            select(AppraisalGoalValue).where(
+                AppraisalGoalValue.org_id == self._org,
+                AppraisalGoalValue.check_in_id == check_in_id,
+            )
+        )
+        return list(result.scalars().all())
+
+    async def one(self, check_in_id: uuid.UUID, goal_id: uuid.UUID) -> AppraisalGoalValue | None:
+        """One goal's value on one check-in."""
+        result = await self._db.execute(
+            select(AppraisalGoalValue).where(
+                AppraisalGoalValue.org_id == self._org,
+                AppraisalGoalValue.check_in_id == check_in_id,
+                AppraisalGoalValue.goal_id == goal_id,
+            )
+        )
+        return result.scalar_one_or_none()

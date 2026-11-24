@@ -10,11 +10,16 @@ Existing data carries forward. Everything people could read before this
 migration stays readable: every existing check-in, and every manager
 note with something written in it, is marked sent at its last update.
 Existing check-ins get a due date five weekdays after their period (the
-person's holidays aren't known here). Existing notes keep the due date
-they had. Running cycles and stored org settings take the decided five
-days for notes; orgs get ``min_goals`` of three, or their ``max_goals``
-when that is lower. Autogenerate doesn't compare check constraints, so
-that swap is spelled out.
+person's holidays aren't known here); one still open gets at least five
+weekdays from the day this runs, so people can keep writing it. Existing
+notes keep their due date, except one written but not finished, which
+also gets five weekdays from today so the manager can finish and send
+it. Cycles not yet closed and stored org settings take the decided five
+days for notes (closed cycles keep theirs; the downgrade puts back the
+old default of ten, not any earlier custom value). Orgs get
+``min_goals`` of three, or their ``max_goals`` when that is lower.
+Autogenerate doesn't compare check constraints, so that swap is spelled
+out.
 
 Revision ID: 6d2d593be9c9
 Revises: 52934796567f
@@ -37,12 +42,33 @@ DUE_DAYS = 5
 OLD_FEEDBACK_DUE_DAYS = 10
 
 # The fifth weekday after each existing check-in's period ends.
+
+
+def weekdays_after(day: str) -> str:
+    """SQL for the fifth weekday after the date expression ``day``."""
+    return (
+        f"(SELECT d::date FROM generate_series({day} + 1, {day} + 14, interval '1 day') d"
+        f" WHERE extract(isodow FROM d) < 6 ORDER BY d OFFSET {DUE_DAYS - 1} LIMIT 1)"
+    )
+
+
+# Usually five weekdays after the period. One still open gets at least a
+# fresh window from today, so nobody is locked out of a check-in they are
+# still writing: a sent check-in can change only until its due date.
 CHECK_IN_DUE = f"""
-UPDATE appraisal_check_ins c SET due_on = (
-    SELECT d::date FROM generate_series(c.period_end + 1, c.period_end + 14, interval '1 day') d
-    WHERE extract(isodow FROM d) < 6 ORDER BY d OFFSET {DUE_DAYS - 1} LIMIT 1
-)
+UPDATE appraisal_check_ins c SET due_on = CASE
+    WHEN c.closed_at IS NULL
+        THEN GREATEST({weekdays_after("c.period_end")}, {weekdays_after("CURRENT_DATE")})
+    ELSE {weekdays_after("c.period_end")}
+END
 WHERE due_on IS NULL
+"""
+
+# A note written but not finished counts as sent (the person could read it)
+# and keeps a window from today, so the manager can still finish and send it.
+UNFINISHED_NOTES_DUE = f"""
+UPDATE appraisal_manager_feedback SET due_on = GREATEST(due_on, {weekdays_after("CURRENT_DATE")})
+WHERE sent_at IS NOT NULL AND status = 'open'
 """
 
 SETTINGS = f"""
@@ -65,7 +91,8 @@ BACKFILL = (
     "UPDATE appraisal_manager_feedback SET sent_at = updated_at"
     " WHERE sent_at IS NULL AND (keep_note IS NOT NULL OR try_note IS NOT NULL"
     " OR goal_status <> '{}'::jsonb)",
-    f"UPDATE appraisal_cycles SET feedback_due_days = {DUE_DAYS}",
+    UNFINISHED_NOTES_DUE,
+    f"UPDATE appraisal_cycles SET feedback_due_days = {DUE_DAYS} WHERE status <> 'closed'",
     SETTINGS,
 )
 
@@ -127,7 +154,10 @@ def downgrade() -> None:
         f" || jsonb_build_object('feedback_due_days', {OLD_FEEDBACK_DUE_DAYS}))"
         " WHERE jsonb_typeof(config -> 'appraisals') = 'object'"
     )
-    op.execute(f"UPDATE appraisal_cycles SET feedback_due_days = {OLD_FEEDBACK_DUE_DAYS}")
+    op.execute(
+        f"UPDATE appraisal_cycles SET feedback_due_days = {OLD_FEEDBACK_DUE_DAYS}"
+        " WHERE status <> 'closed'"
+    )
     # Notes waiting on an unsent check-in have no due date; give them the old one.
     op.execute(
         "UPDATE appraisal_manager_feedback"

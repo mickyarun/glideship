@@ -23,9 +23,7 @@
     <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
     <v-progress-linear v-if="store.loading && !item" indeterminate color="primary" />
     <template v-if="item">
-      <AppCallout v-if="item.can_edit" variant="info">
-        Only you see this until you send it. Write about the work, not the person.
-      </AppCallout>
+      <AppCallout v-if="item.can_edit" variant="info">Only you see this until you send it. Write about the work, not the person.</AppCallout>
       <AppCallout v-else-if="item.content_hidden" variant="info">Not sent yet. You'll read it once {{ item.manager_name || 'the manager' }} sends it.</AppCallout>
       <AppCallout v-if="message" :variant="messageKind">{{ message }}</AppCallout>
       <section class="fb__check-ins" aria-label="Their check-ins">

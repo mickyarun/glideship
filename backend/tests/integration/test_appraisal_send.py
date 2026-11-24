@@ -27,6 +27,7 @@ from sqlalchemy import select, text, update
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
+from app.services.appraisals.work_calendar import WorkCalendar
 from app.services.file_storage import FileStorage
 from tests.integration.appraisal_month import october, send_check_in
 from tests.integration.appraisal_review_support import BASE, end_period_early, team_ids
@@ -139,9 +140,12 @@ async def test_the_review_hides_unsent_months_from_the_manager(
     assert not month["sent"] and month["note"]["lines"] == {} and month["links"] == []
     (own,) = (await client.get(review, headers=emp)).json()["timeline"]
     assert own["links"] and own["note"]["lines"]
-    # The person may cite their own unsent link; the manager may not.
+    # Nobody cites a link from a check-in that was never sent: the reader can't open it.
     cite = {"band": 3, "evidence": [f"link:{link['id']}"], "goals": []}
-    assert (await client.put(f"{review}/self", json=cite, headers=emp)).status_code == 200
+    assert (await client.put(f"{review}/self", json=cite, headers=emp)).status_code == 422
+    assert (
+        await client.put(f"{review}/self", json={**cite, "evidence": []}, headers=emp)
+    ).status_code == 200
     assert (await client.post(f"{review}/self/submit", headers=emp)).status_code == 200
     change = {"agree": False, "band": 4, "reason": "Late", "evidence": cite["evidence"]}
     assert (await client.put(f"{review}/manager", json=change, headers=mgr)).status_code == 422
@@ -182,15 +186,29 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
                 select(AppraisalManagerFeedback).where(AppraisalManagerFeedback.org_id == m.org)
             )
         }
+    # Still open, so still being written: at least five weekdays from today.
+    fresh = WorkCalendar().shift(datetime.now(UTC).date(), 5)
     assert all(c.sent_at == c.updated_at for c in check_ins)
-    assert {c.due_on for c in check_ins} == {date(2026, 11, 6)}
+    assert {c.due_on for c in check_ins} == {max(date(2026, 11, 6), fresh)}
     assert notes[written["id"]].sent_at is not None
     assert [n.sent_at for k, n in notes.items() if k != written["id"]] == [None]
-    assert {n.due_on for n in notes.values()} == {kept_due}
+    # The half-written note gets the same fresh window; the untouched one keeps its date.
+    assert notes[written["id"]].due_on == max(kept_due, fresh)
+    assert [n.due_on for k, n in notes.items() if k != written["id"]] == [kept_due]
     # The person reads the written note, as they could before.
     emp = as_user(m.people["emp"], m.org)
     seen = await client.get(f"/api/v1/manager-feedback/{written['id']}", headers=emp)
     assert seen.status_code == 200 and seen.json()["keep"] == "Clear PRs"
+    # The manager can still finish it and send it.
+    note_url = f"/api/v1/manager-feedback/{written['id']}"
+    both = {"keep": "Clear PRs", "try_next": "Pair on UAT"}
+    assert (await client.put(note_url, json=both, headers=mgr)).status_code == 200
+    finished = await client.post(f"{note_url}/send", headers=mgr)
+    assert finished.json()["status"] == "done"
+    # And the person can keep writing the open check-in.
+    mine = (await client.get(f"{CHECK_INS}/mine", headers=emp)).json()
+    note = await client.put(f"{CHECK_INS}/{mine[0]['id']}/note", json=NOTE, headers=emp)
+    assert note.status_code == 200
 
 
 async def test_goal_values_across_months_show_only_sent_check_ins_to_others(

@@ -88,6 +88,11 @@ describe('your review', () => {
     expect(theirs.text()).toContain("Priya's quarter")
   })
 
+  it('offers links as examples only from sent check-ins, facts from any', () => {
+    const unsent = review({ timeline: twoGoals.timeline.map(m => ({ ...m, sent: false })) })
+    expect(evidenceOptions(unsent).map(o => o.id)).toEqual(['f1'])
+  })
+
   it('leads with what is due, and says who it waits on', () => {
     expect(reviewSubtitle(twoGoals)).toBe('Due Thu 7 Jan 2027')
     const withHr = review({ status: 'calibration', can: { ...twoGoals.can, edit_self: false } })

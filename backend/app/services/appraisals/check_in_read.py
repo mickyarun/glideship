@@ -24,6 +24,7 @@ from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
+from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.user import UserRepository
 from app.repositories.work_facts_other import readable_boards
@@ -71,7 +72,10 @@ async def read_check_in(
         else await readable_boards(db, org_id, caller.user_id, caller.perms, board_ids(facts))
     )
     repo = AppraisalCheckInRepository(db, org_id=org_id)
-    values = {v.goal_id: v for v in await repo.goal_values(check_in.id)}
+    values = {
+        v.goal_id: v
+        for v in await AppraisalGoalValueRepository(db, org_id=org_id).for_check_in(check_in.id)
+    }
     period_start = ctx.cycle.period_start if ctx.cycle else check_in.period_start
     goals = await AppraisalGoalRepository(db, org_id=org_id).accepted_for_period(
         profile.id, period_start

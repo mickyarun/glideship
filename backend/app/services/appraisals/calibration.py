@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus
+from app.models.appraisal_enums import AppraisalStatus, FeedbackStatus
 from app.models.employee_profile import EmployeeProfile
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -59,7 +59,7 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
     items = await AppraisalFeedbackRepository(db, org_id=cycle.org_id).for_cycles([cycle.id])
     feedback: dict[uuid.UUID, list[bool]] = defaultdict(list)
     for item in items:
-        feedback[item.profile_id].append(item.sent_at is not None)
+        feedback[item.profile_id].append(item.status is FeedbackStatus.DONE)
     people_ids = {p.user_id for p in profiles.values()} | {a.manager_user_id for a in appraisals}
     names = {u.id: u.name for u in await UserRepository(db).get_many_by_ids(list(people_ids))}
     rows: list[CalibrationPerson] = []

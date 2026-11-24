@@ -37,21 +37,19 @@ async def evidence_pool(
     db: AsyncSession,
     appraisal: Appraisal,
     check_ins: list[AppraisalCheckIn] | None = None,
-    *,
-    by_person: bool,
 ) -> Pool:
-    """Everything in the period the citer may see, by id.
+    """Everything in the period that can be cited, by id.
 
-    The person may cite links on any of their check-ins; anyone else only
-    links on check-ins that were sent. Facts aren't the person's writing,
-    so they can be cited either way.
+    Links only from check-ins that were sent: an example has to be one the
+    manager and HR can open. Facts aren't the person's writing, so they
+    can be cited from any check-in.
     """
     repo = AppraisalCheckInRepository(db, org_id=appraisal.org_id)
     months = check_ins
     if months is None:
         months = await repo.for_person_in_cycle(appraisal.profile_id, appraisal.cycle_id)
     pool: Pool = {}
-    links = await repo.links_for([c.id for c in months if by_person or c.sent_at is not None])
+    links = await repo.links_for([c.id for c in months if c.sent_at is not None])
     for check_in in months:
         pool.update({str(f["id"]): f for f in check_in.fact_refs or []})
         for link in links.get(check_in.id, []):

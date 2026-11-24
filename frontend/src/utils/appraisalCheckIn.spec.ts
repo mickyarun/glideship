@@ -19,6 +19,7 @@ import {
   emptyHeadings,
   factsBySource,
   monthTitle,
+  localDay,
   safeHref,
   sendLine,
   statusLabel,
@@ -130,5 +131,7 @@ describe('sendLine', () => {
     const sent = checkIn({ sent_at: '2026-11-05T09:00:00Z', edited_after_send_at: '2026-11-06T09:00:00Z' })
     expect(sendLine(sent)).toBe('Due Fri 6 Nov 2026 · Sent Thu 5 Nov 2026, edited after sending')
     expect(sendLine(checkIn({ due_on: null }))).toBe('Not sent yet')
+    const noon = new Date(2026, 10, 5, 12).toISOString()
+    expect(localDay(noon)).toBe('2026-11-05')
   })
 })

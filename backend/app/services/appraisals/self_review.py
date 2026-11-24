@@ -50,7 +50,7 @@ async def save_self(db: AsyncSession, ctx: AppraisalContext, body: SelfBody) -> 
     appraisal = ctx.appraisal
     if not (ctx.access.edit_self_score and appraisal.status is AppraisalStatus.SELF_REVIEW):
         raise AppraisalConflictError("The self-review isn't open for changes.")
-    pool = await evidence_pool(db, appraisal, by_person=True)
+    pool = await evidence_pool(db, appraisal)
     goals = await period_goals(db, ctx)
     problem = goal_ids_problem([str(item.goal_id) for item in body.goals], set(goals))
     if problem:

@@ -20,6 +20,7 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_enums import CheckInStatus
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.employee_profile import EmployeeProfileRepository
@@ -30,8 +31,21 @@ from app.services.appraisals.due_dates import is_late
 from app.services.appraisals.org_clock import org_today
 
 
+def shown_status(check_in: AppraisalCheckIn, is_self: bool) -> CheckInStatus:
+    """The status as the viewer may see it.
+
+    Until it is sent, nobody but the person can tell they have written in
+    it: "added" shows as still open.
+    """
+    if is_self or check_in.sent_at is not None:
+        return check_in.status
+    return (
+        CheckInStatus.OPEN if check_in.status is CheckInStatus.EMPLOYEE_ADDED else check_in.status
+    )
+
+
 def _summary(
-    check_in: AppraisalCheckIn, user_id: uuid.UUID, name: str, today: date
+    check_in: AppraisalCheckIn, user_id: uuid.UUID, name: str, today: date, *, is_self: bool
 ) -> CheckInSummary:
     return CheckInSummary(
         id=check_in.id,
@@ -39,7 +53,7 @@ def _summary(
         person_name=name,
         period_start=check_in.period_start,
         period_end=check_in.period_end,
-        status=check_in.status,
+        status=shown_status(check_in, is_self),
         closed=check_in.closed_at is not None,
         fact_count=len(check_in.fact_refs or []),
         due_on=check_in.due_on,
@@ -55,7 +69,7 @@ async def my_check_ins(db: AsyncSession, caller: Caller) -> list[CheckInSummary]
         return []
     rows = await AppraisalCheckInRepository(db, org_id=caller.org_id).for_profiles([profile.id])
     today = await org_today(db, caller.org_id)
-    return [_summary(c, caller.user_id, "", today) for c in rows]
+    return [_summary(c, caller.user_id, "", today, is_self=True) for c in rows]
 
 
 async def team_check_ins(db: AsyncSession, caller: Caller) -> list[CheckInSummary]:
@@ -76,5 +90,6 @@ async def team_check_ins(db: AsyncSession, caller: Caller) -> list[CheckInSummar
     for check_in in latest:
         profile = profiles[check_in.profile_id]
         user = users.get(profile.user_id)
-        out.append(_summary(check_in, profile.user_id, user.name if user else "", today))
+        name = user.name if user else ""
+        out.append(_summary(check_in, profile.user_id, name, today, is_self=False))
     return sorted(out, key=lambda s: s.person_name.lower())

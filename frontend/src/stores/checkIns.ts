@@ -22,6 +22,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import api from '@/services/api'
+import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
 import type {
   CheckInNote,
   CheckInRead,
@@ -147,7 +148,7 @@ export const useCheckInsStore = defineStore('checkIns', () => {
   /** Send the check-in: from now on the manager and HR read it. */
   async function send(id: string): Promise<string | null> {
     const problem = await write(() => api.post(`${BASE}/${id}/send`), "Couldn't send it. Try again.")
-    if (!problem) await fetchMine()
+    if (!problem) await Promise.all([fetchMine(), useAppraisalTodoStore().fetch()])
     return problem
   }
 

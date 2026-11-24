@@ -153,7 +153,7 @@ async def save_feedback(
         goals, notes = await _goal_checks(db, ctx, body) if body.goals else ({}, {})
         item.goal_status = goals
         crypto.seal_json(item, "goal_notes", notes or None)
-    if seen and not (keep and try_next):
+    if item.status is FeedbackStatus.DONE and not (keep and try_next):
         raise AppraisalInvalidError("A sent note keeps both lines.")
     after = (keep or None, try_next or None, item.goal_status)
     if seen and before != after:
@@ -183,9 +183,11 @@ async def send_feedback(db: AsyncSession, caller: Caller, ctx: FeedbackContext) 
     item = ctx.item
     if not (crypto.unseal(item, "keep_note") and crypto.unseal(item, "try_note")):
         raise AppraisalInvalidError("Write what to keep doing and what to try next first.")
-    if sent(item):
+    if item.status is FeedbackStatus.DONE:
         return
+    # A note from before sending existed may be readable but unfinished:
+    # sending it now finishes it and keeps when it first became readable.
     now = datetime.now(UTC)
-    item.status, item.done_at, item.sent_at = FeedbackStatus.DONE, now, now
+    item.status, item.done_at, item.sent_at = FeedbackStatus.DONE, now, item.sent_at or now
     _audit(db, caller, ctx, EmployeeAuditAction.APPRAISAL_FEEDBACK_GIVEN)
     await db.flush()

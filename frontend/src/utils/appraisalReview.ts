@@ -37,7 +37,8 @@ export function evidenceOptions(review: AppraisalRead): EvidenceOption[] {
       private: fact.private,
     })
   }
-  for (const link of review.timeline.flatMap(m => m.links)) {
+  // Links only from sent check-ins: an example has to be one the reader can open.
+  for (const link of review.timeline.filter(m => m.sent).flatMap(m => m.links)) {
     out.push({ id: `link:${link.id}`, label: link.title || link.url, detail: 'Added by them', url: link.url, private: false })
   }
   return out

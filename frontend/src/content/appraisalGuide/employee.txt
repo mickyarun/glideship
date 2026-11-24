@@ -7,6 +7,8 @@ Say what happened and what came of it. Short and specific beats long and vague.
 - Thin: "Helped the team."
 - Good: "Paired with Sam on the refunds API until it passed review."
 
+Only you see your check-in until you send it; then your manager and HR read it. Its due date shows at the top, and once sent you can still change it until then.
+
 Add what Glideship missed: a link, a win nobody filed, a blocker. If a heading is empty, say so or leave it; an empty month is shown as missed and never held against you.
 
 ## Picking goals

@@ -5,11 +5,11 @@ Write about the work, not the person. One line to keep doing, one to try next.
 - Thin: "Good attitude."
 - Good: "Keep: catching regressions before UAT. Try: pair on the refunds UAT next month."
 
-Your report sees what you save straight away. Feedback you never write stays "not done" on the team list and in the fairness check. It never blocks the review.
+Only you see a note until you send it. Once sent, your report and HR read it, and you can still change it until it's due, a few working days after their check-in is sent. Feedback you never write stays "not done" on the team list and in the fairness check. It never blocks the review.
 
 ## Agreeing or changing a rating
 
-Agree when the evidence supports their rating. Change it when it doesn't, and write a reason they will read: name the records or goals that moved you. When you change the rating, {high_bands} need {high_evidence} examples and {low_band} needs one.
+Always write your words for them, whether you agree or change: they read them in the result. Agree when the evidence supports their rating. Change it when it doesn't, and write a reason they will read: name the records or goals that moved you. When you change the rating, {high_bands} need {high_evidence} examples and {low_band} needs one.
 
 ## Due dates and reminders
 

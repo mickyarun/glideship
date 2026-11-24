@@ -33,6 +33,7 @@ from app.models.appraisal_evidence_link import AppraisalEvidenceLink
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.appraisal_check_in import MAX_LINKS, AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
+from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
 from app.schemas.appraisal_check_in import CheckInNote, FactTag, GoalValueIn, LinkCreate
 from app.services.appraisals import crypto
 from app.services.appraisals.context import CheckInContext, may_regenerate
@@ -173,8 +174,9 @@ async def save_goal_value(
     check_in = await _require_open(db, ctx)
     if goal_id not in await _goal_ids(db, ctx):
         raise AppraisalNotFoundError("Goal not found.")
-    repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
-    value = await repo.goal_value(check_in.id, goal_id)
+    value = await AppraisalGoalValueRepository(db, org_id=check_in.org_id).one(
+        check_in.id, goal_id
+    )
     if value is None:
         value = AppraisalGoalValue(
             org_id=check_in.org_id, goal_id=goal_id, check_in_id=check_in.id

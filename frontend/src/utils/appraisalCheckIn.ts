@@ -141,11 +141,17 @@ export function emptyHeadings(checkIn: CheckInRead): EvidenceHeading[] {
   return HEADINGS.map(h => h.value).filter(h => !filled.has(h))
 }
 
+/** The viewer's own calendar day of a timestamp, as an ISO date. */
+export function localDay(at: string): string {
+  const d = new Date(at)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** Where a check-in is with sending: "Due Fri 6 Nov 2026 · Not sent", "Sent", "Late". */
 export function sendLine(c: Pick<CheckInRead, 'due_on' | 'sent_at' | 'late' | 'edited_after_send_at'>): string {
   const due = c.due_on ? `Due ${longDate(c.due_on)}` : ''
   const state = c.sent_at
-    ? `Sent ${longDate(c.sent_at.slice(0, 10))}${c.edited_after_send_at ? ', edited after sending' : ''}`
+    ? `Sent ${longDate(localDay(c.sent_at))}${c.edited_after_send_at ? ', edited after sending' : ''}`
     : c.late ? 'Late, not sent yet' : 'Not sent yet'
   return [due, state].filter(Boolean).join(' · ')
 }

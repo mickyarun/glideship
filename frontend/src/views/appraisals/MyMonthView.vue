@@ -24,15 +24,17 @@
       <v-btn v-if="store.current?.appraisal_id" variant="text" :to="{ name: 'appraisal-goals', params: { id: store.current.appraisal_id } }">My goals</v-btn>
       <v-btn variant="text" :to="{ name: 'appraisal-my-review' }">Your review</v-btn>
       <AppraisalGuide />
-      <v-btn v-if="store.current?.can_send" color="primary" :loading="sending" @click="send">Send to {{ manager }}</v-btn>
+      <v-btn v-if="store.current?.can_send" color="primary" :disabled="unsaved" :loading="sending" @click="send">Send to {{ manager }}</v-btn>
     </template>
     <AppCallout v-if="store.listError || store.error || sendProblem" variant="error">{{ sendProblem || store.listError || store.error }}</AppCallout>
-    <AppCallout v-if="store.current?.can_send" variant="info">Only you see this until you send it. {{ manager }} reads it after.</AppCallout>
+    <AppCallout v-if="store.current?.can_send" variant="info">
+      Only you see this until you send it. {{ manager }} reads it after.<template v-if="unsaved"> Save your lines first.</template>
+    </AppCallout>
     <v-progress-linear v-if="(store.listLoading || store.loading) && !store.current" indeterminate color="primary" />
     <p v-else-if="!store.listLoading && !store.mine.length" class="my-month__empty">
       No check-ins yet. Your first one opens on the first working day after a month in an appraisal cycle ends.
     </p>
-    <CheckInPage v-if="store.current" :check-in="store.current" />
+    <CheckInPage v-if="store.current" :check-in="store.current" @dirty="d => (unsaved = d)" />
   </AppPage>
 </template>
 
@@ -52,6 +54,7 @@ const store = useCheckInsStore()
 const selected = ref<string | null>(null)
 const sending = ref(false)
 const sendProblem = ref('')
+const unsaved = ref(false)
 const manager = computed(() => firstName(store.current?.manager_name, 'your manager'))
 
 const monthOptions = computed(() =>

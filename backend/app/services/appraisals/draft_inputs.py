@@ -31,6 +31,7 @@ from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
+from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.employee_profile import EmployeeProfileRepository
 from app.services.appraisals import crypto
@@ -118,8 +119,11 @@ async def _month(db: AsyncSession, check_in: AppraisalCheckIn) -> dict[str, Any]
     """
     sent = check_in.sent_at is not None
     note = (crypto.unseal_json(check_in, "employee_note") if sent else None) or {}
-    repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
-    values = await repo.goal_values(check_in.id) if sent else []
+    values = (
+        await AppraisalGoalValueRepository(db, org_id=check_in.org_id).for_check_in(check_in.id)
+        if sent
+        else []
+    )
     return {
         "check_in": str(check_in.id),
         "period_start": check_in.period_start.isoformat(),

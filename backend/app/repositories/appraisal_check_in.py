@@ -25,7 +25,6 @@ from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_enums import AppraisalStatus, DraftStatus
 from app.models.appraisal_evidence_link import AppraisalEvidenceLink
-from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.base import BaseRepository
 
 MAX_LINKS = 5
@@ -174,29 +173,6 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
             .order_by(AppraisalEvidenceLink.created_at)
         )
         return list(result.scalars().all())
-
-    async def goal_values(self, check_in_id: uuid.UUID) -> list[AppraisalGoalValue]:
-        """The goal values on one check-in."""
-        result = await self._db.execute(
-            select(AppraisalGoalValue).where(
-                AppraisalGoalValue.org_id == self._org,
-                AppraisalGoalValue.check_in_id == check_in_id,
-            )
-        )
-        return list(result.scalars().all())
-
-    async def goal_value(
-        self, check_in_id: uuid.UUID, goal_id: uuid.UUID
-    ) -> AppraisalGoalValue | None:
-        """One goal's value on one check-in."""
-        result = await self._db.execute(
-            select(AppraisalGoalValue).where(
-                AppraisalGoalValue.org_id == self._org,
-                AppraisalGoalValue.check_in_id == check_in_id,
-                AppraisalGoalValue.goal_id == goal_id,
-            )
-        )
-        return result.scalar_one_or_none()
 
     async def link(self, link_id: uuid.UUID) -> AppraisalEvidenceLink | None:
         """One link by id."""

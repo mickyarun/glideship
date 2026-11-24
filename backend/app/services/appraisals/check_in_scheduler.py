@@ -49,6 +49,7 @@ from app.repositories.appraisal_cycle import (
     CycleOrg,
     orgs_with_running_cycles,
 )
+from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
 from app.repositories.appraisal_identity import AppraisalIdentityRepository, LooseAccount
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.policy_holiday import PolicyHolidayRepository
@@ -120,7 +121,9 @@ def should_open(
 async def _close(db: AsyncSession, check_in: AppraisalCheckIn, now: datetime) -> None:
     repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
     link_ids = {str(link.id) for link in await repo.links(check_in.id)}
-    values = len(await repo.goal_values(check_in.id))
+    values = len(
+        await AppraisalGoalValueRepository(db, org_id=check_in.org_id).for_check_in(check_in.id)
+    )
     if is_empty(check_in, link_ids, values):
         check_in.status = CheckInStatus.MISSED
     check_in.closed_at = now

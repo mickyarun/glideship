@@ -18,6 +18,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import api from '@/services/api'
+import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
 import type { FeedbackBody, FeedbackRead, FeedbackRow } from '@/types/appraisalFeedback'
 import { extractApiError } from '@/utils/errors'
 
@@ -64,8 +65,11 @@ export const useManagerFeedbackStore = defineStore('managerFeedback', () => {
 
   const save = (id: string, body: FeedbackBody) =>
     write(() => api.put<FeedbackRead>(`${BASE}/${id}`, body), "Couldn't save the feedback. Try again.")
-  const send = (id: string) =>
-    write(() => api.post<FeedbackRead>(`${BASE}/${id}/send`), "Couldn't send it. Try again.")
+  async function send(id: string): Promise<string | null> {
+    const problem = await write(() => api.post<FeedbackRead>(`${BASE}/${id}/send`), "Couldn't send it. Try again.")
+    if (!problem) await useAppraisalTodoStore().fetch()
+    return problem
+  }
 
   return { team, current, teamError, error, loading, fetchTeam, fetchOne, save, send }
 })
