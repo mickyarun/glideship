@@ -28,6 +28,7 @@ from app.models.appraisal_enums import (
 )
 from app.schemas.appraisal_check_in import AiLine, CheckInNote, FactView, LinkRead
 from app.schemas.appraisal_growth import GrowthRead
+from app.schemas.appraisal_settings import MAX_GOALS_CAP
 
 Band = int
 
@@ -146,7 +147,8 @@ class SelfBody(BaseModel):
     band: Band | None = Field(None, ge=1, le=5)
     reason: str = Field("", max_length=600)
     evidence: list[str] = Field(default_factory=list, max_length=10)
-    goals: list[SelfGoalIn] = Field(default_factory=list, max_length=3)
+    # The period's own goals bound it in the service; the org limit can reach the cap.
+    goals: list[SelfGoalIn] = Field(default_factory=list, max_length=MAX_GOALS_CAP)
 
 
 class ManagerGoalIn(BaseModel):
@@ -165,7 +167,7 @@ class ManagerBody(BaseModel):
     band: Band | None = Field(None, ge=1, le=5)
     reason: str = Field("", max_length=600)
     evidence: list[str] = Field(default_factory=list, max_length=10)
-    goals: list[ManagerGoalIn] = Field(default_factory=list, max_length=3)
+    goals: list[ManagerGoalIn] = Field(default_factory=list, max_length=MAX_GOALS_CAP)
     ready_next_level: bool | None = None
     performance_concern: bool | None = None
     concern_note: str = Field("", max_length=500)

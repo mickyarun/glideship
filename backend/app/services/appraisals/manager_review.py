@@ -40,6 +40,7 @@ from app.services.appraisals.review_rules import (
     band_problem,
     final_band,
     final_result,
+    goal_ids_problem,
     goal_problem,
     submitted_band,
     submitted_result,
@@ -65,9 +66,10 @@ async def _apply(
     goals = await period_goals(db, ctx)
     evidence = pick(pool, body.evidence)
     band = BandDecision(body.agree, body.band, body.reason, len(evidence))
+    sent = goal_ids_problem([str(g.goal_id) for g in body.goals], set(goals))
+    if sent:
+        raise AppraisalInvalidError(sent)
     decisions = {str(g.goal_id): g for g in body.goals}
-    if set(decisions) - set(goals):
-        raise AppraisalInvalidError("That goal isn't one of this period's goals.")
     problems = []
     for key, goal in goals.items():
         item = decisions.get(key)

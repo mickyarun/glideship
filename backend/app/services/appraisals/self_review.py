@@ -32,7 +32,7 @@ from app.services.appraisals import audit, crypto
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalInvalidError
 from app.services.appraisals.evidence import evidence_pool, pick
-from app.services.appraisals.review_rules import self_problem
+from app.services.appraisals.review_rules import goal_ids_problem, self_problem
 
 
 async def period_goals(db: AsyncSession, ctx: AppraisalContext) -> dict[str, AppraisalGoal]:
@@ -51,10 +51,11 @@ async def save_self(db: AsyncSession, ctx: AppraisalContext, body: SelfBody) -> 
         raise AppraisalConflictError("The self-review isn't open for changes.")
     pool = await evidence_pool(db, appraisal)
     goals = await period_goals(db, ctx)
+    problem = goal_ids_problem([str(item.goal_id) for item in body.goals], set(goals))
+    if problem:
+        raise AppraisalInvalidError(problem)
     for item in body.goals:
-        goal = goals.get(str(item.goal_id))
-        if goal is None:
-            raise AppraisalInvalidError("That goal isn't one of this period's goals.")
+        goal = goals[str(item.goal_id)]
         goal.self_result = item.result
         crypto.seal(goal, "self_reason", item.reason.strip())
         goal.self_evidence = pick(pool, item.evidence)

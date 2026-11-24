@@ -47,6 +47,19 @@ LOW_BAND = 5
 HIGH_EVIDENCE = 2
 
 
+def goal_ids_problem(sent: list[str], period: set[str]) -> str | None:
+    """Why the goals in a review body don't match the period's goals, or None.
+
+    The body may list as many goals as the period has (the org limit, not a
+    fixed number), each once and each one of the period's own.
+    """
+    if len(sent) != len(set(sent)):
+        return "Each goal can only be scored once."
+    if set(sent) - period:
+        return "That goal isn't one of this period's goals."
+    return None
+
+
 def self_problem(
     band: int | None, evidence: int, results: dict[str, GoalResult | None]
 ) -> str | None:

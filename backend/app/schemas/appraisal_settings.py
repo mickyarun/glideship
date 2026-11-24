@@ -21,6 +21,9 @@ from pydantic import BaseModel, Field, model_validator
 from app.models.appraisal_enums import CheckInCadence, FeedbackCadence, ReviewPeriod
 from app.services.appraisals.cadence import cadence_error
 
+# The most confirmed goals an org may allow per person per period.
+MAX_GOALS_CAP = 20
+
 
 class AppraisalSettings(BaseModel):
     """Stored under ``organizations.config["appraisals"]``."""
@@ -44,7 +47,7 @@ class AppraisalSettings(BaseModel):
     # Confirmed goals per person per period. Read live, not copied onto a
     # cycle, so raising it applies to a running cycle; lowering it keeps
     # goals already confirmed and only stops new ones.
-    max_goals: int = Field(3, ge=1, le=20)
+    max_goals: int = Field(3, ge=1, le=MAX_GOALS_CAP)
 
     @model_validator(mode="after")
     def _rules(self) -> Self:

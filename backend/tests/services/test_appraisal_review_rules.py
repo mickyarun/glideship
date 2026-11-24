@@ -20,6 +20,8 @@ import pytest
 
 from app.models.appraisal_enums import GoalOrigin, GoalResult, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
+from app.schemas.appraisal_review import ManagerBody, SelfBody
+from app.schemas.appraisal_settings import MAX_GOALS_CAP
 from app.services.appraisals.calibration_math import Scored, figures
 from app.services.appraisals.goal_rules import GoalRights, actions, next_position
 from app.services.appraisals.review_rules import (
@@ -28,6 +30,7 @@ from app.services.appraisals.review_rules import (
     band_problem,
     final_band,
     final_result,
+    goal_ids_problem,
     goal_problem,
     self_problem,
 )
@@ -40,6 +43,23 @@ def test_self_score_needs_a_band_evidence_for_high_bands_and_every_goal() -> Non
     assert self_problem(2, 1, {}) == "Bands 1 and 2 need at least two pieces of evidence."
     assert self_problem(2, 2, {"g": None}) == "Score each goal: achieved, partly or not yet."
     assert self_problem(3, 0, {"g": ACHIEVED}) is None
+
+
+def test_review_bodies_take_up_to_the_settings_cap_of_goals() -> None:
+    def goals(n: int) -> list[dict[str, str]]:
+        return [{"goal_id": str(uuid.uuid4())} for _ in range(n)]
+
+    for body in (SelfBody, ManagerBody):
+        assert len(body.model_validate({"goals": goals(MAX_GOALS_CAP)}).goals) == MAX_GOALS_CAP
+        with pytest.raises(ValueError, match="at most"):
+            body.model_validate({"goals": goals(MAX_GOALS_CAP + 1)})
+
+
+def test_review_goals_must_be_the_periods_own_and_each_once() -> None:
+    period = {"a", "b", "c", "d"}
+    assert goal_ids_problem(["a", "b", "c", "d"], period) is None
+    assert goal_ids_problem(["a", "a"], period) == "Each goal can only be scored once."
+    assert goal_ids_problem(["z"], period) == "That goal isn't one of this period's goals."
 
 
 @pytest.mark.parametrize(
