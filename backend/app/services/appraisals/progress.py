@@ -110,6 +110,8 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
                 feedback=len(theirs),
                 feedback_done=sum(i.status is FeedbackStatus.DONE for i in theirs),
                 feedback_overdue=sum(late(i) for i in theirs),
+                feedback_due=sum(i.due_on is not None for i in theirs),
+                quiet=profile.id in quiet,
             )
         )
     overdue = Counter(i.manager_user_id for i in items if late(i))

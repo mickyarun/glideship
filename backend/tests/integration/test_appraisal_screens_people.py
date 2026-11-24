@@ -115,7 +115,10 @@ async def test_hr_reminds_exactly_the_people_the_page_counts(
     cycle = await cycle_id(client, m)
     progress = (await client.get(f"{BASE}/cycles/{cycle}/progress", headers=hr)).json()
     meena = next(p for p in progress["people"] if p["name"] == "Meena")
-    assert meena["check_ins_late"] == 0 and meena["feedback_overdue"] == 0
+    assert meena["check_ins_late"] == 0 and meena["feedback_overdue"] == 0 and meena["quiet"]
+    priya = next(p for p in progress["people"] if p["name"] == "Priya")
+    # Priya's check-in is sent, so her note has a due date; she is still here.
+    assert priya["feedback_due"] == 1 and not priya["quiet"]
     # Only Ravi is late: his note on Priya's sent check-in. Meena has left.
     assert progress["remind_count"] == 1
     sent = (await client.post(f"{BASE}/cycles/{cycle}/remind", headers=hr)).json()

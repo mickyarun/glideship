@@ -116,9 +116,9 @@ describe('cycle page', () => {
   const progress: CycleProgress = {
     people: [
       { user_id: 'u1', name: 'Priya', manager_user_id: 'm1', manager_name: 'Ravi', status: 'enrolled', goals_accepted: 3, goals_late: false, months: ['sent', 'not_open'],
-        check_ins: 1, check_ins_added: 1, check_ins_missed: 0, check_ins_late: 0, feedback: 1, feedback_done: 1, feedback_overdue: 0 },
+        check_ins: 1, check_ins_added: 1, check_ins_missed: 0, check_ins_late: 0, feedback: 1, feedback_done: 1, feedback_overdue: 0, feedback_due: 1, quiet: false },
       { user_id: 'u2', name: 'Meena', manager_user_id: 'm1', manager_name: 'Ravi', status: 'enrolled', goals_accepted: 1, goals_late: true, months: ['late', 'not_open'],
-        check_ins: 1, check_ins_added: 0, check_ins_missed: 0, check_ins_late: 1, feedback: 1, feedback_done: 0, feedback_overdue: 0 },
+        check_ins: 1, check_ins_added: 0, check_ins_missed: 0, check_ins_late: 1, feedback: 1, feedback_done: 0, feedback_overdue: 0, feedback_due: 1, quiet: false },
     ],
     feedback: 2, feedback_done: 1, managers_overdue: [], min_goals: 3,
     check_in_periods: [
@@ -144,10 +144,15 @@ describe('cycle page', () => {
     // Goals, every opened check-in and every note in.
     expect(of([row({})])).toBe('All done')
     // Nothing late, but nothing in yet either: goals short, a check-in not sent, a note to write.
-    const none = row({ goals_accepted: 0, months: ['open', 'not_open'], feedback_done: 0, feedback: 1 })
+    const none = row({ goals_accepted: 0, months: ['open', 'not_open'], feedback_done: 0, feedback: 1, feedback_due: 1 })
     expect(of([none])).toBe('On track')
     expect(of([row({ goals_accepted: 1 })])).toBe('On track')
     expect(of([row({ check_ins_late: 1, months: ['late', 'not_open'] })])).toBe('1 late')
+    // Not holding "All done" back: a note still waiting on its check-in, a
+    // missed (closed) check-in, and someone who has left.
+    expect(of([row({ feedback_done: 0, feedback: 1, feedback_due: 0 })])).toBe('All done')
+    expect(of([row({ months: ['missed', 'not_open'] })])).toBe('All done')
+    expect(of([row({}), { ...none, quiet: true }])).toBe('All done')
   })
 
   it('asks HR to remind, open reviews or check fairness, by where the cycle is', () => {

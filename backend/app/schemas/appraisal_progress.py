@@ -43,6 +43,11 @@ class ProgressRow(BaseModel):
     feedback: int
     feedback_done: int
     feedback_overdue: int
+    # Notes with a due date so far: their check-in is sent. A note still
+    # waiting on its check-in isn't due yet.
+    feedback_due: int = 0
+    # Withdrawn, or past their leaving date: nothing of theirs is chased.
+    quiet: bool = False
 
 
 class ManagerOverdue(BaseModel):

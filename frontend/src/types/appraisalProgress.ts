@@ -35,6 +35,10 @@ export interface ProgressRow {
   feedback: number
   feedback_done: number
   feedback_overdue: number
+  /** Notes with a due date so far: their check-in is sent. */
+  feedback_due: number
+  /** Withdrawn, or past their leaving date: nothing of theirs is chased. */
+  quiet: boolean
 }
 
 export interface PeriodCount {

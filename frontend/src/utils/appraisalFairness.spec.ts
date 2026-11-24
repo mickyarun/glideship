@@ -74,6 +74,8 @@ describe('fairness check', () => {
     expect(item.detail).toBe('3 of 3 rated "Exceeded" in some form. Waiting for another manager\'s reviews to compare with.')
     expect(item.fairIds).toEqual(['v1', 'v2', 'v3'])
     expect(teamStatus(alone.teams[0], alone)).toBe('Waiting to compare')
+    // Still says why while the team's last review is being written.
+    expect(teamStatus({ ...alone.teams[0], total: 4 }, alone)).toBe('Waiting to compare')
     expect(shareable(alone)).toEqual([])
     expect(heldLine(alone)).toBe("Viktor's 3 wait until another manager's reviews are in, or you've looked at them.")
   })

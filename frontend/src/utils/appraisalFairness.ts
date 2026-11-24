@@ -110,10 +110,11 @@ export function spread(team: CalibrationTeam): number[] {
 
 /** Where a manager's reviews stand. */
 export function teamStatus(team: CalibrationTeam, cal: Calibration): string {
-  if (team.people < team.total) return 'Writing'
   const theirs = cal.people.filter(p => p.manager_user_id === team.manager_user_id)
   const look = theirs.filter(p => p.held).length
+  // A held team says why even while its last reviews are still being written.
   if (team.waiting && look) return 'Waiting to compare'
   if (team.rates_high && look) return 'Rates high'
+  if (team.people < team.total) return 'Writing'
   return look ? `${look} to look at` : 'Ready'
 }

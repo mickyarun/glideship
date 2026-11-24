@@ -80,6 +80,7 @@ def test_a_high_rating_team_with_nobody_to_compare_waits() -> None:
     assert waiting_to_compare({a: HighShare(3, 3)}) == {a}
     assert waiting_to_compare({a: HighShare(3, 3), b: HighShare(0, 0)}) == {a}
     # Alone but not rating high, or too small to call: nothing to wait for.
+    assert waiting_to_compare({a: HighShare(2, 3)}) == {a}
     assert waiting_to_compare({a: HighShare(1, 3)}) == set()
     assert waiting_to_compare({a: HighShare(2, 2)}) == set()
     # Once another team's reviews are in, the usual rule decides instead.
