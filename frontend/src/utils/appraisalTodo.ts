@@ -25,9 +25,10 @@ const ROUTES: Record<TodoTarget, string> = {
   cycle: 'appraisal-cycle',
 }
 
-/** The page an item opens. */
+/** The page an item opens; goals someone suggested open straight on the confirm screen. */
 export function todoRoute(item: TodoItem): RouteLocationRaw {
-  return { name: ROUTES[item.target], params: { id: item.target_id } }
+  const name = item.kind === 'confirm_goals' ? 'appraisal-confirm-goals' : ROUTES[item.target]
+  return { name, params: { id: item.target_id } }
 }
 
 /** Something the caller can act on now; a note waiting on a check-in isn't yet. */

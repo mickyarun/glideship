@@ -71,6 +71,7 @@ describe('appraisal tabs', () => {
     expect(todoCounts(items)).toEqual({ own: 1, team: 2, cycles: 0 })
     expect(todoRoute(items[0])).toEqual({ name: 'appraisal-notes', params: { id: 'x1' } })
     expect(todoRoute(item('cycles', 'cycle'))).toEqual({ name: 'appraisal-cycle', params: { id: 'x1' } })
+    expect(todoRoute({ ...item('team', 'goals'), kind: 'confirm_goals' })).toEqual({ name: 'appraisal-confirm-goals', params: { id: 'x1' } })
     const { plugins } = await appraisalPlugins('/appraisals')
     const wrapper = mount(AppraisalTabs, {
       global: { plugins: plugins as never[] },

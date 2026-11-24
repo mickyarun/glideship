@@ -19,7 +19,8 @@
 <template>
   <div class="running">
     <StepStrip :steps="steps" label="Where this cycle is" />
-    <DoNowCard v-if="now === 'remind'" :title="remindTitle" :body="remindBody" :action="remindedToday ? '' : `Remind ${peopleCount(progress.remind_count)}`" :busy="busy === 'remind'" @act="emit('remind')" />
+    <DoNowCard v-if="now === 'remind'" :title="remind.title" :body="remind.body" :action="remindedToday ? '' : `Remind ${peopleCount(progress.remind_count)}`" :busy="busy === 'remind'" @act="emit('remind')" />
+    <DoNowCard v-else-if="now === 'last_check_ins'" :title="waiting.title" :body="waiting.body" />
     <DoNowCard v-else-if="now === 'open_reviews'" title="Open the reviews" body="The period has ended. Opening reviews asks everyone for their review and locks goals." action="Start the review" :busy="busy === 'review'" @act="emit('review')" />
     <DoNowCard v-else-if="now === 'fairness'" title="Check fairness, then share results" body="Look for managers who rate very differently and big gaps before results go out." action="Open the fairness check" :to="{ name: 'appraisal-fairness', params: { id: cycle.id } }" />
     <DoNowCard v-else title="Nothing needs you right now" body="Slack reminds people before anything is due. Late work shows up here." />
@@ -64,8 +65,7 @@ import DoNowCard from '@/components/appraisals/DoNowCard.vue'
 import StepStrip from '@/components/appraisals/StepStrip.vue'
 import type { CycleProgress, CycleRead, Readiness } from '@/types/appraisalSetup'
 import { localDay } from '@/utils/appraisalCheckIn'
-import { cycleDoNow, lateCounts, latestMonthLabel, managerRows, tiles } from '@/utils/appraisalCyclePage'
-import { longDate } from '@/utils/appraisalSetup'
+import { cycleDoNow, lastCheckInsWords, latestMonthLabel, managerRows, remindWords, tiles } from '@/utils/appraisalCyclePage'
 import { cycleSteps } from '@/utils/appraisalSteps'
 import { todayIso } from '@/utils/appraisalTodoWords'
 import { peopleCount } from '@/utils/leavePolicyDisplay'
@@ -78,15 +78,9 @@ const steps = computed(() =>
   cycleSteps({ status: props.cycle.status, people: props.progress.people.length, periodEnd: props.cycle.period_end, ackDue: props.cycle.ack_due }),
 )
 const now = computed(() => cycleDoNow(props.cycle, props.progress, today))
-const late = computed(() => lateCounts(props.progress))
 const remindedToday = computed(() => Boolean(props.progress.reminded_at && localDay(props.progress.reminded_at) === today))
-const remindTitle = computed(() => `${peopleCount(props.progress.remind_count)} ${props.progress.remind_count === 1 ? 'is' : 'are'} late`)
-const remindBody = computed(() => {
-  const l = late.value
-  const what = `${l.checkIns} check-in${l.checkIns === 1 ? '' : 's'} not sent and ${l.notes} manager note${l.notes === 1 ? '' : 's'} overdue.`
-  const last = props.progress.reminded_at ? ` You last reminded them ${longDate(localDay(props.progress.reminded_at))}.` : ' Slack already sent each of them a reminder.'
-  return what + last
-})
+const remind = computed(() => remindWords(props.progress, today))
+const waiting = computed(() => lastCheckInsWords(props.progress, today))
 const noManager = computed(() => props.readiness?.no_primary_manager.length ?? 0)
 const tileList = computed(() => tiles(props.progress, today))
 const rows = computed(() => managerRows(props.progress))

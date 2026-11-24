@@ -34,6 +34,12 @@ import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const BASE = '/v1/appraisals'
 
+/** What a cycle action did, and the line to show for it. */
+export interface Outcome {
+  ok: boolean
+  text: string
+}
+
 export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   const settings = ref<AppraisalSettings | null>(null)
   const cycles = ref<CycleRead[]>([])
@@ -142,10 +148,10 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   }
 
   /** A cycle action with a count back; the message to show. */
-  async function count(id: string, path: string, ok: (n: number) => string, fallback: string): Promise<string> {
+  async function count(id: string, path: string, ok: (n: number) => string, fallback: string): Promise<Outcome> {
     const [data, problem] = await attempt(() => api.post<Record<string, number>>(`${BASE}/cycles/${id}/${path}`), fallback)
     if (data) await fetchCycle(id)
-    return problem ?? ok(Object.values(data ?? {})[0] ?? 0)
+    return problem ? { ok: false, text: problem } : { ok: true, text: ok(Object.values(data ?? {})[0] ?? 0) }
   }
 
   const startReview = (id: string) =>
@@ -156,14 +162,14 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
     count(id, 'suggest-goals', n => `Asked for suggested goals for ${peopleCount(n)}.`, "Couldn't ask for suggestions.")
 
   /** Slack everyone late now; the message to show. */
-  async function remind(id: string): Promise<string> {
+  async function remind(id: string): Promise<Outcome> {
     const [data, problem] = await attempt(
       () => api.post<RemindResult>(`${BASE}/cycles/${id}/remind`),
       "Couldn't send the reminders.",
     )
     if (data) await fetchCycle(id)
-    if (problem || !data) return problem ?? ''
-    return `Reminded ${peopleCount(data.people)}. ${data.reached} got it on Slack.`
+    if (problem || !data) return { ok: false, text: problem ?? "Couldn't send the reminders." }
+    return { ok: true, text: `Reminded ${peopleCount(data.people)}. ${data.reached} got it on Slack.` }
   }
 
   return {

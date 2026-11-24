@@ -57,7 +57,7 @@ import { monthTitle, sourceLabel } from '@/utils/appraisalCheckIn'
 import { firstName } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 import { personSteps } from '@/utils/appraisalSteps'
-import { actionable } from '@/utils/appraisalTodo'
+import { itemsFor } from '@/utils/appraisalTeamView'
 
 const route = useRoute()
 const team = useAppraisalTeamStore()
@@ -80,7 +80,7 @@ const steps = computed(() => {
 const subtitle = computed(() => {
   const r = row.value
   if (!r) return ''
-  const waiting = todo.items.filter(i => i.role === 'team' && i.person_name === r.person_name && actionable(i)).length
+  const waiting = itemsFor(r, todo.items).length
   const next = r.months.find(m => m.state === 'open' || m.state === 'late')
   const head = waiting ? `${waiting} thing${waiting === 1 ? '' : 's'} waiting on you` : 'Nothing waiting on you'
   const tail = next ? ` · Next: their ${monthTitle(next.period_start).split(' ')[0]} check-in${next.due_on ? `, due ${longDate(next.due_on)}` : ''}` : ''

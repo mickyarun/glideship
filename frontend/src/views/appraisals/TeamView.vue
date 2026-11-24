@@ -23,7 +23,7 @@
     <AppCallout v-if="team.error" variant="error">{{ team.error }}</AppCallout>
     <v-progress-linear v-if="!team.loaded" indeterminate color="primary" />
     <p v-else-if="!team.rows.length" class="team__empty">Nobody you manage is in a running appraisal cycle.</p>
-    <FirstRunPanel v-else-if="firstRun" :rows="team.rows" :floor="floor" />
+    <FirstRunPanel v-else-if="firstRun" :rows="team.rows" />
     <template v-else>
       <TeamQueue :items="queue" />
       <p v-if="comingUp" class="team__coming">{{ comingUp }}</p>
@@ -45,16 +45,15 @@ import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
 import { monthTitle } from '@/utils/appraisalCheckIn'
 import { longDate } from '@/utils/appraisalSetup'
 import { isFirstRun, teamQueue } from '@/utils/appraisalTeamView'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const team = useAppraisalTeamStore()
 const todo = useAppraisalTodoStore()
 const firstRun = computed(() => isFirstRun(team.rows))
 const queue = computed(() => teamQueue(todo.items))
-// On a first visit nobody has goals, so the largest "add goals" count is the org's floor.
-const floor = computed(() => Math.max(1, ...todo.items.filter(i => i.kind === 'set_goals').map(i => i.count ?? 0)))
 const subtitle = computed(() => {
   const first = team.rows[0]
-  return first ? `${first.cycle_name} · ${team.rows.length} ${team.rows.length === 1 ? 'person' : 'people'}` : ''
+  return first ? `${first.cycle_name} · ${peopleCount(team.rows.length)}` : ''
 })
 // The next month whose check-ins haven't arrived yet, and when they're due.
 const comingUp = computed(() => {

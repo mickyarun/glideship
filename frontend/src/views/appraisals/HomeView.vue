@@ -95,9 +95,14 @@ const today = todayIso()
 
 const current = computed(() => reviews.mine.find(r => r.status !== 'withdrawn') ?? null)
 const manager = computed(() => firstName(goals.current?.manager_name, 'your manager'))
-const subtitle = computed(() =>
-  current.value ? `${current.value.cycle_name} · ${longDate(current.value.period_start)} to ${longDate(current.value.period_end)}` : '',
-)
+const subtitle = computed(() => {
+  const c = current.value
+  if (!c) return ''
+  const name = goals.current?.manager_name
+  return [c.cycle_name, `${longDate(c.period_start)} to ${longDate(c.period_end)}`, name ? `Manager: ${name}` : '', 'Only you, your managers and HR see this']
+    .filter(Boolean)
+    .join(' · ')
+})
 const own = computed(() => todo.items.filter(i => i.role === 'own'))
 const doNow = computed(() => own.value[0] ?? null)
 const also = computed(() => own.value.slice(1))

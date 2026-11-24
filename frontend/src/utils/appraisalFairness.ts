@@ -30,6 +30,9 @@ export interface LookItem {
   detail: string
   tag: 'Big difference' | 'Rates high' | 'Concern flagged'
   appraisalId: string | null
+  /** Whose review it is, and whether HR can still send it back to them. */
+  managerName: string
+  canSendBack: boolean
 }
 
 const highOf = (t: CalibrationTeam) => HIGH_BANDS.reduce((n, b) => n + (t.bands[String(b)] ?? 0), 0)
@@ -56,14 +59,14 @@ function gapLine(p: CalibrationPerson): string {
 export function needsALook(cal: Calibration): LookItem[] {
   const out: LookItem[] = cal.people
     .filter(p => p.gap)
-    .map(p => ({ key: `gap-${p.appraisal_id}`, title: `${p.name} · ${p.manager_name}`, detail: gapLine(p), tag: 'Big difference', appraisalId: p.appraisal_id }))
+    .map(p => ({ key: `gap-${p.appraisal_id}`, title: `${p.name} · ${p.manager_name}`, detail: gapLine(p), tag: 'Big difference', appraisalId: p.appraisal_id, managerName: p.manager_name, canSendBack: p.status === 'calibration' }))
   for (const name of ratesHigh(cal)) {
     const team = cal.teams.find(t => t.manager_name === name)
     if (!team) continue
-    out.push({ key: `high-${name}`, title: `${name}'s team · ${team.people} reviews`, detail: `${highOf(team)} of ${team.people} rated "Exceeded" in some form.`, tag: 'Rates high', appraisalId: null })
+    out.push({ key: `high-${name}`, title: `${name}'s team · ${team.people} reviews`, detail: `${highOf(team)} of ${team.people} rated "Exceeded" in some form.`, tag: 'Rates high', appraisalId: null, managerName: name, canSendBack: false })
   }
   for (const p of cal.people.filter(p => p.concern)) {
-    out.push({ key: `concern-${p.appraisal_id}`, title: `${p.name} · ${p.manager_name}`, detail: `${p.manager_name} flagged a performance concern in the HR-only section.`, tag: 'Concern flagged', appraisalId: p.appraisal_id })
+    out.push({ key: `concern-${p.appraisal_id}`, title: `${p.name} · ${p.manager_name}`, detail: `${p.manager_name} flagged a performance concern in the HR-only section.`, tag: 'Concern flagged', appraisalId: p.appraisal_id, managerName: p.manager_name, canSendBack: p.status === 'calibration' })
   }
   return out
 }

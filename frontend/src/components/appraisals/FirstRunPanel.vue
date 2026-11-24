@@ -19,19 +19,22 @@
 <template>
   <div class="first">
     <section class="first__main">
+      <h2 class="first__title">Your first cycle as a manager</h2>
+      <p class="first__muted">You have {{ peopleCount(rows.length) }} this period. Here's everything you'll be asked to do, in order. You only ever see what's due now.</p>
       <ol class="first__plan" aria-label="What you'll be asked to do">
-        <li class="first__step first__step--now"><strong>1 · Agree goals</strong> <span>Now</span><p>{{ floor }} or more per person. About 10 minutes each.</p></li>
+        <li class="first__step first__step--now"><strong>1 · Agree goals</strong> <span>Now</span><p>{{ range }} per person. About 10 minutes each.</p></li>
         <li class="first__step"><strong>2 · Reply to check-ins</strong><p>Once a month, a few lines per person.</p></li>
         <li class="first__step"><strong>3 · Review</strong><p>When HR opens reviews: agree or change what each person wrote.</p></li>
       </ol>
-      <DoNowCard :title="`Set goals for your ${rows.length} ${rows.length === 1 ? 'person' : 'people'}`" :body="`0 of ${rows.length} done. They can suggest goals too, so you can wait for theirs or start now.`" />
+      <DoNowCard :title="`Set goals for your ${peopleCount(rows.length)}`" :body="`0 of ${rows.length} done. They can suggest goals too, so you can wait for theirs or start now.`" />
       <AppPanel title="Your people" flush>
         <ul class="first__people">
           <li v-for="row in rows" :key="row.id" class="first__person">
             <span class="first__name">{{ row.person_name }}</span>
             <span class="first__muted">{{ row.goals_accepted }} goals · {{ row.goals_proposed ? `suggested ${row.goals_proposed}` : 'nothing suggested yet' }}</span>
+            <span v-if="row.goals_proposed" class="first__badge">{{ row.goals_proposed }} to look at</span>
             <v-btn size="small" :variant="row.goals_proposed ? 'flat' : 'outlined'" :color="row.goals_proposed ? 'primary' : undefined" :to="{ name: 'appraisal-goals', params: { id: row.id } }">
-              Set goals for {{ row.person_name }}
+              Set goals<span class="d-sr-only"> for {{ row.person_name }}</span>
             </v-btn>
           </li>
         </ul>
@@ -49,11 +52,18 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import DoNowCard from '@/components/appraisals/DoNowCard.vue'
 import type { TeamRow } from '@/types/appraisalTeam'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
-defineProps<{ rows: TeamRow[]; floor: number }>()
+const props = defineProps<{ rows: TeamRow[] }>()
+const range = computed(() => {
+  const row = props.rows[0]
+  if (!row) return ''
+  return row.min_goals === row.max_goals ? `${row.min_goals}` : `${row.min_goals} to ${row.max_goals}`
+})
 </script>
 
 <style scoped>
@@ -108,6 +118,18 @@ defineProps<{ rows: TeamRow[]; floor: number }>()
   gap: 6px 12px;
   padding: 12px 20px;
   border-top: 1px solid rgb(var(--v-theme-rule));
+}
+.first__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.first__badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgb(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
 }
 .first__name {
   font-weight: 600;

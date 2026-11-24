@@ -19,7 +19,7 @@ import type { Calibration } from '@/types/appraisalReview'
 import type { CycleProgress, CycleRead } from '@/types/appraisalSetup'
 import type { TeamRow } from '@/types/appraisalTeam'
 import type { TodoItem } from '@/types/appraisalTodo'
-import { cycleDoNow, managerRows, tiles } from '@/utils/appraisalCyclePage'
+import { cycleDoNow, lastCheckInsWords, managerRows, remindWords, tiles } from '@/utils/appraisalCyclePage'
 import { needsALook, ratesHigh, spread, teamStatus } from '@/utils/appraisalFairness'
 import { goalMeter } from '@/utils/appraisalGoals'
 import { periodRows, previousValues, valueTrail } from '@/utils/appraisalHome'
@@ -85,7 +85,7 @@ describe('team page', () => {
     id: 'a1', user_id: 'u1', profile_id: 'p1', cycle_id: 'c1', person_name: 'Priya', cycle_name: 'Q4', period_start: '2026-10-01',
     period_end: '2026-12-31', status: 'enrolled', goals_accepted: 0, goals_proposed: 0,
     months: [{ period_start: '2026-10-01', period_end: '2026-10-31', check_in_id: null, state: 'not_open', due_on: null }],
-    notes: [], ...over,
+    notes: [], min_goals: 3, max_goals: 6, ...over,
   })
 
   it('orders the queue oldest first with waiting last, and says where each person is', () => {
@@ -96,9 +96,11 @@ describe('team page', () => {
       item({ due_on: '2026-11-11', target_id: 'a' }),
     ])
     expect(queue.map(i => i.target_id)).toEqual(['a', 'b', 'c', 'w'])
-    expect(standing(row({}), queue)).toBe('Waiting on you')
-    expect(standing(row({ person_name: 'Meena' }), queue)).toBe('Needs goals')
-    expect(standing(row({ person_name: 'Sam' }), queue)).toBe('Up to date')
+    const note = { id: 'a', period_start: '2026-10-01', period_end: '2026-10-31', sent: false, due_on: '2026-11-11', late: true }
+    expect(standing(row({ notes: [note] }), queue)).toBe('Waiting on you')
+    expect(standing(row({ id: 'c', person_name: 'Meena' }), queue)).toBe('Needs goals')
+    // Same name, another person: nothing of theirs is on the list.
+    expect(standing(row({ id: 's', person_name: 'Meena' }), queue)).toBe('Up to date')
   })
 
   it('is a first visit only while nobody has goals and no month has opened', () => {
@@ -136,8 +138,28 @@ describe('cycle page', () => {
     const cycle = { status: 'active', period_end: '2026-12-31' } as CycleRead
     expect(cycleDoNow(cycle, progress, '2026-11-24')).toBe('remind')
     expect(cycleDoNow(cycle, { ...progress, remind_count: 0 }, '2026-11-24')).toBe('quiet')
-    expect(cycleDoNow(cycle, progress, '2027-01-04')).toBe('open_reviews')
     expect(cycleDoNow({ ...cycle, status: 'reviewing' }, progress, '2027-01-14')).toBe('fairness')
+  })
+
+  it('waits for the last check-ins before asking HR to open reviews', () => {
+    const cycle = { status: 'active', period_end: '2026-11-30' } as CycleRead
+    const quiet = { ...progress, remind_count: 0 }
+    expect(cycleDoNow(cycle, quiet, '2026-12-01')).toBe('last_check_ins')
+    expect(lastCheckInsWords(quiet, '2026-12-01').body).toBe('November check-ins open once the month closes. Open the reviews after that: opening locks goals.')
+    const due = { ...quiet, check_in_periods: [progress.check_in_periods[0], { ...progress.check_in_periods[1], due_on: '2026-12-07' }] }
+    expect(cycleDoNow(cycle, due, '2026-12-07')).toBe('last_check_ins')
+    expect(cycleDoNow(cycle, due, '2026-12-08')).toBe('open_reviews')
+    const allIn = { ...quiet, check_in_periods: [progress.check_in_periods[0], { ...progress.check_in_periods[1], sent: 2 }] }
+    expect(cycleDoNow(cycle, allIn, '2026-12-01')).toBe('open_reviews')
+  })
+
+  it('says who is late, and the next due date to beat', () => {
+    const late = { ...progress, managers_overdue: [{ name: 'Ravi', overdue: 1 }],
+      check_in_periods: [progress.check_in_periods[0], { ...progress.check_in_periods[1], due_on: '2026-12-07' }] }
+    expect(remindWords(late, '2026-11-24')).toEqual({
+      title: '1 person and 1 manager are late',
+      body: '1 check-in not sent and 0 manager notes overdue. Slack already sent each of them a reminder. Best done before November check-ins are due on Mon 7 Dec 2026.',
+    })
   })
 })
 

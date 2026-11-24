@@ -25,7 +25,7 @@
       <AppraisalGuide />
     </template>
     <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
-    <AppCallout v-if="message" :variant="message.startsWith('Couldn') ? 'error' : 'success'">{{ message }}</AppCallout>
+    <AppCallout v-if="outcome" :variant="outcome.ok ? 'success' : 'error'">{{ outcome.text }}</AppCallout>
     <v-progress-linear v-if="store.loading && !cal" indeterminate color="primary" />
     <template v-if="cal && cycle">
       <DoNowCard
@@ -41,12 +41,16 @@
           <li v-for="item in look" :key="item.key" class="fair__item">
             <div class="fair__words"><strong>{{ item.title }}</strong><span class="fair__muted">{{ item.detail }}</span></div>
             <span class="fair__tag">{{ item.tag }}</span>
-            <v-btn v-if="item.appraisalId" size="small" variant="outlined" :to="{ name: 'appraisal-review', params: { id: item.appraisalId } }">Open review</v-btn>
+            <div class="fair__actions">
+              <v-btn v-if="item.appraisalId && item.canSendBack" size="small" variant="text" @click="back = item">Send back to {{ firstName(item.managerName, 'the manager') }}</v-btn>
+              <v-btn v-if="item.appraisalId" size="small" variant="outlined" :to="{ name: 'appraisal-review', params: { id: item.appraisalId } }">Open review</v-btn>
+            </div>
           </li>
         </ul>
       </AppPanel>
       <FairnessTable :calibration="cal" :high="high" />
     </template>
+    <SendBackDialog :open="Boolean(back)" :manager-name="back?.managerName ?? null" :busy="sendingBack" @close="back = null" @send="sendBack" />
   </AppPage>
 </template>
 
@@ -59,17 +63,23 @@ import AppPanel from '@/components/common/AppPanel.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
 import DoNowCard from '@/components/appraisals/DoNowCard.vue'
 import FairnessTable from '@/components/appraisals/FairnessTable.vue'
-import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
-import { needsALook, ratesHigh } from '@/utils/appraisalFairness'
+import SendBackDialog from '@/components/appraisals/SendBackDialog.vue'
+import { useAppraisalReviewStore } from '@/stores/appraisalReview'
+import { type Outcome, useAppraisalSetupStore } from '@/stores/appraisalSetup'
+import { type LookItem, needsALook, ratesHigh } from '@/utils/appraisalFairness'
+import { firstName } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
 const route = useRoute()
 const store = useAppraisalSetupStore()
+const reviews = useAppraisalReviewStore()
 const id = computed(() => String(route.params.id ?? ''))
 const cycle = computed(() => store.cycle)
 const cal = computed(() => store.calibration)
-const message = ref('')
+const outcome = ref<Outcome | null>(null)
 const sharing = ref(false)
+const back = ref<LookItem | null>(null)
+const sendingBack = ref(false)
 const look = computed(() => (cal.value ? needsALook(cal.value) : []))
 const high = computed(() => (cal.value ? ratesHigh(cal.value) : new Set<string>()))
 const ready = computed(() => cal.value?.people.filter(p => p.status === 'calibration').length ?? 0)
@@ -80,16 +90,27 @@ const shareBody = computed(() => {
   return `Share once each manager has had the 1:1.${due}${still}`
 })
 
+async function sendBack(note: string): Promise<void> {
+  const item = back.value
+  if (!item?.appraisalId) return
+  sendingBack.value = true
+  const problem = await reviews.sendBack(item.appraisalId, note)
+  sendingBack.value = false
+  outcome.value = problem ? { ok: false, text: problem } : { ok: true, text: `Sent back to ${item.managerName}.` }
+  back.value = null
+  if (!problem) await store.fetchCycle(id.value)
+}
+
 async function share(): Promise<void> {
   sharing.value = true
-  message.value = await store.shareAll(id.value)
+  outcome.value = await store.shareAll(id.value)
   sharing.value = false
 }
 
 watch(
   id,
   value => {
-    message.value = ''
+    outcome.value = null
     if (value) void store.fetchCycle(value)
   },
   { immediate: true },
@@ -101,6 +122,10 @@ watch(
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.fair__actions {
+  display: flex;
+  gap: 8px;
 }
 .fair__item {
   display: flex;

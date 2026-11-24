@@ -79,7 +79,7 @@ import CycleReadiness from '@/components/appraisals/CycleReadiness.vue'
 import CycleRunning from '@/components/appraisals/CycleRunning.vue'
 import CycleSetupForm from '@/components/appraisals/CycleSetupForm.vue'
 import FormStep from '@/components/appraisals/FormStep.vue'
-import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
+import { type Outcome, useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import type { CycleUpdate } from '@/types/appraisalSetup'
 import { CYCLE_STATUS, longDate } from '@/utils/appraisalSetup'
 
@@ -109,12 +109,12 @@ async function remind(): Promise<void> {
   if (cycle.value) await count('remind', store.remind(cycle.value.id))
 }
 
-async function count(kind: 'suggest' | 'review' | 'remind', action: Promise<string>): Promise<void> {
+async function count(kind: 'suggest' | 'review' | 'remind', action: Promise<Outcome>): Promise<void> {
   busy.value = kind
-  const text = await action
+  const { ok, text } = await action
   busy.value = null
   message.value = text
-  messageKind.value = text.startsWith("Couldn't") ? 'error' : 'success'
+  messageKind.value = ok ? 'success' : 'error'
 }
 
 async function save(form: CycleUpdate): Promise<void> {

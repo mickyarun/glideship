@@ -39,4 +39,7 @@ export interface NoteState {
 export interface TeamRow extends AppraisalSummary {
   months: MonthState[]
   notes: NoteState[]
+  /** The org's goal range per person. */
+  min_goals: number
+  max_goals: number
 }

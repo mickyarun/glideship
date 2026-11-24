@@ -30,9 +30,15 @@ export function teamQueue(items: TodoItem[]): TodoItem[] {
 
 export type Standing = 'Waiting on you' | 'Needs goals' | 'Up to date'
 
+/** A manager's to-do items about this person: by the appraisal, note or check-in they open, never by name. */
+export function itemsFor(row: TeamRow, items: TodoItem[]): TodoItem[] {
+  const ids = new Set([row.id, ...row.notes.map(n => n.id), ...row.months.flatMap(m => (m.check_in_id ? [m.check_in_id] : []))])
+  return items.filter(i => i.role === 'team' && ids.has(i.target_id) && actionable(i))
+}
+
 /** One person's line in the "Everyone" table, from what is on the manager's to-do. */
 export function standing(row: TeamRow, items: TodoItem[]): Standing {
-  const theirs = items.filter(i => i.role === 'team' && i.person_name === row.person_name && actionable(i))
+  const theirs = itemsFor(row, items)
   if (theirs.some(i => i.kind === 'set_goals')) return 'Needs goals'
   return theirs.length ? 'Waiting on you' : 'Up to date'
 }

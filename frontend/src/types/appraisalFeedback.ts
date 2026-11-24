@@ -61,7 +61,8 @@ export interface FeedbackRead {
 export interface FeedbackBody {
   keep: string
   try_next: string
-  goals: { goal_id: string; status: GoalCheck; note: string }[]
+  /** Null keeps the goal statuses already saved. */
+  goals: { goal_id: string; status: GoalCheck; note: string }[] | null
 }
 
 /** A sent note about the caller, for their home page. */

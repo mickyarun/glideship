@@ -20,14 +20,13 @@
  * check-in opens, so a save coming back never wipes what is being typed.
  */
 
-import { onBeforeUnmount, reactive, ref, watch, type Ref } from 'vue'
+import { reactive, watch, type Ref } from 'vue'
 
+import { useAutosave } from '@/composables/useAutosave'
 import { useCheckInsStore } from '@/stores/checkIns'
 import type { CheckInNote, CheckInRead } from '@/types/appraisal'
 
-const DELAY_MS = 800
-
-export type SaveState = 'saved' | 'saving' | 'unsaved' | 'failed'
+export type { SaveState } from '@/composables/useAutosave'
 
 function copy(note: CheckInNote): CheckInNote {
   return {
@@ -42,53 +41,20 @@ function copy(note: CheckInNote): CheckInNote {
 export function useCheckInDraft(checkIn: Ref<CheckInRead | null>) {
   const store = useCheckInsStore()
   const draft = reactive<CheckInNote>({ lines: {}, went_well: '', item_notes: {}, blocking: '', next_month: '' })
-  const state = ref<SaveState>('saved')
-  const problem = ref('')
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let loading = false
+  const { state, problem, reset, flush } = useAutosave(
+    () => JSON.stringify(draft),
+    async () => (checkIn.value ? store.saveNote(checkIn.value.id, copy(draft)) : null),
+    () => Boolean(checkIn.value?.can_edit),
+  )
 
   watch(
     () => checkIn.value?.id,
     () => {
-      clearTimeout(timer)
-      loading = true
       Object.assign(draft, copy(checkIn.value?.note ?? draft))
-      state.value = 'saved'
-      loading = false
+      reset()
     },
     { immediate: true },
   )
-
-  async function save(): Promise<void> {
-    const id = checkIn.value?.id
-    if (!id) return
-    state.value = 'saving'
-    problem.value = (await store.saveNote(id, copy(draft))) ?? ''
-    state.value = problem.value ? 'failed' : 'saved'
-  }
-
-  watch(
-    draft,
-    () => {
-      if (loading || !checkIn.value?.can_edit) return
-      state.value = 'unsaved'
-      clearTimeout(timer)
-      timer = setTimeout(() => void save(), DELAY_MS)
-    },
-    { deep: true },
-  )
-
-  /** Save now, before sending; whether it saved. */
-  async function flush(): Promise<boolean> {
-    clearTimeout(timer)
-    if (state.value === 'unsaved' || state.value === 'failed') await save()
-    return state.value === 'saved'
-  }
-
-  onBeforeUnmount(() => {
-    if (state.value === 'unsaved') void save()
-    clearTimeout(timer)
-  })
 
   return { draft, state, problem, flush }
 }

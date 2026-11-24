@@ -19,6 +19,7 @@
      Short is fine; notes don't set a rating. -->
 <template>
   <AppPage :title="item ? `Your notes for ${who}` : 'Notes'" :subtitle="subtitle">
+    <template v-if="item" #eyebrow><p class="notes__eyebrow">{{ item.person_name }} · {{ period }} check-in</p></template>
     <template #actions><AppraisalGuide /></template>
     <AppCallout v-if="store.error || problem" variant="error">{{ problem || store.error }}</AppCallout>
     <AppCallout v-if="message" variant="success">{{ message }}</AppCallout>
@@ -26,13 +27,13 @@
     <div v-if="item" class="notes">
       <NotesCheckInSummary v-if="checkIns.current" :check-in="checkIns.current" />
       <p v-else class="notes__muted">No check-in for this period.</p>
-      <AppPanel title="Your notes" :note="item.content_hidden ? '' : 'Short is fine. These don\'t set a rating; they help them steer.'">
+      <AppPanel title="Your notes" :note="item.content_hidden ? '' : 'About 5 minutes. Short is fine. These don\'t set a rating; they help them steer.'">
         <p v-if="item.content_hidden" class="notes__muted">Not sent yet. You'll read it once {{ item.manager_name || 'the manager' }} sends it.</p>
         <template v-else>
           <v-textarea v-model="keep" label="Keep doing" rows="3" auto-grow maxlength="500" :readonly="!item.can_edit" />
           <v-textarea v-model="tryNext" label="Try next" rows="3" auto-grow maxlength="500" :readonly="!item.can_edit" />
           <div v-if="item.can_edit" class="notes__foot">
-            <span class="notes__muted">{{ saving ? 'Saving…' : 'Saved as you type' }}</span>
+            <span class="notes__muted">{{ SAVE_WORDS[state] }}</span>
             <v-btn color="primary" :disabled="Boolean(item.sent_at) || !keep.trim() || !tryNext.trim()" :loading="sending" @click="send">
               {{ item.sent_at ? 'Sent' : `Send to ${who}` }}
             </v-btn>
@@ -44,19 +45,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
 import NotesCheckInSummary from '@/components/appraisals/NotesCheckInSummary.vue'
+import { SAVE_WORDS, useAutosave } from '@/composables/useAutosave'
 import { useCheckInsStore } from '@/stores/checkIns'
 import { useManagerFeedbackStore } from '@/stores/managerFeedback'
+import { feedbackPeriod } from '@/utils/appraisalFeedback'
 import { firstName } from '@/utils/appraisalReview'
 import { dueLine, todayIso } from '@/utils/appraisalTodoWords'
 
-const DELAY_MS = 800
 
 const route = useRoute()
 const store = useManagerFeedbackStore()
@@ -64,14 +66,18 @@ const checkIns = useCheckInsStore()
 const item = computed(() => store.current)
 const keep = ref('')
 const tryNext = ref('')
-const saving = ref(false)
 const sending = ref(false)
-const problem = ref('')
 const message = ref('')
-let timer: ReturnType<typeof setTimeout> | undefined
-let loading = false
+
+const { state, problem, reset, flush } = useAutosave(
+  () => JSON.stringify([keep.value.trim(), tryNext.value.trim()]),
+  // Goals left out (null) so a save keeps any goal statuses already stored.
+  async () => (item.value ? store.save(item.value.id, { keep: keep.value.trim(), try_next: tryNext.value.trim(), goals: null }) : null),
+  () => Boolean(item.value?.can_edit),
+)
 
 const who = computed(() => firstName(item.value?.person_name, 'them'))
+const period = computed(() => (item.value ? feedbackPeriod(item.value.period_start, item.value.cadence) : ''))
 const subtitle = computed(() => {
   const n = item.value
   if (!n) return ''
@@ -79,26 +85,9 @@ const subtitle = computed(() => {
   return `${due} · ${who.value} sees these when you send them · HR can read them`
 })
 
-async function save(): Promise<boolean> {
-  const n = item.value
-  if (!n?.can_edit) return true
-  saving.value = true
-  problem.value = (await store.save(n.id, { keep: keep.value.trim(), try_next: tryNext.value.trim(), goals: [] })) ?? ''
-  saving.value = false
-  return !problem.value
-}
-
-watch([keep, tryNext], () => {
-  if (loading) return
-  clearTimeout(timer)
-  timer = setTimeout(() => void save(), DELAY_MS)
-})
-
 async function send(): Promise<void> {
   const n = item.value
-  if (!n) return
-  clearTimeout(timer)
-  if (!(await save())) return
+  if (!n || !(await flush())) return
   sending.value = true
   problem.value = (await store.send(n.id)) ?? ''
   sending.value = false
@@ -110,18 +99,17 @@ watch(
   async id => {
     message.value = ''
     if (typeof id !== 'string') return
+    await flush()
     await store.fetchOne(id)
-    loading = true
     keep.value = store.current?.keep ?? ''
     tryNext.value = store.current?.try_next ?? ''
-    loading = false
+    reset()
     const last = store.current?.check_ins.at(-1)
     if (last) await checkIns.fetchOne(last.id)
     else checkIns.current = null
   },
   { immediate: true },
 )
-onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <style scoped>
@@ -130,6 +118,11 @@ onBeforeUnmount(() => clearTimeout(timer))
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
+}
+.notes__eyebrow {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .notes__foot {
   display: flex;

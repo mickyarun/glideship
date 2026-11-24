@@ -15,8 +15,9 @@
 /** HR's cycle page: the tiles, the by-manager table and the one thing to do (pure). */
 
 import type { CycleProgress, CycleRead, PeriodCount, ProgressRow } from '@/types/appraisalSetup'
-import { monthTitle } from '@/utils/appraisalCheckIn'
+import { localDay, monthTitle } from '@/utils/appraisalCheckIn'
 import { longDate } from '@/utils/appraisalSetup'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 export interface Tile {
   label: string
@@ -83,20 +84,57 @@ export function latestMonthLabel(progress: CycleProgress): string {
   return opened.length ? `${month(opened[opened.length - 1]).slice(0, 3)} check-ins` : 'Check-ins'
 }
 
-export type CycleDoNow = 'remind' | 'open_reviews' | 'fairness' | 'quiet'
+export type CycleDoNow = 'remind' | 'last_check_ins' | 'open_reviews' | 'fairness' | 'quiet'
 
-/** What HR should do now on a running cycle. */
+/** The last period's check-ins while they can still come in: reviews wait for them. */
+export function lastCheckInsDue(progress: CycleProgress, today: string): PeriodCount | null {
+  const last = progress.check_in_periods.at(-1)
+  if (!last || last.sent >= last.total) return null
+  return !last.due_on || last.due_on >= today ? last : null
+}
+
+/** What HR should do now on a running cycle. Opening reviews locks goals, so it waits for the last check-ins. */
 export function cycleDoNow(cycle: CycleRead, progress: CycleProgress, today: string): CycleDoNow {
   if (cycle.status === 'reviewing') return 'fairness'
-  if (cycle.period_end < today) return 'open_reviews'
-  return progress.remind_count > 0 ? 'remind' : 'quiet'
+  const ended = cycle.period_end < today
+  if (ended && !lastCheckInsDue(progress, today)) return 'open_reviews'
+  if (progress.remind_count > 0) return 'remind'
+  return ended ? 'last_check_ins' : 'quiet'
 }
 
 /** People late now: check-ins past due and not sent, and managers with late notes. */
-export function lateCounts(progress: CycleProgress): { checkIns: number; notes: number; managers: number } {
+function lateCounts(progress: CycleProgress): { people: number; checkIns: number; notes: number; managers: number } {
   return {
+    people: progress.people.filter(r => r.check_ins_late > 0).length,
     checkIns: sum(progress.people, r => r.check_ins_late),
     notes: sum(progress.people, r => r.feedback_overdue),
     managers: progress.managers_overdue.length,
+  }
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** "7 people and 2 managers are late", what is late, and the next due date to beat. */
+export function remindWords(progress: CycleProgress, today: string): { title: string; body: string } {
+  const l = lateCounts(progress)
+  const who = [l.people ? peopleCount(l.people) : '', l.managers ? plural(l.managers, 'manager') : ''].filter(Boolean)
+  const n = who.length ? l.people + l.managers : progress.remind_count
+  const title = `${who.length ? who.join(' and ') : peopleCount(n)} ${n === 1 ? 'is' : 'are'} late`
+  const what = `${plural(l.checkIns, 'check-in')} not sent and ${plural(l.notes, 'manager note')} overdue.`
+  const last = progress.reminded_at
+    ? ` You last reminded them ${longDate(localDay(progress.reminded_at))}.`
+    : ' Slack already sent each of them a reminder.'
+  const next = progress.check_in_periods.find(p => p.due_on && p.due_on >= today && p.sent < p.total)
+  const before = next?.due_on ? ` Best done before ${month(next)} check-ins are due on ${longDate(next.due_on)}.` : ''
+  return { title, body: what + last + before }
+}
+
+/** The wait between the period's end and opening reviews. */
+export function lastCheckInsWords(progress: CycleProgress, today: string): { title: string; body: string } {
+  const p = lastCheckInsDue(progress, today)
+  const due = p?.due_on ? `are due ${longDate(p.due_on)}` : 'open once the month closes'
+  return {
+    title: 'Last check-ins first',
+    body: `${p ? month(p) : 'The last'} check-ins ${due}. Open the reviews after that: opening locks goals.`,
   }
 }

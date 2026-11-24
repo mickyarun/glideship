@@ -23,7 +23,7 @@
     <template #actions><AppraisalGuide /></template>
     <AppCallout v-if="store.error || problem" variant="error">{{ problem || store.error }}</AppCallout>
     <v-progress-linear v-if="store.loading && !checkIn" indeterminate color="primary" />
-    <template v-if="checkIn">
+    <template v-if="checkIn && loaded">
       <AppCallout v-if="checkIn.content_hidden" variant="info">
         {{ checkIn.person_name }} hasn't sent this yet. You'll read it once they do.
       </AppCallout>
@@ -59,6 +59,7 @@ import CheckInGoalsStep from '@/components/appraisals/CheckInGoalsStep.vue'
 import CheckInNotesShown from '@/components/appraisals/CheckInNotesShown.vue'
 import CheckInTextStep from '@/components/appraisals/CheckInTextStep.vue'
 import CheckInWorkStep from '@/components/appraisals/CheckInWorkStep.vue'
+import { SAVE_WORDS } from '@/composables/useAutosave'
 import { useCheckInDraft } from '@/composables/useCheckInDraft'
 import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
@@ -69,7 +70,6 @@ import { previousValues } from '@/utils/appraisalHome'
 import { firstName } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
-const SAVE_WORDS = { saved: 'Saved as you type', saving: 'Saving…', unsaved: 'Saving…', failed: "Couldn't save. Keep typing to try again." }
 
 const route = useRoute()
 const store = useCheckInsStore()
@@ -82,6 +82,8 @@ const dismissed = ref(false)
 const sending = ref(false)
 const previous = ref<Record<string, string>>({})
 
+// The store can still hold the last check-in opened while this one loads.
+const loaded = computed(() => checkIn.value?.id === route.params.id)
 const editable = computed(() => Boolean(checkIn.value?.can_edit))
 const isSelf = computed(() => checkIn.value?.user_id === auth.user?.id)
 const month = computed(() => (checkIn.value ? monthTitle(checkIn.value.period_start).split(' ')[0] : ''))
@@ -133,6 +135,7 @@ watch(
   async id => {
     dismissed.value = false
     if (typeof id !== 'string') return
+    await flush()
     await store.fetchOne(id)
     const c = store.current
     if (c?.appraisal_id) previous.value = previousValues(await reviews.fetchGoalValues(c.appraisal_id), c.period_start)
