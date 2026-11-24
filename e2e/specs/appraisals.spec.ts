@@ -85,6 +85,15 @@ test('a manual review from goals to the read result', async ({ signedIn, stack }
 
   const employee = await signedIn(org.members.emp)
   await employee.goto('/appraisals')
+  // The guide opens only when asked, fits the screen without scrolling, and closes.
+  await employee.getByRole('button', { name: 'How appraisals work' }).click()
+  const guide = employee.getByRole('dialog', { name: 'How appraisals work' })
+  await expect(guide.getByText('Each quarter')).toBeVisible()
+  const box = await guide.boundingBox()
+  expect(box && box.height).toBeLessThanOrEqual(employee.viewportSize()!.height)
+  expect(await guide.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
+  await guide.getByRole('button', { name: 'Got it' }).click()
+  await expect(guide).toBeHidden()
   await employee.getByRole('link', { name: 'Start check-in' }).first().click()
   await employee.getByLabel('Where it stands: Ship refunds').fill('Refunds live for card payments')
   await employee.getByLabel('Anything we missed?').fill('Ran the daily suite; caught 3 regressions')
