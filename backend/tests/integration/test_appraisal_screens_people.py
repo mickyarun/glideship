@@ -117,8 +117,8 @@ async def test_hr_reminds_exactly_the_people_the_page_counts(
     meena = next(p for p in progress["people"] if p["name"] == "Meena")
     assert meena["check_ins_late"] == 0 and meena["feedback_overdue"] == 0 and meena["quiet"]
     priya = next(p for p in progress["people"] if p["name"] == "Priya")
-    # Priya's check-in is sent, so her note has a due date; she is still here.
-    assert priya["feedback_due"] == 1 and not priya["quiet"]
+    # Priya's check-in is sent, so her note has a due date and is still open.
+    assert priya["feedback_due_open"] == 1 and not priya["quiet"]
     # Only Ravi is late: his note on Priya's sent check-in. Meena has left.
     assert progress["remind_count"] == 1
     sent = (await client.post(f"{BASE}/cycles/{cycle}/remind", headers=hr)).json()
@@ -153,3 +153,25 @@ async def test_hr_reminds_only_a_running_cycle_and_only_when_someone_is_late(
     await client.post(f"{BASE}/cycles/{cycle}/close", headers=hr)
     closed = await client.post(f"{BASE}/cycles/{cycle}/remind", headers=hr)
     assert closed.status_code == 409
+
+
+async def test_a_note_sent_early_isnt_counted_as_a_due_note_done(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    mgr, hr = as_user(m.people["mgr"], m.org), as_user(m.people["hr"], m.org)
+    await send_check_in(client, m, "emp")
+    # Ravi sends his note on Meena before her check-in: it has no due date.
+    items = (await client.get("/api/v1/manager-feedback/team", headers=mgr)).json()
+    early = next(i for i in items if i["person_name"] == "Meena")
+    note = {"keep": "Clear PRs", "try_next": "Pair on UAT"}
+    await client.put(f"/api/v1/manager-feedback/{early['id']}", json=note, headers=mgr)
+    sent = await client.post(f"/api/v1/manager-feedback/{early['id']}/send", headers=mgr)
+    assert sent.status_code == 200, sent.text
+    progress = (
+        await client.get(f"{BASE}/cycles/{await cycle_id(client, m)}/progress", headers=hr)
+    ).json()
+    rows = {p["name"]: p for p in progress["people"]}
+    # Priya's note is due and open; Meena's early note is done but was never due.
+    assert rows["Priya"]["feedback_due_open"] == 1 and rows["Priya"]["feedback_done"] == 0
+    assert rows["Meena"]["feedback_due_open"] == 0 and rows["Meena"]["feedback_done"] == 1

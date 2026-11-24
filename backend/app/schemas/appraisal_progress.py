@@ -43,9 +43,10 @@ class ProgressRow(BaseModel):
     feedback: int
     feedback_done: int
     feedback_overdue: int
-    # Notes with a due date so far: their check-in is sent. A note still
-    # waiting on its check-in isn't due yet.
-    feedback_due: int = 0
+    # Notes due and still open: they have a due date (their check-in is sent)
+    # and aren't done. A note waiting on its check-in, or one sent early
+    # with no date, isn't counted.
+    feedback_due_open: int = 0
     # Withdrawn, or past their leaving date: nothing of theirs is chased.
     quiet: bool = False
 

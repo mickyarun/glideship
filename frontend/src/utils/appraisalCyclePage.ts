@@ -62,17 +62,20 @@ export interface ManagerRow {
   status: string
 }
 
-/** "All done" only when every goal, check-in and note so far is in; "N late"; otherwise "On track".
+/** "All done" only when every goal, check-in and note so far is in; "N late"; otherwise "On track";
+a dash when nobody on the manager's list is active.
+
 
 People no longer chased (withdrawn or gone) don't count. A missed check-in has
-closed and can't be sent, so it doesn't hold "All done" back; a note waiting on
-a check-in that isn't sent isn't due yet. */
+closed and can't be sent, so it doesn't hold "All done" back; a note is in once
+no due note is still open (one waiting on its check-in, or sent early, isn't due). */
 function rowStatus(rows: ProgressRow[], minGoals: number, late: number): string {
   if (late) return `${late} late`
   const live = rows.filter(r => !r.quiet)
+  if (!live.length) return '–'
   const goals = live.every(r => r.goals_accepted >= minGoals)
   const checkIns = live.every(r => r.months.every(m => m === 'sent' || m === 'missed' || m === 'not_open'))
-  const notes = live.every(r => r.feedback_done >= r.feedback_due)
+  const notes = live.every(r => r.feedback_due_open === 0)
   return goals && checkIns && notes ? 'All done' : 'On track'
 }
 
