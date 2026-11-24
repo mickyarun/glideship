@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CheckInSummary } from '@/types/appraisal'
 import type { CycleRead } from '@/types/appraisalSetup'
-import type { CycleProgress } from '@/types/appraisalProgress'
+import type { CycleProgress, ProgressRow } from '@/types/appraisalProgress'
 import type { TeamRow } from '@/types/appraisalTeam'
 import type { TodoItem } from '@/types/appraisalTodo'
 import { cycleDoNow, lastCheckInsWords, managerRows, remindWords, tiles } from '@/utils/appraisalCyclePage'
@@ -135,7 +135,19 @@ describe('cycle page', () => {
     ])
     expect(tiles(progress, '2026-10-08', '2026-10-02')[0].label).toBe('Goals confirmed · due Thu 8 Oct 2026')
     // Meena's late check-in and her late goals.
-    expect(managerRows(progress)).toEqual([{ key: 'm1', name: 'Ravi', people: 2, goals: 1, checkIns: '1/2', notes: '1/2', late: 2 }])
+    expect(managerRows(progress)).toEqual([{ key: 'm1', name: 'Ravi', people: 2, goals: 1, checkIns: '1/2', notes: '1/2', late: 2, status: '2 late' }])
+  })
+
+  it("says a manager is all done only when everything so far is in", () => {
+    const row = (over: Partial<ProgressRow>): ProgressRow => ({ ...progress.people[0], ...over })
+    const of = (people: ProgressRow[]) => managerRows({ ...progress, people })[0].status
+    // Goals, every opened check-in and every note in.
+    expect(of([row({})])).toBe('All done')
+    // Nothing late, but nothing in yet either: goals short, a check-in not sent, a note to write.
+    const none = row({ goals_accepted: 0, months: ['open', 'not_open'], feedback_done: 0, feedback: 1 })
+    expect(of([none])).toBe('On track')
+    expect(of([row({ goals_accepted: 1 })])).toBe('On track')
+    expect(of([row({ check_ins_late: 1, months: ['late', 'not_open'] })])).toBe('1 late')
   })
 
   it('asks HR to remind, open reviews or check fairness, by where the cycle is', () => {

@@ -47,7 +47,7 @@
               <td>{{ row.goals }}/{{ row.people }}</td>
               <td>{{ row.checkIns }}</td>
               <td>{{ row.notes }}</td>
-              <td :class="{ 'running__late': row.late }">{{ row.late ? `${row.late} late` : 'All done' }}</td>
+              <td :class="{ 'running__late': row.late }">{{ row.status }}</td>
             </tr>
             <tr v-if="noManager"><td>No manager</td><td>{{ noManager }}</td><td>–</td><td>–</td><td>–</td><td class="running__late">Needs a manager</td></tr>
           </tbody>

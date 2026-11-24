@@ -58,6 +58,17 @@ export interface ManagerRow {
   checkIns: string
   notes: string
   late: number
+  /** "All done", "N late", or "On track" while work is still to come. */
+  status: string
+}
+
+/** "All done" only when every goal, check-in and note so far is in; "N late"; otherwise "On track". */
+function rowStatus(rows: ProgressRow[], minGoals: number, late: number): string {
+  if (late) return `${late} late`
+  const goals = rows.every(r => r.goals_accepted >= minGoals)
+  const checkIns = rows.every(r => r.months.every(m => m === 'sent' || m === 'not_open'))
+  const notes = rows.every(r => r.feedback_done === r.feedback)
+  return goals && checkIns && notes ? 'All done' : 'On track'
 }
 
 /** One row per manager: how their people are doing, and how many are late. */
@@ -70,15 +81,19 @@ export function managerRows(progress: CycleProgress): ManagerRow[] {
   // The latest month that has opened for anyone.
   const latest = Math.max(-1, ...progress.people.flatMap(p => p.months.map((m, i) => (m === 'not_open' ? -1 : i))))
   return [...groups.entries()]
-    .map(([key, rows]) => ({
-      key,
-      name: rows[0].manager_name || 'No manager',
-      people: rows.length,
-      goals: rows.filter(r => r.goals_accepted >= progress.min_goals).length,
-      checkIns: latest < 0 ? '–' : `${rows.filter(r => r.months[latest] === 'sent').length}/${rows.length}`,
-      notes: rows.some(r => r.feedback) ? `${sum(rows, r => r.feedback_done)}/${sum(rows, r => r.feedback)}` : '–',
-      late: sum(rows, r => r.check_ins_late + r.feedback_overdue + Number(r.goals_late)),
-    }))
+    .map(([key, rows]) => {
+      const late = sum(rows, r => r.check_ins_late + r.feedback_overdue + Number(r.goals_late))
+      return {
+        key,
+        name: rows[0].manager_name || 'No manager',
+        people: rows.length,
+        goals: rows.filter(r => r.goals_accepted >= progress.min_goals).length,
+        checkIns: latest < 0 ? '–' : `${rows.filter(r => r.months[latest] === 'sent').length}/${rows.length}`,
+        notes: rows.some(r => r.feedback) ? `${sum(rows, r => r.feedback_done)}/${sum(rows, r => r.feedback)}` : '–',
+        late,
+        status: rowStatus(rows, progress.min_goals, late),
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
