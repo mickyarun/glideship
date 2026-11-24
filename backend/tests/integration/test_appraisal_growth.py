@@ -48,7 +48,11 @@ async def test_the_growth_conversation_and_next_periods_goals(
     goals = [{"goal_id": g["id"], "result": "achieved"} for g in review["goals"]]
     await client.put(f"{url}/self", json={"band": 3, "goals": goals}, headers=emp)
     await client.post(f"{url}/self/submit", headers=emp)
-    agree = {"agree": True, "goals": [{"goal_id": g["goal_id"], "agree": True} for g in goals]}
+    agree = {
+        "agree": True,
+        "reason": "A steady quarter",
+        "goals": [{"goal_id": g["goal_id"], "agree": True} for g in goals],
+    }
     await client.post(f"{url}/manager/submit", json=agree, headers=mgr)
     await client.post(f"{url}/share", headers=hr)
 

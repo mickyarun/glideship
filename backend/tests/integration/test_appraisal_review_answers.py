@@ -67,3 +67,29 @@ async def test_the_answers_are_optional(
     await client.put(f"{url}/self", json={"band": 3, "goals": goals}, headers=emp)
     assert (await client.post(f"{url}/self/submit", headers=emp)).status_code == 200
     assert (await client.get(url, headers=emp)).json()["self_score"]["proud"] == ""
+
+
+async def test_the_managers_words_are_always_written_and_read_in_the_result(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m, ids, _ = await started(client, pg_session_factory)
+    emp, mgr = as_user(m.people["emp"], m.org), as_user(m.people["mgr"], m.org)
+    url = f"{BASE}/{ids['Priya']}"
+    goals = [
+        {"goal_id": g["id"], "result": "achieved"}
+        for g in (await client.get(url, headers=emp)).json()["goals"]
+    ]
+    await client.put(f"{url}/self", json={"band": 3, "goals": goals}, headers=emp)
+    await client.post(f"{url}/self/submit", headers=emp)
+    agreed = {"agree": True, "goals": [{"goal_id": g["goal_id"], "agree": True} for g in goals]}
+    refused = await client.post(f"{url}/manager/submit", json=agreed, headers=mgr)
+    assert refused.status_code == 422 and "words" in refused.json()["detail"]
+    words = {**agreed, "reason": "Two goals landed early"}
+    saved = await client.put(f"{url}/manager", json=words, headers=mgr)
+    assert saved.json()["manager_score"]["reason"] == "Two goals landed early"
+    assert (await client.post(f"{url}/manager/submit", json=words, headers=mgr)).status_code == 200
+    assert (
+        await client.post(f"{url}/share", headers=as_user(m.people["hr"], m.org))
+    ).status_code == 200
+    result = (await client.get(url, headers=emp)).json()["manager_score"]
+    assert result["reason"] == "Two goals landed early" and result["final_band"] == 3

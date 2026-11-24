@@ -343,7 +343,7 @@ async def test_review_steps_are_announced_once_each(
     await client.post(f"/api/v1/appraisals/{mine}/self/submit", headers=emp)
     waiting = await _sent(slack, org, at(11))
     assert waiting[ids["mgr"]].startswith("Q4 2026: 1 review is ready for you. Due Thu 14 Jan.")
-    body = {"agree": True, "goals": []}
+    body = {"agree": True, "reason": "A steady quarter", "goals": []}
     await client.post(f"/api/v1/appraisals/{mine}/manager/submit", json=body, headers=mgr)
     await client.post(f"/api/v1/appraisals/{mine}/share", headers=hr)
     result = await _sent(slack, org, at(12))

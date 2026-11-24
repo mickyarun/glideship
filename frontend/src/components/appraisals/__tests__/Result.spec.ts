@@ -79,8 +79,6 @@ describe('shared result', () => {
     const changed = { ...shared, manager_score: { ...shared.manager_score!, final_band: 3, reason: 'Steady' } }
     expect(overallLine(changed, false)).toBe('Priya picked "Exceeded most times". Ravi changed it.')
     expect(overallLine({ ...shared, self_score: null }, true)).toContain('no self-review')
-    const noted = { ...shared, manager_score: { ...shared.manager_score!, reason: 'Fair call' } }
-    expect(overallLine(noted, true)).toBe('You picked the same. Ravi kept it, with a note.')
     expect(periodWord('quarterly')).toBe('quarter')
     expect(periodWord('yearly')).toBe('year')
   })

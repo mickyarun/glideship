@@ -15,9 +15,9 @@
  -->
 
 <!-- The overall rating in the manager's review: the person's rating and
-     reason on the left, Agree or Change on the right. Changing opens the
-     same five-word scale, a reason they read, and examples when the new
-     rating needs them. -->
+     reason, then Agree or Change. Changing opens the same five-word scale
+     and examples when the new rating needs them. The manager's words to
+     the person are always written; they are the reason for a change too. -->
 <template>
   <div class="mgr-overall">
     <div>
@@ -32,10 +32,18 @@
     />
     <template v-if="!form.agree">
       <BandScale v-model="form.band" label="Your overall rating" show-legend />
-      <v-textarea v-model="form.reason" :label="`Your words for ${who} (they read this)`" rows="2" auto-grow maxlength="600" hide-details="auto" />
       <EvidencePicker v-model="form.evidence" :options="options" label="Examples" />
       <p class="mgr-overall__muted">{{ needLine }}</p>
     </template>
+    <v-textarea
+      v-model="form.reason"
+      :label="`Your words for ${who}`"
+      :hint="form.agree ? `${who} reads this in the result.` : `${who} reads this in the result. Say why you changed the rating.`"
+      persistent-hint
+      rows="3"
+      auto-grow
+      maxlength="600"
+    />
   </div>
 </template>
 

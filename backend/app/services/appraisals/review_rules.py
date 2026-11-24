@@ -21,7 +21,8 @@ or changes a value with a reason the employee will read; moving to band
 self-score, the manager scores from scratch under the same rules and
 says why. The final value is the employee's when the manager agrees,
 the manager's when they change it. A self-score saved but never
-submitted counts as no self-score at all.
+submitted counts as no self-score at all. Whatever the call, the manager
+writes their words to the person, which the person reads in the result.
 """
 
 from dataclasses import dataclass
@@ -97,6 +98,15 @@ def band_problem(self_band: int | None, decision: BandDecision) -> str | None:
     if band == LOW_BAND and decision.evidence < 1:
         return "The rating you picked needs at least one example."
     return None
+
+
+def words_problem(words: str) -> str | None:
+    """Why the manager's words to the person can't be sent, or None.
+
+    The words are always written, agreeing or not: the person reads them in
+    the result. When the rating changes they are also the reason for it.
+    """
+    return None if words.strip() else "Write your words for them; they'll read them."
 
 
 def final_band(self_band: int | None, decision: BandDecision) -> int | None:

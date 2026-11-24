@@ -78,7 +78,7 @@ export function overallLine(review: AppraisalRead, isSelf: boolean): string {
   const final = review.manager_score?.final_band ?? null
   const picked = isSelf ? 'You picked' : `${firstName(review.person_name, 'They')} picked`
   if (own === null) return `${manager} rated this; there was no self-review to agree with.`
-  if (own === final) return `${picked} the same. ${manager} ${review.manager_score?.reason ? 'kept it, with a note' : 'agreed'}.`
+  if (own === final) return `${picked} the same. ${manager} agreed.`
   return `${picked} "${bandLabel(own)}". ${manager} changed it.`
 }
 
@@ -120,6 +120,7 @@ export function reviewWaiting(r: AppraisalRead, isSelf: boolean): string {
 
 /** Why the manager's review can't be sent yet, or ''. Mirrors the server's rules. */
 export function managerProblem(body: ManagerBody): string {
+  if (!body.reason.trim()) return "Write your words for them; they'll read them in the result."
   for (const goal of body.goals) {
     if (goal.agree) continue
     if (!goal.result) return 'Pick the result for each goal you change.'
@@ -127,7 +128,6 @@ export function managerProblem(body: ManagerBody): string {
   }
   if (body.agree) return ''
   if (body.band === null) return 'Pick the overall rating.'
-  if (!body.reason.trim()) return "Say why you changed the rating; they'll read it."
   const needed = evidenceNeeded(body.band, true)
   if (body.evidence.length >= needed) return ''
   return `"${bandLabel(body.band)}" needs ${needed === 1 ? 'an example. Pick one under Examples.' : `${needed} examples. Pick them under Examples.`}`
@@ -149,7 +149,7 @@ export function managerDraft(review: AppraisalRead): ManagerBody {
   const mine = review.manager_score
   const own = review.self_score?.submitted_at ? review.self_score.band : null
   return {
-    agree: own !== null && (!mine?.band || mine.band === own) && !mine?.reason,
+    agree: own !== null && (!mine?.band || mine.band === own),
     band: mine?.band ?? null,
     reason: mine?.reason ?? '',
     evidence: [...(mine?.evidence ?? [])],

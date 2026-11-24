@@ -71,7 +71,11 @@ async def test_a_review_with_more_than_three_goals_saves_and_submits(
     assert {g["self_result"] for g in saved.json()["goals"]} == {"achieved"}
     assert (await client.post(f"{url}/self/submit", headers=emp)).status_code == 200
 
-    agree = {"agree": True, "goals": [{"goal_id": g, "agree": True} for g in goal_ids]}
+    agree = {
+        "agree": True,
+        "reason": "A steady quarter",
+        "goals": [{"goal_id": g, "agree": True} for g in goal_ids],
+    }
     sent = await client.post(f"{url}/manager/submit", json=agree, headers=mgr)
     assert sent.status_code == 200
     assert sent.json()["status"] == "calibration"

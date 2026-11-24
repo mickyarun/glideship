@@ -174,6 +174,8 @@ class ManagerBody(BaseModel):
 
     agree: bool = False
     band: Band | None = Field(None, ge=1, le=5)
+    # The manager's words to the person: always written, read in the result,
+    # and the reason when the rating changes.
     reason: str = Field("", max_length=600)
     evidence: list[str] = Field(default_factory=list, max_length=10)
     goals: list[ManagerGoalIn] = Field(default_factory=list, max_length=MAX_GOALS_CAP)

@@ -94,7 +94,8 @@ async def test_results_reach_the_employee_only_once_shared(
     async with pg_session_factory() as db:
         rows = (await db.scalars(select(AppraisalGoal).where(AppraisalGoal.org_id == m.org))).all()
     assert {g.final_result for g in rows} == {None}
-    await client.post(f"{url}/manager/submit", json={"agree": True, "goals": changed}, headers=mgr)
+    words = {"agree": True, "reason": "Close", "goals": changed}
+    await client.post(f"{url}/manager/submit", json=words, headers=mgr)
     # Next quarter's goals open while Q4 waits for HR: no result shows yet.
     nxt = await client.post(f"{BASE}/cycles", json={"period_start": "2027-01-01"}, headers=hr)
     assert (

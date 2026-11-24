@@ -33,6 +33,7 @@ from app.services.appraisals.review_rules import (
     goal_ids_problem,
     goal_problem,
     self_problem,
+    words_problem,
 )
 
 ACHIEVED, PARTLY = GoalResult.ACHIEVED, GoalResult.PARTLY
@@ -142,3 +143,8 @@ def test_next_position() -> None:
     assert next_position({1, 2, 3}, 5) == 4
     # Lowered after goals were confirmed: slot 2 is empty but four are confirmed.
     assert next_position({1, 3, 4, 5}, 2) is None
+
+
+def test_the_managers_words_are_always_written() -> None:
+    assert words_problem("  ") == "Write your words for them; they'll read them."
+    assert words_problem("A steady quarter") is None

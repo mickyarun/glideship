@@ -24,6 +24,8 @@ const scored = review({
   status: 'manager_review',
   self_score: { band: 3, reason: 'Steady quarter', evidence: [], submitted_at: '2027-01-05T10:00:00Z', proud: 'Shipped refunds early', differently: '' },
   goals: [{ ...review().goals[0], self_result: 'achieved', self_reason: 'Live three days early' }],
+  // Words saved earlier, agreeing with the person's rating.
+  manager_score: { band: 3, reason: 'A steady quarter', evidence: [], final_band: null, submitted_at: null },
   can: { edit_self: false, edit_manager: true, send_back: false, share: false, acknowledge: false },
 })
 
@@ -53,6 +55,7 @@ describe('manager review', () => {
     await overall.findAll('[role="radio"]')[1].trigger('click')
     await wrapper.find('input[type="radio"][value="2"]').setValue(true)
     await wrapper.find('textarea').setValue('Two goals early')
+    expect(wrapper.text()).toContain('Say why you changed the rating.')
     expect(wrapper.text()).toContain('"Exceeded most times" needs 2 examples. You have 0.')
     expect(send(wrapper).attributes('disabled')).toBeDefined()
     for (const box of wrapper.findAll('.evidence input[type="checkbox"]')) await box.setValue(true)
@@ -90,6 +93,7 @@ describe('manager review', () => {
     const low = { ...draft, agree: false, band: 5, reason: 'Missed the launch' }
     expect(managerProblem(low)).toBe('"Did not meet" needs an example. Pick one under Examples.')
     expect(managerProblem({ ...low, evidence: ['f1'] })).toBe('')
-    expect(managerProblem({ ...draft, agree: false, band: 4, reason: '' })).toContain('Say why')
+    expect(managerProblem({ ...draft, agree: false, band: 4, reason: '' })).toContain('Write your words')
+    expect(managerProblem({ ...draft, reason: ' ' })).toContain('Write your words')
   })
 })

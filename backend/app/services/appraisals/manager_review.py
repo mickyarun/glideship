@@ -44,6 +44,7 @@ from app.services.appraisals.review_rules import (
     goal_problem,
     submitted_band,
     submitted_result,
+    words_problem,
 )
 from app.services.appraisals.self_review import period_goals
 
@@ -85,7 +86,8 @@ async def _apply(
         )
         problems.append(goal_problem(own, decision))
     appraisal.manager_band = final_band(own_band, band)
-    crypto.seal(appraisal, "manager_reason", body.reason.strip() if not body.agree else None)
+    # The manager's words to the person, kept whether they agree or change.
+    crypto.seal(appraisal, "manager_reason", body.reason.strip() or None)
     # Examples only back a change; agreeing keeps none, even ones picked before.
     appraisal.manager_evidence = [] if body.agree else evidence
     appraisal.ready_next_level = body.ready_next_level
@@ -94,7 +96,11 @@ async def _apply(
         appraisal, "concern_note", body.concern_note.strip() if body.performance_concern else None
     )
     if submit:
-        problem = band_problem(own_band, band) or next((p for p in problems if p), None)
+        problem = (
+            words_problem(body.reason)
+            or band_problem(own_band, band)
+            or next((p for p in problems if p), None)
+        )
         if problem:
             raise AppraisalInvalidError(problem)
         for goal in goals.values():

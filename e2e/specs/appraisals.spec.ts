@@ -95,6 +95,7 @@ test('a manual review from check-in to growth conversation', async ({ signedIn, 
   await pick(manager, 'Agree or change Automate UAT', 'Change')
   await pick(manager, 'Your result for Automate UAT', 'Not yet')
   await manager.getByLabel('Why, Automate UAT (Eli reads this)').fill('The suite is not running yet')
+  await manager.getByLabel('Your words for Eli').fill('A steady quarter; the suite comes next')
   await manager.getByRole('button', { name: 'Send to HR' }).click()
   await expect(manager.getByText('Eli picked the same. Maya agreed.')).toBeVisible()
 
