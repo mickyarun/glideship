@@ -53,30 +53,10 @@
     rounded="lg"
   />
   <v-list-item
-    prepend-icon="mdi-notebook-edit-outline"
-    title="My month"
-    to="/appraisals"
-    exact
-    rounded="lg"
-  />
-  <v-list-item
     prepend-icon="mdi-clipboard-check-outline"
-    title="My review"
-    to="/appraisals/review"
-    rounded="lg"
-  />
-  <v-list-item
-    v-if="leaveStore.approvalCount.has_reports"
-    prepend-icon="mdi-account-group-outline"
-    title="Team appraisals"
-    to="/appraisals/team"
-    rounded="lg"
-  />
-  <v-list-item
-    v-if="canManageAppraisals"
-    prepend-icon="mdi-calendar-sync-outline"
-    title="Appraisal cycles"
-    to="/appraisals/cycles"
+    title="Appraisals"
+    to="/appraisals"
+    :active="onAppraisals"
     rounded="lg"
   />
   <v-list-item
@@ -102,15 +82,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import NavHeading from '@/components/layout/NavHeading.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import { useLeaveStore } from '@/stores/leave'
 
 defineProps<{ rail: boolean; showHeading: boolean }>()
 
-const { canViewEmployees, canViewLeaveReports, canManageCelebrations, canManageAppraisals } = usePermissions()
+const { canViewEmployees, canViewLeaveReports, canManageCelebrations } = usePermissions()
 const leaveStore = useLeaveStore()
+const route = useRoute()
+// One link for every appraisal page; the tabs inside pick the page.
+const onAppraisals = computed(() => route.path.startsWith('/appraisals'))
 
 onMounted(() => {
   void leaveStore.fetchApprovalCount()

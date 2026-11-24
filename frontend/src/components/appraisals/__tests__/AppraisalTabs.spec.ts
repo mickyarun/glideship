@@ -1,0 +1,61 @@
+// Copyright 2025-2026 Arun Rajkumar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/** The one Appraisals page: which tabs show, and which tab a page sits under. */
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import AppraisalTabs from '@/components/appraisals/AppraisalTabs.vue'
+import { peopleRoutes } from '@/router/routes/people'
+import { appraisalTabs, tabForRoute } from '@/utils/appraisalTabs'
+import { appraisalPlugins } from './mountAppraisal'
+
+describe('appraisal tabs', () => {
+  it('shows the team to managers and cycles to HR, your own to everyone', () => {
+    const keys = (hasReports: boolean, canManage: boolean) => appraisalTabs({ hasReports, canManage }).map(t => t.label)
+    expect(keys(false, false)).toEqual(['Your own'])
+    expect(keys(true, false)).toEqual(['Your team', 'Your own'])
+    expect(keys(true, true)).toEqual(['Your team', 'Your own', 'Cycles'])
+  })
+
+  it('puts list pages under a tab and pages opened by id under none', () => {
+    expect(tabForRoute('appraisal-my-review')).toBe('own')
+    expect(tabForRoute('appraisal-cycle')).toBe('cycles')
+    expect(tabForRoute('appraisal-team')).toBe('team')
+    expect(tabForRoute('appraisal-review')).toBeNull()
+    expect(tabForRoute(null)).toBeNull()
+  })
+
+  it('links each tab to its old route and marks the current one', async () => {
+    const { plugins } = await appraisalPlugins('/appraisals/cycles/c1')
+    const wrapper = mount(AppraisalTabs, { global: { plugins: plugins as never[] }, props: { hasReports: true, canManage: true } })
+    const links = wrapper.findAll('a')
+    expect(links.map(a => a.attributes('href'))).toEqual(['/appraisals/team', '/appraisals', '/appraisals/cycles'])
+    expect(links.map(a => a.attributes('aria-current'))).toEqual([undefined, undefined, 'page'])
+  })
+
+  it('shows no strip when there is only one tab', async () => {
+    const { plugins } = await appraisalPlugins('/appraisals')
+    const wrapper = mount(AppraisalTabs, { global: { plugins: plugins as never[] }, props: { hasReports: false, canManage: false } })
+    expect(wrapper.find('nav').exists()).toBe(false)
+  })
+
+  it('keeps every appraisal route at its old path under the one page', () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', children: peopleRoutes }] })
+    expect(router.resolve({ name: 'appraisal-my-month' }).path).toBe('/appraisals')
+    expect(router.resolve({ name: 'appraisal-review', params: { id: 'a1' } }).path).toBe('/appraisals/reviews/a1')
+    expect(router.resolve('/appraisals/cycles/c1').name).toBe('appraisal-cycle')
+    expect(router.resolve('/appraisals/review').matched).toHaveLength(3)
+  })
+})
