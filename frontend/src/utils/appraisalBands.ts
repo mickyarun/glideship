@@ -38,13 +38,27 @@ export const BANDS: Band[] = [
 /** The two "Exceeded" bands: each needs two examples (the server's rule too). */
 export const HIGH_BANDS = [1, 2]
 export const HIGH_BAND_EVIDENCE = 2
-/** How screens name the two high bands together. */
-export const HIGH_BANDS_NAME = 'Both "Exceeded" ratings'
 /** "Did not meet": the manager needs at least one example to move someone here. */
 export const LOW_BAND = 5
 
 export function bandLabel(value: number | null | undefined): string {
   return BANDS.find(b => b.value === value)?.label ?? ''
+}
+
+/** How screens name the two high bands together: 'Both "Exceeded" ratings'. */
+export const HIGH_BANDS_NAME = `Both "${bandLabel(HIGH_BANDS[0]).split(' ')[0]}" ratings`
+
+/**
+ * Fills the rating words into copy kept outside code (the guide texts), so
+ * the words live only here: {high_bands}, {high_evidence} and {low_band}.
+ */
+export function withBandWords(text: string): string {
+  const words: Record<string, string> = {
+    high_bands: HIGH_BANDS_NAME,
+    high_evidence: String(HIGH_BAND_EVIDENCE),
+    low_band: `"${bandLabel(LOW_BAND)}"`,
+  }
+  return text.replace(/\{(high_bands|high_evidence|low_band)\}/g, (_, key: string) => words[key])
 }
 
 export function bandMeaning(value: number | null | undefined): string {

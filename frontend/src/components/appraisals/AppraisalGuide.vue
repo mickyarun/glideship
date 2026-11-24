@@ -57,7 +57,7 @@ import employeeText from '@/content/appraisalGuide/employee.txt?raw'
 import everyoneText from '@/content/appraisalGuide/everyone.txt?raw'
 import hrText from '@/content/appraisalGuide/hr.txt?raw'
 import managerText from '@/content/appraisalGuide/manager.txt?raw'
-import { BANDS } from '@/utils/appraisalBands'
+import { BANDS, withBandWords } from '@/utils/appraisalBands'
 import { guideGlance, guideDates } from '@/utils/appraisalGuide'
 import { guideBlocks } from '@/utils/guideText'
 
@@ -77,7 +77,7 @@ const audiences = [
   { label: 'Managers', value: 'manager' as Audience },
   { label: 'HR', value: 'hr' as Audience },
 ]
-const blocks = computed(() => guideBlocks(TEXT[audience.value]))
+const blocks = computed(() => guideBlocks(withBandWords(TEXT[audience.value])))
 const glance = computed(() => (guide.value ? guideGlance(guide.value) : ''))
 const dates = computed(() => (guide.value ? guideDates(guide.value) : ''))
 

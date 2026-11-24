@@ -9,7 +9,7 @@ Your report sees what you save straight away. Feedback you never write stays "no
 
 ## Agreeing or changing a rating
 
-Agree when the evidence supports their rating. Change it when it doesn't, and write a reason they will read: name the records or goals that moved you. Changing to either "Exceeded" rating needs two examples, and to "Did not meet" one.
+Agree when the evidence supports their rating. Change it when it doesn't, and write a reason they will read: name the records or goals that moved you. When you change the rating, {high_bands} need {high_evidence} examples and {low_band} needs one.
 
 ## Due dates and reminders
 

@@ -15,4 +15,4 @@ A few a period, up to the number your org sets. Each one says what done looks li
 
 ## Your review
 
-Say how each goal ended, then pick the overall rating that fits and say why. Both "Exceeded" ratings need at least two examples: records from your check-ins, links or goal values.
+Say how each goal ended, then pick the overall rating that fits and say why. {high_bands} need at least {high_evidence} examples: records from your check-ins, links or goal values.

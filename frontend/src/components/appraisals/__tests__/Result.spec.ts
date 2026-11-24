@@ -19,8 +19,9 @@ import AcknowledgeBox from '@/components/appraisals/AcknowledgeBox.vue'
 import BandScale from '@/components/appraisals/BandScale.vue'
 import GrowthSection from '@/components/appraisals/GrowthSection.vue'
 import ReviewResult from '@/components/appraisals/ReviewResult.vue'
-import { BANDS, bandLabel, bandMeaning, evidenceNeeded, isHighBand } from '@/utils/appraisalBands'
-import { overallLine, periodWord } from '@/utils/appraisalReview'
+import { BANDS, bandLabel, bandMeaning, evidenceNeeded, isHighBand, withBandWords } from '@/utils/appraisalBands'
+import { overallLine } from '@/utils/appraisalReview'
+import { periodWord } from '@/utils/appraisalSetup'
 import { appraisalPlugins } from './mountAppraisal'
 import { review } from './reviewFixture'
 
@@ -55,6 +56,12 @@ describe('rating words', () => {
     expect(evidenceNeeded(3, true)).toBe(0)
   })
 
+  it('fills the rating words into copy kept outside code', () => {
+    expect(withBandWords('{high_bands} need {high_evidence}; {low_band} one.')).toBe(
+      'Both "Exceeded" ratings need 2; "Did not meet" one.',
+    )
+  })
+
   it('shows five words with meanings, low to high, and no numbers', async () => {
     const { plugins } = await appraisalPlugins()
     const wrapper = mount(BandScale, { global: { plugins: plugins as never[] }, props: { modelValue: null, label: 'Overall rating' } })
@@ -74,8 +81,8 @@ describe('shared result', () => {
     expect(overallLine({ ...shared, self_score: null }, true)).toContain('no self-review')
     const noted = { ...shared, manager_score: { ...shared.manager_score!, reason: 'Fair call' } }
     expect(overallLine(noted, true)).toBe('You picked the same. Ravi kept it, with a note.')
-    expect(periodWord('2026-10-01', '2026-12-31')).toBe('quarter')
-    expect(periodWord('2026-01-01', '2026-12-31')).toBe('year')
+    expect(periodWord('quarterly')).toBe('quarter')
+    expect(periodWord('yearly')).toBe('year')
   })
 
   it('shows the rating in words and each goal as agreed or changed, with the reason', async () => {

@@ -40,7 +40,7 @@ ACHIEVED, PARTLY = GoalResult.ACHIEVED, GoalResult.PARTLY
 
 def test_self_score_needs_a_band_evidence_for_high_bands_and_every_goal() -> None:
     assert self_problem(None, 0, {}) == "Pick an overall rating."
-    assert self_problem(2, 1, {}) == 'Both "Exceeded" ratings need at least two examples.'
+    assert self_problem(2, 1, {}) == "The rating you picked needs at least two examples."
     unscored = self_problem(2, 2, {"g": None})
     assert unscored == "Pick how each goal ended: not yet, partly or achieved."
     assert self_problem(3, 0, {"g": ACHIEVED}) is None
@@ -73,9 +73,9 @@ def test_review_goals_must_be_the_periods_own_and_each_once() -> None:
         (
             3,
             BandDecision(False, 2, "Shipped", 1),
-            'Both "Exceeded" ratings need at least two examples.',
+            "The rating you picked needs at least two examples.",
         ),
-        (3, BandDecision(False, 5, "Missed", 0), '"Did not meet" needs at least one example.'),
+        (3, BandDecision(False, 5, "Missed", 0), "The rating you picked needs at least one example."),
         (3, BandDecision(False, 5, "Missed", 1), None),
         (None, BandDecision(False, 3, "From scratch", 0), None),
     ],
