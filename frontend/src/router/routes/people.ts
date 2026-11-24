@@ -17,6 +17,7 @@
  * role. Leave, WFH and employee records land here.
  */
 import type { RouteRecordRaw } from 'vue-router'
+import { appraisalRoutes } from './appraisals'
 
 export const peopleRoutes: RouteRecordRaw[] = [
   {
@@ -49,74 +50,7 @@ export const peopleRoutes: RouteRecordRaw[] = [
     name: 'leave-reports',
     component: () => import('@/views/leave/LeaveReportsView.vue'),
   },
-  {
-    // One Appraisals page: a tab strip over every appraisal route. The
-    // children keep their old paths and names, so deep links still work.
-    path: 'appraisals',
-    component: () => import('@/views/appraisals/AppraisalsLayout.vue'),
-    children: [
-      {
-        // Everyone: their own check-ins. The API decides what each person sees.
-        path: '',
-        name: 'appraisal-my-month',
-        component: () => import('@/views/appraisals/MyMonthView.vue'),
-      },
-      {
-        path: 'team',
-        name: 'appraisal-team',
-        component: () => import('@/views/appraisals/TeamCheckInsView.vue'),
-      },
-      {
-        path: 'check-ins/:id',
-        name: 'appraisal-check-in',
-        component: () => import('@/views/appraisals/CheckInView.vue'),
-      },
-      {
-        // The manager writes; the person and HR read. The API decides.
-        path: 'feedback/:id',
-        name: 'appraisal-feedback',
-        component: () => import('@/views/appraisals/FeedbackView.vue'),
-      },
-      {
-        // HR only (appraisals:manage); the API refuses everyone else.
-        path: 'cycles',
-        name: 'appraisal-cycles',
-        component: () => import('@/views/appraisals/CyclesView.vue'),
-      },
-      {
-        path: 'cycles/:id',
-        name: 'appraisal-cycle',
-        component: () => import('@/views/appraisals/CycleView.vue'),
-      },
-      {
-        path: 'settings',
-        name: 'appraisal-settings',
-        component: () => import('@/views/appraisals/AppraisalSettingsView.vue'),
-      },
-      {
-        path: 'role-templates',
-        name: 'appraisal-role-templates',
-        component: () => import('@/views/appraisals/RoleTemplatesView.vue'),
-      },
-      {
-        // The person, their managers and HR; the API decides what each sees.
-        path: 'goals/:id',
-        name: 'appraisal-goals',
-        component: () => import('@/views/appraisals/GoalsView.vue'),
-      },
-      {
-        // The caller's latest review.
-        path: 'review',
-        name: 'appraisal-my-review',
-        component: () => import('@/views/appraisals/ReviewView.vue'),
-      },
-      {
-        path: 'reviews/:id',
-        name: 'appraisal-review',
-        component: () => import('@/views/appraisals/ReviewView.vue'),
-      },
-    ],
-  },
+  appraisalRoutes,
   {
     path: 'settings/leave',
     name: 'settings-leave',

@@ -25,18 +25,19 @@ export interface AppraisalTab {
 
 const TABS: AppraisalTab[] = [
   { key: 'team', label: 'Your team', route: 'appraisal-team' },
-  { key: 'own', label: 'Your own', route: 'appraisal-my-month' },
+  { key: 'own', label: 'Your own', route: 'appraisal-home' },
   { key: 'cycles', label: 'Cycles', route: 'appraisal-cycles' },
 ]
 
 /**
- * Pages that belong to one tab. A page opened by id (a check-in, goals, a
- * review, notes) can be anyone's, so it sits under no tab.
+ * Pages that belong to one tab. Notes, a person's quarter and their goals
+ * are a manager's pages. A check-in or a review opened by id can be anyone's,
+ * so it sits under "Your own" only when it is the viewer's.
  */
 const PAGES: Record<AppraisalTabKey, string[]> = {
-  team: ['appraisal-team'],
-  own: ['appraisal-my-month', 'appraisal-my-review'],
-  cycles: ['appraisal-cycles', 'appraisal-cycle', 'appraisal-settings', 'appraisal-role-templates'],
+  team: ['appraisal-team', 'appraisal-notes', 'appraisal-person', 'appraisal-goals', 'appraisal-confirm-goals'],
+  own: ['appraisal-home', 'appraisal-my-review'],
+  cycles: ['appraisal-cycles', 'appraisal-cycle', 'appraisal-fairness', 'appraisal-settings', 'appraisal-role-templates'],
 }
 
 /** The tabs this person sees: their team only with reports, cycles only with manage. */

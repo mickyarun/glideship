@@ -20,7 +20,7 @@ import type { TodoItem, TodoRole, TodoTarget } from '@/types/appraisalTodo'
 const ROUTES: Record<TodoTarget, string> = {
   check_in: 'appraisal-check-in',
   review: 'appraisal-review',
-  feedback: 'appraisal-feedback',
+  feedback: 'appraisal-notes',
   goals: 'appraisal-goals',
   cycle: 'appraisal-cycle',
 }

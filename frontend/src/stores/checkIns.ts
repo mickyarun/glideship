@@ -37,7 +37,6 @@ const BASE = '/v1/check-ins'
 
 export const useCheckInsStore = defineStore('checkIns', () => {
   const mine = ref<CheckInSummary[]>([])
-  const team = ref<CheckInSummary[]>([])
   const current = ref<CheckInRead | null>(null)
   // Lists and the open check-in keep their own state, so one screen's
   // error never shows on another.
@@ -63,10 +62,6 @@ export const useCheckInsStore = defineStore('checkIns', () => {
 
   async function fetchMine(): Promise<void> {
     mine.value = await fetchList('mine', "Couldn't load your check-ins. Reload to try again.")
-  }
-
-  async function fetchTeam(): Promise<void> {
-    team.value = await fetchList('team', "Couldn't load your team's check-ins. Reload to try again.")
   }
 
   async function fetchOne(id: string): Promise<void> {
@@ -153,7 +148,7 @@ export const useCheckInsStore = defineStore('checkIns', () => {
   }
 
   return {
-    mine, team, current, loading, error, listLoading, listError,
-    fetchMine, fetchTeam, fetchOne, refreshDraft, regenerate, saveNote, saveTag, addLink, removeLink, saveGoalValue, send,
+    mine, current, loading, error, listLoading, listError,
+    fetchMine, fetchOne, refreshDraft, regenerate, saveNote, saveTag, addLink, removeLink, saveGoalValue, send,
   }
 })

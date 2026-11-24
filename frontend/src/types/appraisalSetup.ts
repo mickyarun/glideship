@@ -15,6 +15,7 @@
 /** HR's appraisal setup as the API returns it (`/api/v1/appraisals`), and the guide. */
 
 import type { Cadence } from '@/types/appraisalFeedback'
+import type { MonthStateName } from '@/types/appraisalTeam'
 
 export type ReviewPeriod = 'quarterly' | 'half_yearly' | 'yearly'
 export type FeedbackCadence = 'monthly' | 'quarterly' | 'in_review'
@@ -134,14 +135,27 @@ export interface EnrolmentReport {
 export interface ProgressRow {
   user_id: string
   name: string
+  manager_user_id: string | null
   manager_name: string
   status: AppraisalStatus
+  goals_accepted: number
+  /** Each check-in period's state, in order, as anyone but the person sees it. */
+  months: MonthStateName[]
   check_ins: number
   check_ins_added: number
   check_ins_missed: number
+  check_ins_late: number
   feedback: number
   feedback_done: number
   feedback_overdue: number
+}
+
+export interface PeriodCount {
+  period_start: string
+  period_end: string
+  due_on: string | null
+  sent: number
+  total: number
 }
 
 export interface CycleProgress {
@@ -149,6 +163,17 @@ export interface CycleProgress {
   feedback: number
   feedback_done: number
   managers_overdue: { name: string; overdue: number }[]
+  min_goals: number
+  check_in_periods: PeriodCount[]
+  note_periods: PeriodCount[]
+  /** People a manual reminder would reach now. */
+  remind_count: number
+  reminded_at: string | null
+}
+
+export interface RemindResult {
+  people: number
+  reached: number
 }
 
 export interface GuideRead {

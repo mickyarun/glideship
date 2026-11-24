@@ -60,14 +60,14 @@ interface ModeText {
 }
 
 const TEXT: Record<GoalDialogMode, ModeText> = {
-  propose: { title: 'Add my own goal', action: 'Send to my manager', words: true },
+  propose: { title: 'Suggest a goal', action: 'Send to my manager', words: true },
   add: { title: 'Add a goal', action: 'Add goal', words: true, reason: 'Why now (they see this)', needsReason: true },
   next: { title: 'A goal for next period', action: 'Add goal', words: true },
   edit: { title: 'Edit the goal', action: 'Save', words: true },
   'edit-reason': { title: 'Change the goal', action: 'Save change', words: true, reason: 'Why it changed (they see this)', needsReason: true },
   'suggest-change': { title: 'Suggest a change', action: 'Send to my manager', words: true, reason: 'Why (optional)' },
-  reword: { title: 'Ask to reword', action: 'Send back', words: false, reason: 'What to change (they see this)', needsReason: true },
-  decline: { title: 'Not this period', action: 'Not adding it', words: false, reason: 'Why (they see this)', needsReason: true },
+  reword: { title: 'Suggest a change', action: 'Send back', words: false, reason: 'Your wording, or what to change (they see this)', needsReason: true },
+  decline: { title: 'Not this quarter', action: 'Not adding it', words: false, reason: 'One line on why (they see this)', needsReason: true },
 }
 
 const props = defineProps<{ mode: GoalDialogMode | null; start?: Partial<GoalBody>; busy: boolean; error: string }>()

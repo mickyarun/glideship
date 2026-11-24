@@ -38,8 +38,15 @@ export interface FactTag {
   heading: EvidenceHeading | null
 }
 
+/**
+ * The person's own words. \`went_well\` and \`item_notes\` (by fact id) answer
+ * "what went well"; \`lines\` under the four headings is how check-ins were
+ * written before, kept for those and for AI drafts.
+ */
 export interface CheckInNote {
   lines: Partial<Record<EvidenceHeading, string[]>>
+  went_well: string
+  item_notes: Record<string, string>
   blocking: string
   next_month: string
 }

@@ -101,6 +101,8 @@ export interface GoalBody {
 export interface AppraisalSummary {
   id: string
   user_id: string
+  profile_id: string
+  cycle_id: string
   person_name: string
   cycle_name: string
   period_start: string

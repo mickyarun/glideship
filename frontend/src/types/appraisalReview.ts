@@ -159,13 +159,17 @@ export interface CalibrationPerson {
   self_band: number | null
   final_band: number | null
   gap: boolean
+  /** The manager flagged a performance concern in the part only HR reads. */
+  concern: boolean
   feedback: number
   feedback_done: number
 }
 
 export interface CalibrationTeam {
   manager_name: string
+  /** Reviews sent to HR, out of \`total\` the manager scores. */
   people: number
+  total: number
   bands: Record<string, number>
   agreement: number | null
   gaps: number

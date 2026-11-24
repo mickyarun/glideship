@@ -19,7 +19,7 @@
      the rest is the plain-text guide for each audience. The button sits in
      each appraisal screen's actions. -->
 <template>
-  <v-btn variant="text" prepend-icon="mdi-help-circle-outline" @click="show">How this works</v-btn>
+  <v-btn variant="text" prepend-icon="mdi-help-circle-outline" @click="show">How appraisals work</v-btn>
   <v-dialog v-model="open" max-width="760" scrollable>
     <v-card>
       <v-card-title class="guide__title">How appraisals work here</v-card-title>

@@ -27,17 +27,20 @@ vi.stubGlobal('ResizeObserver', class { observe(): void {} unobserve(): void {} 
 
 const blank = { render: () => null }
 const NAMES: [string, string][] = [
-  ['/appraisals', 'appraisal-my-month'],
-  ['/appraisals/team', 'appraisal-team'],
+  ['/appraisals', 'appraisal-home'],
   ['/appraisals/check-ins/:id', 'appraisal-check-in'],
-  ['/appraisals/feedback/:id', 'appraisal-feedback'],
+  ['/appraisals/review', 'appraisal-my-review'],
+  ['/appraisals/team', 'appraisal-team'],
+  ['/appraisals/notes/:id', 'appraisal-notes'],
+  ['/appraisals/people/:id', 'appraisal-person'],
+  ['/appraisals/goals/:id', 'appraisal-goals'],
+  ['/appraisals/goals/:id/confirm', 'appraisal-confirm-goals'],
+  ['/appraisals/reviews/:id', 'appraisal-review'],
   ['/appraisals/cycles', 'appraisal-cycles'],
   ['/appraisals/cycles/:id', 'appraisal-cycle'],
+  ['/appraisals/cycles/:id/fairness', 'appraisal-fairness'],
   ['/appraisals/settings', 'appraisal-settings'],
   ['/appraisals/role-templates', 'appraisal-role-templates'],
-  ['/appraisals/goals/:id', 'appraisal-goals'],
-  ['/appraisals/review', 'appraisal-my-review'],
-  ['/appraisals/reviews/:id', 'appraisal-review'],
 ]
 
 export async function appraisalPlugins(start = '/'): Promise<{ pinia: Pinia; router: Router; plugins: unknown[] }> {

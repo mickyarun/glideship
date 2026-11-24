@@ -83,7 +83,6 @@ import ReviewResult from '@/components/appraisals/ReviewResult.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import SelfSubmitted from '@/components/appraisals/SelfSubmitted.vue'
 import SendBackDialog from '@/components/appraisals/SendBackDialog.vue'
-import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAuthStore } from '@/stores/auth'
 import type { GoalBody } from '@/types/appraisalGoals'
@@ -150,7 +149,6 @@ watch(
   () => route.params.id,
   async id => {
     message.value = ''
-    void useAppraisalGuide().showOnFirstVisit()
     if (typeof id === 'string') {
       if (!store.mine.length) void store.fetchLists()
       return store.fetchOne(id)

@@ -27,21 +27,6 @@ export interface FeedbackGoal {
   note: string
 }
 
-export interface FeedbackRow {
-  id: string
-  profile_id: string
-  person_name: string
-  period_start: string
-  period_end: string
-  cadence: Cadence
-  /** Empty until the check-in it answers is sent. */
-  due_on: string | null
-  status: FeedbackStatus
-  overdue: boolean
-  check_ins: number
-  check_ins_added: number
-}
-
 export interface FeedbackCheckIn {
   id: string
   period_start: string
@@ -77,6 +62,18 @@ export interface FeedbackBody {
   keep: string
   try_next: string
   goals: { goal_id: string; status: GoalCheck; note: string }[]
+}
+
+/** A sent note about the caller, for their home page. */
+export interface MyNote {
+  id: string
+  manager_name: string | null
+  period_start: string
+  period_end: string
+  cadence: Cadence
+  sent_at: string
+  keep: string
+  try_next: string
 }
 
 /** The manager's feedback as it sits on the employee's check-in. */

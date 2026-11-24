@@ -56,7 +56,7 @@ describe('appraisal tabs', () => {
 
   it('keeps every appraisal route at its old path under the one page', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', children: peopleRoutes }] })
-    expect(router.resolve({ name: 'appraisal-my-month' }).path).toBe('/appraisals')
+    expect(router.resolve({ name: 'appraisal-home' }).path).toBe('/appraisals')
     expect(router.resolve({ name: 'appraisal-review', params: { id: 'a1' } }).path).toBe('/appraisals/reviews/a1')
     expect(router.resolve('/appraisals/cycles/c1').name).toBe('appraisal-cycle')
     expect(router.resolve('/appraisals/review').matched).toHaveLength(3)
@@ -69,7 +69,7 @@ describe('appraisal tabs', () => {
     const waiting = { ...item('team', 'feedback'), kind: 'waiting_on_check_in' as const }
     const items = [item('team', 'feedback'), item('team', 'goals'), item('own', 'check_in'), waiting]
     expect(todoCounts(items)).toEqual({ own: 1, team: 2, cycles: 0 })
-    expect(todoRoute(items[0])).toEqual({ name: 'appraisal-feedback', params: { id: 'x1' } })
+    expect(todoRoute(items[0])).toEqual({ name: 'appraisal-notes', params: { id: 'x1' } })
     expect(todoRoute(item('cycles', 'cycle'))).toEqual({ name: 'appraisal-cycle', params: { id: 'x1' } })
     const { plugins } = await appraisalPlugins('/appraisals')
     const wrapper = mount(AppraisalTabs, {
