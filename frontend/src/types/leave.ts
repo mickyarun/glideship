@@ -133,6 +133,8 @@ export interface LeaveRequestCreate {
   end_date: string
   half_day: HalfDay
   reason: string | null
+  /** They agreed that days past their balance are unpaid. */
+  accept_lop?: boolean
 }
 
 export interface ExcludedDate {

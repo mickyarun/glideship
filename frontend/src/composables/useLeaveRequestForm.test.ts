@@ -61,7 +61,7 @@ describe('payload', () => {
     f.leaveTypeId.value = 'casual'
     expect(f.payload.value).toEqual({
       kind: 'leave', leave_type_id: 'casual', holiday_id: null,
-      start_date: '2026-10-28', end_date: '2026-10-28', half_day: 'none', reason: null,
+      start_date: '2026-10-28', end_date: '2026-10-28', half_day: 'none', reason: null, accept_lop: false,
     })
 
     f.reset('optional_holiday')
@@ -202,6 +202,32 @@ describe('canSend', () => {
     f.reset('wfh')
     await previewSettles()
     expect(f.previewError.value).toBe("Couldn't check this request. Try again.")
+    expect(f.canSend.value).toBe(false)
+  })
+
+  it('holds a request past the balance until they agree to loss of pay', async () => {
+    const past = { code: 'lop_confirm', message: 'No Casual left, so 2 days would be unpaid.' }
+    preview.mockResolvedValue({ data: { ...OK, problems: [past] }, error: '' })
+    const f = form()
+    f.reset('wfh')
+    await previewSettles()
+    expect(f.needsLopConfirm.value).toBe(true)
+    expect(f.canSend.value).toBe(false)
+    f.acceptLop.value = true
+    expect(f.canSend.value).toBe(true)
+    expect(f.payload.value?.accept_lop).toBe(true)
+  })
+
+  it('still refuses when loss of pay is agreed but something else is wrong', async () => {
+    const problems = [
+      { code: 'lop_confirm', message: 'Past the balance' },
+      { code: 'overlap', message: 'Overlaps' },
+    ]
+    preview.mockResolvedValue({ data: { ...OK, problems }, error: '' })
+    const f = form()
+    f.reset('wfh')
+    await previewSettles()
+    f.acceptLop.value = true
     expect(f.canSend.value).toBe(false)
   })
 })

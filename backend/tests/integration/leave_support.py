@@ -146,7 +146,12 @@ async def give_custom_role(
 
 
 def leave_body(type_id: uuid.UUID, start: date, end: date, **kw: object) -> LeaveRequestCreate:
-    """A leave request of type ``type_id``."""
+    """A leave request of type ``type_id``.
+
+    Days past the balance are agreed to be unpaid unless a test says
+    ``accept_lop=False``: most tests are about how loss of pay is priced.
+    """
+    kw.setdefault("accept_lop", True)
     return LeaveRequestCreate(
         kind=LeaveKind.LEAVE, leave_type_id=type_id, start_date=start, end_date=end, **kw
     )  # type: ignore[arg-type]

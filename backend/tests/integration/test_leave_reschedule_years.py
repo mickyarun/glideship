@@ -56,7 +56,13 @@ async def _approved(
     start: str,
     end: str,
 ) -> uuid.UUID:
-    body = {"kind": "leave", "leave_type_id": str(type_id), "start_date": start, "end_date": end}
+    body = {
+        "kind": "leave",
+        "leave_type_id": str(type_id),
+        "start_date": start,
+        "end_date": end,
+        "accept_lop": True,
+    }
     made = await client.post(LEAVE, json=body, headers=as_user(p["emp"], org))
     assert made.status_code == 201, made.text
     request_id = made.json()["id"]

@@ -101,7 +101,9 @@ async def evaluate(
             result.problem("no_working_days", "These dates are all weekends or holidays.")
     await check_overlap(db, policy.org_id, user_id, result, body.kind, body.half_day, held)
     if body.kind == LeaveKind.LEAVE and body.leave_type_id is not None:
-        await apply_balance(db, member, user_id, body.leave_type_id, result, persist)
+        await apply_balance(
+            db, member, user_id, body.leave_type_id, result, persist, accept_lop=body.accept_lop
+        )
         await check_monthly_limit(db, policy, user_id, body.half_day, result)
         # A type set to approve itself (period leave): managers get a heads-up.
         # Days past the balance would be unpaid, so those still go to a manager.

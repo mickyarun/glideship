@@ -131,6 +131,11 @@ async def test_sick_past_its_balance_goes_unpaid_when_nothing_else_is_left(
         await adjustments.adjust(db, change, D(-5), "Used up")
         await db.commit()
     async with pg_session_factory() as db:
+        with pytest.raises(LeaveConflictError, match="would be unpaid"):
+            await submit(
+                db, org, emp, leave_body(sick.id, mon, mon + timedelta(days=2), accept_lop=False)
+            )
+        await db.rollback()
         request, _ = await submit(db, org, emp, leave_body(sick.id, mon, mon + timedelta(days=2)))
         await db.commit()
         assert request.lop_days == D(1)
@@ -138,3 +143,26 @@ async def test_sick_past_its_balance_goes_unpaid_when_nothing_else_is_left(
                                 approve=True, note=None)  # fmt: skip
         await db.commit()
         assert approved.status == LeaveStatus.APPROVED and approved.lop_days == D(1)
+
+
+async def test_past_the_balance_needs_the_person_to_agree_to_loss_of_pay(
+    pg_session_factory: Factory,
+) -> None:
+    org, (emp, mgr), casual = await setup_org(pg_session_factory, "Emp", "Mgr")
+    await report_to(pg_session_factory, org, emp, mgr)
+    mon = future_monday()
+    async with pg_session_factory() as db:
+        # Within the balance there's nothing to agree to.
+        fits, _ = await submit(db, org, emp, leave_body(casual, mon, mon, accept_lop=False))
+        await db.commit()
+        assert fits.lop_days == D(0)
+        later = mon + timedelta(days=7)
+        too_many = leave_body(casual, later, later + timedelta(days=7), accept_lop=False)
+        with pytest.raises(LeaveConflictError, match="would be unpaid \\(loss of pay\\)"):
+            await submit(db, org, emp, too_many)
+        await db.rollback()
+        # Agreeing to it sends the request with the extra days unpaid.
+        agreed = leave_body(casual, later, later + timedelta(days=7), accept_lop=True)
+        request, _ = await submit(db, org, emp, agreed)
+        await db.commit()
+        assert request.lop_days > D(0)

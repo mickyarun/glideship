@@ -65,6 +65,17 @@ def over_balance_message(type_name: str, left: Decimal, others: Sequence[Other])
     return f"{opening} Request {rest} as another type: {names}."
 
 
+def lop_confirm_message(type_name: str, left: Decimal | None, lop_days: Decimal) -> str:
+    """E.g. "You have no Sick leave left, so these 3 days would be unpaid (loss of pay)."."""
+    have = max(left, ZERO) if left is not None else ZERO
+    opening = (
+        f"You have no {type_name} left"
+        if have == ZERO
+        else f"You have {_days(have)} of {type_name} left"
+    )
+    return f"{opening}, so {_days(lop_days)} of this request would be unpaid (loss of pay)."
+
+
 def refusal(
     leave_type: LeaveType,
     lop_days: Decimal,

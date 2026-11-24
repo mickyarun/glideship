@@ -40,7 +40,7 @@ from app.services.leave.loss_of_pay import split_paid
 from app.services.leave.month_usage import booked_by_month, requested_by_month
 from app.services.leave.monthly_limit import first_month_over, limit_message
 from app.services.leave.optional_holidays import pick_optional_holiday
-from app.services.leave.over_balance import refusal
+from app.services.leave.over_balance import lop_confirm_message, refusal
 from app.services.leave.policies import MemberPolicy
 from app.services.leave.wfh_overlap import TIME_OFF, HeldDays, already_held
 
@@ -156,11 +156,15 @@ async def apply_balance(
     leave_type_id: uuid.UUID,
     result: Evaluation,
     persist: bool,
+    *,
+    accept_lop: bool = False,
 ) -> None:
     """Price a leave request against the type's balance for its leave year.
 
-    Days past the balance are loss of pay, unless the type stops at its
-    balance (sick leave): then the request is refused with what's left.
+    Days past the balance are loss of pay, but only once the person has
+    agreed (``accept_lop``): otherwise the request is held with what's left
+    and the days that would be unpaid. A type that stops at its balance
+    (sick leave) is refused instead while they have other leave to use.
     """
     policy = member.policy
     leave_type = await LeaveTypeRepository(db, org_id=policy.org_id).get_by_id(leave_type_id)
@@ -189,6 +193,11 @@ async def apply_balance(
     _paid, result.lop_days = split_paid(result.days, result.balance_before)
     if (why := refusal(leave_type, result.lop_days, line, lines)) is not None:
         result.problem("over_balance", why)
+    elif result.lop_days > ZERO and not accept_lop:
+        result.problem(
+            "lop_confirm",
+            lop_confirm_message(leave_type.name, result.balance_before, result.lop_days),
+        )
 
 
 async def check_monthly_limit(

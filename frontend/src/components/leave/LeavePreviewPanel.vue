@@ -38,8 +38,18 @@
       <AppCallout v-if="preview.high_leave" :variant="highLeaveVariant(preview.high_leave)">
         {{ highLeaveForSelf(preview.high_leave, true) }}
       </AppCallout>
-      <AppCallout v-if="preview.problems.length" ref="problemsBox" variant="error">
-        <div v-for="problem in preview.problems" :key="problem.code">{{ problem.message }}</div>
+      <AppCallout v-if="blocking.length" ref="problemsBox" variant="error">
+        <div v-for="problem in blocking" :key="problem.code">{{ problem.message }}</div>
+      </AppCallout>
+      <AppCallout v-if="lopConfirm" ref="lopBox" variant="warning">
+        <div>{{ lopConfirm.message }}</div>
+        <v-checkbox
+          :model-value="acceptLop"
+          :label="`Apply ${lopDays} as loss of pay (unpaid)`"
+          density="compact"
+          hide-details
+          @update:model-value="emit('update:acceptLop', !!$event)"
+        />
       </AppCallout>
     </template>
     <div v-else class="preview__muted">{{ placeholder }}</div>
@@ -56,6 +66,7 @@ import {
   excludedSummary,
   formatDays,
   lopLabel,
+  pluralDays,
   toNumber,
   toNumberOrNull,
 } from '@/utils/leave'
@@ -68,18 +79,28 @@ const props = defineProps<{
   policy: PolicyBrief | null
   /** Leave type name for the balance line. */
   typeName: string
+  /** They ticked the loss-of-pay box. */
+  acceptLop?: boolean
   placeholder: string
 }>()
+const emit = defineEmits<{ 'update:acceptLop': [value: boolean] }>()
+
+// Days past the balance are asked about, not refused: they tick a box to agree.
+const lopConfirm = computed(() => props.preview?.problems.find(p => p.code === 'lop_confirm'))
+const blocking = computed(() => props.preview?.problems.filter(p => p.code !== 'lop_confirm') ?? [])
+const lopDays = computed(() => pluralDays(toNumber(props.preview?.lop_days)))
 
 // The reason a request can't be sent sits under the form's other fields; bring
 // it into view so a disabled Send button never has a hidden explanation.
 const problemsBox = ref<{ $el: HTMLElement } | null>(null)
+const lopBox = ref<{ $el: HTMLElement } | null>(null)
 watch(
   () => props.preview?.problems.map(p => p.message).join('|') ?? '',
   async text => {
     if (!text) return
     await nextTick()
-    problemsBox.value?.$el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+    const box = problemsBox.value ?? lopBox.value
+    box?.$el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   },
 )
 
@@ -97,7 +118,7 @@ const skips = computed(() => {
 // Days past the balance aren't refused: they're unpaid.
 const lopLine = computed(() => {
   // A type that stops at its balance refuses instead: its message says what to do.
-  if (props.preview?.problems.some(p => p.code === 'over_balance')) return ''
+  if (props.preview?.problems.some(p => p.code === 'over_balance' || p.code === 'lop_confirm')) return ''
   const lop = lopLabel(props.preview?.lop_days)
   return lop ? `${lop}: these days are past your ${props.typeName ?? 'leave'} balance, so they're unpaid.` : ''
 })
