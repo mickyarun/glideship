@@ -31,7 +31,7 @@ from app.models.employee_profile import EmployeeProfile
 from app.models.leave_request import HalfDay
 from app.services.appraisals.availability import Absence, availability
 from app.services.appraisals.cadence import cadence_error, period_after, slices
-from app.services.appraisals.check_in_scheduler import Tick, is_empty, latest_ended, should_open
+from app.services.appraisals.check_in_lifecycle import Tick, is_empty, latest_ended, should_open
 from app.services.appraisals.cycles import default_name, enrolment_cutoff
 from tests.integration.appraisal_support import cycle_row
 

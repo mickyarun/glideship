@@ -28,7 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1._appraisal_deps import get_caller
 from app.core.deps import get_db
 from app.schemas.appraisal_goal_values import GoalValues
-from app.schemas.appraisal_review import AppraisalRead, ManagerBody, NoteBody, ReplyBody, SelfBody
+from app.schemas.appraisal_review import AppraisalRead, ManagerBody, SelfBody
+from app.schemas.appraisal_sharing import NoteBody, ReplyBody
 from app.services.appraisals import manager_review, self_review, sharing
 from app.services.appraisals.appraisal_context import appraisal_context
 from app.services.appraisals.context import Caller

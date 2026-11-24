@@ -28,8 +28,7 @@ Manager feedback items open on the same tick (:mod:`.feedback_open`).
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta, tzinfo
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +37,7 @@ from app.database import AsyncSessionLocal
 from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CheckInStatus, CycleStatus
+from app.models.appraisal_enums import CycleStatus
 from app.models.appraisal_role_template import AppraisalRoleTemplate
 from app.models.employee_profile import EmployeeProfile
 from app.models.policy_holiday import HolidayKind
@@ -49,12 +48,16 @@ from app.repositories.appraisal_cycle import (
     CycleOrg,
     orgs_with_running_cycles,
 )
-from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
 from app.repositories.appraisal_identity import AppraisalIdentityRepository, LooseAccount
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.policy_holiday import PolicyHolidayRepository
-from app.services.appraisals.cadence import CADENCE_MONTHS, slices
 from app.services.appraisals.check_in_builder import create_check_in, refresh_check_in
+from app.services.appraisals.check_in_lifecycle import (
+    Tick,
+    close_check_in,
+    latest_ended,
+    should_open,
+)
 from app.services.appraisals.due_dates import check_in_due
 from app.services.appraisals.enrolment import enrol_late_joiners
 from app.services.appraisals.feedback_open import feedback_pass
@@ -68,66 +71,6 @@ logger = structlog.get_logger(__name__)
 TICK_SECONDS = 3600
 REFRESH_EVERY = timedelta(hours=20)
 WEEKDAYS = [0, 1, 2, 3, 4]
-
-
-@dataclass(frozen=True)
-class Tick:
-    """One pass's clock and calendar for an org."""
-
-    now: datetime
-    today: date
-    working: bool
-    zone: tzinfo
-
-
-def latest_ended(cycle: AppraisalCycle, today: date) -> tuple[date, date] | None:
-    """The newest check-in period that has ended by ``today``, or None (pure)."""
-    periods = slices(cycle.period_start, cycle.period_end, CADENCE_MONTHS[cycle.checkin_cadence])
-    ended = [p for p in periods if p[1] < today]
-    return ended[-1] if ended else None
-
-
-def is_empty(check_in: AppraisalCheckIn, link_ids: set[str], values: int) -> bool:
-    """Nothing added by the person: no lines, links, goal values or live tags.
-
-    Tags on facts that have dropped out of the list don't count: nothing
-    would show for them.
-    """
-    live = {f["id"] for f in check_in.fact_refs or []} | link_ids
-    tagged = any(key in live for key in check_in.fact_tags or {})
-    return check_in.employee_note is None and not tagged and not (link_ids or values)
-
-
-def should_open(
-    cycle: AppraisalCycle,
-    appraisal: Appraisal,
-    profile: EmployeeProfile,
-    period: tuple[date, date],
-    tick: Tick,
-) -> bool:
-    """Whether the person's check-in for ``period`` opens on this tick (pure)."""
-    start, end = period
-    joined, exited = profile.date_of_joining, profile.date_of_exit
-    return (
-        cycle.status is not CycleStatus.CLOSED
-        and appraisal.status is not AppraisalStatus.WITHDRAWN
-        and tick.working
-        and (joined is None or joined <= end)
-        and (exited is None or exited >= start)
-        # The last one would close at once: the self-review has opened.
-        and not (end == cycle.period_end and tick.today >= cycle.self_due)
-    )
-
-
-async def _close(db: AsyncSession, check_in: AppraisalCheckIn, now: datetime) -> None:
-    repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
-    link_ids = {str(link.id) for link in await repo.links(check_in.id)}
-    values = len(
-        await AppraisalGoalValueRepository(db, org_id=check_in.org_id).for_check_in(check_in.id)
-    )
-    if is_empty(check_in, link_ids, values):
-        check_in.status = CheckInStatus.MISSED
-    check_in.closed_at = now
 
 
 async def _person_pass(
@@ -157,7 +100,7 @@ async def _person_pass(
         superseded = latest is not None and start < latest[0] and latest[0] in mine
         last_done = check_in.period_end == cycle.period_end and tick.today >= cycle.self_due
         if not running or superseded or last_done:
-            await _close(db, check_in, tick.now)
+            await close_check_in(db, check_in, tick.now)
         elif tick.now - check_in.facts_at >= REFRESH_EVERY:
             await refresh_check_in(db, check_in, profile, template, loose, tick.zone, tick.now)
 

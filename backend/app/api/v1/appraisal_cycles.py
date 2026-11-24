@@ -28,6 +28,7 @@ from app.core.permission_deps import require_permissions
 from app.core.permissions_people import APPRAISALS_MANAGE
 from app.models.appraisal_cycle import AppraisalCycle
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
+from app.schemas.appraisal_calibration import Calibration
 from app.schemas.appraisal_cycle import (
     CycleCreate,
     CycleProgress,
@@ -36,7 +37,6 @@ from app.schemas.appraisal_cycle import (
     EnrolmentReport,
     Readiness,
 )
-from app.schemas.appraisal_review import Calibration
 from app.services.appraisals import cycles, sharing
 from app.services.appraisals.calibration import calibration
 from app.services.appraisals.context import Caller

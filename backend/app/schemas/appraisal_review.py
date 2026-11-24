@@ -17,7 +17,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from app.models.appraisal_enums import (
     AppraisalStatus,
@@ -182,54 +182,3 @@ class ManagerBody(BaseModel):
     ready_next_level: bool | None = None
     performance_concern: bool | None = None
     concern_note: str = Field("", max_length=500)
-
-
-class NoteBody(BaseModel):
-    """HR's note when sending a review back; the manager reads it."""
-
-    note: str = Field(min_length=1, max_length=600)
-
-    @field_validator("note")
-    @classmethod
-    def _not_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Say what to look at again.")
-        return value
-
-
-class ReplyBody(BaseModel):
-    """The employee's optional reply when acknowledging; HR reads it too."""
-
-    reply: str = Field("", max_length=1000)
-
-
-class CalibrationPerson(BaseModel):
-    """One reviewed person in calibration: bands and states, no reasons."""
-
-    appraisal_id: uuid.UUID
-    name: str
-    manager_name: str
-    status: AppraisalStatus
-    self_band: Band | None
-    final_band: Band | None
-    gap: bool
-    feedback: int
-    feedback_done: int
-
-
-class CalibrationTeam(BaseModel):
-    """One manager's figures."""
-
-    manager_name: str
-    people: int
-    bands: dict[int, int]
-    agreement: float | None
-    gaps: int
-    flag: str | None
-
-
-class Calibration(BaseModel):
-    """The cycle's calibration view."""
-
-    teams: list[CalibrationTeam]
-    people: list[CalibrationPerson]

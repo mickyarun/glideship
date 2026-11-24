@@ -30,7 +30,7 @@ from app.models.employee_profile import EmployeeProfile
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.user import UserRepository
-from app.schemas.appraisal_review import Calibration, CalibrationPerson, CalibrationTeam
+from app.schemas.appraisal_calibration import Calibration, CalibrationPerson, CalibrationTeam
 from app.services.appraisals.calibration_math import Scored, figures
 from app.services.appraisals.context import Caller
 from app.services.appraisals.hr_scope import hidden_users

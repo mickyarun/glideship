@@ -16,8 +16,6 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.appraisal_enums import AppraisalStatus
-from app.models.appraisal_goal import AppraisalGoal
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.user import UserRepository
@@ -27,49 +25,18 @@ from app.schemas.appraisal_review import (
     AppraisalRead,
     ManagerOnly,
     ManagerScore,
-    ReviewActions,
-    ReviewGoal,
     SelfScore,
     TimelineMonth,
 )
 from app.services.appraisals import audit, crypto
-from app.services.appraisals.access import AppraisalAccess, reads_content
+from app.services.appraisals.access import reads_content
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller
 from app.services.appraisals.evidence import ids_of
 from app.services.appraisals.fact_view import board_ids, for_viewer
 from app.services.appraisals.growth import read_growth
-
-
-def _goal(goal: AppraisalGoal, access: AppraisalAccess) -> ReviewGoal:
-    own, manager = access.view_self_score, access.view_manager_score
-    return ReviewGoal(
-        id=goal.id,
-        position=goal.position,
-        title=crypto.unseal(goal, "title") or "",
-        measure=crypto.unseal(goal, "measure") or "",
-        added_mid_period=goal.added_mid_period,
-        accepted_at=goal.accepted_at,
-        self_result=goal.self_result if own else None,
-        self_reason=crypto.unseal(goal, "self_reason") if own else None,
-        self_evidence=ids_of(goal.self_evidence) if own else [],
-        result=goal.final_result if manager else None,
-        draft_result=goal.manager_result if access.edit_manager_score else None,
-        manager_reason=crypto.unseal(goal, "manager_reason") if manager else None,
-    )
-
-
-def _actions(ctx: AppraisalContext) -> ReviewActions:
-    access, status = ctx.access, ctx.appraisal.status
-    calibrating = status is AppraisalStatus.CALIBRATION
-    return ReviewActions(
-        edit_self=access.edit_self_score and status is AppraisalStatus.SELF_REVIEW,
-        edit_manager=access.edit_manager_score and status is AppraisalStatus.MANAGER_REVIEW,
-        send_back=access.send_back and calibrating,
-        share=access.share and calibrating,
-        acknowledge=ctx.is_self and status is AppraisalStatus.SHARED,
-    )
+from app.services.appraisals.review_parts import review_actions, review_goal
 
 
 async def read_review(
@@ -163,7 +130,7 @@ async def read_review(
         summary_hidden=hidden,
         timeline=timeline,
         period_facts=view(list(appraisal.period_facts or [])),
-        goals=[_goal(g, access) for g in goals],
+        goals=[review_goal(g, access) for g in goals],
         self_score=SelfScore(
             band=appraisal.self_band,
             reason=crypto.unseal(appraisal, "self_reason") or "",
@@ -197,5 +164,5 @@ async def read_review(
         shared_at=appraisal.shared_at,
         acknowledged_at=appraisal.acknowledged_at,
         growth=await read_growth(db, ctx),
-        can=_actions(ctx),
+        can=review_actions(ctx),
     )

@@ -35,7 +35,7 @@ from app.models.employee_profile import EmployeeProfile, EmployeeStatus
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
-from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
+from app.repositories.appraisal_feedback_moves import AppraisalFeedbackMoveRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.employee_reporting_manager import (
     EmployeeReportingManagerRepository,
@@ -187,7 +187,7 @@ async def follow_primary_manager(
             action=EmployeeAuditAction.APPRAISAL_CHANGED,
             target=appraisal_id,
         )
-    feedback = await AppraisalFeedbackRepository(db, org_id=org_id).move_open(
+    feedback = await AppraisalFeedbackMoveRepository(db, org_id=org_id).move_open(
         profile_id, primary.user_id
     )
     return len(moved) + feedback
