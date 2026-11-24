@@ -151,36 +151,6 @@ export interface ManagerBody {
   concern_note: string
 }
 
-export interface CalibrationPerson {
-  appraisal_id: string
-  name: string
-  manager_name: string
-  status: AppraisalStatus
-  self_band: number | null
-  final_band: number | null
-  gap: boolean
-  /** The manager flagged a performance concern in the part only HR reads. */
-  concern: boolean
-  feedback: number
-  feedback_done: number
-}
-
-export interface CalibrationTeam {
-  manager_name: string
-  /** Reviews sent to HR, out of \`total\` the manager scores. */
-  people: number
-  total: number
-  bands: Record<string, number>
-  agreement: number | null
-  gaps: number
-  flag: string | null
-}
-
-export interface Calibration {
-  teams: CalibrationTeam[]
-  people: CalibrationPerson[]
-}
-
 /** One citable piece of evidence, resolved for display. */
 export interface EvidenceOption {
   id: string

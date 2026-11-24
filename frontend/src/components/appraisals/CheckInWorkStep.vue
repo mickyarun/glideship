@@ -29,13 +29,14 @@
         <span class="ci-work__muted">{{ detail(fact) }}</span>
         <v-textarea
           v-if="editable && (tags[fact.id] || opened.has(fact.id))"
-          v-model="notes[fact.id]"
+          :model-value="notes[fact.id] ?? ''"
           :label="`Your note on ${fact.key}`"
           hint="Optional"
           persistent-hint
           rows="1"
           auto-grow
           maxlength="500"
+          @update:model-value="v => note(fact.id, v)"
         />
         <p v-else-if="notes[fact.id]" class="ci-work__note">“{{ notes[fact.id] }}”</p>
         <button v-else-if="editable" type="button" class="ci-work__add" @click="opened.add(fact.id)">+ Add a note on {{ fact.key }}</button>
@@ -86,6 +87,13 @@ const ordered = computed(() => {
 })
 const shown = computed(() => (all.value ? ordered.value : ordered.value.slice(0, FIRST)))
 const titles = computed(() => Object.fromEntries(props.goals.map(g => [g.id, g.title])))
+
+// A note is on something that mattered: writing one ticks the item, so the
+// manager, who only sees ticked work, sees the note too.
+function note(factId: string, text: string): void {
+  notes.value[factId] = text
+  if (text.trim() && !props.tags[factId]) emit('tick', factId, true)
+}
 
 function detail(fact: FactView): string {
   const goal = props.tags[fact.id]?.goal_id

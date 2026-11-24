@@ -58,6 +58,7 @@ import { useGoalActions } from '@/composables/useGoalActions'
 import type { Goal, GoalBody } from '@/types/appraisalGoals'
 import { goalMeter } from '@/utils/appraisalGoals'
 import { firstName } from '@/utils/appraisalReview'
+import { longDate } from '@/utils/appraisalSetup'
 
 const route = useRoute()
 const { store, message, dialog, start, busy, dialogError, suggestNote, run, cardEvents, pick, submitDialog, suggest } = useGoalActions()
@@ -67,13 +68,18 @@ const adding = ref(false)
 
 const who = computed(() => firstName(goals.value?.person_name, 'them'))
 const title = computed(() => (goals.value?.can_add ? `Set ${who.value}'s goals` : 'Your goals'))
-const subtitle = computed(() =>
-  goals.value?.can_add ? `${who.value} sees each goal as soon as you confirm it · Goals lock when HR opens reviews` : 'Your manager confirms each goal you suggest · Goals lock when HR opens reviews',
-)
+const subtitle = computed(() => {
+  const g = goals.value
+  const due = g?.goals_due && !g.locked ? `Set goals by ${longDate(g.goals_due)} · ` : ''
+  const confirms = g?.can_add ? `${who.value} sees each goal as soon as you confirm it` : 'Your manager confirms each goal you suggest'
+  return `${due}${confirms} · Goals lock when HR opens reviews`
+})
 const full = computed(() => Boolean(goals.value && goals.value.accepted >= goals.value.limit))
 // Confirmed goals, then (for the person) their own waiting suggestions.
 const listed = computed(() =>
-  (goals.value?.goals ?? []).filter(g => g.status === 'accepted' || (goals.value?.can_propose && g.status === 'proposed')),
+  (goals.value?.goals ?? []).filter(
+    g => g.status === 'accepted' || (g.status === 'proposed' && (Boolean(goals.value?.can_propose) || g.from_manager)),
+  ),
 )
 
 function cardFor(goal: Goal) {

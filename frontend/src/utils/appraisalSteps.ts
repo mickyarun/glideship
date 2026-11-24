@@ -59,13 +59,20 @@ export interface PeriodFacts {
   sent: number
   months: number
   opened: number
+  /** The cycle's goals date, once known. */
+  goalsDue?: string | null
+}
+
+/** While goals are the step: "2 goals confirmed · by Thu 8 Oct 2026". */
+function goalsDetail(f: PeriodFacts, confirmed: string): string {
+  return f.goalsDue && stepIndex(f.status, f.opened) === 0 ? `${confirmed} · by ${longDate(f.goalsDue)}` : confirmed
 }
 
 /** The person's own steps, as on their home page. */
 export function ownSteps(f: PeriodFacts): Step[] {
   return states(
     [
-      { title: 'Agree goals', detail: `${f.goals} goal${f.goals === 1 ? '' : 's'} confirmed`, later: 'First' },
+      { title: 'Agree goals', detail: goalsDetail(f, `${f.goals} goal${f.goals === 1 ? '' : 's'} confirmed`), later: 'First' },
       { title: 'Monthly check-ins', detail: `${f.sent} of ${f.months} sent`, later: 'Next' },
       { title: 'Your review', detail: 'About 20 minutes', later: earlyAfter(f.periodEnd) },
       { title: 'Result and plan', detail: 'After your 1:1', later: earlyAfter(f.periodEnd, 'Late') },
@@ -78,7 +85,7 @@ export function ownSteps(f: PeriodFacts): Step[] {
 export function personSteps(f: PeriodFacts, managerDue: string | null): Step[] {
   return states(
     [
-      { title: 'Goals', detail: `${f.goals} confirmed`, later: 'First' },
+      { title: 'Goals', detail: goalsDetail(f, `${f.goals} confirmed`), later: 'First' },
       { title: 'Check-ins', detail: `${f.sent} of ${f.months} sent`, later: 'Next' },
       { title: 'Review', detail: managerDue ? `Theirs, then yours by ${longDate(managerDue)}` : 'Theirs, then yours', later: earlyAfter(f.periodEnd) },
       { title: 'Result and plan', detail: 'After your 1:1', later: earlyAfter(f.periodEnd, 'Late') },
@@ -90,6 +97,7 @@ export function personSteps(f: PeriodFacts, managerDue: string | null): Step[] {
 export interface CycleFacts {
   status: 'draft' | 'active' | 'reviewing' | 'closed'
   people: number
+  goalsDue: string
   periodEnd: string
   ackDue: string
 }
@@ -99,7 +107,7 @@ export function cycleSteps(f: CycleFacts): Step[] {
   const now = { draft: 0, active: 1, reviewing: 2, closed: 4 }[f.status]
   return states(
     [
-      { title: 'Set up', detail: peopleCount(f.people), later: 'First' },
+      { title: 'Set up', detail: `${peopleCount(f.people)}, goals by ${longDate(f.goalsDue)}`, later: 'First' },
       { title: 'Goals and check-ins', detail: `Until ${longDate(f.periodEnd)}`, later: 'Next' },
       { title: 'Reviews and fairness check', detail: 'You share results after 1:1s', later: `You open it, ${earlyAfter(f.periodEnd).toLowerCase()}` },
       { title: 'Close', detail: 'Everyone has read their result', later: `By ${longDate(f.ackDue)}` },

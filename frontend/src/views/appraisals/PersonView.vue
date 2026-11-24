@@ -74,7 +74,7 @@ const steps = computed(() => {
   if (!r) return []
   const opened = r.months.filter(m => m.state !== 'not_open').length
   const sent = r.months.filter(m => m.state === 'sent').length
-  const facts = { status: r.status, periodEnd: r.period_end, goals: r.goals_accepted, sent, months: r.months.length, opened }
+  const facts = { status: r.status, periodEnd: r.period_end, goals: r.goals_accepted, sent, months: r.months.length, opened, goalsDue: r.goals_due }
   return personSteps(facts, review.value?.manager_due ?? null)
 })
 const subtitle = computed(() => {

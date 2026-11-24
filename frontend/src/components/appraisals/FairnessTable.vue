@@ -32,7 +32,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="team in calibration.teams" :key="team.manager_name">
+          <tr v-for="team in calibration.teams" :key="team.manager_user_id">
             <td>{{ team.manager_name }}</td>
             <td>{{ team.people }}/{{ team.total }}</td>
             <td>
@@ -42,7 +42,7 @@
             </td>
             <td>{{ team.agreement === null ? '–' : `${Math.round(team.agreement * team.people)} of ${team.people}` }}</td>
             <td>{{ team.people ? team.gaps : '–' }}</td>
-            <td>{{ teamStatus(team, calibration, high) }}</td>
+            <td>{{ teamStatus(team, calibration) }}</td>
           </tr>
         </tbody>
       </table>
@@ -53,11 +53,11 @@
 
 <script setup lang="ts">
 import AppPanel from '@/components/common/AppPanel.vue'
-import type { Calibration, CalibrationTeam } from '@/types/appraisalReview'
+import type { Calibration, CalibrationTeam } from '@/types/appraisalCalibration'
 import { BANDS } from '@/utils/appraisalBands'
 import { spread, teamStatus } from '@/utils/appraisalFairness'
 
-defineProps<{ calibration: Calibration; high: Set<string> }>()
+defineProps<{ calibration: Calibration }>()
 
 function spreadLabel(team: CalibrationTeam): string {
   return spread(team).map((n, i) => `${BANDS[i].label} ${n}`).join(', ')

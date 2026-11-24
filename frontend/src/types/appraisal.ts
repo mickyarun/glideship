@@ -102,6 +102,9 @@ export interface CheckInRead {
   identity_warnings: { user_id: string; name: string }[]
   /** The review this check-in belongs to: its goals page hangs off it. */
   appraisal_id: string | null
+  cycle_name: string | null
+  /** Which of the cycle's check-ins this is: 2 of 3. */
+  place: { number: number; of: number } | null
   /** The manager's feedback answering this check-in, once it is sent. */
   feedback: FeedbackShown | null
   due_on: string | null

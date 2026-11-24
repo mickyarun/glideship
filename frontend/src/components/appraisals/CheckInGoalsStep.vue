@@ -16,7 +16,7 @@
 
 <!-- Question 1: where each goal stands at the end of the month, in the
      person's words, with last month's beside it. Each box saves when the
-     person leaves it; a blank one stays blank. -->
+     person leaves it; emptying a box clears that month's value. -->
 <template>
   <FormStep :number="1" title="Where are your goals now?" :hint="`For each goal, say where it stands at the end of ${month}: the number if there is one, and what moved it. Leave it blank if nothing changed.`">
     <p v-if="!goals.length" class="ci-goals__muted">No confirmed goals this period yet.</p>
@@ -51,8 +51,10 @@ const emit = defineEmits<{ save: [goalId: string, value: string] }>()
 const words = reactive<Record<string, string>>({})
 
 function save(goal: CheckInGoal): void {
-  const value = (words[goal.id] ?? '').trim()
-  if (value && value !== (goal.value ?? '')) emit('save', goal.id, value)
+  // Only a box the person changed; an empty one clears the value.
+  if (!(goal.id in words)) return
+  const value = words[goal.id].trim()
+  if (value !== (goal.value ?? '')) emit('save', goal.id, value)
 }
 </script>
 

@@ -21,6 +21,7 @@ import type { CycleRead, CycleUpdate } from '@/types/appraisalSetup'
 export function cycleForm(c: CycleRead): Required<CycleUpdate> {
   return {
     name: c.name,
+    goals_due: c.goals_due,
     self_due: c.self_due,
     manager_due: c.manager_due,
     ack_due: c.ack_due,

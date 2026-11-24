@@ -23,6 +23,8 @@ export type TodoKind =
   | 'waiting_on_check_in'
   | 'manager_review'
   | 'confirm_goals'
+  /** The caller's manager suggested a change to one of their goals. */
+  | 'confirm_change'
   | 'set_goals'
   | 'open_reviews'
   | 'fairness_check'

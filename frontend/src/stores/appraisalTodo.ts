@@ -20,6 +20,7 @@ import { computed, ref } from 'vue'
 import api from '@/services/api'
 import type { TodoItem } from '@/types/appraisalTodo'
 import { actionable, todoCounts } from '@/utils/appraisalTodo'
+import { extractApiError } from '@/utils/errors'
 
 export const useAppraisalTodoStore = defineStore('appraisalTodo', () => {
   const items = ref<TodoItem[]>([])
@@ -28,14 +29,18 @@ export const useAppraisalTodoStore = defineStore('appraisalTodo', () => {
   const total = computed(() => items.value.filter(actionable).length)
   const late = computed(() => items.value.filter(i => i.late).length)
 
-  /** Refresh the list; a failure leaves the badge empty rather than erroring. */
+  /** Why the list couldn't load, for pages built on it; the badge just stays empty. */
+  const error = ref('')
+
   async function fetch(): Promise<void> {
     try {
       items.value = (await api.get<TodoItem[]>('/v1/appraisals/todo')).data
-    } catch {
+      error.value = ''
+    } catch (err) {
       items.value = []
+      error.value = extractApiError(err, "Couldn't load what's waiting on you. Reload to try again.")
     }
   }
 
-  return { items, counts, total, late, fetch }
+  return { items, counts, total, late, error, fetch }
 })

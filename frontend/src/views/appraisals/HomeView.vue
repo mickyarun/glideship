@@ -24,8 +24,8 @@
       <AppraisalGuide />
     </template>
     <AppCallout v-if="guide?.intro_note" variant="info" title="A note from HR">{{ guide.intro_note }}</AppCallout>
-    <AppCallout v-if="message" variant="error">{{ message }}</AppCallout>
-    <p v-if="loaded && !current" class="home__empty">You're not in an appraisal cycle yet. HR opens one each period.</p>
+    <AppCallout v-if="message || loadError" variant="error">{{ message || loadError }}</AppCallout>
+    <p v-if="loaded && !current && !loadError" class="home__empty">You're not in an appraisal cycle yet. HR opens one each period.</p>
     <template v-if="current">
       <StepStrip :steps="steps" label="Where this period is" />
       <div class="home">
@@ -76,6 +76,7 @@ import { dueLine, todayIso, todoAction, todoTitle } from '@/utils/appraisalTodoW
 
 const BODY: Partial<Record<TodoItem['kind'], string>> = {
   check_in: 'Say where each goal stands and tick the work that mattered. About 10 minutes.',
+  confirm_change: 'Take it, or say why not. Once you take it, it replaces the goal.',
   self_review: 'How each goal ended, two short answers and your overall rating. About 20 minutes.',
   read_result: 'Your manager and HR have shared your result. Read it and reply if you want to.',
 }
@@ -93,6 +94,8 @@ const busy = ref(false)
 const message = ref('')
 const today = todayIso()
 
+// What failed to load: the page says so rather than showing an empty state.
+const loadError = computed(() => reviews.error || checkIns.listError || notes.error || todo.error)
 const current = computed(() => reviews.mine.find(r => r.status !== 'withdrawn') ?? null)
 const manager = computed(() => firstName(goals.current?.manager_name, 'your manager'))
 const subtitle = computed(() => {
@@ -116,7 +119,7 @@ const steps = computed(() => {
   if (!c) return []
   const opened = periods.value.filter(p => p.checkInId).length
   const sent = periods.value.filter(p => p.tone === 'done').length
-  return ownSteps({ status: c.status, periodEnd: c.period_end, goals: values.value.length, sent, months: periods.value.length, opened })
+  return ownSteps({ status: c.status, periodEnd: c.period_end, goals: values.value.length, sent, months: periods.value.length, opened, goalsDue: guide.value?.goals_due })
 })
 const quiet = computed(() => {
   const next = periods.value.find(p => p.tone === 'later')

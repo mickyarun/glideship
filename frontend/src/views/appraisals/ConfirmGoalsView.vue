@@ -57,7 +57,8 @@ const route = useRoute()
 const { store, message, dialog, start, busy, dialogError, cardEvents, submitDialog } = useGoalActions()
 const goals = computed(() => store.current)
 const who = computed(() => firstName(goals.value?.person_name, 'them'))
-const proposed = computed(() => (goals.value?.goals ?? []).filter(g => g.status === 'proposed'))
+// What the person suggested; the manager's own suggested changes wait on the person.
+const proposed = computed(() => (goals.value?.goals ?? []).filter(g => g.status === 'proposed' && !g.from_manager))
 const accepted = computed(() => (goals.value?.goals ?? []).filter(g => g.status === 'accepted'))
 const full = computed(() => Boolean(goals.value && goals.value.accepted >= goals.value.limit))
 const title = computed(() => {

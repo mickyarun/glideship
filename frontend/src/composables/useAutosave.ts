@@ -17,10 +17,11 @@
  *
  * Compares a snapshot of the form with the last one saved, so loading a
  * record never saves it, text typed while a save is on its way is kept and
- * saved next, and saves never overlap. Leaving the page saves what's left.
+ * saved next, and saves never overlap. Leaving the page saves what's left,
+ * and closing the tab while something is unsaved asks first.
  */
 
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const DELAY_MS = 800
 
@@ -66,7 +67,8 @@ export function useAutosave(snapshot: () => string, persist: () => Promise<strin
 
   async function save(): Promise<void> {
     clearTimeout(timer)
-    if (running) await running
+    // Another call may start a save while this one waits: wait for all of them.
+    while (running) await running
     if (!canSave() || snapshot() === saved) {
       state.value = 'saved'
       problem.value = ''
@@ -98,7 +100,14 @@ export function useAutosave(snapshot: () => string, persist: () => Promise<strin
     schedule()
   })
 
+  // The browser's own "leave this page?" while text is still on its way.
+  function warn(event: BeforeUnloadEvent): void {
+    if (canSave() && (running || snapshot() !== saved)) event.preventDefault()
+  }
+
+  onMounted(() => window.addEventListener('beforeunload', warn))
   onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', warn)
     clearTimeout(timer)
     if (canSave() && snapshot() !== saved) void save()
   })

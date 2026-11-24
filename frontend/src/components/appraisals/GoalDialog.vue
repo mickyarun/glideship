@@ -66,6 +66,7 @@ const TEXT: Record<GoalDialogMode, ModeText> = {
   edit: { title: 'Edit the goal', action: 'Save', words: true },
   'edit-reason': { title: 'Change the goal', action: 'Save change', words: true, reason: 'Why it changed (they see this)', needsReason: true },
   'suggest-change': { title: 'Suggest a change', action: 'Send to my manager', words: true, reason: 'Why (optional)' },
+  'offer-change': { title: 'Suggest a change', action: 'Send to them', words: true, reason: 'Why (they see this; optional)' },
   reword: { title: 'Suggest a change', action: 'Send back', words: false, reason: 'Your wording, or what to change (they see this)', needsReason: true },
   decline: { title: 'Not this quarter', action: 'Not adding it', words: false, reason: 'One line on why (they see this)', needsReason: true },
 }

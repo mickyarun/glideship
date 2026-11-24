@@ -33,7 +33,7 @@ function goal(overrides: Partial<Goal> = {}): Goal {
   return {
     id: 'g1', position: null, title: 'Refunds UAT at 80%', measure: 'test report', origin: 'employee_own',
     status: 'proposed', suggestion_basis: null, proposed_by_name: 'Priya', added_mid_period: false,
-    created_at: '2026-10-05T10:00:00Z', replaces: null, dismiss_reason: null, reword_note: null, why: null,
+    created_at: '2026-10-05T10:00:00Z', replaces: null, from_manager: false, dismiss_reason: null, reword_note: null, why: null,
     history: [], actions: NONE, ...overrides,
   }
 }

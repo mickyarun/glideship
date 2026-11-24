@@ -60,7 +60,7 @@
     rounded="lg"
   >
     <template v-if="todo.total > 0 && !rail" #append>
-      <span class="people-nav__pill" :aria-label="`${todo.total} to do`">{{ todo.total }}</span>
+      <span class="people-nav__pill" :class="{ 'people-nav__pill--late': todo.late }" :aria-label="`${todo.total} to do${todo.late ? `, ${todo.late} late` : ''}`">{{ todo.total }}</span>
     </template>
   </v-list-item>
   <v-list-item
@@ -127,5 +127,10 @@ onMounted(() => {
   text-align: center;
   background: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-on-primary));
+}
+/* Something on the list is past its due date. */
+.people-nav__pill--late {
+  background: rgb(var(--v-theme-error));
+  color: rgb(var(--v-theme-on-error));
 }
 </style>

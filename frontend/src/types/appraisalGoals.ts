@@ -58,6 +58,8 @@ export interface Goal {
   added_mid_period: boolean
   created_at: string
   replaces: string | null
+  /** A change the manager suggested: the employee takes or declines it. */
+  from_manager: boolean
   dismiss_reason: string | null
   reword_note: string | null
   why: string | null
@@ -73,6 +75,8 @@ export interface GoalsRead {
   period_end: string
   locked: boolean
   limit: number
+  /** Goals are agreed by this date. */
+  goals_due: string | null
   /** The fewest confirmed goals the org asks for. */
   minimum: number
   accepted: number

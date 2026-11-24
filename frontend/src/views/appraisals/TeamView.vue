@@ -20,14 +20,17 @@
 <template>
   <AppPage title="Your team" :subtitle="subtitle">
     <template #actions><AppraisalGuide /></template>
-    <AppCallout v-if="team.error" variant="error">{{ team.error }}</AppCallout>
+    <AppCallout v-if="team.error || todo.error" variant="error">{{ team.error || todo.error }}</AppCallout>
     <v-progress-linear v-if="!team.loaded" indeterminate color="primary" />
-    <p v-else-if="!team.rows.length" class="team__empty">Nobody you manage is in a running appraisal cycle.</p>
-    <FirstRunPanel v-else-if="firstRun" :rows="team.rows" />
-    <template v-else>
-      <TeamQueue :items="queue" />
-      <p v-if="comingUp" class="team__coming">{{ comingUp }}</p>
-      <EveryoneTable :rows="team.rows" :items="todo.items" />
+    <!-- After a failed load the callout says so; nothing below pretends the team is empty. -->
+    <template v-else-if="!team.error">
+      <p v-if="!team.rows.length" class="team__empty">Nobody you manage is in a running appraisal cycle.</p>
+      <FirstRunPanel v-else-if="firstRun" :rows="team.rows" />
+      <template v-else>
+        <TeamQueue :items="queue" :note-days="team.rows[0].note_due_days" />
+        <p v-if="comingUp" class="team__coming">{{ comingUp }}</p>
+        <EveryoneTable :rows="team.rows" :items="todo.items" />
+      </template>
     </template>
   </AppPage>
 </template>
@@ -62,7 +65,8 @@ const comingUp = computed(() => {
   if (!next) return ''
   const due = team.rows.flatMap(r => r.months).find(m => m.period_start === next.period_start && m.due_on)?.due_on
   const label = monthTitle(next.period_start).split(' ')[0]
-  return `Coming up: ${label} check-ins${due ? ` arrive by ${longDate(due)}` : ' arrive after the month ends'}. Your notes on each are due a few working days after it's sent.`
+  const days = team.rows[0].note_due_days
+  return `Coming up: ${label} check-ins${due ? ` arrive by ${longDate(due)}` : ' arrive after the month ends'}. Your notes on each are due ${days} working days after it's sent.`
 })
 
 onMounted(() => {

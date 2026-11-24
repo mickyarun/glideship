@@ -85,3 +85,25 @@ describe('useAutosave', () => {
     expect(saves).toEqual(['send me', 'leaving'])
   })
 })
+
+describe('leaving with unsaved text', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('asks the browser to confirm, and stops asking once saved', async () => {
+    const { text, api } = setup()
+    const ask = () => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    expect(ask()).toBe(false)
+    text.value = 'not saved yet'
+    await nextTick()
+    expect(ask()).toBe(true)
+    const sent = api.flush()
+    await vi.runAllTimersAsync()
+    await sent
+    expect(ask()).toBe(false)
+  })
+})

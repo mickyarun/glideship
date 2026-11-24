@@ -22,11 +22,11 @@
       <h2 class="first__title">Your first cycle as a manager</h2>
       <p class="first__muted">You have {{ peopleCount(rows.length) }} this period. Here's everything you'll be asked to do, in order. You only ever see what's due now.</p>
       <ol class="first__plan" aria-label="What you'll be asked to do">
-        <li class="first__step first__step--now"><strong>1 · Agree goals</strong> <span>Now</span><p>{{ range }} per person. About 10 minutes each.</p></li>
+        <li class="first__step first__step--now"><strong>1 · Agree goals</strong> <span>Now</span><p>{{ range }} per person, by {{ longDate(rows[0].goals_due) }}. About 10 minutes each.</p></li>
         <li class="first__step"><strong>2 · Reply to check-ins</strong><p>Once a month, a few lines per person.</p></li>
         <li class="first__step"><strong>3 · Review</strong><p>When HR opens reviews: agree or change what each person wrote.</p></li>
       </ol>
-      <DoNowCard :title="`Set goals for your ${peopleCount(rows.length)}`" :body="`0 of ${rows.length} done. They can suggest goals too, so you can wait for theirs or start now.`" />
+      <DoNowCard :title="`Set goals for your ${peopleCount(rows.length)}`" :body="`Due ${longDate(rows[0].goals_due)} · 0 of ${rows.length} done. They can suggest goals too, so you can wait for theirs or start now.`" />
       <AppPanel title="Your people" flush>
         <ul class="first__people">
           <li v-for="row in rows" :key="row.id" class="first__person">
@@ -56,6 +56,7 @@ import { computed } from 'vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import DoNowCard from '@/components/appraisals/DoNowCard.vue'
 import type { TeamRow } from '@/types/appraisalTeam'
+import { longDate } from '@/utils/appraisalSetup'
 import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const props = defineProps<{ rows: TeamRow[] }>()

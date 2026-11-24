@@ -22,6 +22,15 @@
   <form class="setup" @submit.prevent="emit('save', form)">
     <FormStep :number="1" title="Who and when">
       <v-text-field v-model="form.name" label="Name" maxlength="120" hide-details="auto" />
+      <v-text-field
+        v-model="form.goals_due"
+        type="date"
+        label="Goals agreed by"
+        :min="cycle.period_start"
+        :max="cycle.period_end"
+        hint="Managers and their people agree goals by this day; after it, anyone short of goals shows as late."
+        persistent-hint
+      />
       <p class="setup__hint">
         {{ longDate(cycle.period_start) }} – {{ longDate(cycle.period_end) }}<template v-if="people !== null"> · {{ people }} people</template>
         · people who join by {{ longDate(cycle.enrolment_cutoff) }} are included

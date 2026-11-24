@@ -31,26 +31,22 @@
       <DoNowCard
         :title="ready ? `${ready} result${ready === 1 ? ' is' : 's are'} ready to share` : 'Nothing ready to share yet'"
         :body="shareBody"
-        :action="ready ? `Share ${ready} result${ready === 1 ? '' : 's'}` : ''"
+        :action="ready ? shareAction : ''"
         :busy="sharing"
-        @act="share"
+        @act="confirming = true"
       />
-      <AppPanel :title="`Needs a look · ${look.length}`" flush>
-        <p v-if="!look.length" class="fair__muted">Nothing stands out.</p>
-        <ul class="fair__list">
-          <li v-for="item in look" :key="item.key" class="fair__item">
-            <div class="fair__words"><strong>{{ item.title }}</strong><span class="fair__muted">{{ item.detail }}</span></div>
-            <span class="fair__tag">{{ item.tag }}</span>
-            <div class="fair__actions">
-              <v-btn v-if="item.appraisalId && item.canSendBack" size="small" variant="text" @click="back = item">Send back to {{ firstName(item.managerName, 'the manager') }}</v-btn>
-              <v-btn v-if="item.appraisalId" size="small" variant="outlined" :to="{ name: 'appraisal-review', params: { id: item.appraisalId } }">Open review</v-btn>
-            </div>
-          </li>
-        </ul>
-      </AppPanel>
-      <FairnessTable :calibration="cal" :high="high" />
+      <FairnessLookList :items="look" :busy="marking" @send-back="item => (back = item)" @fair="markFair" />
+      <FairnessTable :calibration="cal" />
     </template>
     <SendBackDialog :open="Boolean(back)" :manager-name="back?.managerName ?? null" :busy="sendingBack" @close="back = null" @send="sendBack" />
+    <AppConfirmDialog
+      v-model="confirming"
+      :title="`${shareAction}?`"
+      :body="`Each person gets a Slack message and can read their result straight away. Sharing can't be undone.${held ? ' Results still held back stay here.' : ''}`"
+      :action="shareAction"
+      :busy="sharing"
+      @confirm="share"
+    />
   </AppPage>
 </template>
 
@@ -58,16 +54,16 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
+import AppConfirmDialog from '@/components/common/AppConfirmDialog.vue'
 import AppPage from '@/components/common/AppPage.vue'
-import AppPanel from '@/components/common/AppPanel.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
 import DoNowCard from '@/components/appraisals/DoNowCard.vue'
+import FairnessLookList from '@/components/appraisals/FairnessLookList.vue'
 import FairnessTable from '@/components/appraisals/FairnessTable.vue'
 import SendBackDialog from '@/components/appraisals/SendBackDialog.vue'
 import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { type Outcome, useAppraisalSetupStore } from '@/stores/appraisalSetup'
-import { type LookItem, needsALook, ratesHigh } from '@/utils/appraisalFairness'
-import { firstName } from '@/utils/appraisalReview'
+import { heldLine, type LookItem, needsALook, shareable } from '@/utils/appraisalFairness'
 import { longDate } from '@/utils/appraisalSetup'
 
 const route = useRoute()
@@ -78,17 +74,27 @@ const cycle = computed(() => store.cycle)
 const cal = computed(() => store.calibration)
 const outcome = ref<Outcome | null>(null)
 const sharing = ref(false)
+const confirming = ref(false)
+const marking = ref<string | null>(null)
 const back = ref<LookItem | null>(null)
 const sendingBack = ref(false)
 const look = computed(() => (cal.value ? needsALook(cal.value) : []))
-const high = computed(() => (cal.value ? ratesHigh(cal.value) : new Set<string>()))
-const ready = computed(() => cal.value?.people.filter(p => p.status === 'calibration').length ?? 0)
+const ready = computed(() => (cal.value ? shareable(cal.value).length : 0))
+const held = computed(() => cal.value?.people.filter(p => p.status === 'calibration' && p.held).length ?? 0)
+const shareAction = computed(() => `Share ${ready.value} result${ready.value === 1 ? '' : 's'}`)
 const writing = computed(() => cal.value?.people.filter(p => p.status === 'manager_review' || p.status === 'self_review').length ?? 0)
 const shareBody = computed(() => {
   const due = cycle.value ? ` People get a Slack message and must read their result by ${longDate(cycle.value.ack_due)}.` : ''
+  const wait = cal.value ? heldLine(cal.value) : ''
   const still = writing.value ? ` ${writing.value} review${writing.value === 1 ? ' is' : 's are'} still being written.` : ''
-  return `Share once each manager has had the 1:1.${due}${still}`
+  return `Share once each manager has had the 1:1.${due}${wait ? ` ${wait}` : ''}${still}`
 })
+
+async function markFair(item: LookItem): Promise<void> {
+  marking.value = item.key
+  outcome.value = await store.looksFair(id.value, item.fairIds)
+  marking.value = null
+}
 
 async function sendBack(note: string): Promise<void> {
   const item = back.value
@@ -105,6 +111,7 @@ async function share(): Promise<void> {
   sharing.value = true
   outcome.value = await store.shareAll(id.value)
   sharing.value = false
+  confirming.value = false
 }
 
 watch(
@@ -116,43 +123,3 @@ watch(
   { immediate: true },
 )
 </script>
-
-<style scoped>
-.fair__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.fair__actions {
-  display: flex;
-  gap: 8px;
-}
-.fair__item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 12px 20px;
-  border-top: 1px solid rgb(var(--v-theme-rule));
-}
-.fair__words {
-  display: flex;
-  flex: 1 1 280px;
-  flex-direction: column;
-  font-size: 14px;
-}
-.fair__muted {
-  margin: 0;
-  padding: 0 20px 16px;
-  font-size: 13px;
-  color: rgb(var(--v-theme-on-surface-variant));
-}
-.fair__words .fair__muted {
-  padding: 0;
-}
-.fair__tag {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgb(var(--v-theme-warning));
-}
-</style>

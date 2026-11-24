@@ -37,12 +37,12 @@
             <td><MonthDots :states="row.months.map(m => m.state)" :months="months" /></td>
             <td>{{ notesLine(row) }}</td>
             <td :class="`everyone__standing everyone__standing--${standing(row, items).split(' ')[0].toLowerCase()}`">{{ standing(row, items) }}</td>
-            <td><RouterLink :to="{ name: 'appraisal-person', params: { id: row.id } }">Open</RouterLink></td>
+            <td><RouterLink :to="{ name: 'appraisal-person', params: { id: row.id } }">Open<span class="d-sr-only"> {{ row.person_name }}'s quarter</span></RouterLink></td>
           </tr>
         </tbody>
       </table>
     </div>
-    <p class="everyone__key">Dots: filled = sent, ring = late, empty = not open or not sent yet. "Open" shows one person's whole quarter on one page.</p>
+    <p class="everyone__key">Dots: filled = sent, ring = late, cross = missed, empty = not open or not sent yet. "Open" shows one person's whole quarter on one page.</p>
   </AppPanel>
 </template>
 

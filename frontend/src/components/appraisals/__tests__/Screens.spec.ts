@@ -21,7 +21,8 @@ import ProposalCard from '@/components/appraisals/ProposalCard.vue'
 import TeamQueue from '@/components/appraisals/TeamQueue.vue'
 import type { FactView } from '@/types/appraisal'
 import type { Goal } from '@/types/appraisalGoals'
-import type { CycleProgress, CycleRead } from '@/types/appraisalSetup'
+import type { CycleRead } from '@/types/appraisalSetup'
+import type { CycleProgress } from '@/types/appraisalProgress'
 import { appraisalPlugins } from './mountAppraisal'
 
 const fact = (id: string): FactView => ({ source: 'board_cards', id, key: id.toUpperCase(), title: `Work ${id}`, url: null, verb: 'Shipped', done_at: '2026-11-14T10:00:00Z', private: false })
@@ -67,6 +68,7 @@ describe('team queue', () => {
           { kind: 'note', role: 'team', person_name: 'Arjun Mehta', cycle_name: null, due_on: '2026-11-11', late: true, target: 'feedback', target_id: 'f1', count: null },
           { kind: 'waiting_on_check_in', role: 'team', person_name: 'Maya Chen', cycle_name: null, due_on: null, late: false, target: 'feedback', target_id: 'f2', count: null },
         ],
+        noteDays: 5,
       },
     })
     expect(wrapper.text()).toContain('To do · 1')
@@ -98,9 +100,9 @@ describe('cycle page', () => {
     const { plugins } = await appraisalPlugins()
     const progress: CycleProgress = {
       people: [], feedback: 0, feedback_done: 0, managers_overdue: [], min_goals: 3, check_in_periods: [], note_periods: [],
-      remind_count: 9, reminded_at: null,
+      remind_count: 9, reminded_at: null, reminded_today: false,
     }
-    const cycle = { id: 'c1', status: 'active', period_end: '2099-12-31', ack_due: '2100-01-29' } as CycleRead
+    const cycle = { id: 'c1', status: 'active', period_end: '2099-12-31', goals_due: '2099-10-08', ack_due: '2100-01-29' } as CycleRead
     const readiness = { drafting: 'manual' as const, ai_note: null, in_scope: 40, no_primary_manager: [{ user_id: 'u', name: 'X' }, { user_id: 'v', name: 'Y' }], no_template: [], identity: [] }
     const wrapper = mount(CycleRunning, { global: { plugins: plugins as never[] }, props: { cycle, progress, readiness, busy: null } })
     expect(wrapper.text()).toContain('9 people are late')

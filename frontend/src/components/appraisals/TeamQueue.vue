@@ -42,7 +42,8 @@ import { initials } from '@/utils/appraisalTeamView'
 import { actionable, todoRoute } from '@/utils/appraisalTodo'
 import { dueLine, todayIso, todoAction, todoTitle } from '@/utils/appraisalTodoWords'
 
-const props = defineProps<{ items: TodoItem[] }>()
+/** ``noteDays``: the cycle's working days for a note once its check-in is sent. */
+const props = defineProps<{ items: TodoItem[]; noteDays: number }>()
 const today = todayIso()
 const count = computed(() => props.items.filter(actionable).length)
 
@@ -52,11 +53,11 @@ function detail(item: TodoItem): string {
     case 'note':
       return `They sent their check-in. Your notes: ${due}`
     case 'waiting_on_check_in':
-      return 'Not sent yet. Your notes are due a few working days after it is.'
+      return `Not sent yet. Your notes are due ${props.noteDays} working day${props.noteDays === 1 ? '' : 's'} after it is.`
     case 'set_goals':
-      return `Your org asks for at least ${item.count} more.`
+      return `Your org asks for at least ${item.count} more. ${due}`.trim()
     case 'confirm_goals':
-      return 'Goals lock when HR opens reviews.'
+      return `${due} Goals lock when HR opens reviews.`.trim()
     default:
       return due
   }

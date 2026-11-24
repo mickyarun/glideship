@@ -34,8 +34,9 @@ export const useManagerFeedbackStore = defineStore('managerFeedback', () => {
   async function fetchMine(): Promise<void> {
     try {
       mine.value = (await api.get<MyNote[]>(`${BASE}/mine`)).data
-    } catch {
+    } catch (err) {
       mine.value = []
+      error.value = extractApiError(err, "Couldn't load your manager's notes. Reload to try again.")
     }
   }
 

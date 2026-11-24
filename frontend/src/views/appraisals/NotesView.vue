@@ -21,12 +21,12 @@
   <AppPage :title="item ? `Your notes for ${who}` : 'Notes'" :subtitle="subtitle">
     <template v-if="item" #eyebrow><p class="notes__eyebrow">{{ item.person_name }} · {{ period }} check-in</p></template>
     <template #actions><AppraisalGuide /></template>
-    <AppCallout v-if="store.error || problem" variant="error">{{ problem || store.error }}</AppCallout>
+    <AppCallout v-if="store.error || problem || checkIns.error" variant="error">{{ problem || store.error || checkIns.error }}</AppCallout>
     <AppCallout v-if="message" variant="success">{{ message }}</AppCallout>
     <v-progress-linear v-if="store.loading && !item" indeterminate color="primary" />
     <div v-if="item" class="notes">
       <NotesCheckInSummary v-if="checkIns.current" :check-in="checkIns.current" />
-      <p v-else class="notes__muted">No check-in for this period.</p>
+      <p v-else-if="!checkIns.error" class="notes__muted">No check-in for this period.</p>
       <AppPanel title="Your notes" :note="item.content_hidden ? '' : 'About 5 minutes. Short is fine. These don\'t set a rating; they help them steer.'">
         <p v-if="item.content_hidden" class="notes__muted">Not sent yet. You'll read it once {{ item.manager_name || 'the manager' }} sends it.</p>
         <template v-else>

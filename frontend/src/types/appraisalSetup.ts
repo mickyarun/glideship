@@ -15,7 +15,6 @@
 /** HR's appraisal setup as the API returns it (`/api/v1/appraisals`), and the guide. */
 
 import type { Cadence } from '@/types/appraisalFeedback'
-import type { MonthStateName } from '@/types/appraisalTeam'
 
 export type ReviewPeriod = 'quarterly' | 'half_yearly' | 'yearly'
 export type FeedbackCadence = 'monthly' | 'quarterly' | 'in_review'
@@ -63,6 +62,8 @@ export interface CycleRead {
   status: CycleStatus
   period_start: string
   period_end: string
+  /** Goals agreed by: short of the minimum after it is late. */
+  goals_due: string
   self_due: string
   manager_due: string
   ack_due: string
@@ -94,6 +95,7 @@ export type CycleUpdate = Partial<
   Pick<
     CycleRead,
     | 'name'
+    | 'goals_due'
     | 'self_due'
     | 'manager_due'
     | 'ack_due'
@@ -132,50 +134,6 @@ export interface EnrolmentReport {
   no_template: string[]
 }
 
-export interface ProgressRow {
-  user_id: string
-  name: string
-  manager_user_id: string | null
-  manager_name: string
-  status: AppraisalStatus
-  goals_accepted: number
-  /** Each check-in period's state, in order, as anyone but the person sees it. */
-  months: MonthStateName[]
-  check_ins: number
-  check_ins_added: number
-  check_ins_missed: number
-  check_ins_late: number
-  feedback: number
-  feedback_done: number
-  feedback_overdue: number
-}
-
-export interface PeriodCount {
-  period_start: string
-  period_end: string
-  due_on: string | null
-  sent: number
-  total: number
-}
-
-export interface CycleProgress {
-  people: ProgressRow[]
-  feedback: number
-  feedback_done: number
-  managers_overdue: { name: string; overdue: number }[]
-  min_goals: number
-  check_in_periods: PeriodCount[]
-  note_periods: PeriodCount[]
-  /** People a manual reminder would reach now. */
-  remind_count: number
-  reminded_at: string | null
-}
-
-export interface RemindResult {
-  people: number
-  reached: number
-}
-
 export interface GuideRead {
   cycle_name: string | null
   review_period: ReviewPeriod
@@ -183,6 +141,7 @@ export interface GuideRead {
   feedback_cadence: FeedbackCadence
   period_start: string | null
   period_end: string | null
+  goals_due: string | null
   self_due: string | null
   manager_due: string | null
   ack_due: string | null

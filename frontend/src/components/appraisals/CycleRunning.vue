@@ -63,8 +63,8 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import DoNowCard from '@/components/appraisals/DoNowCard.vue'
 import StepStrip from '@/components/appraisals/StepStrip.vue'
-import type { CycleProgress, CycleRead, Readiness } from '@/types/appraisalSetup'
-import { localDay } from '@/utils/appraisalCheckIn'
+import type { CycleRead, Readiness } from '@/types/appraisalSetup'
+import type { CycleProgress } from '@/types/appraisalProgress'
 import { cycleDoNow, lastCheckInsWords, latestMonthLabel, managerRows, remindWords, tiles } from '@/utils/appraisalCyclePage'
 import { cycleSteps } from '@/utils/appraisalSteps'
 import { todayIso } from '@/utils/appraisalTodoWords'
@@ -75,14 +75,14 @@ const emit = defineEmits<{ remind: []; review: [] }>()
 const today = todayIso()
 
 const steps = computed(() =>
-  cycleSteps({ status: props.cycle.status, people: props.progress.people.length, periodEnd: props.cycle.period_end, ackDue: props.cycle.ack_due }),
+  cycleSteps({ status: props.cycle.status, people: props.progress.people.length, goalsDue: props.cycle.goals_due, periodEnd: props.cycle.period_end, ackDue: props.cycle.ack_due }),
 )
 const now = computed(() => cycleDoNow(props.cycle, props.progress, today))
-const remindedToday = computed(() => Boolean(props.progress.reminded_at && localDay(props.progress.reminded_at) === today))
+const remindedToday = computed(() => props.progress.reminded_today)
 const remind = computed(() => remindWords(props.progress, today))
 const waiting = computed(() => lastCheckInsWords(props.progress, today))
 const noManager = computed(() => props.readiness?.no_primary_manager.length ?? 0)
-const tileList = computed(() => tiles(props.progress, today))
+const tileList = computed(() => tiles(props.progress, props.cycle.goals_due, today))
 const rows = computed(() => managerRows(props.progress))
 </script>
 

@@ -93,7 +93,7 @@ describe('the guide', () => {
   it('words the period from the cycle', () => {
     const guide: GuideRead = {
       cycle_name: 'Q4 2026', review_period: 'quarterly', checkin_cadence: 'monthly', feedback_cadence: 'in_review',
-      period_start: '2026-10-01', period_end: '2026-12-31', self_due: '2027-01-07', manager_due: '2027-01-14',
+      period_start: '2026-10-01', period_end: '2026-12-31', goals_due: '2026-10-08', self_due: '2027-01-07', manager_due: '2027-01-14',
       ack_due: '2027-01-28', feedback_due_days: 10, reminder_offsets: [-3, 0, 2], ai_drafting: false,
       intro_note: '', is_manager: false, is_hr: false,
     }

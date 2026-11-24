@@ -20,6 +20,7 @@
      offers a first draft of question 2. -->
 <template>
   <AppPage :title="title" :subtitle="subtitle">
+    <template v-if="eyebrow" #eyebrow><p class="ci__eyebrow">{{ eyebrow }}</p></template>
     <template #actions><AppraisalGuide /></template>
     <AppCallout v-if="store.error || problem" variant="error">{{ problem || store.error }}</AppCallout>
     <v-progress-linear v-if="store.loading && !checkIn" indeterminate color="primary" />
@@ -97,6 +98,12 @@ const title = computed(() => {
   if (!c) return 'Check-in'
   return isSelf.value ? `${month.value} check-in` : `${c.person_name}'s ${month.value} check-in`
 })
+// "Check-in 2 of 3 · Q4 2026"
+const eyebrow = computed(() => {
+  const c = loaded.value ? checkIn.value : null
+  if (!c?.place) return c?.cycle_name ?? ''
+  return [`Check-in ${c.place.number} of ${c.place.of}`, c.cycle_name].filter(Boolean).join(' · ')
+})
 const subtitle = computed(() => {
   const c = checkIn.value
   if (!c) return ''
@@ -111,19 +118,32 @@ function useDraft(): void {
   dismissed.value = true
 }
 
-async function tick(factId: string, on: boolean): Promise<void> {
-  if (!checkIn.value) return
-  problem.value = (await store.saveTag(checkIn.value.id, factId, on ? { goal_id: null, heading: null } : null)) ?? ''
+// Ticks and goal boxes save on their own; sending waits for any on their way,
+// so a check-in sent straight after a change is never marked edited after sending.
+const saving = new Set<Promise<string | null>>()
+
+function track(action: Promise<string | null>): Promise<string | null> {
+  const done = action.then(p => {
+    problem.value = p ?? ''
+    return p
+  })
+  saving.add(done)
+  void done.finally(() => saving.delete(done))
+  return done
 }
 
-async function saveValue(goalId: string, value: string): Promise<void> {
-  if (!checkIn.value) return
-  problem.value = (await store.saveGoalValue(checkIn.value.id, goalId, { value, source_note: '', source_url: null })) ?? ''
+function tick(factId: string, on: boolean): void {
+  if (checkIn.value) void track(store.saveTag(checkIn.value.id, factId, on ? { goal_id: null, heading: null } : null))
+}
+
+function saveValue(goalId: string, value: string): void {
+  if (checkIn.value) void track(store.saveGoalValue(checkIn.value.id, goalId, { value, source_note: '', source_url: null }))
 }
 
 async function send(): Promise<void> {
   const c = checkIn.value
-  if (!c || !(await flush())) return
+  const failed = (await Promise.all(saving)).some(Boolean)
+  if (!c || failed || !(await flush())) return
   sending.value = true
   problem.value = (await store.send(c.id)) ?? ''
   sending.value = false
@@ -157,6 +177,11 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.ci__eyebrow {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .ci__saved {
   font-size: 13px;

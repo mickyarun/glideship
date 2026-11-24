@@ -39,6 +39,8 @@ export function todoTitle(item: TodoItem, month = ''): string {
       return `Waiting on ${who}'s check-in`
     case 'manager_review':
       return `Review ${who}'s quarter`
+    case 'confirm_change':
+      return n > 1 ? `Your manager suggested changes to ${n} goals` : 'Your manager suggested a change to a goal'
     case 'confirm_goals':
       return `Confirm ${n} goal${n === 1 ? '' : 's'} ${who} suggested`
     case 'set_goals':
@@ -60,6 +62,7 @@ export function todoAction(item: TodoItem): string {
     waiting_on_check_in: 'Open',
     manager_review: 'Start review',
     confirm_goals: 'Look at goals',
+    confirm_change: 'Look at the change',
     set_goals: 'Add goals',
     open_reviews: 'Open the cycle',
     fairness_check: 'Open the fairness check',

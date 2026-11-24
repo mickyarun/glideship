@@ -14,7 +14,8 @@
 
 /** HR's cycle page: the tiles, the by-manager table and the one thing to do (pure). */
 
-import type { CycleProgress, CycleRead, PeriodCount, ProgressRow } from '@/types/appraisalSetup'
+import type { CycleRead } from '@/types/appraisalSetup'
+import type { CycleProgress, PeriodCount, ProgressRow } from '@/types/appraisalProgress'
 import { localDay, monthTitle } from '@/utils/appraisalCheckIn'
 import { longDate } from '@/utils/appraisalSetup'
 import { peopleCount } from '@/utils/leavePolicyDisplay'
@@ -27,11 +28,18 @@ export interface Tile {
 
 const month = (p: PeriodCount) => monthTitle(p.period_start).split(' ')[0]
 
+/** "Goals confirmed · due 8 Oct" before the goals date, "· 2 late" after it. */
+function goalsLabel(progress: CycleProgress, goalsDue: string, today: string): string {
+  const late = progress.people.filter(p => p.goals_late).length
+  if (goalsDue >= today) return `Goals confirmed · due ${longDate(goalsDue)}`
+  return late ? `Goals confirmed · ${late} late` : 'Goals confirmed'
+}
+
 /** Goals confirmed, each opened month's check-ins, and the latest notes. */
-export function tiles(progress: CycleProgress, today: string): Tile[] {
+export function tiles(progress: CycleProgress, goalsDue: string, today: string): Tile[] {
   const people = progress.people.filter(p => p.status !== 'withdrawn')
   const out: Tile[] = [
-    { label: 'Goals confirmed', done: people.filter(p => p.goals_accepted >= progress.min_goals).length, total: people.length },
+    { label: goalsLabel(progress, goalsDue, today), done: people.filter(p => p.goals_accepted >= progress.min_goals).length, total: people.length },
   ]
   for (const p of progress.check_in_periods.filter(p => p.due_on)) {
     const due = p.due_on && p.due_on >= today && p.sent < p.total ? ` · due ${longDate(p.due_on)}` : ''
@@ -69,7 +77,7 @@ export function managerRows(progress: CycleProgress): ManagerRow[] {
       goals: rows.filter(r => r.goals_accepted >= progress.min_goals).length,
       checkIns: latest < 0 ? '–' : `${rows.filter(r => r.months[latest] === 'sent').length}/${rows.length}`,
       notes: rows.some(r => r.feedback) ? `${sum(rows, r => r.feedback_done)}/${sum(rows, r => r.feedback)}` : '–',
-      late: sum(rows, r => r.check_ins_late + r.feedback_overdue),
+      late: sum(rows, r => r.check_ins_late + r.feedback_overdue + Number(r.goals_late)),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -102,13 +110,16 @@ export function cycleDoNow(cycle: CycleRead, progress: CycleProgress, today: str
   return ended ? 'last_check_ins' : 'quiet'
 }
 
-/** People late now: check-ins past due and not sent, and managers with late notes. */
-function lateCounts(progress: CycleProgress): { people: number; checkIns: number; notes: number; managers: number } {
+/** People late now: check-ins past due and not sent; managers with late notes or people short of goals. */
+function lateCounts(progress: CycleProgress) {
+  const short = progress.people.filter(r => r.goals_late)
+  const managers = new Set([...progress.managers_overdue.map(m => m.name), ...short.map(r => r.manager_name)])
   return {
     people: progress.people.filter(r => r.check_ins_late > 0).length,
     checkIns: sum(progress.people, r => r.check_ins_late),
     notes: sum(progress.people, r => r.feedback_overdue),
-    managers: progress.managers_overdue.length,
+    goals: short.length,
+    managers: managers.size,
   }
 }
 
@@ -120,7 +131,8 @@ export function remindWords(progress: CycleProgress, today: string): { title: st
   const who = [l.people ? peopleCount(l.people) : '', l.managers ? plural(l.managers, 'manager') : ''].filter(Boolean)
   const n = who.length ? l.people + l.managers : progress.remind_count
   const title = `${who.length ? who.join(' and ') : peopleCount(n)} ${n === 1 ? 'is' : 'are'} late`
-  const what = `${plural(l.checkIns, 'check-in')} not sent and ${plural(l.notes, 'manager note')} overdue.`
+  const goals = l.goals ? ` ${peopleCount(l.goals)} still short of goals.` : ''
+  const what = `${plural(l.checkIns, 'check-in')} not sent and ${plural(l.notes, 'manager note')} overdue.${goals}`
   const last = progress.reminded_at
     ? ` You last reminded them ${longDate(localDay(progress.reminded_at))}.`
     : ' Slack already sent each of them a reminder.'

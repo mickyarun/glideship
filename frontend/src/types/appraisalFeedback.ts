@@ -23,7 +23,6 @@ export type GoalCheck = 'on_track' | 'at_risk' | 'off_track'
 export interface FeedbackGoal {
   id: string
   title: string
-  status: GoalCheck | null
   note: string
 }
 

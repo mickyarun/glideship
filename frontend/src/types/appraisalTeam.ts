@@ -42,4 +42,7 @@ export interface TeamRow extends AppraisalSummary {
   /** The org's goal range per person. */
   min_goals: number
   max_goals: number
+  /** The cycle's working days for a note after its check-in is sent, and its goals date. */
+  note_due_days: number
+  goals_due: string
 }

@@ -12,63 +12,87 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** The fairness check's lists: what needs a look, and how each manager rated (pure). */
+/** The fairness check's lists: what needs a look, who is held back, and how each manager rated (pure).
 
-import type { Calibration, CalibrationPerson, CalibrationTeam } from '@/types/appraisalReview'
-import { BANDS, bandLabel, HIGH_BANDS } from '@/utils/appraisalBands'
+The server decides what is flagged and who "rates high"; these only word it. */
 
-/** A manager "rates high" when at least this share of their reviews is in an Exceeded band... */
-const HIGH_SHARE = 2 / 3
-/** ...and everyone else together rates under this share that high. */
-const OTHERS_SHARE = 0.5
-/** Too few reviews to call a pattern. */
-const MIN_TEAM = 3
+import type { Calibration, CalibrationPerson, CalibrationTeam } from '@/types/appraisalCalibration'
+import { BANDS, bandLabel } from '@/utils/appraisalBands'
+import { firstName } from '@/utils/appraisalReview'
 
 export interface LookItem {
   key: string
   title: string
   detail: string
   tag: 'Big difference' | 'Rates high' | 'Concern flagged'
+  /** The one review this is about; null for a whole team. */
   appraisalId: string | null
-  /** Whose review it is, and whether HR can still send it back to them. */
   managerName: string
+  /** Every result "Looks fair" marks: the person, or everyone held on the team. */
+  fairIds: string[]
+  /** Already looked at: who said it looks fair, and when. */
+  fairBy: string | null
+  fairAt: string | null
   canSendBack: boolean
 }
 
-const highOf = (t: CalibrationTeam) => HIGH_BANDS.reduce((n, b) => n + (t.bands[String(b)] ?? 0), 0)
-
-/** Managers whose share of "Exceeded" ratings stands out from everyone else's. */
-export function ratesHigh(cal: Calibration): Set<string> {
-  const out = new Set<string>()
-  for (const team of cal.teams) {
-    if (team.people < MIN_TEAM) continue
-    const others = cal.teams.filter(t => t !== team)
-    const otherPeople = others.reduce((n, t) => n + t.people, 0)
-    const otherHigh = others.reduce((n, t) => n + highOf(t), 0)
-    const share = highOf(team) / team.people
-    if (share >= HIGH_SHARE && (otherPeople === 0 || otherHigh / otherPeople < OTHERS_SHARE)) out.add(team.manager_name)
-  }
-  return out
+/** "1 in 3", "none", or "2 of 2" when every one is. */
+export function share(high: number, people: number): string {
+  if (!high) return 'none'
+  if (high === people) return `${high} of ${people}`
+  return `1 in ${Math.round(people / high)}`
 }
 
 function gapLine(p: CalibrationPerson): string {
-  return `${p.name}: ${bandLabel(p.self_band)} → ${p.manager_name}: ${bandLabel(p.final_band)}. Two or more steps apart.`
+  return `${firstName(p.name, p.name)}: ${bandLabel(p.self_band)} → ${firstName(p.manager_name, p.manager_name)}: ${bandLabel(p.final_band)}. Two or more steps apart.`
+}
+
+function person(p: CalibrationPerson, tag: LookItem['tag'], detail: string): LookItem {
+  return {
+    key: `${tag}-${p.appraisal_id}`, title: `${p.name} · ${p.manager_name}`, detail, tag, appraisalId: p.appraisal_id,
+    managerName: p.manager_name, fairIds: [p.appraisal_id], fairBy: p.looks_fair_at ? p.looks_fair_by_name : null,
+    fairAt: p.looks_fair_at, canSendBack: p.status === 'calibration',
+  }
 }
 
 /** Big differences, managers who rate high, and flagged concerns. */
 export function needsALook(cal: Calibration): LookItem[] {
-  const out: LookItem[] = cal.people
-    .filter(p => p.gap)
-    .map(p => ({ key: `gap-${p.appraisal_id}`, title: `${p.name} · ${p.manager_name}`, detail: gapLine(p), tag: 'Big difference', appraisalId: p.appraisal_id, managerName: p.manager_name, canSendBack: p.status === 'calibration' }))
-  for (const name of ratesHigh(cal)) {
-    const team = cal.teams.find(t => t.manager_name === name)
-    if (!team) continue
-    out.push({ key: `high-${name}`, title: `${name}'s team · ${team.people} reviews`, detail: `${highOf(team)} of ${team.people} rated "Exceeded" in some form.`, tag: 'Rates high', appraisalId: null, managerName: name, canSendBack: false })
+  const out = cal.people.filter(p => p.gap).map(p => person(p, 'Big difference', gapLine(p)))
+  for (const team of cal.teams.filter(t => t.rates_high)) {
+    const theirs = cal.people.filter(p => p.manager_user_id === team.manager_user_id && p.final_band !== null)
+    const open = theirs.filter(p => !p.looks_fair_at)
+    const marked = theirs.find(p => p.looks_fair_at)
+    out.push({
+      key: `high-${team.manager_user_id}`, title: `${team.manager_name}'s team · ${team.people} reviews`,
+      detail: `${team.high} of ${team.people} rated "Exceeded" in some form. For other managers it's ${share(team.others_high, team.others_people)}.`,
+      tag: 'Rates high', appraisalId: null, managerName: team.manager_name, fairIds: open.map(p => p.appraisal_id),
+      fairBy: open.length ? null : (marked?.looks_fair_by_name ?? null), fairAt: open.length ? null : (marked?.looks_fair_at ?? null), canSendBack: false,
+    })
   }
   for (const p of cal.people.filter(p => p.concern)) {
-    out.push({ key: `concern-${p.appraisal_id}`, title: `${p.name} · ${p.manager_name}`, detail: `${p.manager_name} flagged a performance concern in the HR-only section.`, tag: 'Concern flagged', appraisalId: p.appraisal_id, managerName: p.manager_name, canSendBack: p.status === 'calibration' })
+    out.push(person(p, 'Concern flagged', `${firstName(p.manager_name, p.manager_name)} flagged a performance concern in the HR-only section.`))
   }
   return out
+}
+
+/** Results waiting for HR that sharing everything would send now: not held back. */
+export function shareable(cal: Calibration): CalibrationPerson[] {
+  return cal.people.filter(p => p.status === 'calibration' && !p.held)
+}
+
+/** "Viktor's 17 wait until you've looked at how he rated." per held team, then held people. */
+export function heldLine(cal: Calibration): string {
+  const held = cal.people.filter(p => p.status === 'calibration' && p.held)
+  if (!held.length) return ''
+  const high = new Set(cal.teams.filter(t => t.rates_high).map(t => t.manager_user_id))
+  const parts: string[] = []
+  for (const team of cal.teams.filter(t => high.has(t.manager_user_id))) {
+    const n = held.filter(p => p.manager_user_id === team.manager_user_id).length
+    if (n) parts.push(`${firstName(team.manager_name, team.manager_name)}'s ${n} wait until you've looked at how they rated.`)
+  }
+  const flagged = held.filter(p => !high.has(p.manager_user_id)).length
+  if (flagged) parts.push(`${flagged} flagged result${flagged === 1 ? ' waits' : 's wait'} until you mark ${flagged === 1 ? 'it' : 'them'} fair.`)
+  return parts.join(' ')
 }
 
 /** A manager's ratings lowest to highest, as counts in the scale's order. */
@@ -77,9 +101,10 @@ export function spread(team: CalibrationTeam): number[] {
 }
 
 /** Where a manager's reviews stand. */
-export function teamStatus(team: CalibrationTeam, cal: Calibration, high: Set<string>): string {
+export function teamStatus(team: CalibrationTeam, cal: Calibration): string {
   if (team.people < team.total) return 'Writing'
-  if (high.has(team.manager_name)) return 'Rates high'
-  const look = cal.people.filter(p => p.manager_name === team.manager_name && (p.gap || p.concern)).length
+  const theirs = cal.people.filter(p => p.manager_user_id === team.manager_user_id)
+  const look = theirs.filter(p => p.held).length
+  if (team.rates_high && look) return 'Rates high'
   return look ? `${look} to look at` : 'Ready'
 }

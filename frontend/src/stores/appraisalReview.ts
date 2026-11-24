@@ -33,6 +33,7 @@ export const useAppraisalReviewStore = defineStore('appraisalReview', () => {
   const loading = ref(false)
 
   async function fetchLists(): Promise<void> {
+    error.value = ''
     try {
       const [own, reports] = await Promise.all([
         api.get<AppraisalSummary[]>(`${BASE}/mine`),

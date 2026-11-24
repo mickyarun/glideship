@@ -15,12 +15,11 @@
 /** The pure rules behind the new appraisal screens. */
 import { describe, expect, it } from 'vitest'
 import type { CheckInSummary } from '@/types/appraisal'
-import type { Calibration } from '@/types/appraisalReview'
-import type { CycleProgress, CycleRead } from '@/types/appraisalSetup'
+import type { CycleRead } from '@/types/appraisalSetup'
+import type { CycleProgress } from '@/types/appraisalProgress'
 import type { TeamRow } from '@/types/appraisalTeam'
 import type { TodoItem } from '@/types/appraisalTodo'
 import { cycleDoNow, lastCheckInsWords, managerRows, remindWords, tiles } from '@/utils/appraisalCyclePage'
-import { needsALook, ratesHigh, spread, teamStatus } from '@/utils/appraisalFairness'
 import { goalMeter } from '@/utils/appraisalGoals'
 import { periodRows, previousValues, valueTrail } from '@/utils/appraisalHome'
 import { cycleSteps, ownSteps } from '@/utils/appraisalSteps'
@@ -39,7 +38,7 @@ describe('steps', () => {
     expect(ownSteps(base)[2].when).toBe('Early January')
     expect(ownSteps({ ...base, opened: 0 })[0].state).toBe('now')
     expect(ownSteps({ ...base, status: 'self_review' })[2].state).toBe('now')
-    expect(cycleSteps({ status: 'reviewing', people: 40, periodEnd: '2026-12-31', ackDue: '2027-01-29' })[2].state).toBe('now')
+    expect(cycleSteps({ status: 'reviewing', people: 40, goalsDue: '2026-10-08', periodEnd: '2026-12-31', ackDue: '2027-01-29' })[2].state).toBe('now')
   })
 })
 
@@ -85,7 +84,7 @@ describe('team page', () => {
     id: 'a1', user_id: 'u1', profile_id: 'p1', cycle_id: 'c1', person_name: 'Priya', cycle_name: 'Q4', period_start: '2026-10-01',
     period_end: '2026-12-31', status: 'enrolled', goals_accepted: 0, goals_proposed: 0,
     months: [{ period_start: '2026-10-01', period_end: '2026-10-31', check_in_id: null, state: 'not_open', due_on: null }],
-    notes: [], min_goals: 3, max_goals: 6, ...over,
+    notes: [], min_goals: 3, max_goals: 6, note_due_days: 5, goals_due: '2026-10-08', ...over,
   })
 
   it('orders the queue oldest first with waiting last, and says where each person is', () => {
@@ -113,9 +112,9 @@ describe('team page', () => {
 describe('cycle page', () => {
   const progress: CycleProgress = {
     people: [
-      { user_id: 'u1', name: 'Priya', manager_user_id: 'm1', manager_name: 'Ravi', status: 'enrolled', goals_accepted: 3, months: ['sent', 'not_open'],
+      { user_id: 'u1', name: 'Priya', manager_user_id: 'm1', manager_name: 'Ravi', status: 'enrolled', goals_accepted: 3, goals_late: false, months: ['sent', 'not_open'],
         check_ins: 1, check_ins_added: 1, check_ins_missed: 0, check_ins_late: 0, feedback: 1, feedback_done: 1, feedback_overdue: 0 },
-      { user_id: 'u2', name: 'Meena', manager_user_id: 'm1', manager_name: 'Ravi', status: 'enrolled', goals_accepted: 1, months: ['late', 'not_open'],
+      { user_id: 'u2', name: 'Meena', manager_user_id: 'm1', manager_name: 'Ravi', status: 'enrolled', goals_accepted: 1, goals_late: true, months: ['late', 'not_open'],
         check_ins: 1, check_ins_added: 0, check_ins_missed: 0, check_ins_late: 1, feedback: 1, feedback_done: 0, feedback_overdue: 0 },
     ],
     feedback: 2, feedback_done: 1, managers_overdue: [], min_goals: 3,
@@ -124,14 +123,16 @@ describe('cycle page', () => {
       { period_start: '2026-11-01', period_end: '2026-11-30', due_on: null, sent: 0, total: 2 },
     ],
     note_periods: [{ period_start: '2026-10-01', period_end: '2026-10-31', due_on: '2026-11-12', sent: 1, total: 2 }],
-    remind_count: 1, reminded_at: null,
+    remind_count: 1, reminded_at: null, reminded_today: false,
   }
 
   it('counts goals, each opened month and the latest notes', () => {
-    expect(tiles(progress, '2026-11-24').map(t => [t.label, t.done, t.total])).toEqual([
-      ['Goals confirmed', 1, 2], ['October check-ins', 1, 2], ['Manager notes on October', 1, 2],
+    expect(tiles(progress, '2026-10-08', '2026-11-24').map(t => [t.label, t.done, t.total])).toEqual([
+      ['Goals confirmed · 1 late', 1, 2], ['October check-ins', 1, 2], ['Manager notes on October', 1, 2],
     ])
-    expect(managerRows(progress)).toEqual([{ key: 'm1', name: 'Ravi', people: 2, goals: 1, checkIns: '1/2', notes: '1/2', late: 1 }])
+    expect(tiles(progress, '2026-10-08', '2026-10-02')[0].label).toBe('Goals confirmed · due Thu 8 Oct 2026')
+    // Meena's late check-in and her late goals.
+    expect(managerRows(progress)).toEqual([{ key: 'm1', name: 'Ravi', people: 2, goals: 1, checkIns: '1/2', notes: '1/2', late: 2 }])
   })
 
   it('asks HR to remind, open reviews or check fairness, by where the cycle is', () => {
@@ -158,31 +159,7 @@ describe('cycle page', () => {
       check_in_periods: [progress.check_in_periods[0], { ...progress.check_in_periods[1], due_on: '2026-12-07' }] }
     expect(remindWords(late, '2026-11-24')).toEqual({
       title: '1 person and 1 manager are late',
-      body: '1 check-in not sent and 0 manager notes overdue. Slack already sent each of them a reminder. Best done before November check-ins are due on Mon 7 Dec 2026.',
+      body: '1 check-in not sent and 0 manager notes overdue. 1 person still short of goals. Slack already sent each of them a reminder. Best done before November check-ins are due on Mon 7 Dec 2026.',
     })
-  })
-})
-
-describe('fairness check', () => {
-  const team = (name: string, bands: Record<string, number>) => {
-    const people = Object.values(bands).reduce((a, b) => a + b, 0)
-    return { manager_name: name, people, total: people, bands, agreement: 1, gaps: 0, flag: null }
-  }
-  const cal: Calibration = {
-    teams: [team('Viktor', { '1': 2, '2': 3 }), team('Priya', { '3': 4, '2': 1 })],
-    people: [
-      { appraisal_id: 'a1', name: 'Tom', manager_name: 'Priya', status: 'calibration', self_band: 2, final_band: 4, gap: true, concern: false, feedback: 1, feedback_done: 1 },
-      { appraisal_id: 'a2', name: 'Aisha', manager_name: 'Priya', status: 'calibration', self_band: 3, final_band: 3, gap: false, concern: true, feedback: 1, feedback_done: 1 },
-    ],
-  }
-
-  it('lists big differences, managers who rate high and concerns, in rating words', () => {
-    expect([...ratesHigh(cal)]).toEqual(['Viktor'])
-    const look = needsALook(cal)
-    expect(look.map(l => l.tag)).toEqual(['Big difference', 'Rates high', 'Concern flagged'])
-    expect(look[0].detail).toBe('Tom: Exceeded most times → Priya: Met sometimes. Two or more steps apart.')
-    expect(spread(cal.teams[1])).toEqual([0, 0, 4, 1, 0])
-    expect(teamStatus(cal.teams[1], cal, ratesHigh(cal))).toBe('2 to look at')
-    expect(teamStatus({ ...cal.teams[1], people: 0, total: 5 }, cal, new Set())).toBe('Writing')
   })
 })

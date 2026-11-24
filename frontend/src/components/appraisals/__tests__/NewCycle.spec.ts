@@ -24,7 +24,7 @@ import { appraisalPlugins } from './mountAppraisal'
 
 const draft: CycleRead = {
   id: 'c1', name: 'Q1 2027', status: 'draft', period_start: '2027-01-01', period_end: '2027-03-31',
-  self_due: '2027-04-07', manager_due: '2027-04-14', ack_due: '2027-04-28', review_period: 'quarterly',
+  goals_due: '2027-01-08', self_due: '2027-04-07', manager_due: '2027-04-14', ack_due: '2027-04-28', review_period: 'quarterly',
   checkin_cadence: 'monthly', feedback_cadence: 'monthly', checkin_due_days: 5, feedback_due_days: 5, reminder_offsets: [-3, 0, 2],
   overdue_nudge: true, hr_overdue_list: true, hr_overdue_offset: 3, ai_drafting: true, suggest_goals_on_open: false,
   enrolment_cutoff: '2027-01-15', scope: { offices: [], departments: [], templates: [] }, template_overrides: {}, intro_note: '',

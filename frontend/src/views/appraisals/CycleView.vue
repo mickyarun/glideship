@@ -82,6 +82,7 @@ import FormStep from '@/components/appraisals/FormStep.vue'
 import { type Outcome, useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import type { CycleUpdate } from '@/types/appraisalSetup'
 import { CYCLE_STATUS, longDate } from '@/utils/appraisalSetup'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const route = useRoute()
 const router = useRouter()
@@ -130,7 +131,7 @@ async function open(): Promise<void> {
   const [result, problem] = await store.activate(cycle.value.id)
   busy.value = null
   const skipped = result?.no_primary_manager.length ?? 0
-  report(problem, `Opened. ${result?.enrolled ?? 0} people enrolled${skipped ? `, ${skipped} without a primary manager` : ''}.`)
+  report(problem, `Opened. ${peopleCount(result?.enrolled ?? 0)} enrolled${skipped ? `, ${skipped} without a primary manager` : ''}.`)
 }
 
 async function remove(): Promise<void> {
