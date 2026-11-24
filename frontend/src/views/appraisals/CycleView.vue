@@ -14,16 +14,16 @@
  * limitations under the License.
  -->
 
-<!-- One cycle for HR. A draft shows its settings and readiness, then opens;
-     a running cycle shows progress and can be closed. -->
+<!-- One cycle for HR. A draft is set up in three steps on one page (who and
+     when, how it runs, check and open); a running cycle shows progress and
+     can be closed. -->
 <template>
-  <AppPage :title="cycle?.name || 'Cycle'" :subtitle="subtitle">
+  <AppPage :title="cycle?.status === 'draft' ? `Start ${cycle.name}` : cycle?.name || 'Cycle'" :subtitle="subtitle">
     <template #actions>
       <v-btn variant="text" :to="{ name: 'appraisal-cycles' }">All cycles</v-btn>
       <AppraisalGuide />
       <template v-if="cycle?.status === 'draft'">
         <v-btn variant="outlined" color="error" :loading="busy === 'delete'" @click="remove">Delete draft</v-btn>
-        <v-btn color="primary" :loading="busy === 'open'" @click="open">Open cycle</v-btn>
       </template>
       <template v-else-if="cycle && cycle.status !== 'closed'">
         <v-btn v-if="cycle.ai_drafting && cycle.status === 'active'" variant="text" :loading="busy === 'suggest'" @click="count('suggest', store.suggestAll(cycle.id))">Suggest goals for everyone</v-btn>
@@ -36,8 +36,13 @@
     <AppCallout v-if="message" :variant="messageKind">{{ message }}</AppCallout>
     <v-progress-linear v-if="store.loading && !cycle" indeterminate color="primary" />
     <div v-if="cycle?.status === 'draft'" class="cycle__draft">
-      <CycleSetupForm :cycle="cycle" :saving="busy === 'save'" @save="save" />
-      <CycleReadiness v-if="store.readiness" :readiness="store.readiness" />
+      <CycleSetupForm :cycle="cycle" :saving="busy === 'save'" :people="store.readiness?.in_scope ?? null" @save="save" />
+      <FormStep :number="3" title="Check and open" hint="We check everyone has a manager and a role template. Nothing goes out until you open it.">
+        <CycleReadiness v-if="store.readiness" :readiness="store.readiness" />
+        <div class="cycle__open">
+          <v-btn color="primary" :loading="busy === 'open'" @click="open">Open {{ cycle.name }}</v-btn>
+        </div>
+      </FormStep>
     </div>
     <template v-else>
       <CalibrationPanel v-if="store.calibration" :calibration="store.calibration" />
@@ -70,6 +75,7 @@ import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
 import CycleProgressTable from '@/components/appraisals/CycleProgressTable.vue'
 import CycleReadiness from '@/components/appraisals/CycleReadiness.vue'
 import CycleSetupForm from '@/components/appraisals/CycleSetupForm.vue'
+import FormStep from '@/components/appraisals/FormStep.vue'
 import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import type { CycleUpdate } from '@/types/appraisalSetup'
 import { CYCLE_STATUS, longDate } from '@/utils/appraisalSetup'
@@ -83,11 +89,12 @@ const confirmClose = ref(false)
 const message = ref('')
 const messageKind = ref<'error' | 'success'>('success')
 
-const subtitle = computed(() =>
-  cycle.value
-    ? `${CYCLE_STATUS[cycle.value.status]} · ${longDate(cycle.value.period_start)} – ${longDate(cycle.value.period_end)}`
-    : '',
-)
+const subtitle = computed(() => {
+  const c = cycle.value
+  if (!c) return ''
+  if (c.status === 'draft') return 'New cycle · 3 short steps. Defaults come from Settings, so most cycles only need step 1.'
+  return `${CYCLE_STATUS[c.status]} · ${longDate(c.period_start)} – ${longDate(c.period_end)}`
+})
 
 function report(problem: string | null, ok: string): void {
   message.value = problem ?? ok
@@ -148,15 +155,13 @@ watch(
 
 <style scoped>
 .cycle__draft {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: start;
+  max-width: 960px;
 }
-/* The setup form needs the width for its rows of dates; readiness goes below. */
-@media (max-width: 1200px) {
-  .cycle__draft {
-    grid-template-columns: 1fr;
-  }
+.cycle__open {
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

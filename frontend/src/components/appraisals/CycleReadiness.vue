@@ -18,7 +18,7 @@
      gets the general template, and accounts that may need merging. -->
 <template>
   <section class="ready" aria-labelledby="ready-title">
-    <h2 id="ready-title" class="ready__title">Readiness · {{ readiness.in_scope }} people in scope</h2>
+    <h3 id="ready-title" class="ready__title">{{ readiness.in_scope }} people in scope</h3>
     <AppCallout :variant="readiness.drafting === 'ai' ? 'success' : 'info'" :title="readiness.drafting === 'ai' ? 'AI drafts are ready' : 'Manual check-ins'">
       {{ readiness.ai_note || 'Check-ins get AI lines on top of the work list. Everyone can still change or ignore them.' }}
     </AppCallout>
@@ -61,14 +61,10 @@ const allClear = computed(
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 20px;
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgb(var(--v-theme-rule));
-  border-radius: 12px;
 }
 .ready__title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
 }
 .ready__clear {
