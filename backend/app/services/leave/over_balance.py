@@ -16,7 +16,8 @@
 
 Sick leave, usually: rather than the extra days quietly becoming loss of
 pay, the person is told what's left and pointed at the leave they still
-have, so they can split the request themselves.
+have, so they can split the request themselves. With no other leave left
+there is nothing to point at, so the days go through as loss of pay.
 """
 
 from collections.abc import Sequence
@@ -42,6 +43,11 @@ def _days(days: Decimal) -> str:
     return f"{value} day" if days == 1 else f"{value} days"
 
 
+def usable_others(others: Sequence[Other]) -> list[Other]:
+    """The other types they could still take leave from."""
+    return [o for o in others if o.left is None or o.left > ZERO]
+
+
 def over_balance_message(type_name: str, left: Decimal, others: Sequence[Other]) -> str:
     """E.g. "You have 1 day of Sick leave left, so request that much. Request the rest
     as another type: Earned leave (6 days left)."."""
@@ -51,14 +57,23 @@ def over_balance_message(type_name: str, left: Decimal, others: Sequence[Other])
         if have == ZERO
         else f"You have {_days(have)} of {type_name} left, so request that much."
     )
-    usable = [o for o in others if o.left is None or o.left > ZERO]
-    if not usable:
-        return f"{opening} You have no other leave left, so talk to your manager or HR."
+    usable = usable_others(others)
     names = ", ".join(
         o.name if o.left is None else f"{o.name} ({_days(o.left)} left)" for o in usable
     )
     rest = "the rest" if have > ZERO else "it"
     return f"{opening} Request {rest} as another type: {names}."
+
+
+def lop_confirm_message(type_name: str, left: Decimal | None, lop_days: Decimal) -> str:
+    """E.g. "You have no Sick leave left, so these 3 days would be unpaid (loss of pay)."."""
+    have = max(left, ZERO) if left is not None else ZERO
+    opening = (
+        f"You have no {type_name} left"
+        if have == ZERO
+        else f"You have {_days(have)} of {type_name} left"
+    )
+    return f"{opening}, so {_days(lop_days)} of this request would be unpaid (loss of pay)."
 
 
 def refusal(
@@ -67,7 +82,11 @@ def refusal(
     line: BalanceLine | None,
     lines: Sequence[BalanceLine],
 ) -> str | None:
-    """Why the request is refused, or None if it may go ahead (or be part unpaid)."""
+    """Why the request is refused, or None if it may go ahead (or be part unpaid).
+
+    Someone with no other leave left isn't refused: there's nothing to
+    request instead, so the days past the balance are loss of pay.
+    """
     if not leave_type.stops_at_balance or lop_days <= ZERO:
         return None
     if line is None or line.available is None:
@@ -78,4 +97,6 @@ def refusal(
         for o in lines
         if o is not line and o.leave_type.eligible_genders is None
     ]
+    if not usable_others(others):
+        return None
     return over_balance_message(leave_type.name, line.available, others)

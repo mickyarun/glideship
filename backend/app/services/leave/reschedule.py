@@ -41,8 +41,9 @@ from app.services.leave.loss_of_pay import rebalance, reprice
 from app.services.leave.policies import MemberPolicy
 from app.services.leave.wfh_overlap import HeldDays
 
-# The editor is an approver, so "nobody can approve this" doesn't apply.
-_IGNORED_PROBLEMS = {"no_approver"}
+# The editor is an approver, so "nobody can approve this" doesn't apply, and
+# the days past a balance are priced as loss of pay without asking again.
+_IGNORED_PROBLEMS = {"no_approver", "lop_confirm"}
 
 
 async def reschedule(

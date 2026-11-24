@@ -35,6 +35,8 @@ export function useLeaveRequestForm() {
   const endDate = ref('')
   const halfDay = ref<HalfDay>('none')
   const reason = ref('')
+  // They agreed that days past their balance are unpaid (loss of pay).
+  const acceptLop = ref(false)
 
   const preview = ref<LeavePreview | null>(null)
   const previewError = ref('')
@@ -56,14 +58,21 @@ export function useLeaveRequestForm() {
       end_date: endDate.value,
       half_day: singleDay.value && kind.value !== 'optional_holiday' ? halfDay.value : 'none',
       reason: reason.value.trim() || null,
+      accept_lop: acceptLop.value,
     }
   })
+
+  // Days past the balance are the one problem the person can answer themselves.
+  const needsLopConfirm = computed(
+    () => preview.value?.problems.some(p => p.code === 'lop_confirm') ?? false,
+  )
 
   const canSend = computed(
     () =>
       !!payload.value &&
       !!preview.value &&
-      preview.value.problems.length === 0 &&
+      preview.value.problems.every(p => p.code === 'lop_confirm') &&
+      (!needsLopConfirm.value || acceptLop.value) &&
       !previewing.value &&
       !previewError.value,
   )
@@ -77,6 +86,7 @@ export function useLeaveRequestForm() {
     endDate.value = today
     halfDay.value = 'none'
     reason.value = ''
+    acceptLop.value = false
     // Same key as last time (e.g. reopened with the same kind) won't fire the
     // watcher, so restart the preview here rather than leave a stale result.
     schedulePreview()
@@ -93,12 +103,13 @@ export function useLeaveRequestForm() {
 
   // The reason doesn't change the cost, so it doesn't re-run the preview.
   const previewKey = computed(() =>
-    payload.value ? JSON.stringify({ ...payload.value, reason: null }) : '',
+    payload.value ? JSON.stringify({ ...payload.value, reason: null, accept_lop: false }) : '',
   )
 
   function schedulePreview(): void {
     if (timer) clearTimeout(timer)
     call += 1
+    acceptLop.value = false
     preview.value = null
     previewError.value = ''
     const body = payload.value
@@ -131,6 +142,8 @@ export function useLeaveRequestForm() {
     endDate,
     halfDay,
     reason,
+    acceptLop,
+    needsLopConfirm,
     singleDay,
     payload,
     preview,

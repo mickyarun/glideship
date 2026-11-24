@@ -71,7 +71,9 @@
         :kind="form.kind.value"
         :policy="summary?.policy ?? null"
         :type-name="selectedTypeName"
+        :accept-lop="form.acceptLop.value"
         placeholder="Pick the dates to see how many days this uses."
+        @update:accept-lop="form.acceptLop.value = $event"
       />
       <AppCallout v-if="error" variant="error">{{ error }}</AppCallout>
     </v-form>

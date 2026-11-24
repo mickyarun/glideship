@@ -16,7 +16,9 @@
 
 from decimal import Decimal
 
-from app.services.leave.over_balance import Other, over_balance_message
+from app.models.leave_type import LeaveType
+from app.services.leave.balances import BalanceLine
+from app.services.leave.over_balance import Other, over_balance_message, refusal
 
 D = Decimal
 
@@ -36,8 +38,27 @@ def test_none_left_and_types_that_are_used_up_are_not_offered() -> None:
     )
 
 
-def test_nothing_else_left_sends_them_to_a_person() -> None:
-    text = over_balance_message("Sick leave", D("-1"), [Other("Earned leave", D(0))])
-    assert text == (
-        "You have no Sick leave left. You have no other leave left, so talk to your manager or HR."
+def _line(name: str, left: Decimal, *, stops: bool = False) -> BalanceLine:
+    return BalanceLine(
+        leave_type=LeaveType(name=name, stops_at_balance=stops),
+        allocated=D(5),
+        earned=D(5),
+        adjustments=D(0),
+        used=D(5) - left,
+        pending=D(0),
+        available=left,
+        taken=D(0),
     )
+
+
+def test_nothing_else_left_goes_through_as_loss_of_pay() -> None:
+    sick = _line("Sick leave", D(0), stops=True)
+    lines = [sick, _line("Earned leave", D(0))]
+    assert refusal(sick.leave_type, D(3), sick, lines) is None
+
+
+def test_another_type_with_leave_left_still_refuses() -> None:
+    sick = _line("Sick leave", D(0), stops=True)
+    lines = [sick, _line("Earned leave", D("2.5"))]
+    why = refusal(sick.leave_type, D(3), sick, lines)
+    assert why is not None and "Earned leave (2.5 days left)" in why

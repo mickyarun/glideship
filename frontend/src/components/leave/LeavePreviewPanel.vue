@@ -38,8 +38,20 @@
       <AppCallout v-if="preview.high_leave" :variant="highLeaveVariant(preview.high_leave)">
         {{ highLeaveForSelf(preview.high_leave, true) }}
       </AppCallout>
-      <AppCallout v-if="preview.problems.length" variant="error">
-        <div v-for="problem in preview.problems" :key="problem.code">{{ problem.message }}</div>
+      <AppCallout v-if="blocking.length" ref="problemsBox" variant="error">
+        <div v-for="problem in blocking" :key="problem.code">{{ problem.message }}</div>
+      </AppCallout>
+      <AppCallout v-if="lopConfirm" ref="lopBox" variant="warning" title="Past your balance">
+        <p class="lop__message">{{ lopConfirm.message }}</p>
+        <label class="lop__agree" :class="{ 'lop__agree--on': acceptLop }">
+          <v-checkbox-btn
+            :model-value="acceptLop"
+            density="compact"
+            color="primary"
+            @update:model-value="emit('update:acceptLop', !!$event)"
+          />
+          <span>Apply {{ lopDays }} as loss of pay (unpaid)</span>
+        </label>
       </AppCallout>
     </template>
     <div v-else class="preview__muted">{{ placeholder }}</div>
@@ -47,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import type { LeaveKind, LeavePreview, PolicyBrief } from '@/types/leave'
 import { highLeaveForSelf, highLeaveVariant } from '@/utils/highLeave'
@@ -56,6 +68,7 @@ import {
   excludedSummary,
   formatDays,
   lopLabel,
+  pluralDays,
   toNumber,
   toNumberOrNull,
 } from '@/utils/leave'
@@ -68,8 +81,30 @@ const props = defineProps<{
   policy: PolicyBrief | null
   /** Leave type name for the balance line. */
   typeName: string
+  /** They ticked the loss-of-pay box. */
+  acceptLop?: boolean
   placeholder: string
 }>()
+const emit = defineEmits<{ 'update:acceptLop': [value: boolean] }>()
+
+// Days past the balance are asked about, not refused: they tick a box to agree.
+const lopConfirm = computed(() => props.preview?.problems.find(p => p.code === 'lop_confirm'))
+const blocking = computed(() => props.preview?.problems.filter(p => p.code !== 'lop_confirm') ?? [])
+const lopDays = computed(() => pluralDays(toNumber(props.preview?.lop_days)))
+
+// The reason a request can't be sent sits under the form's other fields; bring
+// it into view so a disabled Send button never has a hidden explanation.
+const problemsBox = ref<{ $el: HTMLElement } | null>(null)
+const lopBox = ref<{ $el: HTMLElement } | null>(null)
+watch(
+  () => props.preview?.problems.map(p => p.message).join('|') ?? '',
+  async text => {
+    if (!text) return
+    await nextTick()
+    const box = problemsBox.value ?? lopBox.value
+    box?.$el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  },
+)
 
 const daysLine = computed(() => {
   const days = toNumber(props.preview?.days)
@@ -85,7 +120,7 @@ const skips = computed(() => {
 // Days past the balance aren't refused: they're unpaid.
 const lopLine = computed(() => {
   // A type that stops at its balance refuses instead: its message says what to do.
-  if (props.preview?.problems.some(p => p.code === 'over_balance')) return ''
+  if (props.preview?.problems.some(p => p.code === 'over_balance' || p.code === 'lop_confirm')) return ''
   const lop = lopLabel(props.preview?.lop_days)
   return lop ? `${lop}: these days are past your ${props.typeName ?? 'leave'} balance, so they're unpaid.` : ''
 })
@@ -131,6 +166,26 @@ const approval = computed(() =>
 .preview__approval {
   margin: 0;
   color: rgb(var(--v-theme-ink-2));
+}
+.lop__message {
+  margin: 0;
+}
+.lop__agree {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.lop__agree--on {
+  border-color: rgb(var(--v-theme-primary));
 }
 .preview__note,
 .preview__muted {

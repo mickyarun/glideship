@@ -71,6 +71,8 @@ class LeaveRequestCreate(BaseModel):
     end_date: date
     half_day: HalfDay = HalfDay.NONE
     reason: str | None = Field(None, max_length=500)
+    # The person agreed that days past their balance are unpaid (loss of pay).
+    accept_lop: bool = False
 
     @model_validator(mode="after")
     def _shape(self) -> "LeaveRequestCreate":
@@ -115,6 +117,7 @@ ProblemCode = Literal[
     "remote_no_wfh",
     "monthly_limit",
     "over_balance",
+    "lop_confirm",
 ]
 
 
