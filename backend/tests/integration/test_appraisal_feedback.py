@@ -390,3 +390,33 @@ async def test_a_check_in_opens_due_five_working_days_after_its_month(
         )
     # October ends on Saturday the 31st: Monday 2 to Friday 6 November.
     assert {(c.due_on, c.sent_at) for c in rows} == {(date(2026, 11, 6), None)}
+
+
+async def test_a_sent_but_unfinished_note_follows_a_new_manager_with_its_words(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    item = await _emp_item(pg_session_factory, m)
+    mgr = as_user(m.people["mgr"], m.org)
+    url = f"{FEEDBACK}/{item.id}"
+    await client.put(url, json={"keep": "Clear PRs"}, headers=mgr)
+    async with pg_session_factory() as db:
+        # As the migration leaves a note written before sending existed.
+        await db.execute(
+            update(AppraisalManagerFeedback)
+            .where(AppraisalManagerFeedback.id == item.id)
+            .values(sent_at=datetime.now(UTC), due_on=date(2099, 1, 1))
+        )
+        await db.commit()
+    moved = await client.put(
+        f"/api/v1/employees/{m.people['emp']}/managers",
+        json={"managers": [{"user_id": str(m.people["stranger"]), "is_primary": True}]},
+        headers=as_user(m.people["hr"], m.org),
+    )
+    assert moved.status_code == 200, moved.text
+    new_mgr = as_user(m.people["stranger"], m.org)
+    taken = (await client.get(url, headers=new_mgr)).json()
+    assert taken["can_edit"] and taken["keep"] == "Clear PRs"
+    await client.put(url, json={"keep": "Clear PRs", "try_next": "Pair on UAT"}, headers=new_mgr)
+    finished = await client.post(f"{url}/send", headers=new_mgr)
+    assert finished.json()["status"] == "done"
