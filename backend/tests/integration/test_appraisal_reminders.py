@@ -32,7 +32,7 @@ from app.services import slack_dm
 from app.services.appraisals import reminder_job
 from app.services.appraisals.enrolment import withdraw_on_exit
 from app.services.file_storage import FileStorage
-from tests.integration.appraisal_month import Month, october
+from tests.integration.appraisal_month import Month, october, send_check_in
 from tests.integration.board_notify_support import Slack, fake_slack, link_slack, mute
 from tests.integration.hr_support import configure_hr_storage
 from tests.integration.leave_support import Factory, as_user
@@ -348,3 +348,43 @@ async def test_review_steps_are_announced_once_each(
     await client.post(f"/api/v1/appraisals/{mine}/share", headers=hr)
     result = await _sent(slack, org, at(12))
     assert result[ids["emp"]].startswith("Your Q4 2026 result is ready.")
+
+
+async def test_an_unsent_check_in_is_reminded_before_on_and_after_its_due_date(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage, slack: Slack
+) -> None:
+    m, ids = await _month(client, pg_session_factory, sent=False)
+    await mute(pg_session_factory, m.people["quiet"], "appraisal_reminders")
+    org = await _org(pg_session_factory, m.org)
+    await _sent(slack, org, at(2))
+    # Due Friday 6 November: Wednesday, Friday, then Monday once late.
+    before = await _sent(slack, org, at(4))
+    assert before[ids["emp"]].startswith("Your October check-in is due Fri 6 Nov.")
+    assert await _sent(slack, org, at(5)) == {}
+    due = await _sent(slack, org, at(6))
+    assert due[ids["emp"]].startswith("Your October check-in is due today.")
+    late = await _sent(slack, org, at(9))
+    assert late[ids["emp"]].startswith("Your October check-in was due Fri 6 Nov")
+    assert ids["emp"] not in await _sent(slack, org, at(10))
+    # Muted people are skipped, as for every other reminder.
+    assert ids["quiet"] not in {**before, **due, **late}
+    async with pg_session_factory() as db:
+        claim = await db.scalar(
+            select(DigestClaim).where(
+                DigestClaim.org_id == m.org,
+                DigestClaim.user_id == m.people["quiet"],
+                DigestClaim.kind == DigestClaimKind.APPRAISAL_CHECK_IN_DUE,
+            )
+        )
+    assert claim is not None and claim.status is DigestClaimStatus.SKIPPED
+
+
+async def test_sending_the_check_in_stops_its_reminders(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage, slack: Slack
+) -> None:
+    m, ids = await _month(client, pg_session_factory, sent=False)
+    org = await _org(pg_session_factory, m.org)
+    await _sent(slack, org, at(2))
+    await send_check_in(client, m, "emp")
+    for day in (4, 6, 9):
+        assert ids["emp"] not in await _sent(slack, org, at(day)), day

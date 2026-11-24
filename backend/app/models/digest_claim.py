@@ -40,6 +40,7 @@ class DigestClaimKind(StrEnum):
     DAILY_FOLLOWUPS = "daily_followups"
     # Appraisals: one DM per person per kind per day, covering all their items.
     APPRAISAL_CHECK_IN_READY = "appraisal_check_in_ready"
+    APPRAISAL_CHECK_IN_DUE = "appraisal_check_in_due"
     APPRAISAL_FEEDBACK_DUE = "appraisal_feedback_due"
     APPRAISAL_SELF_DUE = "appraisal_self_due"
     APPRAISAL_REVIEW_DUE = "appraisal_review_due"

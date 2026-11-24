@@ -4,7 +4,8 @@ Check-ins and manager notes become private to their writer until sent,
 and both get due dates: a check-in five working days after its period
 ends, a manager note five working days after the check-in it answers is
 sent (a cycle's ``feedback_due_days`` now counts from that send). The
-self-review gains two open answers.
+self-review gains two open answers, and check-ins get due-date reminders
+(a new ``digest_claim_kind`` value).
 
 Existing data carries forward. Everything people could read before this
 migration stays readable: every existing check-in with something in it
@@ -40,6 +41,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 DUE_DAYS = 5
+CHECK_IN_DUE_KIND = "appraisal_check_in_due"
 OLD_FEEDBACK_DUE_DAYS = 10
 
 # The fifth weekday after each existing check-in's period ends.
@@ -129,6 +131,10 @@ BACKFILL = (
 
 
 def upgrade() -> None:
+    # The check-in due-date reminders' claim kind. A new enum value can't be
+    # used in the transaction that adds it on pg14, so it commits on its own.
+    with op.get_context().autocommit_block():
+        op.execute(f"ALTER TYPE digest_claim_kind ADD VALUE IF NOT EXISTS '{CHECK_IN_DUE_KIND}'")
     op.add_column("appraisal_check_ins", sa.Column("due_on", sa.Date(), nullable=True))
     op.add_column(
         "appraisal_check_ins", sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True)
@@ -181,6 +187,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     for statement in CLEAR_UNSENT:
         op.execute(statement)
+    # Postgres can't drop an enum value; its claims go, the unused value stays.
+    op.execute(f"DELETE FROM digest_claims WHERE kind = '{CHECK_IN_DUE_KIND}'")
     op.execute(
         "UPDATE organizations SET config = jsonb_set(config, '{appraisals}',"
         " (config -> 'appraisals') - 'min_goals' - 'checkin_due_days'"

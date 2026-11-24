@@ -60,6 +60,12 @@ class Schedule:
         )
 
 
+# Check-ins: two working days before, on the day, and one nudge the working
+# day after. Fixed rather than the cycle's offsets, which are for managers'
+# and review work.
+CHECK_IN_SCHEDULE = Schedule(offsets=(-2, 0, 1), overdue_nudge=True, hr_list=False, hr_offset=0)
+
+
 def moment(
     today: date,
     announced: bool,

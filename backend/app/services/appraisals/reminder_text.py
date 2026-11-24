@@ -89,6 +89,21 @@ def check_in_ready_text(labels: Sequence[str], base_url: str) -> str:
     )
 
 
+def check_in_due_line(moment: Moment, period_start: date, due_on: date) -> str:
+    """One check-in in a person's due-date reminder."""
+    label = f"{period_start:%B}"
+    if moment is Moment.DUE:
+        return f"Your {label} check-in is due today. Send it to your manager when it reads right."
+    if moment is Moment.AFTER:
+        return f"Your {label} check-in was due {short_date(due_on)} and isn't sent yet."
+    return f"Your {label} check-in is due {short_date(due_on)}. Only you see it until you send it."
+
+
+def check_in_due_text(lines: Sequence[str], base_url: str) -> str:
+    """A person's whole check-in reminder: every check-in due today, one link."""
+    return "\n".join([*lines, link(base_url, MY_MONTH_PATH, "Open your check-in")])
+
+
 def hr_overdue_text(managers: Sequence[tuple[str, int]], base_url: str) -> str:
     """HR's one list: managers with feedback still open past its due date."""
     # Names are people's own display names: escaped, so one can't ping or link.

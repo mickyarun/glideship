@@ -37,13 +37,12 @@ from app.core.permissions_people import APPRAISALS_MANAGE
 from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.digest_claim import DigestClaimKind
-from app.repositories.appraisal import AppraisalRepository
-from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.employee_reporting_manager import EmployeeReportingManagerRepository
 from app.repositories.user import UserRepository
 from app.services.appraisals import reminder_text
+from app.services.appraisals.check_in_reminder_stage import check_in_due_stream, ready_stream
 from app.services.appraisals.reminder_message import Message, Outbox
 from app.services.appraisals.reminders import Schedule, hr_list_today, moment
 from app.services.appraisals.review_reminder_stage import review_streams
@@ -52,32 +51,9 @@ from app.services.notifications import NotificationCategory, category_default
 
 GroupKey = tuple[uuid.UUID, uuid.UUID, date, date]
 READY = DigestClaimKind.APPRAISAL_CHECK_IN_READY
+CHECK_IN_DUE = DigestClaimKind.APPRAISAL_CHECK_IN_DUE
 FEEDBACK = DigestClaimKind.APPRAISAL_FEEDBACK_DUE
 HR_LIST = DigestClaimKind.APPRAISAL_HR_OVERDUE
-
-
-async def _ready(
-    db: AsyncSession, org_id: uuid.UUID, cycles: list[AppraisalCycle], skip: set[uuid.UUID]
-) -> Outbox:
-    waiting = await AppraisalCheckInRepository(db, org_id=org_id).unannounced(
-        [c.id for c in cycles]
-    )
-    profiles = await AppraisalRepository(db, org_id=org_id).profiles_by_id(
-        list({c.profile_id for c in waiting})
-    )
-    labels: dict[uuid.UUID, list[str]] = defaultdict(list)
-    ids: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
-    for check_in in sorted(waiting, key=lambda c: c.period_start):
-        profile = profiles.get(check_in.profile_id)
-        if profile is None or profile.user_id in skip:
-            continue
-        labels[profile.user_id].append(f"{check_in.period_start:%B}")
-        ids[profile.user_id].append(check_in.id)
-    base = settings.frontend_url
-    return {
-        user: Message(reminder_text.check_in_ready_text(names, base), check_ins=ids[user])
-        for user, names in labels.items()
-    }
 
 
 async def _still_managing(
@@ -191,7 +167,10 @@ async def compose_day(
     by_id = {c.id: c for c in cycles}
     feedback, overdue = await _feedback(db, org_id, by_id, day, skip.get(FEEDBACK, set()))
     return {
-        READY: await _ready(db, org_id, cycles, skip.get(READY, set())),
+        READY: await ready_stream(db, org_id, cycles, skip.get(READY, set())),
+        CHECK_IN_DUE: await check_in_due_stream(
+            db, org_id, cycles, day, skip.get(CHECK_IN_DUE, set())
+        ),
         FEEDBACK: feedback,
         HR_LIST: await _hr(db, org_id, overdue, skip.get(HR_LIST, set())),
         **await review_streams(db, org_id, cycles, day, skip),
