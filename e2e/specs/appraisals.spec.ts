@@ -91,9 +91,9 @@ test('a manual review from check-in to growth conversation', async ({ signedIn, 
 
   await manager.goto(`/appraisals/reviews/${eli.id}`)
   await pick(manager, 'Agree or change Automate UAT', 'Change')
-  await pick(manager, 'Result', 'Not yet')
-  await manager.getByLabel('Reason (they read this)').fill('The suite is not running yet')
-  await manager.getByRole('button', { name: 'Submit to HR' }).click()
+  await pick(manager, 'Your result for Automate UAT', 'Not yet')
+  await manager.getByLabel('Why (Eli reads this)').fill('The suite is not running yet')
+  await manager.getByRole('button', { name: 'Send to HR' }).click()
   await expect(manager.getByText('Eli picked the same. Maya agreed.')).toBeVisible()
 
   await hr.reload()

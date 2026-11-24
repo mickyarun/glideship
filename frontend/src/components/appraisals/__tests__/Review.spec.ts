@@ -116,7 +116,7 @@ describe('manager review', () => {
       can: { ...review().can, edit_self: false, edit_manager: true },
     })
     const agreeing = mount(ManagerReviewForm, { global: { plugins: plugins as never[] }, props: { review: scored, options: [], busy: null } })
-    await agreeing.findAll('button').find(b => b.text() === 'Submit to HR')?.trigger('click')
+    await agreeing.findAll('button').find(b => b.text() === 'Send to HR')?.trigger('click')
     const [body] = agreeing.emitted('submit')![0] as [{ agree: boolean; goals: { agree: boolean }[] }]
     expect(body.agree).toBe(true)
     expect(body.goals[0].agree).toBe(true)
@@ -152,7 +152,7 @@ describe('review fixes', () => {
     })
     const wrapper = mount(ManagerReviewForm, { global: { plugins: plugins as never[] }, props: { review: drafted, options: [], busy: null } })
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Half shipped')
-    await wrapper.findAll('button').find(b => b.text() === 'Submit to HR')?.trigger('click')
+    await wrapper.findAll('button').find(b => b.text() === 'Send to HR')?.trigger('click')
     const [body] = wrapper.emitted('submit')![0] as [{ goals: { agree: boolean; result: string }[] }]
     expect(body.goals[0]).toMatchObject({ agree: false, result: 'partly' })
   })

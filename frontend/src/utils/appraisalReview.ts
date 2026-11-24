@@ -15,9 +15,9 @@
 /** Evidence chips and the submit checks on the review forms (pure). */
 
 import type { AppraisalSummary } from '@/types/appraisalGoals'
-import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalReview'
+import type { AppraisalRead, EvidenceOption, ManagerBody, SelfBody } from '@/types/appraisalReview'
 import type { AppraisalStatus } from '@/types/appraisalSetup'
-import { HIGH_BAND_EVIDENCE, bandLabel, isHighBand } from '@/utils/appraisalBands'
+import { HIGH_BAND_EVIDENCE, bandLabel, evidenceNeeded, isHighBand } from '@/utils/appraisalBands'
 import { sourceLabel } from '@/utils/appraisalCheckIn'
 import { longDate } from '@/utils/appraisalSetup'
 
@@ -119,4 +119,51 @@ export function reviewWaiting(r: AppraisalRead, isSelf: boolean): string {
   if (r.status === 'manager_review' && isSelf) return `Waiting for ${r.manager_name || 'your manager'}.`
   if (r.status === 'calibration' && isSelf) return "With HR for a fairness check. You'll see the result when it's shared."
   return ''
+}
+
+/** Why the manager's review can't be sent yet, or ''. Mirrors the server's rules. */
+export function managerProblem(body: ManagerBody): string {
+  for (const goal of body.goals) {
+    if (goal.agree) continue
+    if (!goal.result) return 'Pick the result for each goal you change.'
+    if (!goal.reason.trim()) return "Say why for each goal you change; they'll read it."
+  }
+  if (body.agree) return ''
+  if (body.band === null) return 'Pick the overall rating.'
+  if (!body.reason.trim()) return "Say why you changed the rating; they'll read it."
+  const needed = evidenceNeeded(body.band, true)
+  if (body.evidence.length >= needed) return ''
+  return `"${bandLabel(body.band)}" needs ${needed === 1 ? 'an example. Pick one below.' : `${needed} examples. Pick them below.`}`
+}
+
+/** Agree or Change; Agree only when the person gave an answer to agree with. */
+export function agreeOrChange(canAgree: boolean): { label: string; value: string; disabled?: boolean }[] {
+  return [
+    { label: 'Agree', value: 'agree', disabled: !canAgree },
+    { label: 'Change', value: 'change' },
+  ]
+}
+
+/**
+ * The manager's form as last saved. A goal or the overall rating starts as
+ * "agree" when the person answered and the manager hasn't changed it.
+ */
+export function managerDraft(review: AppraisalRead): ManagerBody {
+  const mine = review.manager_score
+  const own = review.self_score?.submitted_at ? review.self_score.band : null
+  return {
+    agree: own !== null && (!mine?.band || mine.band === own) && !mine?.reason,
+    band: mine?.band ?? null,
+    reason: mine?.reason ?? '',
+    evidence: [...(mine?.evidence ?? [])],
+    goals: review.goals.map(g => ({
+      goal_id: g.id,
+      agree: g.self_result !== null && (g.draft_result === null || g.draft_result === g.self_result) && !g.manager_reason,
+      result: g.draft_result,
+      reason: g.manager_reason ?? '',
+    })),
+    ready_next_level: review.manager_only?.ready_next_level ?? null,
+    performance_concern: review.manager_only?.performance_concern ?? null,
+    concern_note: review.manager_only?.concern_note ?? '',
+  }
 }
