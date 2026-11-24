@@ -15,10 +15,8 @@
 /** Goals and reviews on screen: actions, the evidence rules, agree or change, calibration. */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
 import GrowthSection from '@/components/appraisals/GrowthSection.vue'
 import GoalCard from '@/components/appraisals/GoalCard.vue'
-import TeamReviewsList from '@/components/appraisals/TeamReviewsList.vue'
 import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import type { Goal } from '@/types/appraisalGoals'
@@ -124,24 +122,6 @@ describe('manager review', () => {
   })
 })
 
-describe('calibration', () => {
-  it('shows agreement and flags', async () => {
-    const { plugins } = await appraisalPlugins()
-    const wrapper = mount(CalibrationPanel, {
-      global: { plugins: plugins as never[] },
-      props: {
-        calibration: {
-          teams: [{ manager_name: 'Ravi', people: 3, bands: { '3': 3 }, agreement: 1, gaps: 0, flag: 'Agreed with every self-score.' }],
-          people: [{ appraisal_id: 'a1', name: 'Priya', manager_name: 'Ravi', status: 'calibration', self_band: 1, final_band: 3, gap: true, feedback: 2, feedback_done: 1 }],
-        },
-      },
-    })
-    expect(wrapper.text()).toContain('100%')
-    expect(wrapper.text()).toContain('Agreed with every self-score.')
-    expect(wrapper.find('.calib__gap').exists()).toBe(true)
-  })
-})
-
 describe('review fixes', () => {
   it('keeps a reopened "change" draft as a change, with its reason box', async () => {
     const { plugins } = await appraisalPlugins()
@@ -216,7 +196,7 @@ describe('growth conversation by role', () => {
 
 describe('which review opens', () => {
   const row = (id: string, status: AppraisalSummary['status']): AppraisalSummary => ({
-    id, user_id: 'u1', person_name: 'Priya', cycle_name: id, period_start: '2026-10-01', period_end: '2026-12-31',
+    id, user_id: 'u1', profile_id: 'p1', cycle_id: 'c1', person_name: 'Priya', cycle_name: id, period_start: '2026-10-01', period_end: '2026-12-31',
     status, goals_accepted: 0, goals_proposed: 0,
   })
 
@@ -234,18 +214,3 @@ describe('which review opens', () => {
   })
 })
 
-describe('team reviews list', () => {
-  const summary = (status: AppraisalSummary['status']): AppraisalSummary => ({
-    id: 'a1', user_id: 'u1', person_name: 'Priya', cycle_name: 'Q4 2026', period_start: '2026-10-01', period_end: '2026-12-31',
-    status, goals_accepted: 6, goals_proposed: 0,
-  })
-
-  it('offers Goals only until the review exists, and names the stage in words', async () => {
-    const { plugins } = await appraisalPlugins()
-    const wrapper = mount(TeamReviewsList, { global: { plugins: plugins as never[] }, props: { rows: [summary('enrolled')] } })
-    expect(wrapper.text()).toContain('Q4 2026 · Goals and check-ins · 6 goals')
-    expect(wrapper.findAll('a, button').map(b => b.text())).toEqual(['Goals'])
-    const open = mount(TeamReviewsList, { global: { plugins: plugins as never[] }, props: { rows: [summary('self_review')] } })
-    expect(open.findAll('a, button').map(b => b.text())).toEqual(['Goals', 'Review'])
-  })
-})

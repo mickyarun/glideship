@@ -15,8 +15,8 @@
  -->
 
 <!-- One cycle for HR. A draft is set up in three steps on one page (who and
-     when, how it runs, check and open); a running cycle shows progress and
-     can be closed. -->
+     when, how it runs, check and open). A running cycle shows where it is,
+     the one thing to do now, the counts and each manager, and can close. -->
 <template>
   <AppPage :title="cycle?.status === 'draft' ? `Start ${cycle.name}` : cycle?.name || 'Cycle'" :subtitle="subtitle">
     <template #actions>
@@ -27,8 +27,7 @@
       </template>
       <template v-else-if="cycle && cycle.status !== 'closed'">
         <v-btn v-if="cycle.ai_drafting && cycle.status === 'active'" variant="text" :loading="busy === 'suggest'" @click="count('suggest', store.suggestAll(cycle.id))">Suggest goals for everyone</v-btn>
-        <v-btn v-if="cycle.status === 'active'" color="primary" :loading="busy === 'review'" @click="count('review', store.startReview(cycle.id))">Start the review</v-btn>
-        <v-btn v-if="cycle.status === 'reviewing'" color="primary" :loading="busy === 'share'" @click="count('share', store.shareAll(cycle.id))">Share all ready results</v-btn>
+        <v-btn v-if="cycle.status === 'reviewing'" variant="text" :to="{ name: 'appraisal-fairness', params: { id: cycle.id } }">Fairness check</v-btn>
         <v-btn variant="outlined" @click="confirmClose = true">Close cycle</v-btn>
       </template>
     </template>
@@ -45,15 +44,20 @@
         </div>
       </FormStep>
     </div>
-    <template v-else>
-      <CalibrationPanel v-if="store.calibration" :calibration="store.calibration" />
-      <CycleProgressTable v-if="store.progress" :progress="store.progress" />
-    </template>
+    <CycleRunning
+      v-else-if="cycle && store.progress"
+      :cycle="cycle"
+      :progress="store.progress"
+      :readiness="store.readiness"
+      :busy="busy"
+      @remind="remind"
+      @review="count('review', store.startReview(cycle.id))"
+    />
     <v-dialog v-model="confirmClose" max-width="480">
       <v-card>
         <v-card-title>Close {{ cycle?.name }}?</v-card-title>
         <v-card-text>
-          Everything in it becomes read-only: check-ins close on the next tick and feedback not written stays "not done". Nothing is deleted.
+          Everything in it becomes read-only: check-ins close on the next tick and notes not sent stay "not done". Nothing is deleted.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -71,10 +75,8 @@ import { useRoute, useRouter } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
-import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
-import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
-import CycleProgressTable from '@/components/appraisals/CycleProgressTable.vue'
 import CycleReadiness from '@/components/appraisals/CycleReadiness.vue'
+import CycleRunning from '@/components/appraisals/CycleRunning.vue'
 import CycleSetupForm from '@/components/appraisals/CycleSetupForm.vue'
 import FormStep from '@/components/appraisals/FormStep.vue'
 import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
@@ -85,7 +87,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useAppraisalSetupStore()
 const cycle = computed(() => store.cycle)
-const busy = ref<'save' | 'open' | 'delete' | 'close' | 'suggest' | 'review' | 'share' | null>(null)
+const busy = ref<'save' | 'open' | 'delete' | 'close' | 'suggest' | 'review' | 'remind' | null>(null)
 const confirmClose = ref(false)
 const unsaved = ref(false)
 const message = ref('')
@@ -103,7 +105,11 @@ function report(problem: string | null, ok: string): void {
   messageKind.value = problem ? 'error' : 'success'
 }
 
-async function count(kind: 'suggest' | 'review' | 'share', action: Promise<string>): Promise<void> {
+async function remind(): Promise<void> {
+  if (cycle.value) await count('remind', store.remind(cycle.value.id))
+}
+
+async function count(kind: 'suggest' | 'review' | 'remind', action: Promise<string>): Promise<void> {
   busy.value = kind
   const text = await action
   busy.value = null
@@ -148,7 +154,6 @@ watch(
   () => route.params.id,
   id => {
     message.value = ''
-    void useAppraisalGuide().showOnFirstVisit()
     if (typeof id === 'string') void store.fetchCycle(id)
   },
   { immediate: true },

@@ -26,6 +26,7 @@ import type {
   CycleUpdate,
   EnrolmentReport,
   Readiness,
+  RemindResult,
 } from '@/types/appraisalSetup'
 import type { Calibration } from '@/types/appraisalReview'
 import { extractApiError } from '@/utils/errors'
@@ -67,7 +68,7 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
     cycles.value = (await load<CycleRead[]>('cycles', "Couldn't load the cycles.")) ?? []
   }
 
-  /** The cycle, with readiness while it's a draft and progress once it runs. */
+  /** The cycle, with readiness while it's a draft or open, and progress once it runs. */
   async function fetchCycle(id: string): Promise<void> {
     cycle.value = await load<CycleRead>(`cycles/${id}`, "Couldn't load this cycle.")
     readiness.value = null
@@ -79,6 +80,10 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
       return
     }
     progress.value = await load<CycleProgress>(`cycles/${id}/progress`, "Couldn't load progress.")
+    // While goals and check-ins run, readiness says who still has no manager.
+    if (cycle.value.status === 'active') {
+      readiness.value = await load<Readiness>(`cycles/${id}/readiness`, "Couldn't check readiness.")
+    }
     // Calibration starts once the review has opened.
     if (cycle.value.status !== 'active') {
       calibration.value = await load<Calibration>(`cycles/${id}/calibration`, "Couldn't load calibration.")
@@ -153,8 +158,20 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   const suggestAll = (id: string) =>
     count(id, 'suggest-goals', n => `Asked for suggested goals for ${people(n)}.`, "Couldn't ask for suggestions.")
 
+  /** Slack everyone late now; the message to show. */
+  async function remind(id: string): Promise<string> {
+    const [data, problem] = await attempt(
+      () => api.post<RemindResult>(`${BASE}/cycles/${id}/remind`),
+      "Couldn't send the reminders.",
+    )
+    if (data) await fetchCycle(id)
+    if (problem || !data) return problem ?? ''
+    return `Reminded ${people(data.people)}. ${data.reached} got it on Slack.`
+  }
+
   return {
     calibration,
+    remind,
     startReview,
     shareAll,
     suggestAll,
