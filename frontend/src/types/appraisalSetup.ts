@@ -46,6 +46,8 @@ export interface AppraisalSettings {
   hr_overdue_offset: number
   suggest_goals_on_open: boolean
   max_goals: number
+  /** The fewest confirmed goals per person; never above max_goals. */
+  min_goals: number
 }
 
 export interface CycleScope {

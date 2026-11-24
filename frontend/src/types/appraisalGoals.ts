@@ -73,6 +73,8 @@ export interface GoalsRead {
   period_end: string
   locked: boolean
   limit: number
+  /** The fewest confirmed goals the org asks for. */
+  minimum: number
   accepted: number
   can_propose: boolean
   can_add: boolean

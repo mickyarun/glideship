@@ -64,6 +64,11 @@ export function goalLimitProblem(n: number): string | null {
   return Number.isInteger(n) && n >= 1 && n <= MAX_GOAL_LIMIT ? null : `A whole number from 1 to ${MAX_GOAL_LIMIT}.`
 }
 
+/** What's wrong with the fewest-goals value, or null: a valid count no higher than the most. */
+export function goalFloorProblem(min: number, max: number): string | null {
+  return goalLimitProblem(min) ?? (min > max ? 'No more than the most goals per person.' : null)
+}
+
 export function cadenceProblem(review: ReviewPeriod, checkIns: Cadence, feedback: FeedbackCadence): string | null {
   if (checkIns === 'quarterly' && review === 'quarterly') return 'Check-ins once at quarter end need half-yearly or yearly reviews.'
   if (feedback === 'in_review') {

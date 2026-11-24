@@ -19,7 +19,7 @@ import type { GuideRead } from '@/types/appraisalSetup'
 import { checkInLine, feedbackGroups, feedbackPeriod } from '@/utils/appraisalFeedback'
 import { safeHref } from '@/utils/appraisalCheckIn'
 import { guideDates, guideGlance } from '@/utils/appraisalGuide'
-import { cadenceProblem, dmPreview, goalLimitProblem, longDate, offsetLabel, parseOffsets, yearPreview } from '@/utils/appraisalSetup'
+import { cadenceProblem, dmPreview, goalFloorProblem, goalLimitProblem, longDate, offsetLabel, parseOffsets, yearPreview } from '@/utils/appraisalSetup'
 import { guideBlocks } from '@/utils/guideText'
 
 describe('cadenceProblem', () => {
@@ -149,5 +149,9 @@ describe('goal limit', () => {
   it('takes a whole number from 1 to 20', () => {
     expect([1, 3, 20].map(goalLimitProblem)).toEqual([null, null, null])
     expect([0, 21, 2.5, Number.NaN].map(n => goalLimitProblem(n) !== null)).toEqual([true, true, true, true])
+    expect(goalFloorProblem(3, 5)).toBeNull()
+    expect(goalFloorProblem(3, 3)).toBeNull()
+    expect(goalFloorProblem(4, 3)).toBe('No more than the most goals per person.')
+    expect(goalFloorProblem(0, 3)).not.toBeNull()
   })
 })

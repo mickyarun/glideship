@@ -60,8 +60,11 @@
         <v-switch v-model="form.ai_enabled" color="primary" label="AI drafts check-ins and period summaries" hide-details />
         <p class="settings__hint">Off means everyone gets the manual check-in, whatever AI provider is connected.</p>
         <v-switch v-model="form.suggest_goals_on_open" color="primary" label="Suggest goals for everyone when a cycle opens" hide-details />
-        <v-text-field v-model.number="form.max_goals" type="number" min="1" :max="MAX_GOAL_LIMIT" label="Confirmed goals per person per period" :error-messages="goalsProblem ?? undefined" />
-        <p class="settings__hint">Applies to running cycles too. Lowering it keeps goals already confirmed; it only stops new ones.</p>
+        <div class="settings__row">
+          <v-text-field v-model.number="form.min_goals" type="number" min="1" :max="form.max_goals" label="Fewest goals per person" :error-messages="floorProblem ?? undefined" />
+          <v-text-field v-model.number="form.max_goals" type="number" min="1" :max="MAX_GOAL_LIMIT" label="Most goals per person" :error-messages="goalsProblem ?? undefined" />
+        </div>
+        <p class="settings__hint">Both apply to running cycles too. Below the fewest, the manager's to-do list asks for more goals. Lowering the most keeps goals already confirmed; it only stops new ones.</p>
       </section>
       <div class="settings__save">
         <v-btn type="submit" color="primary" :loading="saving" :disabled="Boolean(problem)">Save settings</v-btn>
@@ -81,7 +84,7 @@ import ReminderFields from '@/components/appraisals/ReminderFields.vue'
 import YearPreview from '@/components/appraisals/YearPreview.vue'
 import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import type { AppraisalSettings } from '@/types/appraisalSetup'
-import { MAX_GOAL_LIMIT, cadenceProblem, goalLimitProblem } from '@/utils/appraisalSetup'
+import { MAX_GOAL_LIMIT, cadenceProblem, goalFloorProblem, goalLimitProblem } from '@/utils/appraisalSetup'
 
 const store = useAppraisalSetupStore()
 const form = ref<AppraisalSettings | null>(null)
@@ -90,10 +93,11 @@ const message = ref('')
 const messageKind = ref<'error' | 'success'>('success')
 
 const goalsProblem = computed(() => (form.value ? goalLimitProblem(form.value.max_goals) : null))
+const floorProblem = computed(() => (form.value ? goalFloorProblem(form.value.min_goals, form.value.max_goals) : null))
 const problem = computed(() => {
   const f = form.value
   if (!f) return null
-  return goalsProblem.value ?? cadenceProblem(f.review_period, f.checkin_cadence, f.feedback_cadence)
+  return goalsProblem.value ?? floorProblem.value ?? cadenceProblem(f.review_period, f.checkin_cadence, f.feedback_cadence)
 })
 
 watch(

@@ -117,6 +117,8 @@ class GoalsRead(BaseModel):
     period_end: date
     locked: bool
     limit: int
+    # The fewest confirmed goals the org asks for; below it the manager is asked for more.
+    minimum: int
     accepted: int
     can_propose: bool
     can_add: bool

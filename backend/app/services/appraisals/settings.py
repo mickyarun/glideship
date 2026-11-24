@@ -59,6 +59,11 @@ async def save_appraisal_settings(
     )
 
 
+async def goal_floor(db: AsyncSession, org_id: uuid.UUID) -> int:
+    """The fewest confirmed goals a person should have, from the live settings."""
+    return (await load_appraisal_settings(db, org_id)).min_goals
+
+
 async def goal_limit(db: AsyncSession, org_id: uuid.UUID) -> int:
     """How many confirmed goals a person may have in a period, from the live settings."""
     return (await load_appraisal_settings(db, org_id)).max_goals
