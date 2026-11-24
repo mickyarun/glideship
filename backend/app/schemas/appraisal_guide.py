@@ -34,6 +34,9 @@ class GuideRead(BaseModel):
     manager_due: date | None
     ack_due: date | None
     feedback_due_days: int
+    # The org's goal range per person, for "3 to 6".
+    min_goals: int = 0
+    max_goals: int = 0
     reminder_offsets: list[int]
     ai_drafting: bool
     intro_note: str

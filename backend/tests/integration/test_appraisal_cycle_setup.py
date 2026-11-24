@@ -144,6 +144,9 @@ async def test_the_guide_uses_the_running_cycle_and_knows_the_audience(
     guide = (await client.get("/api/v1/check-ins/guide", headers=emp)).json()
     assert guide["cycle_name"] == "Q4 2026" and guide["intro_note"] == "Ask HR anything."
     assert guide["self_due"] == "2027-01-07"
+    assert (guide["min_goals"], guide["max_goals"]) == (3, guide["max_goals"]) and guide[
+        "max_goals"
+    ] >= 3
     assert (guide["is_manager"], guide["is_hr"]) == (False, False)
     assert (await client.get("/api/v1/check-ins/guide", headers=mgr)).json()["is_manager"]
     assert (await client.get("/api/v1/check-ins/guide", headers=hr)).json()["is_hr"]
