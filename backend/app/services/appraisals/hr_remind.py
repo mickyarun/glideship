@@ -16,9 +16,11 @@
 
 Everyone with a check-in past its due date and not sent, and every
 manager with a note past its due date and not sent, gets the same words
-the scheduled late reminder uses. People HR can't see (HR's own record,
-their own manager's) are left out, as on the cycle page. Once a day per
-cycle, recorded on the cycle, so the page can say when it last went out.
+the scheduled late reminder uses; someone late on both gets both in one
+message. The people are the ones the cycle page counts: not HR's own
+record or their manager's, and nobody withdrawn or gone
+(:mod:`.cycle_people`). Once a day per cycle in the org's time zone,
+recorded on the cycle, so the page can say when it last went out.
 """
 
 import uuid
@@ -30,11 +32,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import CheckInCadence
+from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in_due import AppraisalCheckInDueRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.schemas.appraisal_progress import RemindResult
 from app.services.appraisals import reminder_text
 from app.services.appraisals.context import Caller
+from app.services.appraisals.cycle_people import not_chased
 from app.services.appraisals.errors import AppraisalConflictError
 from app.services.appraisals.feedback_read import is_overdue
 from app.services.appraisals.hr_scope import hidden_users
@@ -58,8 +62,13 @@ async def _texts(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -> dic
                 reminder_text.check_in_due_line(Moment.AFTER, c.period_start, c.due_on)
             )
     texts = {user: reminder_text.check_in_due_text(text, base) for user, text in lines.items()}
+    repo = AppraisalRepository(db, org_id=cycle.org_id)
+    appraisals = await repo.for_cycle(cycle.id)
+    profiles = await repo.profiles_by_id([a.profile_id for a in appraisals])
+    quiet = not_chased(appraisals, profiles, today)
+    seen = {pid for pid, p in profiles.items() if p.user_id not in hidden and pid not in quiet}
     notes = await AppraisalFeedbackRepository(db, org_id=cycle.org_id).for_cycles([cycle.id])
-    late = [i for i in notes if is_overdue(i, today) and i.manager_user_id not in hidden]
+    late = [i for i in notes if i.profile_id in seen and is_overdue(i, today)]
     groups: dict[uuid.UUID, dict[tuple[date, CheckInCadence, date], int]] = defaultdict(
         lambda: defaultdict(int)
     )
@@ -74,7 +83,9 @@ async def _texts(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -> dic
             )
             for (start, cadence, due), count in sorted(batches.items())
         ]
-        texts[manager] = reminder_text.feedback_text(manager_lines, base)
+        note_text = reminder_text.feedback_text(manager_lines, base)
+        own = texts.get(manager)
+        texts[manager] = f"{own}\n\n{note_text}" if own else note_text
     return texts
 
 
@@ -82,7 +93,7 @@ async def remind_late(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
     """Message everyone late in the cycle now; once a day."""
     today = await org_today(db, cycle.org_id)
     last = cycle.hr_reminded_at
-    if last is not None and last.date() >= today:
+    if last is not None and await org_today(db, cycle.org_id, now=last) >= today:
         raise AppraisalConflictError("Reminders already went out today.")
     texts = await _texts(db, caller, cycle)
     reached = await send_each(cycle.org_id, NotificationCategory.APPRAISAL_REMINDERS, texts)

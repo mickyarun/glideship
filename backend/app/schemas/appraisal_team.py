@@ -53,3 +53,6 @@ class TeamRow(AppraisalSummary):
 
     months: list[MonthState]
     notes: list[NoteState]
+    # The org's goal range per person, for the first-visit plan.
+    min_goals: int
+    max_goals: int

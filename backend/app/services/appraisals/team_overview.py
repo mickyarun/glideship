@@ -17,6 +17,8 @@
 A check-in's state is what a manager may know: sent, or not sent yet
 (late once past due), or missed once it closed unsent, never whether the
 person has started writing. A month that hasn't opened shows as such.
+Withdrawn people and leavers aren't listed, as on the to-do list, and the
+notes are the caller's own: a second manager doesn't hold the first's.
 """
 
 import uuid
@@ -27,8 +29,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import FeedbackStatus
+from app.models.appraisal_enums import AppraisalStatus, FeedbackStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
+from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -36,8 +39,10 @@ from app.schemas.appraisal_team import MonthState, MonthStateName, NoteState, Te
 from app.services.appraisals.appraisal_lists import team_appraisals
 from app.services.appraisals.cadence import CADENCE_MONTHS, slices
 from app.services.appraisals.context import Caller
+from app.services.appraisals.cycle_people import not_chased
 from app.services.appraisals.due_dates import is_late
 from app.services.appraisals.org_clock import org_today
+from app.services.appraisals.settings import goal_floor, goal_limit
 
 
 def month_state(check_in: AppraisalCheckIn | None, today: date) -> MonthStateName:
@@ -79,8 +84,16 @@ async def team_overview(db: AsyncSession, caller: Caller) -> list[TeamRow]:
     """The caller's reports in running cycles, with each month and each note."""
     org_id = caller.org_id
     cycles = {c.id: c for c in await AppraisalCycleRepository(db, org_id=org_id).running()}
-    rows = [r for r in await team_appraisals(db, caller) if r.cycle_id in cycles]
     today = await org_today(db, org_id)
+    rows = [
+        r
+        for r in await team_appraisals(db, caller)
+        if r.cycle_id in cycles and r.status is not AppraisalStatus.WITHDRAWN
+    ]
+    profiles = await AppraisalRepository(db, org_id=org_id).profiles_by_id(
+        [r.profile_id for r in rows]
+    )
+    rows = [r for r in rows if r.profile_id not in not_chased([], profiles, today)]
     check_ins: dict[tuple[uuid.UUID, uuid.UUID], dict[date, AppraisalCheckIn]] = defaultdict(dict)
     repo = AppraisalCheckInRepository(db, org_id=org_id)
     for cycle_id in cycles:
@@ -88,10 +101,14 @@ async def team_overview(db: AsyncSession, caller: Caller) -> list[TeamRow]:
             check_ins[(cycle_id, check_in.profile_id)][check_in.period_start] = check_in
     notes: dict[tuple[uuid.UUID, uuid.UUID], list[AppraisalManagerFeedback]] = defaultdict(list)
     for item in await AppraisalFeedbackRepository(db, org_id=org_id).for_cycles(list(cycles)):
-        notes[(item.cycle_id, item.profile_id)].append(item)
+        if item.manager_user_id == caller.user_id:
+            notes[(item.cycle_id, item.profile_id)].append(item)
+    least, most = await goal_floor(db, org_id), await goal_limit(db, org_id)
     return [
         TeamRow(
             **row.model_dump(),
+            min_goals=least,
+            max_goals=most,
             months=_months(cycles[row.cycle_id], check_ins[(row.cycle_id, row.profile_id)], today),
             notes=[
                 NoteState(
