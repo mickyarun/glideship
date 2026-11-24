@@ -4,8 +4,9 @@ Check-ins and manager notes become private to their writer until sent,
 and both get due dates: a check-in five working days after its period
 ends, a manager note five working days after the check-in it answers is
 sent (a cycle's ``feedback_due_days`` now counts from that send). The
-self-review gains two open answers, and check-ins get due-date reminders
-(a new ``digest_claim_kind`` value).
+self-review gains two open answers, check-ins get due-date reminders
+(a new ``digest_claim_kind`` value), and a cycle records when HR last
+reminded everyone late by hand.
 
 Existing data carries forward. Everything people could read before this
 migration stays readable: every existing check-in with something in it
@@ -173,6 +174,10 @@ def upgrade() -> None:
         "appraisal_cycles",
         sa.Column("checkin_due_days", sa.SmallInteger(), server_default="5", nullable=False),
     )
+    op.add_column(
+        "appraisal_cycles",
+        sa.Column("hr_reminded_at", sa.DateTime(timezone=True), nullable=True),
+    )
     op.drop_constraint("ck_appraisal_cycles_offsets", "appraisal_cycles", type_="check")
     op.create_check_constraint(
         "ck_appraisal_cycles_offsets",
@@ -242,6 +247,7 @@ def downgrade() -> None:
         "feedback_due_days >= 0 AND hr_overdue_offset >= 0",
     )
     op.drop_column("appraisal_cycles", "checkin_due_days")
+    op.drop_column("appraisal_cycles", "hr_reminded_at")
     op.drop_index(
         "ix_appraisal_check_ins_unsent",
         table_name="appraisal_check_ins",

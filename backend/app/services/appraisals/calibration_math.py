@@ -56,9 +56,9 @@ def figures(people: Sequence[Scored]) -> TeamFigures:
     flag = None
     if agreement is not None and len(scored) >= FLAG_TEAM:
         if agreement == 1:
-            flag = "Agreed with every self-score."
+            flag = "Kept every person's own rating."
         elif 1 - agreement >= CHANGED_MOST:
-            flag = "Changed nearly every self-score."
+            flag = "Changed nearly every person's rating."
     return TeamFigures(
         bands={b: bands.get(b, 0) for b in range(1, 6)}, agreement=agreement, gaps=gaps, flag=flag
     )

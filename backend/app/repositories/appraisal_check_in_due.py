@@ -19,7 +19,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
@@ -45,12 +45,15 @@ class AppraisalCheckInDueRepository:
         self._db = db
         self._org = org_id
 
-    async def unsent(self, cycle_ids: Collection[uuid.UUID], today: date) -> list[UnsentCheckIn]:
+    async def unsent(
+        self, cycle_ids: Collection[uuid.UUID], today: date, *, announced_only: bool = True
+    ) -> list[UnsentCheckIn]:
         """Open, unsent check-ins with a due date in these cycles, unless withdrawn.
 
-        Only ones whose opening was announced: the "ready" message goes
-        first. The stream also skips anyone it reached today, so the two
-        never land on the same day. Nobody whose leaving date has passed.
+        By default only ones whose opening was announced: the "ready"
+        message goes first (and the stream skips anyone it reached today,
+        so the two never land on the same day). HR's manual reminder asks
+        for all of them. Nobody whose leaving date has passed.
         """
         if not cycle_ids:
             return []
@@ -71,7 +74,7 @@ class AppraisalCheckInDueRepository:
                 check_in.closed_at.is_(None),
                 check_in.sent_at.is_(None),
                 check_in.due_on.is_not(None),
-                check_in.notified_at.is_not(None),
+                check_in.notified_at.is_not(None) if announced_only else true(),
                 Appraisal.status != AppraisalStatus.WITHDRAWN,
                 or_(EmployeeProfile.date_of_exit.is_(None), EmployeeProfile.date_of_exit >= today),
             )

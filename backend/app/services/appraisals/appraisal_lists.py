@@ -58,6 +58,8 @@ async def _summaries(
             AppraisalSummary(
                 id=appraisal.id,
                 user_id=user_id,
+                profile_id=appraisal.profile_id,
+                cycle_id=cycle.id,
                 person_name=names.get(user_id, ""),
                 cycle_name=cycle.name,
                 period_start=cycle.period_start,

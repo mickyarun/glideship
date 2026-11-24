@@ -32,6 +32,8 @@ class CalibrationPerson(BaseModel):
     self_band: Band | None
     final_band: Band | None
     gap: bool
+    # The manager flagged a performance concern in the part only HR reads.
+    concern: bool = False
     feedback: int
     feedback_done: int
 
@@ -40,7 +42,9 @@ class CalibrationTeam(BaseModel):
     """One manager's figures."""
 
     manager_name: str
+    # Reviews sent to HR, out of everyone the manager scores (withdrawn left out).
     people: int
+    total: int = 0
     bands: dict[int, int]
     agreement: float | None
     gaps: int

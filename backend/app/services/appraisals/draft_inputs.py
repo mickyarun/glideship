@@ -131,6 +131,9 @@ async def _month(db: AsyncSession, check_in: AppraisalCheckIn) -> dict[str, Any]
         "working_days": check_in.working_days,
         "facts": [prompt_fact(f) for f in check_in.fact_refs or []],
         "own_lines": note.get("lines", {}),
+        "went_well": note.get("went_well", ""),
+        "item_notes": note.get("item_notes", {}),
+        "ticked": sorted((check_in.fact_tags or {}) if sent else []),
         "blocking": note.get("blocking", ""),
         "goal_values": [
             {"goal_id": str(v.goal_id), "value": crypto.unseal(v, "value")} for v in values

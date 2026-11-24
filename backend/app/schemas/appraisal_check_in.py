@@ -17,23 +17,43 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Self
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from app.models.appraisal_enums import CheckInStatus, DraftingMode, DraftStatus, EvidenceHeading
 from app.schemas.appraisal_feedback import FeedbackShown
 
 LINE = 300
 MAX_LINES = 10
+ITEM_NOTE = 500
+# One note per ticked item, at most as many as a month's work list shows.
+MAX_ITEM_NOTES = 50
 
 
 class CheckInNote(BaseModel):
-    """The employee's own words; everything is optional."""
+    """The employee's own words; everything is optional, all of it encrypted.
+
+    The check-in asks four questions: goals (their values), what went well,
+    what got in the way (``blocking``) and next month's focus
+    (``next_month``). What went well is the ticked work with a note on each
+    item (``item_notes``, by fact id) and free text for anything the list
+    missed (``went_well``). ``lines`` under the four role headings is how
+    check-ins were written before, kept for those and for AI drafts.
+    """
 
     lines: dict[EvidenceHeading, list[str]] = Field(default_factory=dict)
+    went_well: str = Field("", max_length=2000)
+    item_notes: dict[str, str] = Field(default_factory=dict, max_length=MAX_ITEM_NOTES)
     blocking: str = Field("", max_length=1000)
     next_month: str = Field("", max_length=1000)
+
+    @field_validator("item_notes")
+    @classmethod
+    def _short_item_notes(cls, notes: dict[str, str]) -> dict[str, str]:
+        cleaned = {key: text.strip() for key, text in notes.items() if text.strip()}
+        if any(len(text) > ITEM_NOTE for text in cleaned.values()):
+            raise ValueError(f"Each note must be {ITEM_NOTE} characters or fewer.")
+        return cleaned
 
     @field_validator("lines")
     @classmethod
@@ -50,20 +70,24 @@ class CheckInNote(BaseModel):
     @property
     def is_empty(self) -> bool:
         """Nothing written at all."""
-        return not self.lines and not self.blocking.strip() and not self.next_month.strip()
+        return not (
+            self.lines
+            or self.went_well.strip()
+            or self.item_notes
+            or self.blocking.strip()
+            or self.next_month.strip()
+        )
 
 
 class FactTag(BaseModel):
-    """Which goal a fact or link helped; with no goal, which heading it goes under."""
+    """A ticked fact or link: what mattered this month.
+
+    It may name the goal it helped, or a role heading (how check-ins were
+    tagged before); a tick with neither just marks it as mattering.
+    """
 
     goal_id: uuid.UUID | None = None
     heading: EvidenceHeading | None = None
-
-    @model_validator(mode="after")
-    def _one_place(self) -> Self:
-        if self.goal_id is None and self.heading is None:
-            raise ValueError("Pick a goal or a heading.")
-        return self
 
 
 class LinkCreate(BaseModel):
@@ -78,7 +102,8 @@ class LinkCreate(BaseModel):
 class GoalValueIn(BaseModel):
     """This month's value for a goal's measure, and where it came from."""
 
-    value: str = Field(min_length=1, max_length=100)
+    # Where the goal stands, in the person's words: the number and what moved it.
+    value: str = Field(min_length=1, max_length=1000)
     source_note: str = Field("", max_length=200)
     source_url: HttpUrl | None = None
 

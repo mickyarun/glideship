@@ -19,7 +19,7 @@ a review back with a note, or share it.
 """
 
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,7 +64,10 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
     names = {u.id: u.name for u in await UserRepository(db).get_many_by_ids(list(people_ids))}
     rows: list[CalibrationPerson] = []
     teams: dict[uuid.UUID, list[Scored]] = defaultdict(list)
+    totals: Counter[uuid.UUID] = Counter()
     for a in appraisals:
+        if a.status is not AppraisalStatus.WITHDRAWN:
+            totals[a.manager_user_id] += 1
         final = a.final_band if a.manager_submitted_at else None
         own = submitted_band(a)
         # Withdrawn people keep their row but leave the team's figures.
@@ -80,17 +83,21 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
                 self_band=own,
                 final_band=final,
                 gap=final is not None and own is not None and abs(own - final) >= 2,
+                concern=final is not None and bool(a.performance_concern),
                 feedback=len(done),
                 feedback_done=sum(done),
             )
         )
     team_rows = []
-    for manager, scored in teams.items():
+    # Every manager with someone to score, so one still writing shows as 0 of N.
+    for manager in totals:
+        scored = teams[manager]
         figs = figures(scored)
         team_rows.append(
             CalibrationTeam(
                 manager_name=names.get(manager, ""),
                 people=len(scored),
+                total=totals[manager],
                 bands=figs.bands,
                 agreement=figs.agreement,
                 gaps=figs.gaps,

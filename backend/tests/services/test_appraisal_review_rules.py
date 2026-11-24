@@ -106,8 +106,8 @@ def test_calibration_figures() -> None:
     assert figs.bands == {1: 0, 2: 1, 3: 2, 4: 1, 5: 0}
     assert figs.agreement == pytest.approx(2 / 3)
     assert figs.gaps == 1 and figs.flag is None
-    assert figures([Scored(3, 3)] * 3).flag == "Agreed with every self-score."
-    assert figures([Scored(1, 3)] * 5).flag == "Changed nearly every self-score."
+    assert figures([Scored(3, 3)] * 3).flag == "Kept every person's own rating."
+    assert figures([Scored(1, 3)] * 5).flag == "Changed nearly every person's rating."
     assert figures([Scored(3, 3)] * 2).flag is None
     assert figures([Scored(None, 3)]).agreement is None
 

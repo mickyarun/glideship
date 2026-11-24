@@ -38,6 +38,7 @@ from app.api.v1.agent_skills import router as agent_skills_router
 from app.api.v1.ai_settings import router as ai_settings_router
 from app.api.v1.appraisal_admin import router as appraisal_admin_router
 from app.api.v1.appraisal_check_ins import router as appraisal_check_ins_router
+from app.api.v1.appraisal_cycle_progress import router as appraisal_cycle_progress_router
 from app.api.v1.appraisal_cycles import router as appraisal_cycles_router
 from app.api.v1.appraisal_feedback import router as appraisal_feedback_router
 from app.api.v1.appraisal_goals import router as appraisal_goals_router
@@ -180,6 +181,9 @@ api_router.include_router(
 )
 api_router.include_router(
     appraisal_cycles_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
+)
+api_router.include_router(
+    appraisal_cycle_progress_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
 )
 api_router.include_router(
     appraisal_goals_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE

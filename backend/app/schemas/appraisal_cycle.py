@@ -21,7 +21,6 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.appraisal_enums import (
-    AppraisalStatus,
     CheckInCadence,
     CycleStatus,
     DraftingMode,
@@ -151,34 +150,3 @@ class Readiness(BaseModel):
     no_primary_manager: list[PersonRef]
     no_template: list[PersonRef]
     identity: list[IdentityFlag]
-
-
-class ProgressRow(BaseModel):
-    """One enrolled person's progress through the cycle: counts and states only."""
-
-    user_id: uuid.UUID
-    name: str
-    manager_name: str
-    status: AppraisalStatus
-    check_ins: int
-    check_ins_added: int
-    check_ins_missed: int
-    feedback: int
-    feedback_done: int
-    feedback_overdue: int
-
-
-class ManagerOverdue(BaseModel):
-    """A manager with feedback still open past its due date."""
-
-    name: str
-    overdue: int
-
-
-class CycleProgress(BaseModel):
-    """Who's done and who's overdue."""
-
-    people: list[ProgressRow]
-    feedback: int
-    feedback_done: int
-    managers_overdue: list[ManagerOverdue]

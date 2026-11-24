@@ -143,6 +143,8 @@ class AppraisalSummary(BaseModel):
 
     id: uuid.UUID
     user_id: uuid.UUID
+    profile_id: uuid.UUID
+    cycle_id: uuid.UUID
     person_name: str
     cycle_name: str
     period_start: date

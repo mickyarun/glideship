@@ -100,6 +100,19 @@ class FeedbackRead(BaseModel):
     content_hidden: bool = False
 
 
+class MyNote(BaseModel):
+    """A sent note about the caller, for their home page."""
+
+    id: uuid.UUID
+    manager_name: str | None
+    period_start: date
+    period_end: date
+    cadence: CheckInCadence
+    sent_at: datetime
+    keep: str
+    try_next: str
+
+
 class FeedbackShown(BaseModel):
     """The manager's feedback as it appears on the employee's check-in."""
 
