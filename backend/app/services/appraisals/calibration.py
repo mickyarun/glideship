@@ -16,8 +16,9 @@
 
 Bands and states only, never reasons. HR never changes a band; they send
 a review back with a note, or share it. A flagged result (a big gap, a
-concern, or anyone on a team that rates high) is held out of sharing
-everything that's ready until HR marks it fair.
+concern, or anyone on a team that rates high, or that would but has no
+other team to compare with yet) is held out of sharing everything that's
+ready until HR marks it fair.
 """
 
 import uuid
@@ -39,6 +40,7 @@ from app.services.appraisals.calibration_math import (
     high_share,
     others,
     rates_high,
+    waiting_to_compare,
 )
 from app.services.appraisals.context import Caller
 from app.services.appraisals.hr_scope import hidden_users
@@ -82,13 +84,15 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
             teams[a.manager_user_id].append(Scored(submitted_band(a), a.final_band))
     shares = {manager: high_share(teams[manager]) for manager in totals}
     high = rates_high(shares)
+    waiting = waiting_to_compare(shares)
     rows = []
     for a in appraisals:
         final = a.final_band if a.manager_submitted_at else None
         own = submitted_band(a)
         gap = final is not None and own is not None and abs(own - final) >= 2
         concern = final is not None and bool(a.performance_concern)
-        flagged = gap or concern or (final is not None and a.manager_user_id in high)
+        team_held = a.manager_user_id in high or a.manager_user_id in waiting
+        flagged = gap or concern or (final is not None and team_held)
         done = feedback[a.profile_id]
         rows.append(
             CalibrationPerson(
@@ -126,6 +130,7 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
                 others_high=rest.high,
                 others_people=rest.people,
                 rates_high=manager in high,
+                waiting=manager in waiting,
             )
         )
     return Calibration(

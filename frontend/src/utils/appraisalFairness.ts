@@ -24,7 +24,7 @@ export interface LookItem {
   key: string
   title: string
   detail: string
-  tag: 'Big difference' | 'Rates high' | 'Concern flagged'
+  tag: 'Big difference' | 'Rates high' | 'Waiting to compare' | 'Concern flagged'
   /** The one review this is about; null for a whole team. */
   appraisalId: string | null
   managerName: string
@@ -54,18 +54,25 @@ function person(p: CalibrationPerson, tag: LookItem['tag'], detail: string): Loo
   }
 }
 
-/** Big differences, managers who rate high, and flagged concerns. */
+/** Why a whole team is held: it rates high, or would and has nobody to compare with yet. */
+function teamDetail(team: CalibrationTeam): string {
+  const theirs = `${team.high} of ${team.people} rated "Exceeded" in some form.`
+  if (team.waiting) return `${theirs} Waiting for another manager's reviews to compare with.`
+  return `${theirs} For other managers it's ${share(team.others_high, team.others_people)}.`
+}
+
+/** Big differences, managers who rate high (or wait to be compared), and flagged concerns. */
 export function needsALook(cal: Calibration): LookItem[] {
   const out = cal.people.filter(p => p.gap).map(p => person(p, 'Big difference', gapLine(p)))
-  for (const team of cal.teams.filter(t => t.rates_high)) {
+  for (const team of cal.teams.filter(t => t.rates_high || t.waiting)) {
     // People with their own gap or concern are looked at on their own item, not by the team's.
     const theirs = cal.people.filter(p => p.manager_user_id === team.manager_user_id && p.final_band !== null && !p.gap && !p.concern)
     const open = theirs.filter(p => !p.looks_fair_at)
     const marked = theirs.find(p => p.looks_fair_at)
     out.push({
       key: `high-${team.manager_user_id}`, title: `${team.manager_name}'s team · ${team.people} reviews`,
-      detail: `${team.high} of ${team.people} rated "Exceeded" in some form. For other managers it's ${share(team.others_high, team.others_people)}.`,
-      tag: 'Rates high', appraisalId: null, managerName: team.manager_name, fairIds: open.map(p => p.appraisal_id),
+      detail: teamDetail(team),
+      tag: team.waiting ? 'Waiting to compare' : 'Rates high', appraisalId: null, managerName: team.manager_name, fairIds: open.map(p => p.appraisal_id),
       fairBy: open.length ? null : (marked?.looks_fair_by_name ?? null), fairAt: open.length ? null : (marked?.looks_fair_at ?? null), canSendBack: false,
     })
   }
@@ -84,11 +91,12 @@ export function shareable(cal: Calibration): CalibrationPerson[] {
 export function heldLine(cal: Calibration): string {
   const held = cal.people.filter(p => p.status === 'calibration' && p.held)
   if (!held.length) return ''
-  const high = new Set(cal.teams.filter(t => t.rates_high).map(t => t.manager_user_id))
+  const high = new Set(cal.teams.filter(t => t.rates_high || t.waiting).map(t => t.manager_user_id))
   const parts: string[] = []
   for (const team of cal.teams.filter(t => high.has(t.manager_user_id))) {
     const n = held.filter(p => p.manager_user_id === team.manager_user_id).length
-    if (n) parts.push(`${firstName(team.manager_name, team.manager_name)}'s ${n} wait until you've looked at how they rated.`)
+    const until = team.waiting ? "another manager's reviews are in, or you've looked at them" : "you've looked at how they rated"
+    if (n) parts.push(`${firstName(team.manager_name, team.manager_name)}'s ${n} wait until ${until}.`)
   }
   const flagged = held.filter(p => !high.has(p.manager_user_id)).length
   if (flagged) parts.push(`${flagged} flagged result${flagged === 1 ? ' waits' : 's wait'} until you mark ${flagged === 1 ? 'it' : 'them'} fair.`)
@@ -105,6 +113,7 @@ export function teamStatus(team: CalibrationTeam, cal: Calibration): string {
   if (team.people < team.total) return 'Writing'
   const theirs = cal.people.filter(p => p.manager_user_id === team.manager_user_id)
   const look = theirs.filter(p => p.held).length
+  if (team.waiting && look) return 'Waiting to compare'
   if (team.rates_high && look) return 'Rates high'
   return look ? `${look} to look at` : 'Ready'
 }

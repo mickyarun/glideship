@@ -21,7 +21,7 @@ describe('fairness check', () => {
   const team = (id: string, name: string, bands: Record<string, number>, high: Partial<CalibrationTeam> = {}): CalibrationTeam => {
     const people = Object.values(bands).reduce((a, b) => a + b, 0)
     return { manager_user_id: id, manager_name: name, people, total: people, bands, agreement: 1, gaps: 0, flag: null,
-      high: 0, others_high: 0, others_people: 0, rates_high: false, ...high }
+      high: 0, others_high: 0, others_people: 0, rates_high: false, waiting: false, ...high }
   }
   const person = (over: Partial<CalibrationPerson>): CalibrationPerson => ({
     appraisal_id: 'a1', name: 'Tom Becker', manager_user_id: 'm2', manager_name: 'Priya Nair', status: 'calibration', self_band: 2, final_band: 4,
@@ -62,5 +62,19 @@ describe('fairness check', () => {
     expect(share(0, 4)).toBe('0 of 4')
     expect(share(2, 2)).toBe('2 of 2')
     expect(share(5, 12)).toBe('5 of 12')
+  })
+
+  it('holds a high-rating team with nobody to compare with, and says so', () => {
+    const alone: Calibration = {
+      teams: [team('m1', 'Viktor Hale', { '1': 2, '2': 1 }, { high: 3, waiting: true })],
+      people: ['v1', 'v2', 'v3'].map(id => person({ appraisal_id: id, manager_user_id: 'm1', manager_name: 'Viktor Hale', final_band: 1, held: true })),
+    }
+    const [item] = needsALook(alone)
+    expect(item.tag).toBe('Waiting to compare')
+    expect(item.detail).toBe('3 of 3 rated "Exceeded" in some form. Waiting for another manager\'s reviews to compare with.')
+    expect(item.fairIds).toEqual(['v1', 'v2', 'v3'])
+    expect(teamStatus(alone.teams[0], alone)).toBe('Waiting to compare')
+    expect(shareable(alone)).toEqual([])
+    expect(heldLine(alone)).toBe("Viktor's 3 wait until another manager's reviews are in, or you've looked at them.")
   })
 })

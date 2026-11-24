@@ -19,7 +19,13 @@ from datetime import date
 
 from app.models.appraisal_enums import GoalOrigin, GoalStatus
 from app.models.appraisal_goal import FROM_MANAGER, AppraisalGoal
-from app.services.appraisals.calibration_math import HighShare, Scored, high_share, rates_high
+from app.services.appraisals.calibration_math import (
+    HighShare,
+    Scored,
+    high_share,
+    rates_high,
+    waiting_to_compare,
+)
 from app.services.appraisals.cycle_people import goals_due_for
 from app.services.appraisals.goal_rules import GoalRights, actions
 
@@ -66,3 +72,15 @@ def test_someone_enrolled_late_gets_the_same_window_for_goals() -> None:
     assert goals_due_for(due, start, due) == due
     # Enrolled on 20 October: a week, as everyone had, from then.
     assert goals_due_for(due, start, date(2026, 10, 20)) == date(2026, 10, 27)
+
+
+def test_a_high_rating_team_with_nobody_to_compare_waits() -> None:
+    a, b = uuid.uuid4(), uuid.uuid4()
+    # Alone and rating high: not judged, but held until others arrive.
+    assert waiting_to_compare({a: HighShare(3, 3)}) == {a}
+    assert waiting_to_compare({a: HighShare(3, 3), b: HighShare(0, 0)}) == {a}
+    # Alone but not rating high, or too small to call: nothing to wait for.
+    assert waiting_to_compare({a: HighShare(1, 3)}) == set()
+    assert waiting_to_compare({a: HighShare(2, 2)}) == set()
+    # Once another team's reviews are in, the usual rule decides instead.
+    assert waiting_to_compare({a: HighShare(3, 3), b: HighShare(0, 1)}) == set()

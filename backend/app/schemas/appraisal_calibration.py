@@ -62,6 +62,8 @@ class CalibrationTeam(BaseModel):
     others_high: int = 0
     others_people: int = 0
     rates_high: bool = False
+    # Would rate high, but no other manager's reviews are in to compare with yet.
+    waiting: bool = False
 
 
 class LooksFairBody(BaseModel):

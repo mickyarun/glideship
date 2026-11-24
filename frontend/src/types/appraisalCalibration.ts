@@ -50,6 +50,8 @@ export interface CalibrationTeam {
   others_high: number
   others_people: number
   rates_high: boolean
+  /** Would rate high, but no other manager's reviews are in to compare with yet. */
+  waiting: boolean
 }
 
 export interface Calibration {

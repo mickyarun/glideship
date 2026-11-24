@@ -21,8 +21,10 @@ score, or changed four in five or more, is flagged for HR to look at.
 
 A manager "rates high" when two in three or more of their final bands are
 an Exceeded band, on a team of three or more, while every other manager's
-reviews together are under one in two: a pattern needs others to stand
-out from, so with no other reviews nobody rates high.
+reviews together are under one in two. A pattern needs others to stand
+out from: a team that rates that high before any other manager's reviews
+are in is "waiting to compare", held like one that rates high, until
+another team's reviews arrive and the rule above can run.
 """
 
 import uuid
@@ -103,3 +105,14 @@ def rates_high(teams: Mapping[uuid.UUID, HighShare]) -> set[uuid.UUID]:
         if team.high / team.people >= HIGH_SHARE and rest.high / rest.people < OTHERS_SHARE:
             out.add(manager)
     return out
+
+
+def waiting_to_compare(teams: Mapping[uuid.UUID, HighShare]) -> set[uuid.UUID]:
+    """Teams that rate high on their own with no other manager's reviews in yet."""
+    return {
+        manager
+        for manager, team in teams.items()
+        if team.people >= FLAG_TEAM
+        and team.high / team.people >= HIGH_SHARE
+        and others(teams, manager).people == 0
+    }
