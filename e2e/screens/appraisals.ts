@@ -29,6 +29,20 @@ export function lastQuarter(today = new Date()): { start: string, end: Date, tic
   return { start: start.toISOString().slice(0, 10), end, tickAt: tick.toISOString() }
 }
 
+/** A date as the app writes it: "Thu 8 Oct 2026". */
+export function longDate(iso: string): string {
+  const day = new Date(`${iso}T00:00:00Z`)
+  const part = (options: Intl.DateTimeFormatOptions) => day.toLocaleDateString('en-GB', { ...options, timeZone: 'UTC' })
+  return `${part({ weekday: 'short' })} ${part({ day: 'numeric', month: 'short', year: 'numeric' })}`
+}
+
+/** The ISO date `days` after `iso`. */
+export function plusDays(iso: string, days: number): string {
+  const day = new Date(`${iso}T00:00:00Z`)
+  day.setUTCDate(day.getUTCDate() + days)
+  return day.toISOString().slice(0, 10)
+}
+
 /** An ISO date `days` from today. */
 export function daysFromNow(days: number): string {
   const day = new Date()

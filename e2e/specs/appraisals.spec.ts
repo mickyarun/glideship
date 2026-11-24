@@ -13,16 +13,18 @@
 // limitations under the License.
 
 /**
- * An appraisal from both sides, in manual mode: the manager sets goals on a
- * first visit, the employee checks in and sends, the manager sends notes,
- * HR opens the review, the employee scores, the manager agrees with one goal
- * and changes another, HR shares from the fairness check, and the employee
- * reads the reason and acknowledges.
+ * An appraisal from both sides, in manual mode: HR sets the goals date and
+ * opens the cycle, the manager sets goals on a first visit, the employee
+ * checks in and sends, the manager sends notes, HR opens the review, the
+ * employee scores, the manager agrees with one goal, changes another and
+ * flags a concern, the fairness check holds the result back until HR finds
+ * it fair, HR shares, and the employee reads the reason and acknowledges.
  */
 import type { Api } from '../fixtures/api.ts'
 import type { StackClient } from '../fixtures/client.ts'
 import { expect, test } from '../fixtures/test.ts'
-import { daysFromNow, lastQuarter, pick } from '../screens/appraisals.ts'
+import type { Page } from '@playwright/test'
+import { daysFromNow, lastQuarter, longDate, pick, plusDays } from '../screens/appraisals.ts'
 
 function team(stack: StackClient) {
   return stack.seedOrg({
@@ -34,26 +36,40 @@ function team(stack: StackClient) {
   })
 }
 
-/** Last quarter's cycle, opened, with review dates ahead so the real hourly tick can't move it on mid-test. */
-async function openLastQuarter(hr: Api): Promise<string> {
-  const quarter = lastQuarter()
-  const cycle = await hr.post<{ id: string }>('appraisals/cycles', { period_start: quarter.start, ai_drafting: false })
+/** Last quarter's draft cycle, with review dates ahead so the real hourly tick can't move it on mid-test. */
+async function draftLastQuarter(hr: Api): Promise<{ id: string, name: string }> {
+  const cycle = await hr.post<{ id: string, name: string }>('appraisals/cycles', { period_start: lastQuarter().start, ai_drafting: false })
   await hr.patch(`appraisals/cycles/${cycle.id}`, {
     self_due: daysFromNow(30),
     manager_due: daysFromNow(40),
     ack_due: daysFromNow(60),
   })
-  await hr.post(`appraisals/cycles/${cycle.id}/activate`, {})
-  return cycle.id
+  return cycle
+}
+
+/** HR sets the goals date in step 1 and opens the cycle. */
+async function openWithGoalsDate(hr: Page, cycle: { id: string, name: string }, goalsDue: string): Promise<void> {
+  await hr.goto(`/appraisals/cycles/${cycle.id}`)
+  await hr.getByLabel('Goals agreed by').fill(goalsDue)
+  await hr.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(hr.getByText('Saved.')).toBeVisible()
+  await hr.getByRole('button', { name: `Open ${cycle.name}` }).click()
+  await expect(hr.getByText(/^Opened\. 1 person enrolled/)).toBeVisible()
 }
 
 test('a manual review from goals to the read result', async ({ signedIn, stack }) => {
   const org = await team(stack)
-  const cycleId = await openLastQuarter(await stack.api(org.members.hr))
+  const cycle = await draftLastQuarter(await stack.api(org.members.hr))
+  const cycleId = cycle.id
+  const goalsDue = plusDays(lastQuarter().start, 14)
+  const hr = await signedIn(org.members.hr)
+  await openWithGoalsDate(hr, cycle, goalsDue)
 
   const manager = await signedIn(org.members.mgr)
   await manager.goto('/appraisals/team')
+  await expect(manager.getByText(`Due ${longDate(goalsDue)} · 0 of 1 done`)).toBeVisible()
   await manager.getByRole('link', { name: 'Set goals for Eli Employee' }).click()
+  await expect(manager.getByText(`Set goals by ${longDate(goalsDue)}`)).toBeVisible()
   for (const title of ['Ship refunds', 'Automate UAT']) {
     await manager.getByLabel('Goal', { exact: true }).fill(title)
     await manager.getByLabel('How we\'ll know').fill('Live by quarter end')
@@ -84,7 +100,6 @@ test('a manual review from goals to the read result', async ({ signedIn, stack }
   await employee.reload()
   await expect(employee.getByText('Catching regressions before UAT')).toBeVisible()
 
-  const hr = await signedIn(org.members.hr)
   await hr.goto(`/appraisals/cycles/${cycleId}`)
   await hr.getByRole('button', { name: 'Start the review' }).click()
   await expect(hr.getByText('Review opened for 1 person.')).toBeVisible()
@@ -102,11 +117,22 @@ test('a manual review from goals to the read result', async ({ signedIn, stack }
   await pick(manager, 'Your result for Automate UAT', 'Not yet')
   await manager.getByLabel('Why, Automate UAT (Eli reads this)').fill('The suite is not running yet')
   await manager.getByLabel('Your words for Eli').fill('A steady quarter; the suite comes next')
+  await pick(manager, 'Performance concern', 'Yes')
+  await manager.getByLabel('What concerns you').fill('Delivery dates slip')
   await manager.getByRole('button', { name: 'Send to HR' }).click()
   await expect(manager.getByText('Eli picked the same. Maya agreed.')).toBeVisible()
 
+  // A flagged concern holds the result back until HR finds it fair.
   await hr.goto(`/appraisals/cycles/${cycleId}/fairness`)
+  await expect(hr.getByText('Nothing ready to share yet')).toBeVisible()
+  await expect(hr.getByText('1 flagged result waits until you mark it fair.', { exact: false })).toBeVisible()
+  await hr.getByRole('button', { name: 'Looks fair' }).click()
+  await expect(hr.getByText('Marked fair: 1 result can now be shared.')).toBeVisible()
+  await expect(hr.getByText(/^Looks fair · Hana People,/)).toBeVisible()
   await hr.getByRole('button', { name: 'Share 1 result' }).click()
+  const confirm = hr.getByRole('dialog', { name: 'Share 1 result?' })
+  await expect(confirm.getByText("Sharing can't be undone.", { exact: false })).toBeVisible()
+  await confirm.getByRole('button', { name: 'Share 1 result' }).click()
   await expect(hr.getByText('Shared 1 result.')).toBeVisible()
 
   await employee.goto('/appraisals/review')
