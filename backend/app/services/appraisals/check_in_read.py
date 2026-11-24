@@ -39,6 +39,7 @@ from app.schemas.appraisal_check_in import (
 )
 from app.services.appraisals import audit, crypto
 from app.services.appraisals.access import reads_content
+from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller, CheckInContext, may_regenerate
 from app.services.appraisals.due_dates import is_late, may_change_after_send
 from app.services.appraisals.fact_view import board_ids, for_viewer
@@ -118,7 +119,7 @@ async def read_check_in(
         period_end=check_in.period_end,
         working_days=check_in.working_days,
         available_days=check_in.available_days,
-        status=check_in.status,
+        status=shown_status(check_in, is_self),
         closed=check_in.closed_at is not None,
         can_edit=ctx.is_open and may_change_after_send(check_in.due_on, check_in.sent_at, today),
         drafting_mode=mode,

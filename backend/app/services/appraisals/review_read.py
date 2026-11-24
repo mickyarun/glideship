@@ -35,6 +35,7 @@ from app.schemas.appraisal_review import (
 from app.services.appraisals import audit, crypto
 from app.services.appraisals.access import AppraisalAccess, reads_content
 from app.services.appraisals.appraisal_context import AppraisalContext
+from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller
 from app.services.appraisals.evidence import ids_of
 from app.services.appraisals.fact_view import board_ids, for_viewer
@@ -111,7 +112,7 @@ async def read_review(
         TimelineMonth(
             check_in_id=c.id,
             period_start=c.period_start,
-            status=c.status,
+            status=shown_status(c, ctx.is_self),
             sent=c.sent_at is not None,
             facts=view(list(c.fact_refs or [])),
             note=CheckInNote.model_validate(

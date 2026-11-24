@@ -67,9 +67,12 @@ async def test_an_unsent_check_in_shows_its_facts_but_not_the_persons_words(
     assert (await client.post(f"{url}/links", json=LINK, headers=emp)).status_code == 201
     own = (await client.get(url, headers=emp)).json()
     assert own["note"]["lines"]["team"] and own["links"] and own["can_send"]
+    assert own["status"] == "employee_added"
     for who in ("mgr", "hr"):
         theirs = (await client.get(url, headers=as_user(m.people[who], m.org))).json()
         assert theirs["content_hidden"], who
+        # Nor can they tell the person has written in it.
+        assert theirs["status"] == "open", who
         assert theirs["note"]["lines"] == {} and theirs["links"] == [], who
         assert theirs["facts"], who
         assert not theirs["can_send"], who
@@ -138,6 +141,9 @@ async def test_the_review_hides_unsent_months_from_the_manager(
     review = f"{BASE}/{ids['Priya']}"
     (month,) = (await client.get(review, headers=mgr)).json()["timeline"]
     assert not month["sent"] and month["note"]["lines"] == {} and month["links"] == []
+    assert month["status"] == "open"
+    hr_view = await client.get(review, headers=as_user(m.people["hr"], m.org))
+    assert [t["status"] for t in hr_view.json()["timeline"]] == ["open"]
     (own,) = (await client.get(review, headers=emp)).json()["timeline"]
     assert own["links"] and own["note"]["lines"]
     # Nobody cites a link from a check-in that was never sent: the reader can't open it.
