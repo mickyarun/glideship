@@ -145,6 +145,9 @@ export interface GuideRead {
   manager_due: string | null
   ack_due: string | null
   feedback_due_days: number
+  /** The org's goal range per person. */
+  min_goals: number
+  max_goals: number
   reminder_offsets: number[]
   ai_drafting: boolean
   intro_note: string

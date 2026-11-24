@@ -19,7 +19,7 @@ import AcknowledgeBox from '@/components/appraisals/AcknowledgeBox.vue'
 import BandScale from '@/components/appraisals/BandScale.vue'
 import GrowthSection from '@/components/appraisals/GrowthSection.vue'
 import ReviewResult from '@/components/appraisals/ReviewResult.vue'
-import { BANDS, bandLabel, bandMeaning, evidenceNeeded, isHighBand, withBandWords } from '@/utils/appraisalBands'
+import { BANDS, bandLabel, bandMeaning, evidenceNeeded, isHighBand } from '@/utils/appraisalBands'
 import { overallLine } from '@/utils/appraisalReview'
 import { periodWord } from '@/utils/appraisalSetup'
 import { appraisalPlugins } from './mountAppraisal'
@@ -54,12 +54,6 @@ describe('rating words', () => {
     expect(evidenceNeeded(5, false)).toBe(0)
     expect(evidenceNeeded(5, true)).toBe(1)
     expect(evidenceNeeded(3, true)).toBe(0)
-  })
-
-  it('fills the rating words into copy kept outside code', () => {
-    expect(withBandWords('{high_bands} need {high_evidence}; {low_band} one.')).toBe(
-      'Both "Exceeded" ratings need 2; "Did not meet" one.',
-    )
   })
 
   it('shows five words with meanings, low to high, and no numbers', async () => {

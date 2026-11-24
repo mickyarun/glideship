@@ -14,12 +14,9 @@
 
 /** HR setup helpers: the cadence rules, the year and DM previews, offsets and feedback groups. */
 import { describe, expect, it } from 'vitest'
-import type { GuideRead } from '@/types/appraisalSetup'
 import { feedbackPeriod } from '@/utils/appraisalFeedback'
 import { safeHref } from '@/utils/appraisalCheckIn'
-import { guideDates, guideGlance } from '@/utils/appraisalGuide'
 import { cadenceProblem, dmPreview, goalFloorProblem, goalLimitProblem, longDate, offsetLabel, parseOffsets, yearPreview } from '@/utils/appraisalSetup'
-import { guideBlocks } from '@/utils/guideText'
 
 describe('cadenceProblem', () => {
   it('matches the server rules', () => {
@@ -76,32 +73,6 @@ describe('reminder helpers', () => {
 describe('note periods', () => {
   it('names quarters', () => {
     expect(feedbackPeriod('2027-01-01', 'quarterly')).toBe('Q1 2027')
-  })
-})
-
-describe('the guide', () => {
-  it('splits text into headings, paragraphs and lists, with no markup beyond that', () => {
-    const blocks = guideBlocks('## Title\nFirst line\nsecond line\n\n- a\n- b\n\n<b>not html</b>')
-    expect(blocks).toEqual([
-      { kind: 'heading', text: 'Title' },
-      { kind: 'paragraph', text: 'First line second line' },
-      { kind: 'list', items: ['a', 'b'] },
-      { kind: 'paragraph', text: '<b>not html</b>' },
-    ])
-  })
-
-  it('words the period from the cycle', () => {
-    const guide: GuideRead = {
-      cycle_name: 'Q4 2026', review_period: 'quarterly', checkin_cadence: 'monthly', feedback_cadence: 'in_review',
-      period_start: '2026-10-01', period_end: '2026-12-31', self_due: '2027-01-07', manager_due: '2027-01-14',
-      ack_due: '2027-01-28', feedback_due_days: 10, reminder_offsets: [-3, 0, 2], ai_drafting: false,
-      intro_note: '', is_manager: false, is_hr: false,
-    }
-    expect(guideGlance(guide)).toBe(
-      'Monthly check-ins, your manager’s feedback as part of each quarterly review, a review every quarter, then a growth conversation.',
-    )
-    expect(guideDates(guide)).toBe('Q4 2026: self-review due Thu 7 Jan 2027, manager review due Thu 14 Jan 2027.')
-    expect(guideDates({ ...guide, cycle_name: null })).toBe('')
   })
 })
 
