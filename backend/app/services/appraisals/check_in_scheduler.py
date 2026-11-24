@@ -58,6 +58,7 @@ from app.services.appraisals.check_in_builder import create_check_in, refresh_ch
 from app.services.appraisals.due_dates import check_in_due
 from app.services.appraisals.enrolment import enrol_late_joiners
 from app.services.appraisals.feedback_open import feedback_pass
+from app.services.appraisals.note_clock import date_waiting_notes
 from app.services.appraisals.review_start import pass_self_due
 from app.services.appraisals.work_calendar import load_calendars
 from app.services.leave.digest_settings import org_zone
@@ -189,6 +190,7 @@ async def cycle_pass(db: AsyncSession, cycle: AppraisalCycle, tick: Tick) -> Non
                 "appraisal_check_in_person_failed", org_id=str(org_id), profile_id=str(profile.id)
             )
     await feedback_pass(db, cycle, appraisals, profiles, tick.today, tick.working)
+    await date_waiting_notes(db, cycle, tick.today)
     await pass_self_due(db, cycle, tick.today)
 
 

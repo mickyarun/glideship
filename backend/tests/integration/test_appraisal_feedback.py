@@ -29,6 +29,7 @@ from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.employee_audit_event import EmployeeAuditAction, EmployeeAuditEvent
 from app.repositories.employee_profile import EmployeeProfileRepository
 from app.services.appraisals import crypto
+from app.services.appraisals.work_calendar import WorkCalendar
 from app.services.file_storage import FileStorage
 from tests.integration.appraisal_month import Month, october, run_tick, send_check_in
 from tests.integration.hr_support import configure_hr_storage
@@ -373,10 +374,12 @@ async def test_a_note_opening_after_its_check_in_was_sent_is_due_from_then(
             .values(sent_at=datetime(2026, 11, 6, 15, tzinfo=UTC))
         )
         await db.commit()
-    # Opened on Monday 9 Nov: five working days from then, not from the Friday send.
+    # Five working days from when the note opened (the row's creation, which
+    # is now, whatever date the tick pretends), not from the earlier send.
     await run_tick(pg_session_factory, m.org, datetime(2026, 11, 9, 6, tzinfo=UTC))
     due = {i.profile_id: i.due_on for i in await _items(pg_session_factory, m.org)}
-    assert due[emp_profile] == date(2026, 11, 16)
+    opened = max(date(2026, 11, 6), datetime.now(UTC).date())
+    assert due[emp_profile] == WorkCalendar().shift(opened, 5)
     assert [d for p, d in due.items() if p != emp_profile] == [None]
 
 
@@ -420,3 +423,39 @@ async def test_a_sent_but_unfinished_note_follows_a_new_manager_with_its_words(
     await client.put(url, json={"keep": "Clear PRs", "try_next": "Pair on UAT"}, headers=new_mgr)
     finished = await client.post(f"{url}/send", headers=new_mgr)
     assert finished.json()["status"] == "done"
+
+
+async def test_a_note_whose_check_in_closes_unsent_is_due_from_the_close(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    assert {i.due_on for i in await _items(pg_session_factory, m.org)} == {None}
+    # November's check-in opens on Tuesday 1 December, closing October's unsent.
+    closed_on = datetime(2026, 12, 1, 6, tzinfo=UTC)
+    await run_tick(pg_session_factory, m.org, closed_on)
+    october_items = [
+        i for i in await _items(pg_session_factory, m.org) if i.period_end == date(2026, 10, 31)
+    ]
+    start = max(closed_on.date(), datetime.now(UTC).date())
+    expected = WorkCalendar().shift(start, 5)
+    assert {i.due_on for i in october_items} == {expected}
+
+
+async def test_a_send_that_crosses_the_tick_is_dated_on_the_next_one(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    emp_profile = await _profile(pg_session_factory, m.org, m.people["emp"])
+    sent_at = datetime.now(UTC)
+    async with pg_session_factory() as db:
+        # The send committed after the tick had opened the note undated.
+        await db.execute(
+            update(AppraisalCheckIn)
+            .where(AppraisalCheckIn.profile_id == emp_profile)
+            .values(sent_at=sent_at)
+        )
+        await db.commit()
+    await run_tick(pg_session_factory, m.org, datetime(2026, 11, 3, 6, tzinfo=UTC))
+    due = {i.profile_id: i.due_on for i in await _items(pg_session_factory, m.org)}
+    assert due[emp_profile] == WorkCalendar().shift(sent_at.date(), 5)
+    assert [d for p, d in due.items() if p != emp_profile] == [None]

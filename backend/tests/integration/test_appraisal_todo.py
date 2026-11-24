@@ -65,9 +65,15 @@ async def test_a_primary_manager_owes_notes_on_sent_check_ins_and_goals(
 ) -> None:
     m = await october(client, pg_session_factory)
     before = await _todo(client, m, "mgr")
-    # No note is due before its check-in is sent; both reports are below three goals.
-    assert _kinds(before) == [("set_goals", "Meena"), ("set_goals", "Priya")]
-    assert {i["count"] for i in before} == {3}
+    # A note waits on its check-in until it is sent. Both reports are below three goals.
+    assert _kinds(before) == [
+        ("set_goals", "Meena"),
+        ("set_goals", "Priya"),
+        ("waiting_on_check_in", "Meena"),
+        ("waiting_on_check_in", "Priya"),
+    ]
+    assert {i["count"] for i in before if i["kind"] == "set_goals"} == {3}
+    assert not any(i["late"] or i["due_on"] for i in before)
     await send_check_in(client, m, "emp")
     after = await _todo(client, m, "mgr")
     (note,) = [i for i in after if i["kind"] == "note"]

@@ -28,6 +28,8 @@ class TodoKind(StrEnum):
     SELF_REVIEW = "self_review"
     READ_RESULT = "read_result"
     NOTE = "note"
+    # A note with nothing to answer yet: the report's check-in isn't sent.
+    WAITING_ON_CHECK_IN = "waiting_on_check_in"
     MANAGER_REVIEW = "manager_review"
     CONFIRM_GOALS = "confirm_goals"
     SET_GOALS = "set_goals"

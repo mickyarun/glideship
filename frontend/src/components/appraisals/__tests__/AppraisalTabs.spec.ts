@@ -66,7 +66,8 @@ describe('appraisal tabs', () => {
     const item = (role: TodoItem['role'], target: TodoItem['target']): TodoItem => ({
       kind: 'note', role, person_name: 'Priya', cycle_name: null, due_on: null, late: false, target, target_id: 'x1', count: null,
     })
-    const items = [item('team', 'feedback'), item('team', 'goals'), item('own', 'check_in')]
+    const waiting = { ...item('team', 'feedback'), kind: 'waiting_on_check_in' as const }
+    const items = [item('team', 'feedback'), item('team', 'goals'), item('own', 'check_in'), waiting]
     expect(todoCounts(items)).toEqual({ own: 1, team: 2, cycles: 0 })
     expect(todoRoute(items[0])).toEqual({ name: 'appraisal-feedback', params: { id: 'x1' } })
     expect(todoRoute(item('cycles', 'cycle'))).toEqual({ name: 'appraisal-cycle', params: { id: 'x1' } })

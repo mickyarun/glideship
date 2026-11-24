@@ -30,9 +30,14 @@ export function todoRoute(item: TodoItem): RouteLocationRaw {
   return { name: ROUTES[item.target], params: { id: item.target_id } }
 }
 
-/** How many items sit on each tab. */
+/** Something the caller can act on now; a note waiting on a check-in isn't yet. */
+export function actionable(item: TodoItem): boolean {
+  return item.kind !== 'waiting_on_check_in'
+}
+
+/** How many items the caller can act on sit on each tab. */
 export function todoCounts(items: TodoItem[]): Record<TodoRole, number> {
   const counts: Record<TodoRole, number> = { own: 0, team: 0, cycles: 0 }
-  for (const item of items) counts[item.role] += 1
+  for (const item of items.filter(actionable)) counts[item.role] += 1
   return counts
 }

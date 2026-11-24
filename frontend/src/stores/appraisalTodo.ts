@@ -19,11 +19,13 @@ import { computed, ref } from 'vue'
 
 import api from '@/services/api'
 import type { TodoItem } from '@/types/appraisalTodo'
-import { todoCounts } from '@/utils/appraisalTodo'
+import { actionable, todoCounts } from '@/utils/appraisalTodo'
 
 export const useAppraisalTodoStore = defineStore('appraisalTodo', () => {
   const items = ref<TodoItem[]>([])
   const counts = computed(() => todoCounts(items.value))
+  /** What the nav badge counts: everything the caller can act on now. */
+  const total = computed(() => items.value.filter(actionable).length)
   const late = computed(() => items.value.filter(i => i.late).length)
 
   /** Refresh the list; a failure leaves the badge empty rather than erroring. */
@@ -35,5 +37,5 @@ export const useAppraisalTodoStore = defineStore('appraisalTodo', () => {
     }
   }
 
-  return { items, counts, late, fetch }
+  return { items, counts, total, late, fetch }
 })

@@ -15,12 +15,10 @@
 """Opening manager feedback items, as part of the hourly check-in tick.
 
 On the first working day after a feedback period ends, each enrolled
-person gets an item for their primary manager. It is due
-``feedback_due_days`` working days (on the manager's calendar) after the
-check-in it answers is sent: at once when that check-in is already sent,
-otherwise when it is (:mod:`.check_in_send`). As with check-ins, only the
-latest ended period opens, and the count never starts before the item
-opens, so nobody is handed a note that is already late. Items never close
+person gets an item for their primary manager. Its due date comes from
+the check-in it answers, once that is sent or closes (:mod:`.note_clock`,
+which runs on the same tick). As with check-ins, only the latest ended
+period opens. Items never close
 on their own: one the manager never sends stays "not done" and never
 blocks the review.
 """
@@ -36,11 +34,8 @@ from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import AppraisalStatus, CycleStatus, FeedbackStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.employee_profile import EmployeeProfile
-from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.services.appraisals.cadence import FEEDBACK_ITEMS, feedback_periods
-from app.services.appraisals.due_dates import note_due
-from app.services.appraisals.work_calendar import load_calendars
 
 logger = structlog.get_logger(__name__)
 
@@ -95,22 +90,8 @@ async def feedback_pass(
             due.append(appraisal)
     if not due:
         return
-    calendars = await load_calendars(db, cycle.org_id, {a.manager_user_id for a in due}, today)
-    sent = await AppraisalCheckInRepository(db, org_id=cycle.org_id).sent_ending(
-        cycle.id, period[1]
-    )
     for appraisal in due:
         profile = profiles[appraisal.profile_id]
-        sent_at = sent.get(profile.id)
-        due_on = (
-            note_due(
-                max(sent_at.date(), today),
-                cycle.feedback_due_days,
-                calendars.of(appraisal.manager_user_id),
-            )
-            if sent_at
-            else None
-        )
         try:
             async with db.begin_nested():
                 await repo.create(
@@ -123,7 +104,8 @@ async def feedback_pass(
                         period_start=period[0],
                         period_end=period[1],
                         cadence=cadence,
-                        due_on=due_on,
+                        # Dated by the note clock once its check-in is answered.
+                        due_on=None,
                         goal_status={},
                         status=FeedbackStatus.OPEN,
                     )

@@ -134,7 +134,7 @@ class AppraisalTodoRepository:
         ]
 
     async def notes_to_send(self, manager_user_id: uuid.UUID) -> list[TodoRow]:
-        """Notes the caller owes: their check-in was sent, the note wasn't."""
+        """Notes the caller hasn't sent; one with no due date waits on its check-in."""
         item = AppraisalManagerFeedback
         result = await self._db.execute(
             select(item.id, item.due_on, User.name)
@@ -150,7 +150,6 @@ class AppraisalTodoRepository:
                 *self._live(),
                 item.manager_user_id == manager_user_id,
                 item.sent_at.is_(None),
-                item.due_on.is_not(None),
             )
         )
         return [TodoRow(row.id, row.name, row.due_on) for row in result.all()]

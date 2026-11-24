@@ -19,6 +19,8 @@ export type TodoKind =
   | 'self_review'
   | 'read_result'
   | 'note'
+  /** A note with nothing to answer yet: the report's check-in isn't sent. */
+  | 'waiting_on_check_in'
   | 'manager_review'
   | 'confirm_goals'
   | 'set_goals'

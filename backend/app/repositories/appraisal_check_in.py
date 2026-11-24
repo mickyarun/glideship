@@ -45,20 +45,6 @@ class AppraisalCheckInRepository(BaseRepository[AppraisalCheckIn]):
         )
         return list(result.scalars().all())
 
-    async def sent_ending(
-        self, cycle_id: uuid.UUID, period_end: date
-    ) -> dict[uuid.UUID, datetime]:
-        """When each person sent their check-in ending on ``period_end``, by profile."""
-        result = await self._db.execute(
-            select(AppraisalCheckIn.profile_id, AppraisalCheckIn.sent_at).where(
-                AppraisalCheckIn.org_id == self._org,
-                AppraisalCheckIn.cycle_id == cycle_id,
-                AppraisalCheckIn.period_end == period_end,
-                AppraisalCheckIn.sent_at.is_not(None),
-            )
-        )
-        return {row.profile_id: row.sent_at for row in result.all()}
-
     async def unannounced(self, cycle_ids: Collection[uuid.UUID]) -> list[AppraisalCheckIn]:
         """Open check-ins in these cycles whose person hasn't been told, unless withdrawn."""
         if not cycle_ids:

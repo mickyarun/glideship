@@ -59,8 +59,8 @@
     :active="onAppraisals"
     rounded="lg"
   >
-    <template v-if="todo.items.length > 0 && !rail" #append>
-      <span class="people-nav__pill" :aria-label="`${todo.items.length} to do`">{{ todo.items.length }}</span>
+    <template v-if="todo.total > 0 && !rail" #append>
+      <span class="people-nav__pill" :aria-label="`${todo.total} to do`">{{ todo.total }}</span>
     </template>
   </v-list-item>
   <v-list-item

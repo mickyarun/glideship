@@ -17,10 +17,10 @@
 Three parts, each only for those it applies to. Everyone: their open
 check-in to send, their review to write, their result to read. A
 primary manager, for the appraisals they score: notes owed on sent
-check-ins, reviews to send on to HR, proposed goals to confirm and
-people below the org's fewest goals. HR (``appraisals:manage``): cycles
-whose period has ended and whose reviews can open, and reviews waiting
-in the fairness check. Late work comes first, then by due date.
+check-ins (and those still waiting on one), reviews to send on to HR,
+proposed goals to confirm and people below the org's fewest goals. HR
+(``appraisals:manage``): cycles whose period has ended and whose reviews
+can open, and reviews waiting in the fairness check. Late work comes first, then by due date.
 """
 
 from datetime import date
@@ -78,7 +78,8 @@ async def _team(
     out = [
         _item(
             today,
-            kind=TodoKind.NOTE,
+            # No due date yet: the note waits on the report's check-in, never late.
+            kind=TodoKind.NOTE if row.due_on else TodoKind.WAITING_ON_CHECK_IN,
             person_name=row.person_name,
             due_on=row.due_on,
             target=TodoTarget.FEEDBACK,
