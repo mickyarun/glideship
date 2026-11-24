@@ -28,7 +28,7 @@ from app.services.appraisals.reminders import Moment
 from app.services.slack_mrkdwn import escape_mrkdwn
 
 TEAM_PATH = "/appraisals/team"
-MY_MONTH_PATH = "/appraisals"
+HOME_PATH = "/appraisals"
 CYCLES_PATH = "/appraisals/cycles"
 
 
@@ -85,7 +85,7 @@ def check_in_ready_text(labels: Sequence[str], base_url: str) -> str:
     which = " and ".join(labels)
     return (
         f"Your {which} check-in is ready. Add anything Glideship missed. "
-        f"{link(base_url, MY_MONTH_PATH, 'Open My month')}"
+        f"{link(base_url, HOME_PATH, 'Open your appraisal')}"
     )
 
 
@@ -101,7 +101,7 @@ def check_in_due_line(moment: Moment, period_start: date, due_on: date) -> str:
 
 def check_in_due_text(lines: Sequence[str], base_url: str) -> str:
     """A person's whole check-in reminder: every check-in due today, one link."""
-    return "\n".join([*lines, link(base_url, MY_MONTH_PATH, "Open your check-in")])
+    return "\n".join([*lines, link(base_url, HOME_PATH, "Open your check-in")])
 
 
 def hr_overdue_text(managers: Sequence[tuple[str, int]], base_url: str) -> str:
