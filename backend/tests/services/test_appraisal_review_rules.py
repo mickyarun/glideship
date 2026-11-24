@@ -75,7 +75,11 @@ def test_review_goals_must_be_the_periods_own_and_each_once() -> None:
             BandDecision(False, 2, "Shipped", 1),
             "The rating you picked needs at least two examples.",
         ),
-        (3, BandDecision(False, 5, "Missed", 0), "The rating you picked needs at least one example."),
+        (
+            3,
+            BandDecision(False, 5, "Missed", 0),
+            "The rating you picked needs at least one example.",
+        ),
         (3, BandDecision(False, 5, "Missed", 1), None),
         (None, BandDecision(False, 3, "From scratch", 0), None),
     ],
