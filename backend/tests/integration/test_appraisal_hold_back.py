@@ -78,6 +78,9 @@ async def test_a_flagged_result_waits_until_hr_finds_it_fair(
     priya = await _priya(client, cycle, hr)
     assert priya["concern"] and priya["held"] and priya["looks_fair_at"] is None
     assert priya["manager_user_id"] == str(m.people["mgr"])
+    # The review page tells HR it's held; nobody else is told.
+    assert (await client.get(f"{BASE}/{ids['Priya']}", headers=hr)).json()["held"]
+    assert not (await client.get(f"{BASE}/{ids['Priya']}", headers=mgr)).json()["held"]
     # Held back: sharing everything ready leaves it out.
     shared = await client.post(f"{BASE}/cycles/{cycle}/share", headers=hr)
     assert shared.json() == {"shared": 0}
@@ -88,6 +91,7 @@ async def test_a_flagged_result_waits_until_hr_finds_it_fair(
     assert (await client.post(fair_url, json=fair, headers=hr)).json() == {"marked": 1}
     priya = await _priya(client, cycle, hr)
     assert not priya["held"] and priya["looks_fair_by_name"] == "Hr"
+    assert not (await client.get(f"{BASE}/{ids['Priya']}", headers=hr)).json()["held"]
     shared = await client.post(f"{BASE}/cycles/{cycle}/share", headers=hr)
     assert shared.json() == {"shared": 1}
 

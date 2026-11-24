@@ -16,6 +16,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.appraisal_enums import AppraisalStatus
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.user import UserRepository
@@ -36,6 +37,7 @@ from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller
 from app.services.appraisals.evidence import ids_of
 from app.services.appraisals.fact_view import board_ids, for_viewer
+from app.services.appraisals.fairness import held_ids
 from app.services.appraisals.growth import read_growth
 from app.services.appraisals.review_parts import review_actions, review_goal
 
@@ -163,6 +165,9 @@ async def read_review(
         if ctx.is_self or access.view_calibration
         else None,
         shared_at=appraisal.shared_at,
+        held=access.share
+        and appraisal.status is AppraisalStatus.CALIBRATION
+        and appraisal.id in await held_ids(db, caller, cycle),
         acknowledged_at=appraisal.acknowledged_at,
         growth=await read_growth(db, ctx),
         can=review_actions(ctx),

@@ -19,6 +19,7 @@ import CheckInGoalsStep from '@/components/appraisals/CheckInGoalsStep.vue'
 import CheckInWorkStep from '@/components/appraisals/CheckInWorkStep.vue'
 import FairnessLookList from '@/components/appraisals/FairnessLookList.vue'
 import GoalCard from '@/components/appraisals/GoalCard.vue'
+import ShareResultButton from '@/components/appraisals/ShareResultButton.vue'
 import type { Goal } from '@/types/appraisalGoals'
 import type { LookItem } from '@/utils/appraisalFairness'
 import { appraisalPlugins } from './mountAppraisal'
@@ -93,5 +94,29 @@ describe('a change the manager suggested', () => {
     const wrapper = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal, managerName: 'Daniel', asEmployee: false } })
     expect(wrapper.text()).toContain('A change you suggested, waiting for them to take it.')
     expect(wrapper.findAll('button').map(b => b.text())).toEqual(['Edit', 'Take it back'])
+  })
+})
+
+describe('sharing one result', () => {
+  // The dialog itself is AppConfirmDialog's to test; here, what it says and when sharing happens.
+  const AppConfirmDialog = {
+    props: ['modelValue', 'body'],
+    emits: ['confirm'],
+    template: '<div v-if="modelValue"><p class="body">{{ body }}</p><button class="ok" @click="$emit(\'confirm\')">ok</button></div>',
+  }
+
+  it('says so when the fairness check holds it back, and shares only once confirmed', async () => {
+    const { plugins } = await appraisalPlugins()
+    for (const held of [true, false]) {
+      const wrapper = mount(ShareResultButton, {
+        global: { plugins: plugins as never[], stubs: { AppConfirmDialog } },
+        props: { name: 'Eli Employee', held, busy: false },
+      })
+      await wrapper.find('button').trigger('click')
+      expect(wrapper.find('.body').text().includes('This result is held back in the fairness check.')).toBe(held)
+      expect(wrapper.emitted('share')).toBeUndefined()
+      await wrapper.find('.ok').trigger('click')
+      expect(wrapper.emitted('share')).toHaveLength(1)
+    }
   })
 })

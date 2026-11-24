@@ -134,6 +134,8 @@ class AppraisalRead(BaseModel):
     send_back_note: str | None
     reply: str | None
     shared_at: datetime | None
+    # For HR: the fairness check holds this result out of sharing everything ready.
+    held: bool = False
     acknowledged_at: datetime | None
     growth: GrowthRead
     can: ReviewActions

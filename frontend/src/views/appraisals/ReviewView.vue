@@ -33,7 +33,7 @@
       <v-btn v-if="review" variant="text" :to="{ name: 'appraisal-goals', params: { id: review.id } }">Goals</v-btn>
       <template v-if="review?.can.share">
         <v-btn variant="outlined" @click="sendingBack = true">Send back</v-btn>
-        <v-btn color="primary" :loading="busy === 'share'" @click="share">Share with {{ review.person_name }}</v-btn>
+        <ShareResultButton :name="review.person_name" :held="review.held" :busy="busy === 'share'" @share="share" />
       </template>
       <AppraisalGuide />
     </template>
@@ -83,6 +83,7 @@ import ReviewResult from '@/components/appraisals/ReviewResult.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import SelfSubmitted from '@/components/appraisals/SelfSubmitted.vue'
 import SendBackDialog from '@/components/appraisals/SendBackDialog.vue'
+import ShareResultButton from '@/components/appraisals/ShareResultButton.vue'
 import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAuthStore } from '@/stores/auth'
 import type { GoalBody } from '@/types/appraisalGoals'

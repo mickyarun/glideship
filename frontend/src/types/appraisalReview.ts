@@ -125,6 +125,8 @@ export interface AppraisalRead {
   send_back_note: string | null
   reply: string | null
   shared_at: string | null
+  /** For HR: the fairness check holds this result out of sharing everything ready. */
+  held: boolean
   acknowledged_at: string | null
   growth: GrowthRead
   can: ReviewActions
