@@ -477,3 +477,60 @@ async def test_the_note_clock_counts_in_the_orgs_own_days(
         await db.commit()
     assert dated == 2
     assert {i.due_on for i in await _items(pg_session_factory, m.org)} == {date(2026, 12, 8)}
+
+
+async def _yearly_with_quarterly_notes(
+    client: AsyncClient, factory: Factory, *, report_first: bool
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """A 2026 yearly cycle with monthly check-ins and quarterly notes; (org, emp, mgr)."""
+    org, ids, _ = await setup_org(factory, "Hr", "Ravi", "Priya")
+    hr_id, mgr_id, emp_id = ids
+    await give_role(factory, org, hr_id, "hr")
+    if report_first:
+        await report_to(factory, org, emp_id, mgr_id)
+    hr = as_user(hr_id, org)
+    settings = (await client.get("/api/v1/appraisals/settings", headers=hr)).json()
+    settings |= {
+        "review_period": "yearly",
+        "checkin_cadence": "monthly",
+        "feedback_cadence": "quarterly",
+    }
+    assert (
+        await client.put("/api/v1/appraisals/settings", json=settings, headers=hr)
+    ).status_code == 200
+    body = {"period_start": "2026-01-01", "ai_drafting": False}
+    cycle = (await client.post("/api/v1/appraisals/cycles", json=body, headers=hr)).json()
+    activated = await client.post(f"/api/v1/appraisals/cycles/{cycle['id']}/activate", headers=hr)
+    assert activated.status_code == 200, activated.text
+    return org, emp_id, mgr_id
+
+
+async def test_a_late_joiners_note_with_no_matching_check_in_is_still_dated(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    org, emp_id, mgr_id = await _yearly_with_quarterly_notes(
+        client, pg_session_factory, report_first=False
+    )
+    # Enrolled on 1 May, inside the cut-off: April's check-in opens, but the
+    # note opens for Q1, which ended with March. No check-in will match it.
+    await report_to(pg_session_factory, org, emp_id, mgr_id)
+    await run_tick(pg_session_factory, org, datetime(2026, 5, 1, 6, tzinfo=UTC))
+    (item,) = await _items(pg_session_factory, org)
+    assert item.period_end == date(2026, 3, 31) and item.due_on is not None
+
+
+async def test_a_mid_quarter_leavers_note_is_still_dated(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    org, emp_id, _ = await _yearly_with_quarterly_notes(
+        client, pg_session_factory, report_first=True
+    )
+    async with pg_session_factory() as db:
+        profile = await EmployeeProfileRepository(db, org_id=org).get_by_user(emp_id)
+        assert profile is not None
+        # Left in February: March's check-in never opens, Q1's note does.
+        profile.date_of_exit = date(2026, 2, 15)
+        await db.commit()
+    await run_tick(pg_session_factory, org, datetime(2026, 4, 1, 6, tzinfo=UTC))
+    (item,) = await _items(pg_session_factory, org)
+    assert item.period_end == date(2026, 3, 31) and item.due_on is not None

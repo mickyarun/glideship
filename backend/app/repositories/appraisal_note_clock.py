@@ -17,7 +17,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
@@ -40,13 +40,19 @@ class AppraisalNoteClockRepository:
         Each comes with when its check-in was answered (the send, or the
         close for one that closed unsent) and when the note opened. The
         check-in is the one whose period ends with the note's: a quarterly
-        note waits for the quarter's last.
+        note waits for the quarter's last. A note with no such check-in (a
+        late joiner into a quarter, a leaver mid-quarter, a missed tick)
+        counts as answered when it opened: check-ins open before notes on
+        the same tick, so none will come later.
         """
         item, check_in = AppraisalManagerFeedback, AppraisalCheckIn
-        answered = func.coalesce(check_in.sent_at, check_in.closed_at)
+        answered = case(
+            (check_in.id.is_(None), item.created_at),
+            else_=func.coalesce(check_in.sent_at, check_in.closed_at),
+        )
         result = await self._db.execute(
             select(item, answered, item.created_at)
-            .join(
+            .outerjoin(
                 check_in,
                 and_(
                     check_in.org_id == item.org_id,

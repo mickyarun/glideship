@@ -48,8 +48,9 @@ class AppraisalCheckInDueRepository:
     async def unsent(self, cycle_ids: Collection[uuid.UUID]) -> list[UnsentCheckIn]:
         """Open, unsent check-ins with a due date in these cycles, unless withdrawn.
 
-        Only ones whose opening was announced: the "ready" message goes first,
-        never on the same day as a due reminder.
+        Only ones whose opening was announced: the "ready" message goes
+        first. The stream also skips anyone it reached today, so the two
+        never land on the same day.
         """
         if not cycle_ids:
             return []

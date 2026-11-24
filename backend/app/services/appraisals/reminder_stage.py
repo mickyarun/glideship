@@ -166,10 +166,14 @@ async def compose_day(
         return {}
     by_id = {c.id: c for c in cycles}
     feedback, overdue = await _feedback(db, org_id, by_id, day, skip.get(FEEDBACK, set()))
+    ready = await ready_stream(db, org_id, cycles, skip.get(READY, set()))
+    # Nobody gets "ready" and "due" on the same day: anyone told it's ready
+    # today, now or on an earlier pass, waits for tomorrow's due reminder.
+    told_ready = skip.get(READY, set()) | set(ready)
     return {
-        READY: await ready_stream(db, org_id, cycles, skip.get(READY, set())),
+        READY: ready,
         CHECK_IN_DUE: await check_in_due_stream(
-            db, org_id, cycles, day, skip.get(CHECK_IN_DUE, set())
+            db, org_id, cycles, day, skip.get(CHECK_IN_DUE, set()) | told_ready
         ),
         FEEDBACK: feedback,
         HR_LIST: await _hr(db, org_id, overdue, skip.get(HR_LIST, set())),

@@ -388,3 +388,24 @@ async def test_sending_the_check_in_stops_its_reminders(
     await send_check_in(client, m, "emp")
     for day in (4, 6, 9):
         assert ids["emp"] not in await _sent(slack, org, at(day)), day
+
+
+async def test_ready_and_due_never_land_on_the_same_day(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage, slack: Slack
+) -> None:
+    m, ids = await _month(client, pg_session_factory, sent=False)
+    async with pg_session_factory() as db:
+        # Due Wednesday 4 Nov: two working days before is Monday, the opening day.
+        await db.execute(
+            update(AppraisalCheckIn)
+            .where(AppraisalCheckIn.org_id == m.org)
+            .values(due_on=date(2026, 11, 4))
+        )
+        await db.commit()
+    org = await _org(pg_session_factory, m.org)
+    first = await _sent(slack, org, at(2))
+    assert first[ids["emp"]].startswith("Your October check-in is ready.")
+    # A later pass the same day: the ready message went out, the due one waits.
+    assert ids["emp"] not in await _sent(slack, org, at(2, 13))
+    due = await _sent(slack, org, at(4))
+    assert due[ids["emp"]].startswith("Your October check-in is due today.")
