@@ -37,11 +37,11 @@ import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { appraisalTabs, tabForRoute } from '@/utils/appraisalTabs'
 
-const props = defineProps<{ hasReports: boolean; canManage: boolean }>()
+const props = withDefaults(defineProps<{ hasReports: boolean; canManage: boolean; ownPage?: boolean }>(), { ownPage: false })
 
 const route = useRoute()
 const tabs = computed(() => appraisalTabs({ hasReports: props.hasReports, canManage: props.canManage }))
-const active = computed(() => tabForRoute(route.name ? String(route.name) : null))
+const active = computed(() => tabForRoute(route.name ? String(route.name) : null, props.ownPage))
 </script>
 
 <style scoped>

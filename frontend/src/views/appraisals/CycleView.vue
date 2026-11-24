@@ -36,11 +36,12 @@
     <AppCallout v-if="message" :variant="messageKind">{{ message }}</AppCallout>
     <v-progress-linear v-if="store.loading && !cycle" indeterminate color="primary" />
     <div v-if="cycle?.status === 'draft'" class="cycle__draft">
-      <CycleSetupForm :cycle="cycle" :saving="busy === 'save'" :people="store.readiness?.in_scope ?? null" @save="save" />
+      <CycleSetupForm :cycle="cycle" :saving="busy === 'save'" :people="store.readiness?.in_scope ?? null" @save="save" @dirty="d => (unsaved = d)" />
       <FormStep :number="3" title="Check and open" hint="We check everyone has a manager and a role template. Nothing goes out until you open it.">
         <CycleReadiness v-if="store.readiness" :readiness="store.readiness" />
         <div class="cycle__open">
-          <v-btn color="primary" :loading="busy === 'open'" @click="open">Open {{ cycle.name }}</v-btn>
+          <span v-if="unsaved" class="cycle__unsaved">Save step 2 first: opening uses what's saved.</span>
+          <v-btn color="primary" :disabled="unsaved" :loading="busy === 'open'" @click="open">Open {{ cycle.name }}</v-btn>
         </div>
       </FormStep>
     </div>
@@ -86,6 +87,7 @@ const store = useAppraisalSetupStore()
 const cycle = computed(() => store.cycle)
 const busy = ref<'save' | 'open' | 'delete' | 'close' | 'suggest' | 'review' | 'share' | null>(null)
 const confirmClose = ref(false)
+const unsaved = ref(false)
 const message = ref('')
 const messageKind = ref<'error' | 'success'>('success')
 
@@ -162,6 +164,13 @@ watch(
 }
 .cycle__open {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: 12px;
+}
+.cycle__unsaved {
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 </style>

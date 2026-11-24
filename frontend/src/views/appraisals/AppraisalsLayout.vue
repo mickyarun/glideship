@@ -19,20 +19,27 @@
      links keep their paths and names. -->
 <template>
   <div class="appraisals">
-    <AppraisalTabs class="appraisals__tabs" :has-reports="leaveStore.approvalCount.has_reports" :can-manage="canManageAppraisals" />
+    <AppraisalTabs class="appraisals__tabs" :has-reports="leaveStore.approvalCount.has_reports" :can-manage="canManageAppraisals" :own-page="ownReview" />
     <RouterView />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { RouterView } from 'vue-router'
+import { computed, onMounted } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import AppraisalTabs from '@/components/appraisals/AppraisalTabs.vue'
 import { usePermissions } from '@/composables/usePermissions'
+import { useAppraisalReviewStore } from '@/stores/appraisalReview'
+import { useAuthStore } from '@/stores/auth'
 import { useLeaveStore } from '@/stores/leave'
 
 const { canManageAppraisals } = usePermissions()
 const leaveStore = useLeaveStore()
+const route = useRoute()
+const reviews = useAppraisalReviewStore()
+const auth = useAuthStore()
+// A review opened by id belongs under "Your own" when it is the viewer's.
+const ownReview = computed(() => route.name === 'appraisal-review' && Boolean(reviews.current) && reviews.current?.user_id === auth.user?.id)
 
 onMounted(() => {
   void leaveStore.fetchApprovalCount()

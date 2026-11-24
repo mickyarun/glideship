@@ -44,8 +44,11 @@ export function appraisalTabs(access: { hasReports: boolean; canManage: boolean 
   return TABS.filter(t => (t.key === 'team' ? access.hasReports : t.key === 'cycles' ? access.canManage : true))
 }
 
-/** The tab a route sits under, or null for a page opened by id. */
-export function tabForRoute(name: string | null | undefined): AppraisalTabKey | null {
+/**
+ * The tab a route sits under. A page opened by id sits under "Your own"
+ * when it is the viewer's own, else under none.
+ */
+export function tabForRoute(name: string | null | undefined, ownPage = false): AppraisalTabKey | null {
   const hit = (Object.keys(PAGES) as AppraisalTabKey[]).find(k => PAGES[k].includes(String(name)))
-  return hit ?? null
+  return hit ?? (ownPage ? 'own' : null)
 }

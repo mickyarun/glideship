@@ -72,6 +72,8 @@ describe('shared result', () => {
     const changed = { ...shared, manager_score: { ...shared.manager_score!, final_band: 3, reason: 'Steady' } }
     expect(overallLine(changed, false)).toBe('Priya picked "Exceeded most times". Ravi changed it.')
     expect(overallLine({ ...shared, self_score: null }, true)).toContain('no self-review')
+    const noted = { ...shared, manager_score: { ...shared.manager_score!, reason: 'Fair call' } }
+    expect(overallLine(noted, true)).toBe('You picked the same. Ravi kept it, with a note.')
     expect(periodWord('2026-10-01', '2026-12-31')).toBe('quarter')
     expect(periodWord('2026-01-01', '2026-12-31')).toBe('year')
   })
@@ -85,6 +87,13 @@ describe('shared result', () => {
     expect(rows[1]).toContain('Changed to Achieved')
     expect(rows[1]).toContain('They ship alone now')
     expect(wrapper.find('input[value="2"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('says a goal was rated, not changed, when there was no self-review', async () => {
+    const { plugins } = await appraisalPlugins()
+    const unscored = { ...shared, goals: [{ ...shared.goals[0], self_result: null, result: 'partly' as const }] }
+    const wrapper = mount(ReviewResult, { global: { plugins: plugins as never[] }, props: { review: unscored, isSelf: true } })
+    expect(wrapper.find('tbody tr').text()).toContain('Rated Partly')
   })
 
   it("confirms reading, not agreeing, with an optional reply", async () => {

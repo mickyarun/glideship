@@ -49,7 +49,7 @@ export function selfProblem(body: SelfBody, goalIds: string[]): string {
   if (goalIds.some(id => !scored.has(id))) return 'Pick how each goal ended: not yet, partly or achieved.'
   if (body.band === null) return 'Pick an overall rating.'
   if (isHighBand(body.band) && body.evidence.length < HIGH_BAND_EVIDENCE) {
-    return `"${bandLabel(body.band)}" needs ${HIGH_BAND_EVIDENCE} examples. Pick them below.`
+    return `"${bandLabel(body.band)}" needs ${HIGH_BAND_EVIDENCE} examples. Pick them under Examples.`
   }
   return ''
 }
@@ -81,7 +81,7 @@ export function overallLine(review: AppraisalRead, isSelf: boolean): string {
   const final = review.manager_score?.final_band ?? null
   const picked = isSelf ? 'You picked' : `${firstName(review.person_name, 'They')} picked`
   if (own === null) return `${manager} rated this; there was no self-review to agree with.`
-  if (own === final) return `${picked} the same. ${manager} agreed.`
+  if (own === final) return `${picked} the same. ${manager} ${review.manager_score?.reason ? 'kept it, with a note' : 'agreed'}.`
   return `${picked} "${bandLabel(own)}". ${manager} changed it.`
 }
 
@@ -133,7 +133,7 @@ export function managerProblem(body: ManagerBody): string {
   if (!body.reason.trim()) return "Say why you changed the rating; they'll read it."
   const needed = evidenceNeeded(body.band, true)
   if (body.evidence.length >= needed) return ''
-  return `"${bandLabel(body.band)}" needs ${needed === 1 ? 'an example. Pick one below.' : `${needed} examples. Pick them below.`}`
+  return `"${bandLabel(body.band)}" needs ${needed === 1 ? 'an example. Pick one under Examples.' : `${needed} examples. Pick them under Examples.`}`
 }
 
 /** Agree or Change; Agree only when the person gave an answer to agree with. */

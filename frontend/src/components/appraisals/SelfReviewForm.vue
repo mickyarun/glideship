@@ -34,7 +34,7 @@
           :aria-label="`Result for ${byId[goal.goal_id].title}`"
           @update:model-value="v => (goal.result = v as GoalResult)"
         />
-        <v-text-field v-model="goal.reason" label="Why" maxlength="300" density="compact" hide-details="auto" />
+        <v-text-field v-model="goal.reason" label="Why" :aria-label="`Why, ${byId[goal.goal_id].title}`" maxlength="300" density="compact" hide-details="auto" />
       </div>
       <p v-if="!form.goals.length" class="self__muted">No goals were confirmed this {{ period }}.</p>
     </FormStep>
@@ -60,7 +60,7 @@ import EvidencePicker from '@/components/appraisals/EvidencePicker.vue'
 import FormStep from '@/components/appraisals/FormStep.vue'
 import type { GoalResult } from '@/types/appraisalGoals'
 import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalReview'
-import { HIGH_BAND_EVIDENCE } from '@/utils/appraisalBands'
+import { HIGH_BAND_EVIDENCE, HIGH_BANDS_NAME } from '@/utils/appraisalBands'
 import { RESULT_OPTIONS } from '@/utils/appraisalGoals'
 import { firstName, periodWord, selfProblem, selfProgress } from '@/utils/appraisalReview'
 
@@ -86,7 +86,7 @@ const form = reactive<SelfBody>({
 const problem = computed(() => selfProblem(form, props.review.goals.map(g => g.id)))
 const progress = computed(() => selfProgress(form))
 const examplesLine = computed(
-  () => `Both "Exceeded" ratings need ${HIGH_BAND_EVIDENCE} examples. You have ${form.evidence.length}.`,
+  () => `${HIGH_BANDS_NAME} need ${HIGH_BAND_EVIDENCE} examples. You have ${form.evidence.length}.`,
 )
 
 function body(): SelfBody {

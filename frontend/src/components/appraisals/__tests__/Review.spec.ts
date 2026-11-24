@@ -80,7 +80,7 @@ describe('goals', () => {
 describe('self-review', () => {
   it('needs two examples for either Exceeded rating, and every goal scored', () => {
     const body = { band: 2, reason: '', evidence: ['f1'], goals: [{ goal_id: 'g1', result: 'achieved' as const, reason: '', evidence: [] }] }
-    expect(selfProblem(body, ['g1'])).toBe('"Exceeded most times" needs 2 examples. Pick them below.')
+    expect(selfProblem(body, ['g1'])).toBe('"Exceeded most times" needs 2 examples. Pick them under Examples.')
     expect(selfProblem({ ...body, evidence: ['f1', 'link:l1'] }, ['g1'])).toBe('')
     expect(selfProblem({ ...body, band: 3, goals: [] }, ['g1'])).toContain('Pick how each goal ended')
   })

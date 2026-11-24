@@ -35,6 +35,7 @@ describe('appraisal tabs', () => {
     expect(tabForRoute('appraisal-team')).toBe('team')
     expect(tabForRoute('appraisal-review')).toBeNull()
     expect(tabForRoute(null)).toBeNull()
+    expect(tabForRoute('appraisal-review', true)).toBe('own')
   })
 
   it('links each tab to its old route and marks the current one', async () => {

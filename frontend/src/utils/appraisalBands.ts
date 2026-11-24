@@ -38,6 +38,8 @@ export const BANDS: Band[] = [
 /** The two "Exceeded" bands: each needs two examples (the server's rule too). */
 export const HIGH_BANDS = [1, 2]
 export const HIGH_BAND_EVIDENCE = 2
+/** How screens name the two high bands together. */
+export const HIGH_BANDS_NAME = 'Both "Exceeded" ratings'
 /** "Did not meet": the manager needs at least one example to move someone here. */
 export const LOW_BAND = 5
 

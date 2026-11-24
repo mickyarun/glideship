@@ -37,8 +37,10 @@ describe('new cycle', () => {
     expect(wrapper.text()).toContain('41 people')
     expect(wrapper.text()).not.toMatch(/goals per person/i)
     expect(wrapper.text()).toContain('Offer AI first drafts')
+    await wrapper.find('input[maxlength="120"]').setValue('Q1 2027 pilot')
+    expect(wrapper.emitted('dirty')!.at(-1)).toEqual([true])
     await wrapper.find('form').trigger('submit')
-    expect(wrapper.emitted('save')![0][0]).toMatchObject({ name: 'Q1 2027', checkin_cadence: 'monthly', feedback_cadence: 'monthly' })
+    expect(wrapper.emitted('save')![0][0]).toMatchObject({ name: 'Q1 2027 pilot', checkin_cadence: 'monthly', feedback_cadence: 'monthly' })
   })
 
   it('labels quarterly check-ins as once at quarter end, and greys out what cannot run', async () => {

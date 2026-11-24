@@ -75,7 +75,7 @@ describe('manager review', () => {
     expect(managerProblem(draft)).toBe('')
     expect(managerProblem({ ...draft, goals: [{ ...draft.goals[0], agree: false, result: 'partly', reason: '' }] })).toContain('Say why')
     const low = { ...draft, agree: false, band: 5, reason: 'Missed the launch' }
-    expect(managerProblem(low)).toBe('"Did not meet" needs an example. Pick one below.')
+    expect(managerProblem(low)).toBe('"Did not meet" needs an example. Pick one under Examples.')
     expect(managerProblem({ ...low, evidence: ['f1'] })).toBe('')
     expect(managerProblem({ ...draft, agree: false, band: 4, reason: '' })).toContain('Say why')
   })

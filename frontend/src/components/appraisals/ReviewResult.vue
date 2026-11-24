@@ -38,11 +38,8 @@
             <td>{{ goal.title }}</td>
             <td>{{ goal.self_result ? resultLabel(goal.self_result) : '–' }}</td>
             <td>
-              <template v-if="changed(goal)">
-                <span class="result__changed">Changed to {{ resultLabel(goal.result) }}</span>
-                <span v-if="goal.manager_reason" class="result__muted result__quote">“{{ goal.manager_reason }}”</span>
-              </template>
-              <template v-else>Agreed</template>
+              <span :class="{ result__changed: goal.result !== goal.self_result }">{{ managerCall(goal) }}</span>
+              <span v-if="goal.manager_reason" class="result__muted result__quote">“{{ goal.manager_reason }}”</span>
             </td>
           </tr>
         </tbody>
@@ -66,8 +63,11 @@ const final = computed(() => score.value?.final_band ?? null)
 const manager = computed(() => firstName(props.review.manager_name, 'Your manager'))
 const person = computed(() => firstName(props.review.person_name, 'They'))
 
-function changed(goal: ReviewGoal): boolean {
-  return goal.self_result === null || goal.result !== goal.self_result
+/** What the manager made of one goal: rated from scratch, changed, or agreed. */
+function managerCall(goal: ReviewGoal): string {
+  if (goal.self_result === null) return `Rated ${resultLabel(goal.result)}`
+  if (goal.result !== goal.self_result) return `Changed to ${resultLabel(goal.result)}`
+  return goal.manager_reason ? 'Agreed, with a note' : 'Agreed'
 }
 </script>
 

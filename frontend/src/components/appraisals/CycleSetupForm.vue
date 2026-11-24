@@ -66,7 +66,7 @@ import { cadenceProblem, longDate } from '@/utils/appraisalSetup'
 type Form = Required<CycleUpdate>
 
 const props = defineProps<{ cycle: CycleRead; saving: boolean; people: number | null }>()
-const emit = defineEmits<{ save: [form: Form] }>()
+const emit = defineEmits<{ save: [form: Form]; dirty: [dirty: boolean] }>()
 
 const form = ref<Form>(cycleForm(props.cycle))
 watch(
@@ -74,6 +74,12 @@ watch(
   c => {
     form.value = cycleForm(c)
   },
+)
+// Tell the page when there are edits not yet saved, so opening can't skip them.
+watch(
+  form,
+  f => emit('dirty', JSON.stringify(f) !== JSON.stringify(cycleForm(props.cycle))),
+  { deep: true },
 )
 const period = computed(() => periodNoun(props.cycle.review_period))
 const problem = computed(() =>
