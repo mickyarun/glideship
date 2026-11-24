@@ -34,6 +34,8 @@ from app.repositories.user import UserRepository
 from app.schemas.leave import LeaveRequestCreate
 from app.services.fixed_window import seconds_until_allowed
 from app.services.leave.approvers import approvers_for, route_for
+from app.services.leave.balances import balances_for, find_line
+from app.services.leave.calendar_math import leave_year_bounds
 from app.services.leave.errors import (
     LeaveConflictError,
     LeaveForbiddenError,
@@ -45,6 +47,7 @@ from app.services.leave.evaluation import evaluate
 from app.services.leave.evaluation_steps import Evaluation
 from app.services.leave.loss_of_pay import rebalance, reprice
 from app.services.leave.messages import already_decided_message
+from app.services.leave.over_balance import refusal
 from app.services.leave.policies import policy_for_request, resolve_member_policy
 
 # Far above anyone's real use; low enough that approvers can't be spammed.
@@ -166,11 +169,24 @@ async def _refuse_if_over(db: AsyncSession, org_id: uuid.UUID, request: LeaveReq
 
     Its balance can drop after the request was sent (HR took days off), so
     the approver is told to send it back rather than approve unpaid days.
+    Same rule as when it was sent: with no other leave left to use instead,
+    the unpaid days stand.
     """
     if request.lop_days <= 0 or request.leave_type_id is None:
         return
     leave_type = await LeaveTypeRepository(db, org_id=org_id).get_by_id(request.leave_type_id)
-    if leave_type is not None and leave_type.stops_at_balance:
+    if leave_type is None or not leave_type.stops_at_balance:
+        return
+    member = await policy_for_request(db, org_id, request)
+    lines = await balances_for(
+        db,
+        policy=member.policy,
+        profile=member.profile,
+        user_id=request.user_id,
+        year=leave_year_bounds(request.start_date, member.policy.year_start_month),
+        on=request.start_date,
+    )
+    if refusal(leave_type, request.lop_days, find_line(lines, leave_type.id), lines) is not None:
         raise LeaveConflictError(
             f"Their {leave_type.name} balance went down after they asked, and this request "
             "is now past it. Reject it so they can request the rest as another type."

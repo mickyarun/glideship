@@ -38,7 +38,7 @@
       <AppCallout v-if="preview.high_leave" :variant="highLeaveVariant(preview.high_leave)">
         {{ highLeaveForSelf(preview.high_leave, true) }}
       </AppCallout>
-      <AppCallout v-if="preview.problems.length" variant="error">
+      <AppCallout v-if="preview.problems.length" ref="problemsBox" variant="error">
         <div v-for="problem in preview.problems" :key="problem.code">{{ problem.message }}</div>
       </AppCallout>
     </template>
@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import type { LeaveKind, LeavePreview, PolicyBrief } from '@/types/leave'
 import { highLeaveForSelf, highLeaveVariant } from '@/utils/highLeave'
@@ -70,6 +70,18 @@ const props = defineProps<{
   typeName: string
   placeholder: string
 }>()
+
+// The reason a request can't be sent sits under the form's other fields; bring
+// it into view so a disabled Send button never has a hidden explanation.
+const problemsBox = ref<{ $el: HTMLElement } | null>(null)
+watch(
+  () => props.preview?.problems.map(p => p.message).join('|') ?? '',
+  async text => {
+    if (!text) return
+    await nextTick()
+    problemsBox.value?.$el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  },
+)
 
 const daysLine = computed(() => {
   const days = toNumber(props.preview?.days)
