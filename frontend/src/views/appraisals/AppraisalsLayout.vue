@@ -39,7 +39,11 @@ const route = useRoute()
 const reviews = useAppraisalReviewStore()
 const auth = useAuthStore()
 // A review opened by id belongs under "Your own" when it is the viewer's.
-const ownReview = computed(() => route.name === 'appraisal-review' && Boolean(reviews.current) && reviews.current?.user_id === auth.user?.id)
+// Only once the review on screen is the one in the route, not the last one still loaded.
+const ownReview = computed(() => {
+  const current = reviews.current
+  return route.name === 'appraisal-review' && current?.id === route.params.id && current.user_id === auth.user?.id
+})
 
 onMounted(() => {
   void leaveStore.fetchApprovalCount()
