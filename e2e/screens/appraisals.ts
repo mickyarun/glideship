@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** Appraisal screens: the guide, check-ins, feedback, the review and the growth conversation. */
-import { expect, type Page } from '@playwright/test'
+/** Appraisal screen helpers: the quarter under test and the pill groups. */
+import type { Page } from '@playwright/test'
 
 /** The quarter before today's, and the first weekday after it ends, at noon UTC so the date is the same in any org time zone. */
 export function lastQuarter(today = new Date()): { start: string, end: Date, tickAt: string } {
@@ -34,15 +34,6 @@ export function daysFromNow(days: number): string {
   const day = new Date()
   day.setUTCDate(day.getUTCDate() + days)
   return day.toISOString().slice(0, 10)
-}
-
-/** Opens an appraisal screen, closing the guide that opens on a first visit. */
-export async function openAppraisals(page: Page, path: string): Promise<void> {
-  await page.goto(path)
-  const guide = page.getByRole('button', { name: 'Got it' })
-  await expect(guide).toBeVisible()
-  await guide.click()
-  await expect(guide).toBeHidden()
 }
 
 /** Picks one option in a labelled pill group. */

@@ -36,7 +36,9 @@
           @update:model-value="v => (goal.result = v as GoalResult)"
         />
         <EvidenceChips v-model="goal.evidence" :options="options" label="Examples picked earlier:" />
-        <v-text-field v-model="goal.reason" label="Why" :aria-label="`Why, ${byId[goal.goal_id].title}`" maxlength="300" density="compact" hide-details="auto" />
+        <v-text-field v-model="goal.reason" maxlength="300" density="compact" hide-details="auto">
+          <template #label>Why<span class="d-sr-only">, {{ byId[goal.goal_id].title }}</span></template>
+        </v-text-field>
       </div>
       <p v-if="!form.goals.length" class="self__muted">No goals were confirmed this {{ period }}.</p>
     </FormStep>

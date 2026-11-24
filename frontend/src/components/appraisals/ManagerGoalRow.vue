@@ -38,7 +38,10 @@
           :aria-label="`Your result for ${goal.title}`"
           @update:model-value="v => (decision.result = v as GoalResult)"
         />
-        <v-text-field v-model="decision.reason" :label="`Why (${who} reads this)`" :aria-label="`Why, ${goal.title} (${who} reads this)`" maxlength="300" density="compact" hide-details="auto" />
+        <v-text-field v-model="decision.reason" maxlength="300" density="compact" hide-details="auto">
+          <!-- The goal's name is for screen readers: several rows can ask "Why". -->
+          <template #label>Why<span class="d-sr-only">, {{ goal.title }}</span> ({{ who }} reads this)</template>
+        </v-text-field>
       </template>
     </div>
   </div>
