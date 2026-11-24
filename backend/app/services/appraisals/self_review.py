@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The employee's self-review: a result and reason per goal, and an overall band.
+"""The employee's self-review: a result and reason per goal, two open
+answers (most proud of, would do differently) and an overall band.
 
 Saved as they go; submitting checks the rules in :mod:`.review_rules` and
 passes the review to the manager. Evidence comes only from the period.
@@ -61,6 +62,8 @@ async def save_self(db: AsyncSession, ctx: AppraisalContext, body: SelfBody) -> 
         goal.self_evidence = pick(pool, item.evidence)
     appraisal.self_band = body.band
     crypto.seal(appraisal, "self_reason", body.reason.strip())
+    crypto.seal(appraisal, "self_proud", body.proud.strip() or None)
+    crypto.seal(appraisal, "self_differently", body.differently.strip() or None)
     appraisal.self_evidence = pick(pool, body.evidence)
     await db.flush()
 

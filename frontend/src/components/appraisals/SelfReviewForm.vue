@@ -14,9 +14,10 @@
  * limitations under the License.
  -->
 
-<!-- Your review: how each goal ended with a line on why, then the overall
-     rating in words with the reason and examples. The quarter's check-ins
-     and work sit beside it. -->
+<!-- Your review: how each goal ended with a line on why, what you're most
+     proud of, what you'd do differently, then the overall rating in words
+     with the reason and examples. The quarter's check-ins and work sit
+     beside it. -->
 <template>
   <form class="self" @submit.prevent>
     <p class="self__lead">
@@ -39,7 +40,13 @@
       </div>
       <p v-if="!form.goals.length" class="self__muted">No goals were confirmed this {{ period }}.</p>
     </FormStep>
-    <FormStep :number="2" :title="`Overall, how did your ${period} go?`" :hint="`Compared with what your role expects. ${manager} can agree or change it, and will say why.`">
+    <FormStep :number="2" :title="`What are you most proud of this ${period}?`" hint="Say what happened and what changed because of it.">
+      <v-textarea v-model="form.proud" label="Most proud of" rows="2" auto-grow maxlength="1000" hide-details="auto" />
+    </FormStep>
+    <FormStep :number="3" title="What would you do differently?" :hint="`One or two things. This helps plan next ${period}.`">
+      <v-textarea v-model="form.differently" label="Would do differently" rows="2" auto-grow maxlength="1000" hide-details="auto" />
+    </FormStep>
+    <FormStep :number="4" :title="`Overall, how did your ${period} go?`" :hint="`Compared with what your role expects. ${manager} can agree or change it, and will say why.`">
       <BandScale v-model="form.band" label="Overall rating" />
       <v-textarea v-model="form.reason" label="Why this one?" rows="2" auto-grow maxlength="600" hide-details="auto" />
       <EvidencePicker v-model="form.evidence" :options="options" label="Examples" />
@@ -78,6 +85,8 @@ const form = reactive<SelfBody>({
   band: props.review.self_score?.band ?? null,
   reason: props.review.self_score?.reason ?? '',
   evidence: [...(props.review.self_score?.evidence ?? [])],
+  proud: props.review.self_score?.proud ?? '',
+  differently: props.review.self_score?.differently ?? '',
   goals: props.review.goals.map(g => ({
     goal_id: g.id,
     result: g.self_result,

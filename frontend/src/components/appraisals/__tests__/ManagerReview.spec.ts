@@ -22,7 +22,7 @@ import { review } from './reviewFixture'
 
 const scored = review({
   status: 'manager_review',
-  self_score: { band: 3, reason: 'Steady quarter', evidence: [], submitted_at: '2027-01-05T10:00:00Z' },
+  self_score: { band: 3, reason: 'Steady quarter', evidence: [], submitted_at: '2027-01-05T10:00:00Z', proud: 'Shipped refunds early', differently: '' },
   goals: [{ ...review().goals[0], self_result: 'achieved', self_reason: 'Live three days early' }],
   can: { edit_self: false, edit_manager: true, send_back: false, share: false, acknowledge: false },
 })
@@ -42,6 +42,8 @@ describe('manager review', () => {
     expect(wrapper.text()).toContain('Met every time')
     expect(wrapper.text()).toContain('“Steady quarter”')
     expect(wrapper.text()).toContain('Priya sees your answers after HR shares them.')
+    expect(wrapper.text()).toContain('Most proud of“Shipped refunds early”')
+    expect(wrapper.text()).not.toContain('Would do differently')
     expect(send(wrapper).attributes('disabled')).toBeUndefined()
   })
 

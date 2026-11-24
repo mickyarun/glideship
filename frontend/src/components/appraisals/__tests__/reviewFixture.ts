@@ -28,7 +28,7 @@ export function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
       links: [{ id: 'l1', url: 'https://doc.test', title: 'Spec', heading: 'team', goal_id: null }],
     }],
     goals: [{ id: 'g1', position: 1, title: 'Ship refunds', measure: '', added_mid_period: false, accepted_at: null, self_result: null, self_reason: null, self_evidence: [], result: null, draft_result: null, manager_reason: null }],
-    self_score: { band: null, reason: '', evidence: [], submitted_at: null },
+    self_score: { band: null, reason: '', evidence: [], submitted_at: null, proud: '', differently: '' },
     manager_score: null, manager_only: null, send_back_note: null, reply: null, shared_at: null, acknowledged_at: null,
     growth: { open: false, can_edit: false, is_self: true, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3, goals: [] },
     can: { edit_self: true, edit_manager: false, send_back: false, share: false, acknowledge: false },

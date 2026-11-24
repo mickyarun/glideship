@@ -28,7 +28,7 @@ import { review } from './reviewFixture'
 const shared = review({
   status: 'shared',
   shared_at: '2027-01-27T10:00:00Z',
-  self_score: { band: 2, reason: 'Two goals early', evidence: [], submitted_at: '2027-01-05T10:00:00Z' },
+  self_score: { band: 2, reason: 'Two goals early', evidence: [], submitted_at: '2027-01-05T10:00:00Z', proud: '', differently: 'Start write-ups sooner' },
   manager_score: { band: 2, reason: '', evidence: [], final_band: 2, submitted_at: '2027-01-12T10:00:00Z' },
   goals: [
     { ...review().goals[0], self_result: 'achieved', result: 'achieved' },
@@ -94,6 +94,8 @@ describe('shared result', () => {
     expect(rows[1]).toContain('Changed to Achieved')
     expect(rows[1]).toContain('They ship alone now')
     expect(wrapper.find('input[value="2"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('In your words')
+    expect(wrapper.text()).toContain('Would do differently“Start write-ups sooner”')
   })
 
   it('says a goal was rated, not changed, when there was no self-review', async () => {

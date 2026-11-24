@@ -54,10 +54,15 @@ export function selfProblem(body: SelfBody, goalIds: string[]): string {
   return ''
 }
 
-/** How much of the self-review is filled in: each goal's result, then the overall rating. */
+/** How many of the four questions are answered: the goals (all of them), the two open answers, the rating. */
 export function selfProgress(body: SelfBody): { done: number; total: number } {
-  const goals = body.goals.filter(g => g.result).length
-  return { done: goals + (body.band === null ? 0 : 1), total: body.goals.length + 1 }
+  const answered = [
+    body.goals.every(g => g.result),
+    Boolean(body.proud.trim()),
+    Boolean(body.differently.trim()),
+    body.band !== null,
+  ]
+  return { done: answered.filter(Boolean).length, total: answered.length }
 }
 
 /** The first word of a name, for "Priya said"; the fallback when there is none. */

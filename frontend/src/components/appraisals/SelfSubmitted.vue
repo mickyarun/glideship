@@ -14,18 +14,20 @@
  * limitations under the License.
  -->
 
-<!-- What the employee submitted, while it waits for the manager and HR. -->
+<!-- What the person sent, while it waits for the manager and HR. -->
 <template>
   <section class="submitted" aria-labelledby="submitted-title">
-    <h2 id="submitted-title" class="submitted__title">What you submitted</h2>
+    <h2 id="submitted-title" class="submitted__title">What you sent</h2>
     <ul class="submitted__list">
       <li v-for="goal in review.goals" :key="goal.id"><strong>{{ goal.title }}</strong> · {{ resultLabel(goal.self_result) }}<template v-if="goal.self_reason"> · {{ goal.self_reason }}</template></li>
     </ul>
+    <OpenAnswers class="submitted__answers" :score="review.self_score" who="You" />
     <p class="submitted__band">Overall: {{ bandLabel(review.self_score?.band) }}<template v-if="review.self_score?.reason"> · {{ review.self_score.reason }}</template></p>
   </section>
 </template>
 
 <script setup lang="ts">
+import OpenAnswers from '@/components/appraisals/OpenAnswers.vue'
 import type { AppraisalRead } from '@/types/appraisalReview'
 import { bandLabel } from '@/utils/appraisalBands'
 import { resultLabel } from '@/utils/appraisalGoals'
@@ -50,6 +52,9 @@ defineProps<{ review: AppraisalRead }>()
   margin: 0;
   padding-left: 20px;
   font-size: 14px;
+}
+.submitted__answers {
+  margin-top: 8px;
 }
 .submitted__band {
   margin: 6px 0 0;

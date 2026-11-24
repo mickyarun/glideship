@@ -50,6 +50,8 @@ export interface SelfScore {
   reason: string
   evidence: string[]
   submitted_at: string | null
+  proud: string
+  differently: string
 }
 
 export interface ManagerScore {
@@ -132,6 +134,9 @@ export interface SelfBody {
   band: number | null
   reason: string
   evidence: string[]
+  /** The two open answers; optional. */
+  proud: string
+  differently: string
   goals: { goal_id: string; result: GoalResult | null; reason: string; evidence: string[] }[]
 }
 

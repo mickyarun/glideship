@@ -34,15 +34,18 @@ async function mountForm() {
 }
 
 describe('your review', () => {
-  it('asks how each goal ended, low to high, and counts what is complete', async () => {
+  it('asks how each goal ended, low to high, then two open answers, and counts what is complete', async () => {
     const wrapper = await mountForm()
     const pills = wrapper.findAll('[role="radiogroup"]')[0].findAll('[role="radio"]').map(b => b.text())
     expect(pills).toEqual(['Not yet', 'Partly', 'Achieved'])
     expect(wrapper.text()).toContain('Live for everyone by 15 Dec')
-    expect(wrapper.text()).toContain('Ravi reads this next, then HR · 0 of 3 complete')
-    await wrapper.findAll('[role="radio"]').find(b => b.text() === 'Partly')?.trigger('click')
-    expect(wrapper.text()).toContain('1 of 3 complete')
-    expect(selfProgress({ band: 3, reason: '', evidence: [], goals: [] })).toEqual({ done: 1, total: 1 })
+    expect(wrapper.text()).toContain('Ravi reads this next, then HR · 0 of 4 complete')
+    for (const radio of wrapper.findAll('[role="radiogroup"]')) await radio.findAll('[role="radio"]')[1].trigger('click')
+    expect(wrapper.text()).toContain('1 of 4 complete')
+    await wrapper.find('textarea').setValue('Shipped refunds early')
+    expect(wrapper.text()).toContain('2 of 4 complete')
+    const empty = { band: 3, reason: '', evidence: [], proud: '', differently: 'Start sooner', goals: [] }
+    expect(selfProgress(empty)).toEqual({ done: 3, total: 4 })
   })
 
   it('asks for two examples for an Exceeded rating, and keeps each goal\'s earlier examples', async () => {
@@ -60,6 +63,7 @@ describe('your review', () => {
     expect(sent.band).toBe(1)
     expect(sent.evidence).toEqual(['f1', 'link:l1'])
     expect(sent.goals[1].evidence).toEqual(['f1'])
+    expect(sent).toMatchObject({ proud: '', differently: '' })
     expect(wrapper.text()).not.toMatch(/\bband\b/i)
   })
 

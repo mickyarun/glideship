@@ -26,10 +26,13 @@
       <ManagerGoalRow v-for="(decision, i) in form.goals" :key="decision.goal_id" v-model="form.goals[i]" :goal="byId[decision.goal_id]" :who="who" />
       <p v-if="!form.goals.length" class="mgr__muted">No goals were confirmed this period.</p>
     </FormStep>
-    <FormStep :number="2" title="Overall" :hint="`Changing it opens the same five ratings ${who} used.`">
+    <FormStep :number="2" :title="`${who}'s answers`" hint="Read-only. Your words for them come with the overall rating.">
+      <OpenAnswers :score="review.self_score" :who="who" />
+    </FormStep>
+    <FormStep :number="3" title="Overall" :hint="`Changing it opens the same five ratings ${who} used.`">
       <ManagerOverall v-model="form" :review="review" :options="options" :who="who" />
     </FormStep>
-    <FormStep :number="3" title="For HR only" :hint="`${who} never sees this part.`">
+    <FormStep :number="4" title="For HR only" :hint="`${who} never sees this part.`">
       <HrOnlyAnswers v-model="form" :who="who" />
     </FormStep>
     <div class="mgr__foot">
@@ -47,6 +50,7 @@ import FormStep from '@/components/appraisals/FormStep.vue'
 import HrOnlyAnswers from '@/components/appraisals/HrOnlyAnswers.vue'
 import ManagerGoalRow from '@/components/appraisals/ManagerGoalRow.vue'
 import ManagerOverall from '@/components/appraisals/ManagerOverall.vue'
+import OpenAnswers from '@/components/appraisals/OpenAnswers.vue'
 import type { AppraisalRead, EvidenceOption, ManagerBody } from '@/types/appraisalReview'
 import { firstName, managerDraft, managerProblem } from '@/utils/appraisalReview'
 

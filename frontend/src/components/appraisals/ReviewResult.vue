@@ -46,12 +46,16 @@
       </table>
     </div>
   </AppPanel>
+  <AppPanel :title="isSelf ? 'In your words' : `In ${person}'s words`">
+    <OpenAnswers :score="review.self_score" :who="isSelf ? 'You' : person" />
+  </AppPanel>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import BandScale from '@/components/appraisals/BandScale.vue'
+import OpenAnswers from '@/components/appraisals/OpenAnswers.vue'
 import type { AppraisalRead, ReviewGoal } from '@/types/appraisalReview'
 import { bandLabel } from '@/utils/appraisalBands'
 import { resultLabel } from '@/utils/appraisalGoals'

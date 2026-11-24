@@ -67,12 +67,14 @@ class ReviewGoal(BaseModel):
 
 
 class SelfScore(BaseModel):
-    """The employee's overall band."""
+    """The employee's overall band and their two open answers."""
 
     band: Band | None
     reason: str
     evidence: list[str]
     submitted_at: datetime | None
+    proud: str = ""
+    differently: str = ""
 
 
 class ManagerScore(BaseModel):
@@ -151,6 +153,9 @@ class SelfBody(BaseModel):
     band: Band | None = Field(None, ge=1, le=5)
     reason: str = Field("", max_length=600)
     evidence: list[str] = Field(default_factory=list, max_length=10)
+    # The two open answers: optional, and read by the manager and in the result.
+    proud: str = Field("", max_length=1000)
+    differently: str = Field("", max_length=1000)
     # The period's own goals bound it in the service; the org limit can reach the cap.
     goals: list[SelfGoalIn] = Field(default_factory=list, max_length=MAX_GOALS_CAP)
 

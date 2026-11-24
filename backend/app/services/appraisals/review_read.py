@@ -168,6 +168,8 @@ async def read_review(
             reason=crypto.unseal(appraisal, "self_reason") or "",
             evidence=ids_of(appraisal.self_evidence),
             submitted_at=appraisal.self_submitted_at,
+            proud=crypto.unseal(appraisal, "self_proud") or "",
+            differently=crypto.unseal(appraisal, "self_differently") or "",
         )
         if access.view_self_score
         else None,
