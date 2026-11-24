@@ -23,6 +23,7 @@ from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.models.appraisal_cycle import AppraisalCycle
+from app.repositories.employee_profile import EmployeeProfileRepository
 from app.services.file_storage import FileStorage
 from tests.integration.appraisal_month import Month, october, send_check_in
 from tests.integration.appraisal_review_support import BASE, end_period_early
@@ -124,3 +125,17 @@ async def test_hr_is_asked_to_open_reviews_once_the_period_ends(
     (item,) = [i for i in await _todo(client, m, "hr") if i["role"] == "cycles"]
     assert item["kind"] == "open_reviews" and item["target"] == "cycle"
     assert [i for i in await _todo(client, m, "mgr") if i["role"] == "cycles"] == []
+
+
+async def test_people_who_have_left_drop_off_every_list(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    assert any(i["person_name"] == "Priya" for i in await _todo(client, m, "mgr"))
+    async with pg_session_factory() as db:
+        profile = await EmployeeProfileRepository(db, org_id=m.org).get_by_user(m.people["emp"])
+        assert profile is not None
+        profile.date_of_exit = datetime.now(UTC).date() - timedelta(days=1)
+        await db.commit()
+    assert not any(i["person_name"] == "Priya" for i in await _todo(client, m, "mgr"))
+    assert [i for i in await _todo(client, m, "emp") if i["role"] == "own"] == []

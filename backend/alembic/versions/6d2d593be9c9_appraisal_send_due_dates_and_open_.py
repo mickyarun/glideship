@@ -103,14 +103,14 @@ WHERE f.sent_at IS NULL AND EXISTS (
 """
 
 # Run after the schema changes; a test runs the same statements.
-# A check-in counts as sent only if the manager could read something in it:
-# the person's lines, links, tags or goal values, or the AI draft. A blank
-# one stays unsent, so the person gets the normal Send step.
+# A check-in counts as sent only if the person wrote or attached something
+# in it: lines, links, tags or goal values. An AI draft alone doesn't count
+# (AI cycles draft every check-in unasked). A blank one stays unsent, so the
+# person gets the normal Send step.
 CHECK_INS_WITH_CONTENT = """
 UPDATE appraisal_check_ins c SET sent_at = c.updated_at
 WHERE c.sent_at IS NULL AND (
     c.employee_note IS NOT NULL
-    OR c.ai_summary IS NOT NULL
     OR c.fact_tags <> '{}'::jsonb
     OR EXISTS (SELECT 1 FROM appraisal_evidence_links l WHERE l.check_in_id = c.id)
     OR EXISTS (SELECT 1 FROM appraisal_goal_values v WHERE v.check_in_id = c.id)

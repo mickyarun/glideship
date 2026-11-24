@@ -28,6 +28,7 @@ from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.digest_claim import DigestClaim, DigestClaimKind, DigestClaimStatus
 from app.repositories.appraisal_cycle import CycleOrg, orgs_with_running_cycles
+from app.repositories.employee_profile import EmployeeProfileRepository
 from app.services import slack_dm
 from app.services.appraisals import reminder_job
 from app.services.appraisals.enrolment import withdraw_on_exit
@@ -409,3 +410,19 @@ async def test_ready_and_due_never_land_on_the_same_day(
     assert ids["emp"] not in await _sent(slack, org, at(2, 13))
     due = await _sent(slack, org, at(4))
     assert due[ids["emp"]].startswith("Your October check-in is due today.")
+
+
+async def test_people_who_have_left_get_no_check_in_reminders(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage, slack: Slack
+) -> None:
+    m, ids = await _month(client, pg_session_factory, sent=False)
+    org = await _org(pg_session_factory, m.org)
+    await _sent(slack, org, at(2))
+    async with pg_session_factory() as db:
+        profile = await EmployeeProfileRepository(db, org_id=m.org).get_by_user(m.people["emp"])
+        assert profile is not None
+        profile.date_of_exit = date(2026, 11, 3)
+        await db.commit()
+    for day in (4, 6, 9):
+        sent = await _sent(slack, org, at(day))
+        assert ids["emp"] not in sent and ids["quiet"] in sent, day

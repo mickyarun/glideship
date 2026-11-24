@@ -24,7 +24,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import ColumnElement, and_, func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
@@ -61,17 +61,26 @@ class GoalCount:
 class AppraisalTodoRepository:
     """To-do reads for one org."""
 
-    def __init__(self, db: AsyncSession, *, org_id: uuid.UUID) -> None:
-        """Initialize the repository."""
+    def __init__(self, db: AsyncSession, *, org_id: uuid.UUID, today: date) -> None:
+        """Initialize the repository; ``today`` is the org's date, for who has left."""
         self._db = db
         self._org = org_id
+        self._today = today
 
     def _live(self) -> list[ColumnElement[bool]]:
-        """Appraisals still in progress, in cycles that haven't closed."""
+        """Appraisals still in progress, in cycles that haven't closed, of people still here.
+
+        Every query joins the person's profile; anyone whose leaving date
+        has passed drops off everyone's list.
+        """
         return [
             Appraisal.org_id == self._org,
             Appraisal.status != AppraisalStatus.WITHDRAWN,
             AppraisalCycle.status != CycleStatus.CLOSED,
+            or_(
+                EmployeeProfile.date_of_exit.is_(None),
+                EmployeeProfile.date_of_exit >= self._today,
+            ),
         ]
 
     def _primary(self, manager_user_id: uuid.UUID) -> ColumnElement[bool]:

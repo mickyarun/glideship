@@ -225,6 +225,12 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
             .where(AppraisalManagerFeedback.org_id == m.org)
             .values(sent_at=None, due_on=kept_due)
         )
+        # An AI draft alone (AI cycles draft every check-in) isn't the person's writing.
+        await db.execute(
+            update(AppraisalCheckIn)
+            .where(AppraisalCheckIn.org_id == m.org, AppraisalCheckIn.id != uuid.UUID(priya))
+            .values(ai_summary=b"drafted")
+        )
         for statement in _migration().BACKFILL:
             await db.execute(text(statement))
         await db.commit()

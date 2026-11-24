@@ -136,7 +136,7 @@ async def _cycles(db: AsyncSession, caller: Caller, today: date) -> list[TodoIte
 async def todo_list(db: AsyncSession, caller: Caller) -> list[TodoItem]:
     """Everything the caller has to do in appraisals now, late first, then by due date."""
     today = await org_today(db, caller.org_id)
-    repo = AppraisalTodoRepository(db, org_id=caller.org_id)
+    repo = AppraisalTodoRepository(db, org_id=caller.org_id, today=today)
     items = await _own(repo, caller, today) + await _team(db, repo, caller, today)
     if caller.perms.has(APPRAISALS_MANAGE):
         items += await _cycles(db, caller, today)

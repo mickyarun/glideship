@@ -46,7 +46,9 @@ async def check_in_due_stream(
     skip: set[uuid.UUID],
 ) -> Outbox:
     """Each person's check-in reminder today; ``skip`` holds people already reached."""
-    waiting = await AppraisalCheckInDueRepository(db, org_id=org_id).unsent([c.id for c in cycles])
+    waiting = await AppraisalCheckInDueRepository(db, org_id=org_id).unsent(
+        [c.id for c in cycles], day
+    )
     waiting = [w for w in waiting if w.user_id not in skip]
     if not waiting:
         return {}
