@@ -60,6 +60,17 @@ describe('manager review', () => {
     expect(body).toMatchObject({ agree: false, band: 2, evidence: ['f1', 'link:l1'] })
   })
 
+  it('drops picked examples when switching back to agree', async () => {
+    const wrapper = await mountForm()
+    const overall = () => wrapper.findAll('[role="radiogroup"]').find(g => g.attributes('aria-label') === 'Agree or change the overall rating')!
+    await overall().findAll('[role="radio"]')[1].trigger('click')
+    await wrapper.findAll('.evidence input[type="checkbox"]')[0].setValue(true)
+    await overall().findAll('[role="radio"]')[0].trigger('click')
+    await send(wrapper).trigger('click')
+    const [body] = wrapper.emitted('submit')![0] as [{ agree: boolean; evidence: string[] }]
+    expect(body).toMatchObject({ agree: true, evidence: [] })
+  })
+
   it('asks HR-only questions with yes or no, and offers no send back', async () => {
     const wrapper = await mountForm()
     expect(wrapper.text()).toContain('Priya never sees this part.')

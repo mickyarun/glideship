@@ -28,7 +28,7 @@
       :model-value="form.agree ? 'agree' : 'change'"
       :options="agreeOrChange(theirs !== null)"
       aria-label="Agree or change the overall rating"
-      @update:model-value="v => (form.agree = v === 'agree')"
+      @update:model-value="choose"
     />
     <template v-if="!form.agree">
       <BandScale v-model="form.band" label="Your overall rating" show-legend />
@@ -52,6 +52,12 @@ const props = defineProps<{ review: AppraisalRead; options: EvidenceOption[]; wh
 const form = defineModel<ManagerBody>({ required: true })
 // Only a sent self-review counts; a draft is nobody else's to agree with.
 const theirs = computed(() => (props.review.self_score?.submitted_at ? props.review.self_score.band : null))
+// Examples only back a change, so agreeing drops any picked before.
+function choose(value: string): void {
+  form.value.agree = value === 'agree'
+  if (form.value.agree) form.value.evidence = []
+}
+
 const needLine = computed(() => {
   const needed = evidenceNeeded(form.value.band, true)
   if (!needed) return 'Examples are optional for this rating.'

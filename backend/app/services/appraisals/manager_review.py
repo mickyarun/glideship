@@ -86,7 +86,8 @@ async def _apply(
         problems.append(goal_problem(own, decision))
     appraisal.manager_band = final_band(own_band, band)
     crypto.seal(appraisal, "manager_reason", body.reason.strip() if not body.agree else None)
-    appraisal.manager_evidence = evidence
+    # Examples only back a change; agreeing keeps none, even ones picked before.
+    appraisal.manager_evidence = [] if body.agree else evidence
     appraisal.ready_next_level = body.ready_next_level
     appraisal.performance_concern = body.performance_concern
     crypto.seal(

@@ -226,3 +226,23 @@ async def test_a_suggestion_run_that_ends_after_the_lock_saves_nothing(
         ).all()
         row = await db.get(Appraisal, uuid.UUID(appraisal))
     assert goals == [] and row is not None and row.suggest_status.value == "none"
+
+
+async def test_agreeing_drops_examples_picked_for_a_change(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m, ids, _ = await started(client, pg_session_factory)
+    emp, mgr = as_user(m.people["emp"], m.org), as_user(m.people["mgr"], m.org)
+    url = f"{BASE}/{ids['Priya']}"
+    review = (await client.get(url, headers=emp)).json()
+    goals = [{"goal_id": g["id"], "result": "achieved"} for g in review["goals"]]
+    await client.put(f"{url}/self", json={"band": 3, "goals": goals}, headers=emp)
+    assert (await client.post(f"{url}/self/submit", headers=emp)).status_code == 200
+    facts = [f["id"] for month in review["timeline"] for f in month["facts"]]
+    assert facts
+    agreed = [{"goal_id": g["goal_id"], "agree": True} for g in goals]
+    change = {"agree": False, "band": 4, "reason": "Late", "evidence": facts[:1], "goals": agreed}
+    saved = await client.put(f"{url}/manager", json=change, headers=mgr)
+    assert saved.json()["manager_score"]["evidence"] == facts[:1]
+    back = await client.put(f"{url}/manager", json={**change, "agree": True}, headers=mgr)
+    assert back.json()["manager_score"]["evidence"] == []
