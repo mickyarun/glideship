@@ -22,6 +22,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import update
 
+from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
 from app.repositories.employee_profile import EmployeeProfileRepository
 from app.services.file_storage import FileStorage
@@ -74,11 +75,22 @@ async def test_a_primary_manager_owes_notes_on_sent_check_ins_and_goals(
         ("waiting_on_check_in", "Priya"),
     ]
     assert {i["count"] for i in before if i["kind"] == "set_goals"} == {3}
-    # Goals were due by the cycle's goals date (8 October): late now. Notes
-    # waiting on a check-in have no date and are never late.
+    # The cycle opened today, after its goals date (8 October): everyone gets
+    # the same week from today. Notes waiting on a check-in have no date.
     goals = [i for i in before if i["kind"] == "set_goals"]
-    assert all(i["due_on"] == "2026-10-08" and i["late"] for i in goals)
+    fresh = (datetime.now(UTC).date() + timedelta(days=7)).isoformat()
+    assert all(i["due_on"] == fresh and not i["late"] for i in goals)
     assert not any(i["late"] or i["due_on"] for i in before if i not in goals)
+    # Enrolled before the goals date: due on it, and late now.
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(Appraisal)
+            .where(Appraisal.org_id == m.org)
+            .values(created_at=datetime(2026, 10, 1, tzinfo=UTC))
+        )
+        await db.commit()
+    goals = [i for i in await _todo(client, m, "mgr") if i["kind"] == "set_goals"]
+    assert all(i["due_on"] == "2026-10-08" and i["late"] for i in goals)
     await send_check_in(client, m, "emp")
     after = await _todo(client, m, "mgr")
     (note,) = [i for i in after if i["kind"] == "note"]

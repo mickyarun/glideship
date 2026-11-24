@@ -48,6 +48,11 @@ export function isFirstRun(rows: TeamRow[]): boolean {
   return rows.length > 0 && rows.every(r => r.goals_accepted === 0 && r.months.every(m => m.state === 'not_open'))
 }
 
+/** "1 working day", "5 working days". */
+export function workingDays(n: number): string {
+  return `${n} working day${n === 1 ? '' : 's'}`
+}
+
 /** "MC" for "Maya Chen". */
 export function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')

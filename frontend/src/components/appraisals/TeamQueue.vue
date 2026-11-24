@@ -36,16 +36,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppPanel from '@/components/common/AppPanel.vue'
+import type { TeamRow } from '@/types/appraisalTeam'
 import type { TodoItem } from '@/types/appraisalTodo'
 import { longDate } from '@/utils/appraisalSetup'
-import { initials } from '@/utils/appraisalTeamView'
+import { initials, workingDays } from '@/utils/appraisalTeamView'
 import { actionable, todoRoute } from '@/utils/appraisalTodo'
 import { dueLine, todayIso, todoAction, todoTitle } from '@/utils/appraisalTodoWords'
 
-/** ``noteDays``: the cycle's working days for a note once its check-in is sent. */
-const props = defineProps<{ items: TodoItem[]; noteDays: number }>()
+/** ``rows``: each person's row, for their cycle's working days on a note. */
+const props = defineProps<{ items: TodoItem[]; rows: TeamRow[] }>()
 const today = todayIso()
 const count = computed(() => props.items.filter(actionable).length)
+
+// The note's cycle decides: a manager's people can sit in different cycles.
+function noteDays(item: TodoItem): number {
+  return (props.rows.find(r => r.notes.some(n => n.id === item.target_id)) ?? props.rows[0])?.note_due_days ?? 0
+}
 
 function detail(item: TodoItem): string {
   const due = item.due_on ? `Due ${longDate(item.due_on)}.` : ''
@@ -53,7 +59,7 @@ function detail(item: TodoItem): string {
     case 'note':
       return `They sent their check-in. Your notes: ${due}`
     case 'waiting_on_check_in':
-      return `Not sent yet. Your notes are due ${props.noteDays} working day${props.noteDays === 1 ? '' : 's'} after it is.`
+      return `Not sent yet. Your notes are due ${workingDays(noteDays(item))} after it is.`
     case 'set_goals':
       return `Your org asks for at least ${item.count} more. ${due}`.trim()
     case 'confirm_goals':

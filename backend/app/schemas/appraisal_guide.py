@@ -30,7 +30,6 @@ class GuideRead(BaseModel):
     feedback_cadence: FeedbackCadence
     period_start: date | None
     period_end: date | None
-    goals_due: date | None = None
     self_due: date | None
     manager_due: date | None
     ack_due: date | None

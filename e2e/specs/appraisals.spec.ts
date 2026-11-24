@@ -65,11 +65,13 @@ test('a manual review from goals to the read result', async ({ signedIn, stack }
   const hr = await signedIn(org.members.hr)
   await openWithGoalsDate(hr, cycle, goalsDue)
 
+  // The quarter is over, so opening it today gives everyone the same two weeks from now.
+  const ownGoalsDue = daysFromNow(14)
   const manager = await signedIn(org.members.mgr)
   await manager.goto('/appraisals/team')
-  await expect(manager.getByText(`Due ${longDate(goalsDue)} · 0 of 1 done`)).toBeVisible()
+  await expect(manager.getByText(`Due ${longDate(ownGoalsDue)} · 0 of 1 done`)).toBeVisible()
   await manager.getByRole('link', { name: 'Set goals for Eli Employee' }).click()
-  await expect(manager.getByText(`Set goals by ${longDate(goalsDue)}`)).toBeVisible()
+  await expect(manager.getByText(`Set goals by ${longDate(ownGoalsDue)}`)).toBeVisible()
   for (const title of ['Ship refunds', 'Automate UAT']) {
     await manager.getByLabel('Goal', { exact: true }).fill(title)
     await manager.getByLabel('How we\'ll know').fill('Live by quarter end')

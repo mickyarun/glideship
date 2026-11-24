@@ -141,7 +141,6 @@ export interface GuideRead {
   feedback_cadence: FeedbackCadence
   period_start: string | null
   period_end: string | null
-  goals_due: string | null
   self_due: string | null
   manager_due: string | null
   ack_due: string | null

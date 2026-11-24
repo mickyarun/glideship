@@ -27,7 +27,7 @@
       <p v-if="!team.rows.length" class="team__empty">Nobody you manage is in a running appraisal cycle.</p>
       <FirstRunPanel v-else-if="firstRun" :rows="team.rows" />
       <template v-else>
-        <TeamQueue :items="queue" :note-days="team.rows[0].note_due_days" />
+        <TeamQueue :items="queue" :rows="team.rows" />
         <p v-if="comingUp" class="team__coming">{{ comingUp }}</p>
         <EveryoneTable :rows="team.rows" :items="todo.items" />
       </template>
@@ -47,7 +47,7 @@ import { useAppraisalTeamStore } from '@/stores/appraisalTeam'
 import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
 import { monthTitle } from '@/utils/appraisalCheckIn'
 import { longDate } from '@/utils/appraisalSetup'
-import { isFirstRun, teamQueue } from '@/utils/appraisalTeamView'
+import { isFirstRun, teamQueue, workingDays } from '@/utils/appraisalTeamView'
 import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const team = useAppraisalTeamStore()
@@ -65,8 +65,7 @@ const comingUp = computed(() => {
   if (!next) return ''
   const due = team.rows.flatMap(r => r.months).find(m => m.period_start === next.period_start && m.due_on)?.due_on
   const label = monthTitle(next.period_start).split(' ')[0]
-  const days = team.rows[0].note_due_days
-  return `Coming up: ${label} check-ins${due ? ` arrive by ${longDate(due)}` : ' arrive after the month ends'}. Your notes on each are due ${days} working days after it's sent.`
+  return `Coming up: ${label} check-ins${due ? ` arrive by ${longDate(due)}` : ' arrive after the month ends'}. Your notes on each are due ${workingDays(team.rows[0].note_due_days)} after it's sent.`
 })
 
 onMounted(() => {

@@ -49,7 +49,7 @@ export interface CycleProgress {
   people: ProgressRow[]
   feedback: number
   feedback_done: number
-  managers_overdue: { name: string; overdue: number }[]
+  managers_overdue: { user_id: string; name: string; overdue: number }[]
   min_goals: number
   check_in_periods: PeriodCount[]
   note_periods: PeriodCount[]

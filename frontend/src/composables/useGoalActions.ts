@@ -53,10 +53,13 @@ export function useGoalActions() {
     accept: (goal: Goal) => run(store.accept(goal.id)),
     remove: (goal: Goal) => run(store.remove(goal.id)),
     reword: (goal: Goal) => open('reword', goal),
-    // A manager declining someone's proposal says why; taking back their own
-    // suggested change, or the person declining it, needs no reason.
-    dismiss: (goal: Goal) =>
-      goal.status === 'proposed' && manager() && !goal.from_manager ? open('decline', goal) : run(store.dismiss(goal.id, '')),
+    // A manager declining someone's proposal says why; the person turning down
+    // their manager's change may say why; taking back your own needs nothing.
+    dismiss: (goal: Goal) => {
+      if (goal.status === 'proposed' && manager() && !goal.from_manager) open('decline', goal)
+      else if (goal.from_manager && !manager()) open('turn-down', goal)
+      else void run(store.dismiss(goal.id, ''))
+    },
     // A manager always says why; the person rewords their own proposal freely.
     edit: (goal: Goal) => open(manager() ? 'edit-reason' : 'edit', goal, { title: goal.title, measure: goal.measure }),
     'suggest-change': (goal: Goal) => open(manager() ? 'offer-change' : 'suggest-change', goal, { title: goal.title, measure: goal.measure }),
@@ -79,7 +82,7 @@ export function useGoalActions() {
     else if (goal && (mode === 'edit' || mode === 'edit-reason')) problem = await store.edit(goal.id, body)
     else if (goal && (mode === 'suggest-change' || mode === 'offer-change')) problem = await store.suggestChange(goal.id, body)
     else if (goal && mode === 'reword') problem = await store.askReword(goal.id, body.reason)
-    else if (goal && mode === 'decline') problem = await store.dismiss(goal.id, body.reason)
+    else if (goal && (mode === 'decline' || mode === 'turn-down')) problem = await store.dismiss(goal.id, body.reason)
     busy.value = false
     dialogError.value = problem ?? ''
     if (!problem) dialog.value = null

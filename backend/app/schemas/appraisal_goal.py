@@ -156,3 +156,5 @@ class AppraisalSummary(BaseModel):
     status: AppraisalStatus
     goals_accepted: int
     goals_proposed: int
+    # This person's goals date: the cycle's, or a fresh window from a late enrolment.
+    goals_due: date | None = None

@@ -90,9 +90,15 @@ const titles = computed(() => Object.fromEntries(props.goals.map(g => [g.id, g.t
 
 // A note is on something that mattered: writing one ticks the item, so the
 // manager, who only sees ticked work, sees the note too.
+const ticking = new Set<string>()
+
 function note(factId: string, text: string): void {
   notes.value[factId] = text
-  if (text.trim() && !props.tags[factId]) emit('tick', factId, true)
+  // Once per item: the tick takes a moment to come back in ``tags``.
+  if (text.trim() && !props.tags[factId] && !ticking.has(factId)) {
+    ticking.add(factId)
+    emit('tick', factId, true)
+  }
 }
 
 function detail(fact: FactView): string {

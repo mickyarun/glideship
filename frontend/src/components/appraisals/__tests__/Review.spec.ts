@@ -197,7 +197,7 @@ describe('growth conversation by role', () => {
 describe('which review opens', () => {
   const row = (id: string, status: AppraisalSummary['status']): AppraisalSummary => ({
     id, user_id: 'u1', profile_id: 'p1', cycle_id: 'c1', person_name: 'Priya', cycle_name: id, period_start: '2026-10-01', period_end: '2026-12-31',
-    status, goals_accepted: 0, goals_proposed: 0,
+    status, goals_accepted: 0, goals_proposed: 0, goals_due: null,
   })
 
   it('prefers one in progress, then the newest finished, over a cycle not yet reviewed', () => {

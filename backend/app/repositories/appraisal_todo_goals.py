@@ -44,6 +44,8 @@ class GoalCount:
     accepted: int
     proposed: int
     goals_due: date
+    period_start: date
+    enrolled_on: date
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ class OwnChanges:
     appraisal_id: uuid.UUID
     count: int
     goals_due: date
+    manager_name: str
 
 
 def from_manager() -> ColumnElement[bool]:
@@ -83,6 +86,8 @@ class AppraisalTodoGoalsRepository(TodoReads):
                 Appraisal.id,
                 User.name,
                 AppraisalCycle.goals_due,
+                AppraisalCycle.period_start,
+                Appraisal.created_at,
                 func.count(goal.id).filter(goal.status == GoalStatus.ACCEPTED).label("accepted"),
                 func.count(goal.id)
                 .filter(goal.status == GoalStatus.PROPOSED, ~from_manager())
@@ -94,16 +99,36 @@ class AppraisalTodoGoalsRepository(TodoReads):
             .join(User, User.id == EmployeeProfile.user_id)
             .outerjoin(goal, self._period_goals())
             .where(*self._live(), Appraisal.status == AppraisalStatus.ENROLLED)
-            .group_by(Appraisal.id, User.name, AppraisalCycle.goals_due)
+            .group_by(
+                Appraisal.id,
+                User.name,
+                AppraisalCycle.goals_due,
+                AppraisalCycle.period_start,
+                Appraisal.created_at,
+            )
         )
-        return [GoalCount(r.id, r.name, r.accepted, r.proposed, r.goals_due) for r in result.all()]
+        return [
+            GoalCount(
+                r.id,
+                r.name,
+                r.accepted,
+                r.proposed,
+                r.goals_due,
+                r.period_start,
+                r.created_at.date(),
+            )
+            for r in result.all()
+        ]
 
     async def own_changes(self, user_id: uuid.UUID) -> list[OwnChanges]:
         """The caller's goals their manager suggested changing, still to decide on."""
         goal = AppraisalGoal
         result = await self._db.execute(
-            select(Appraisal.id, AppraisalCycle.goals_due, func.count(goal.id).label("n"))
+            select(
+                Appraisal.id, AppraisalCycle.goals_due, User.name, func.count(goal.id).label("n")
+            )
             .join(AppraisalCycle, AppraisalCycle.id == Appraisal.cycle_id)
+            .join(User, User.id == Appraisal.manager_user_id)
             .join(EmployeeProfile, EmployeeProfile.id == Appraisal.profile_id)
             .join(goal, self._period_goals())
             .where(
@@ -113,6 +138,6 @@ class AppraisalTodoGoalsRepository(TodoReads):
                 goal.status == GoalStatus.PROPOSED,
                 from_manager(),
             )
-            .group_by(Appraisal.id, AppraisalCycle.goals_due)
+            .group_by(Appraisal.id, AppraisalCycle.goals_due, User.name)
         )
-        return [OwnChanges(r.id, r.n, r.goals_due) for r in result.all()]
+        return [OwnChanges(r.id, r.n, r.goals_due, r.name) for r in result.all()]

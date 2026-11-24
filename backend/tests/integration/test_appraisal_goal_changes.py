@@ -69,7 +69,8 @@ async def test_the_person_takes_a_change_their_manager_suggested(
     assert not [i for i in manager_todo if i["kind"] == "confirm_goals"]
     (item,) = await _own_todo(client, m)
     assert (item["target"], item["target_id"], item["count"]) == ("goals", appraisal, 1)
-    assert item["due_on"] == "2026-10-08"
+    # Suggested after the goals date (8 October): no due date, so not late on arrival.
+    assert item["due_on"] is None and not item["late"] and item["person_name"] == "Ravi"
     taken = await client.post(f"{BASE}/goals/{proposal['id']}/accept", headers=emp)
     assert taken.status_code == 200, taken.text
     goals = {g["measure"]: g["status"] for g in taken.json()["goals"]}

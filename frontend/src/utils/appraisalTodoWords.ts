@@ -40,7 +40,7 @@ export function todoTitle(item: TodoItem, month = ''): string {
     case 'manager_review':
       return `Review ${who}'s quarter`
     case 'confirm_change':
-      return n > 1 ? `Your manager suggested changes to ${n} goals` : 'Your manager suggested a change to a goal'
+      return `${who.split(' ')[0] || 'Your manager'} suggested ${n > 1 ? `changes to ${n} of your goals` : 'a change to one of your goals'}`
     case 'confirm_goals':
       return `Confirm ${n} goal${n === 1 ? '' : 's'} ${who} suggested`
     case 'set_goals':

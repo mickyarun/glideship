@@ -102,7 +102,10 @@ export function useAutosave(snapshot: () => string, persist: () => Promise<strin
 
   // The browser's own "leave this page?" while text is still on its way.
   function warn(event: BeforeUnloadEvent): void {
-    if (canSave() && (running || snapshot() !== saved)) event.preventDefault()
+    if (!canSave() || (!running && snapshot() === saved)) return
+    event.preventDefault()
+    // Older browsers ask only when this is set.
+    event.returnValue = ''
   }
 
   onMounted(() => window.addEventListener('beforeunload', warn))

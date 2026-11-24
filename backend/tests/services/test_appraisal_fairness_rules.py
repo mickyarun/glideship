@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Who rates high, and who acts on a change the manager suggested (pure)."""
+"""Who rates high, who acts on a change the manager suggested, and when goals are due (pure)."""
 
 import uuid
+from datetime import date
 
 from app.models.appraisal_enums import GoalOrigin, GoalStatus
 from app.models.appraisal_goal import FROM_MANAGER, AppraisalGoal
 from app.services.appraisals.calibration_math import HighShare, Scored, high_share, rates_high
+from app.services.appraisals.cycle_people import goals_due_for
 from app.services.appraisals.goal_rules import GoalRights, actions
 
 
@@ -56,3 +58,11 @@ def test_the_person_decides_on_a_change_their_manager_suggested() -> None:
     confirmed.suggestion_refs = {}
     assert actions(confirmed, manager, False).suggest_change
     assert not actions(confirmed, manager, True).suggest_change
+
+
+def test_someone_enrolled_late_gets_the_same_window_for_goals() -> None:
+    start, due = date(2026, 10, 1), date(2026, 10, 8)
+    assert goals_due_for(due, start, date(2026, 10, 1)) == due
+    assert goals_due_for(due, start, due) == due
+    # Enrolled on 20 October: a week, as everyone had, from then.
+    assert goals_due_for(due, start, date(2026, 10, 20)) == date(2026, 10, 27)

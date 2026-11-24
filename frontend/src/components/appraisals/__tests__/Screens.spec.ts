@@ -68,7 +68,7 @@ describe('team queue', () => {
           { kind: 'note', role: 'team', person_name: 'Arjun Mehta', cycle_name: null, due_on: '2026-11-11', late: true, target: 'feedback', target_id: 'f1', count: null },
           { kind: 'waiting_on_check_in', role: 'team', person_name: 'Maya Chen', cycle_name: null, due_on: null, late: false, target: 'feedback', target_id: 'f2', count: null },
         ],
-        noteDays: 5,
+        rows: [],
       },
     })
     expect(wrapper.text()).toContain('To do · 1')

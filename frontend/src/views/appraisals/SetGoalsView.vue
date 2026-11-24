@@ -21,7 +21,7 @@
 <template>
   <AppPage :title="title" :subtitle="subtitle">
     <template #actions>
-      <v-btn v-if="goals?.goals.some(g => g.status === 'proposed') && goals.can_add" variant="text" :to="{ name: 'appraisal-confirm-goals', params: { id: goals.appraisal_id } }">Confirm suggested goals</v-btn>
+      <v-btn v-if="goals?.goals.some(g => g.status === 'proposed' && !g.from_manager) && goals.can_add" variant="text" :to="{ name: 'appraisal-confirm-goals', params: { id: goals.appraisal_id } }">Confirm suggested goals</v-btn>
       <AppraisalGuide />
     </template>
     <AppCallout v-if="store.error || message" variant="error">{{ message || store.error }}</AppCallout>

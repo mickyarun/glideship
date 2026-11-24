@@ -28,6 +28,7 @@ from app.repositories.employee_profile import EmployeeProfileRepository
 from app.repositories.user import UserRepository
 from app.schemas.appraisal_goal import AppraisalSummary
 from app.services.appraisals.context import Caller
+from app.services.appraisals.cycle_people import goals_due_for
 
 
 async def _summaries(
@@ -60,6 +61,9 @@ async def _summaries(
                 user_id=user_id,
                 profile_id=appraisal.profile_id,
                 cycle_id=cycle.id,
+                goals_due=goals_due_for(
+                    cycle.goals_due, cycle.period_start, appraisal.created_at.date()
+                ),
                 person_name=names.get(user_id, ""),
                 cycle_name=cycle.name,
                 period_start=cycle.period_start,

@@ -121,7 +121,7 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
         feedback=len(items),
         feedback_done=sum(i.status is FeedbackStatus.DONE for i in items),
         managers_overdue=[
-            ManagerOverdue(name=names.get(user_id, ""), overdue=count)
+            ManagerOverdue(user_id=user_id, name=names.get(user_id, ""), overdue=count)
             for user_id, count in overdue.most_common()
         ],
         min_goals=floor,

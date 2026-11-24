@@ -36,9 +36,16 @@ from app.repositories.appraisal_todo import AppraisalTodoRepository
 from app.repositories.appraisal_todo_goals import AppraisalTodoGoalsRepository
 from app.schemas.appraisal_todo import TodoItem, TodoKind, TodoRole, TodoTarget
 from app.services.appraisals.context import Caller
+from app.services.appraisals.cycle_people import goals_due_for
 from app.services.appraisals.due_dates import is_late
 from app.services.appraisals.org_clock import org_today
 from app.services.appraisals.settings import goal_floor
+
+
+def _decide_by(goals_due: date, today: date) -> date | None:
+    """A proposal to decide on is due by the goals date while it's ahead; one
+    that turns up later has no date, so it is never late the moment it appears."""
+    return goals_due if goals_due >= today else None
 
 
 def _item(today: date, **fields: object) -> TodoItem:
@@ -81,7 +88,9 @@ async def _own(
             today,
             kind=TodoKind.CONFIRM_CHANGE,
             role=TodoRole.OWN,
-            due_on=row.goals_due,
+            # Who suggested it, for "Daniel suggested a change".
+            person_name=row.manager_name,
+            due_on=_decide_by(row.goals_due, today),
             target=TodoTarget.GOALS,
             target_id=row.appraisal_id,
             count=row.count,
@@ -128,16 +137,31 @@ async def _team(
     for goals in await goal_repo.goal_counts(caller.user_id):
         common = {
             "person_name": goals.person_name,
-            "due_on": goals.goals_due,
             "target": TodoTarget.GOALS,
             "target_id": goals.appraisal_id,
             **team,
         }
         if goals.proposed:
-            out.append(_item(today, kind=TodoKind.CONFIRM_GOALS, count=goals.proposed, **common))
-        if goals.accepted < floor:
+            decide = _decide_by(goals.goals_due, today)
             out.append(
-                _item(today, kind=TodoKind.SET_GOALS, count=floor - goals.accepted, **common)
+                _item(
+                    today,
+                    kind=TodoKind.CONFIRM_GOALS,
+                    count=goals.proposed,
+                    due_on=decide,
+                    **common,
+                )
+            )
+        if goals.accepted < floor:
+            due = goals_due_for(goals.goals_due, goals.period_start, goals.enrolled_on)
+            out.append(
+                _item(
+                    today,
+                    kind=TodoKind.SET_GOALS,
+                    count=floor - goals.accepted,
+                    due_on=due,
+                    **common,
+                )
             )
     return out
 

@@ -18,7 +18,8 @@ Withdrawn people and leavers keep their rows, but nobody is chased for
 their check-ins or for notes about them: the cycle page, its counts and
 HR's reminder all use this one rule. Goals are late once the cycle's
 "goals agreed by" date has passed with fewer than the org's fewest
-confirmed, until the review opens and goals lock.
+confirmed, until the review opens and goals lock. Someone enrolled after
+that date gets the same window, counted from the day they were enrolled.
 """
 
 import uuid
@@ -42,6 +43,13 @@ def not_chased(
     return withdrawn | gone
 
 
+def goals_due_for(goals_due: date, period_start: date, enrolled_on: date) -> date:
+    """One person's goals date: the cycle's, or as long again from a late enrolment."""
+    if enrolled_on <= goals_due:
+        return goals_due
+    return enrolled_on + (goals_due - period_start)
+
+
 def late_on_goals(
     appraisals: Iterable[Appraisal],
     accepted: Mapping[uuid.UUID, int],
@@ -51,12 +59,11 @@ def late_on_goals(
     quiet: set[uuid.UUID],
 ) -> set[uuid.UUID]:
     """Profile ids still short of goals after the cycle's goals date."""
-    if today <= cycle.goals_due:
-        return set()
     return {
         a.profile_id
         for a in appraisals
         if a.status is AppraisalStatus.ENROLLED
         and a.profile_id not in quiet
         and accepted.get(a.profile_id, 0) < floor
+        and today > goals_due_for(cycle.goals_due, cycle.period_start, a.created_at.date())
     }

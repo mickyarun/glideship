@@ -23,7 +23,7 @@ import { cycleDoNow, lastCheckInsWords, managerRows, remindWords, tiles } from '
 import { goalMeter } from '@/utils/appraisalGoals'
 import { periodRows, previousValues, valueTrail } from '@/utils/appraisalHome'
 import { cycleSteps, ownSteps } from '@/utils/appraisalSteps'
-import { isFirstRun, standing, teamQueue } from '@/utils/appraisalTeamView'
+import { isFirstRun, standing, teamQueue, workingDays } from '@/utils/appraisalTeamView'
 import { dueLine, todoTitle } from '@/utils/appraisalTodoWords'
 
 const item = (over: Partial<TodoItem>): TodoItem => ({
@@ -46,6 +46,9 @@ describe('to-do words', () => {
   it('names the work and how late it is', () => {
     expect(todoTitle(item({ kind: 'confirm_goals', count: 2 }))).toBe('Confirm 2 goals Priya suggested')
     expect(todoTitle(item({ kind: 'check_in', role: 'own' }), 'November')).toBe('Write your November check-in')
+    expect(todoTitle(item({ kind: 'confirm_change', role: 'own', person_name: 'Daniel Okafor', count: 1 }))).toBe('Daniel suggested a change to one of your goals')
+    expect(workingDays(1)).toBe('1 working day')
+    expect(workingDays(5)).toBe('5 working days')
     expect(dueLine('2026-12-08', '2026-12-03')).toBe('Due Tue 8 Dec 2026 · 5 days left')
     expect(dueLine('2026-11-11', '2026-12-02')).toBe('3 weeks late')
     expect(dueLine(null, '2026-12-02')).toBe('')
@@ -155,7 +158,7 @@ describe('cycle page', () => {
   })
 
   it('says who is late, and the next due date to beat', () => {
-    const late = { ...progress, managers_overdue: [{ name: 'Ravi', overdue: 1 }],
+    const late = { ...progress, managers_overdue: [{ user_id: 'm1', name: 'Ravi', overdue: 1 }],
       check_in_periods: [progress.check_in_periods[0], { ...progress.check_in_periods[1], due_on: '2026-12-07' }] }
     expect(remindWords(late, '2026-11-24')).toEqual({
       title: '1 person and 1 manager are late',

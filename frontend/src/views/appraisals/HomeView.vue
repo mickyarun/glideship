@@ -119,7 +119,7 @@ const steps = computed(() => {
   if (!c) return []
   const opened = periods.value.filter(p => p.checkInId).length
   const sent = periods.value.filter(p => p.tone === 'done').length
-  return ownSteps({ status: c.status, periodEnd: c.period_end, goals: values.value.length, sent, months: periods.value.length, opened, goalsDue: guide.value?.goals_due })
+  return ownSteps({ status: c.status, periodEnd: c.period_end, goals: values.value.length, sent, months: periods.value.length, opened, goalsDue: c.goals_due })
 })
 const quiet = computed(() => {
   const next = periods.value.find(p => p.tone === 'later')

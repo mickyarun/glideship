@@ -36,11 +36,10 @@ export interface LookItem {
   canSendBack: boolean
 }
 
-/** "1 in 3", "none", or "2 of 2" when every one is. */
+/** "1 in 3" when it divides evenly, otherwise "5 of 12": never rounded across the threshold. */
 export function share(high: number, people: number): string {
-  if (!high) return 'none'
-  if (high === people) return `${high} of ${people}`
-  return `1 in ${Math.round(people / high)}`
+  if (high && people % high === 0 && high !== people) return `1 in ${people / high}`
+  return `${high} of ${people}`
 }
 
 function gapLine(p: CalibrationPerson): string {
@@ -59,7 +58,8 @@ function person(p: CalibrationPerson, tag: LookItem['tag'], detail: string): Loo
 export function needsALook(cal: Calibration): LookItem[] {
   const out = cal.people.filter(p => p.gap).map(p => person(p, 'Big difference', gapLine(p)))
   for (const team of cal.teams.filter(t => t.rates_high)) {
-    const theirs = cal.people.filter(p => p.manager_user_id === team.manager_user_id && p.final_band !== null)
+    // People with their own gap or concern are looked at on their own item, not by the team's.
+    const theirs = cal.people.filter(p => p.manager_user_id === team.manager_user_id && p.final_band !== null && !p.gap && !p.concern)
     const open = theirs.filter(p => !p.looks_fair_at)
     const marked = theirs.find(p => p.looks_fair_at)
     out.push({

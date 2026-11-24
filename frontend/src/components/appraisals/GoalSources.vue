@@ -57,7 +57,8 @@ import type { Goal, GoalOption } from '@/types/appraisalGoals'
 
 const props = defineProps<{ goals: Goal[]; options: GoalOption[]; who: string; full: boolean; canSuggest: boolean; pending: boolean }>()
 const emit = defineEmits<{ accept: [goal: Goal]; pick: [option: GoalOption]; suggest: [] }>()
-const proposed = computed(() => props.goals.filter(g => g.status === 'proposed'))
+// What the person suggested; the manager's own suggested changes wait on the person.
+const proposed = computed(() => props.goals.filter(g => g.status === 'proposed' && !g.from_manager))
 const ideas = computed(() => props.goals.filter(g => g.status === 'suggested'))
 const library = computed(() => props.options.filter(o => o.source === 'role_library'))
 const lastPeriod = computed(() => props.options.filter(o => o.source === 'last_period'))

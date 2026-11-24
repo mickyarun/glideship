@@ -113,7 +113,7 @@ export function cycleDoNow(cycle: CycleRead, progress: CycleProgress, today: str
 /** People late now: check-ins past due and not sent; managers with late notes or people short of goals. */
 function lateCounts(progress: CycleProgress) {
   const short = progress.people.filter(r => r.goals_late)
-  const managers = new Set([...progress.managers_overdue.map(m => m.name), ...short.map(r => r.manager_name)])
+  const managers = new Set([...progress.managers_overdue.map(m => m.user_id), ...short.map(r => r.manager_user_id ?? '')])
   return {
     people: progress.people.filter(r => r.check_ins_late > 0).length,
     checkIns: sum(progress.people, r => r.check_ins_late),

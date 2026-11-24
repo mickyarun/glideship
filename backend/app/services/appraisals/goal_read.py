@@ -34,6 +34,7 @@ from app.schemas.appraisal_goal import (
 )
 from app.services.appraisals import audit, crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
+from app.services.appraisals.cycle_people import goals_due_for
 from app.services.appraisals.goal_history import GoalText, HistoryEntry
 from app.services.appraisals.goal_rules import actions, by_manager, is_locked
 from app.services.appraisals.goal_writes import goal_rights
@@ -129,7 +130,9 @@ async def list_goals(
         period_end=ctx.cycle.period_end,
         locked=is_locked(ctx.appraisal, ctx.cycle),
         limit=await goal_limit(db, ctx.cycle.org_id),
-        goals_due=ctx.cycle.goals_due,
+        goals_due=goals_due_for(
+            ctx.cycle.goals_due, ctx.cycle.period_start, ctx.appraisal.created_at.date()
+        ),
         minimum=await goal_floor(db, ctx.cycle.org_id),
         accepted=sum(g.status is GoalStatus.ACCEPTED for g in goals),
         can_propose=rights.employee,

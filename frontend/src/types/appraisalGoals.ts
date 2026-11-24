@@ -114,4 +114,6 @@ export interface AppraisalSummary {
   status: AppraisalStatus
   goals_accepted: number
   goals_proposed: number
+  /** This person's goals date: the cycle's, or a fresh window from a late enrolment. */
+  goals_due: string | null
 }

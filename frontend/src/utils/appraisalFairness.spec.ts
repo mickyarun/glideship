@@ -38,16 +38,18 @@ describe('fairness check', () => {
       person({ appraisal_id: 'v1', name: 'Leo Park', manager_user_id: 'm1', manager_name: 'Viktor Hale', final_band: 1, held: true }),
       person({ appraisal_id: 'v2', name: 'Sam Ito', manager_user_id: 'm1', manager_name: 'Viktor Hale', final_band: 2, held: false, looks_fair_at: '2027-01-20T10:00:00Z', looks_fair_by_name: 'Hana' }),
       person({ appraisal_id: 'p3', name: 'Ren Ola', self_band: 3, final_band: 3 }),
+      person({ appraisal_id: 'v3', name: 'Ada Moss', manager_user_id: 'm1', manager_name: 'Viktor Hale', self_band: 4, final_band: 1, gap: true, held: true }),
     ],
   }
 
   it('lists what needs a look with the comparison, keyed by manager id', () => {
     const look = needsALook(cal)
-    expect(look.map(l => l.tag)).toEqual(['Big difference', 'Rates high', 'Concern flagged'])
+    expect(look.map(l => l.tag)).toEqual(['Big difference', 'Big difference', 'Rates high', 'Concern flagged'])
     expect(look[0].detail).toBe('Tom: Exceeded most times → Priya: Met sometimes. Two or more steps apart.')
-    expect(look[1].detail).toBe('5 of 5 rated "Exceeded" in some form. For other managers it\'s 1 in 3.')
+    expect(look[2].detail).toBe('5 of 5 rated "Exceeded" in some form. For other managers it\'s 1 in 3.')
     // "Looks fair" on the team marks everyone on it not yet marked.
-    expect(look[1].fairIds).toEqual(['v1'])
+    // Ada's gap is looked at on its own item, so the team's mark leaves her out.
+    expect(look[2].fairIds).toEqual(['v1'])
     expect(spread(cal.teams[1])).toEqual([0, 1, 2, 0, 0])
     expect(teamStatus(cal.teams[1], cal)).toBe('2 to look at')
     expect(teamStatus(cal.teams[0], cal)).toBe('Rates high')
@@ -56,8 +58,9 @@ describe('fairness check', () => {
 
   it('shares only what is not held back, and says what waits', () => {
     expect(shareable(cal).map(p => p.appraisal_id)).toEqual(['v2', 'p3'])
-    expect(heldLine(cal)).toBe("Viktor's 1 wait until you've looked at how they rated. 2 flagged results wait until you mark them fair.")
-    expect(share(0, 4)).toBe('none')
+    expect(heldLine(cal)).toBe("Viktor's 2 wait until you've looked at how they rated. 2 flagged results wait until you mark them fair.")
+    expect(share(0, 4)).toBe('0 of 4')
     expect(share(2, 2)).toBe('2 of 2')
+    expect(share(5, 12)).toBe('5 of 12')
   })
 })

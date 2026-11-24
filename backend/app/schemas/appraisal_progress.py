@@ -48,6 +48,7 @@ class ProgressRow(BaseModel):
 class ManagerOverdue(BaseModel):
     """A manager with notes still unsent past their due date."""
 
+    user_id: uuid.UUID
     name: str
     overdue: int
 
