@@ -79,3 +79,16 @@ export function goalSections(goals: Goal[]): Record<'accepted' | 'waiting' | 'su
     dismissed: goals.filter(g => g.status === 'dismissed'),
   }
 }
+
+/** "2 of 3–6 · add 1 more": confirmed goals against the org's floor and limit. */
+export function goalMeter(accepted: number, minimum: number, limit: number): string {
+  const range = minimum === limit ? `${limit}` : `${minimum}–${limit}`
+  const more = minimum - accepted
+  const tail = more > 0 ? ` · add ${more} more` : accepted >= limit ? ' · full' : ''
+  return `${accepted} of ${range}${tail}`
+}
+
+/** Why the person suggested it, in their words, when they gave a reason. */
+export function proposalReason(goal: Goal): string {
+  return goal.why ?? goal.history.find(h => h.kind === 'created')?.reason ?? ''
+}
