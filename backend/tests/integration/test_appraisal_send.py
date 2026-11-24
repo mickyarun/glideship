@@ -191,3 +191,32 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
     emp = as_user(m.people["emp"], m.org)
     seen = await client.get(f"/api/v1/manager-feedback/{written['id']}", headers=emp)
     assert seen.status_code == 200 and seen.json()["keep"] == "Clear PRs"
+
+
+async def test_goal_values_across_months_show_only_sent_check_ins_to_others(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    emp, mgr = as_user(m.people["emp"], m.org), as_user(m.people["mgr"], m.org)
+    ids = await team_ids(client, m)
+    goals_url = f"{BASE}/{ids['Priya']}/goals"
+    added = await client.post(
+        goals_url, json={"title": "p95 under 300 ms", "reason": "Q4"}, headers=mgr
+    )
+    goal_id = next(g["id"] for g in added.json()["goals"] if g["status"] == "accepted")
+    check_in_id = (await client.get(f"{CHECK_INS}/mine", headers=emp)).json()[0]["id"]
+    value = {"value": "410 ms", "source_note": "Dashboard", "source_url": None}
+    put = await client.put(
+        f"{CHECK_INS}/{check_in_id}/goal-values/{goal_id}", json=value, headers=emp
+    )
+    assert put.status_code == 200, put.text
+    url = f"{BASE}/{ids['Priya']}/goal-values"
+    (own,) = (await client.get(url, headers=emp)).json()
+    assert [(v["period_start"], v["value"]) for v in own["values"]] == [("2026-10-01", "410 ms")]
+    (theirs,) = (await client.get(url, headers=mgr)).json()
+    assert theirs["title"] == "p95 under 300 ms" and theirs["values"] == []
+    await send_check_in(client, m, "emp")
+    (sent,) = (await client.get(url, headers=mgr)).json()
+    assert [v["value"] for v in sent["values"]] == ["410 ms"]
+    stranger = as_user(m.people["stranger"], m.org)
+    assert (await client.get(url, headers=stranger)).status_code == 404
