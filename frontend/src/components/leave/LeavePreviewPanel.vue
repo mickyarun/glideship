@@ -41,15 +41,17 @@
       <AppCallout v-if="blocking.length" ref="problemsBox" variant="error">
         <div v-for="problem in blocking" :key="problem.code">{{ problem.message }}</div>
       </AppCallout>
-      <AppCallout v-if="lopConfirm" ref="lopBox" variant="warning">
-        <div>{{ lopConfirm.message }}</div>
-        <v-checkbox
-          :model-value="acceptLop"
-          :label="`Apply ${lopDays} as loss of pay (unpaid)`"
-          density="compact"
-          hide-details
-          @update:model-value="emit('update:acceptLop', !!$event)"
-        />
+      <AppCallout v-if="lopConfirm" ref="lopBox" variant="warning" title="Past your balance">
+        <p class="lop__message">{{ lopConfirm.message }}</p>
+        <label class="lop__agree" :class="{ 'lop__agree--on': acceptLop }">
+          <v-checkbox-btn
+            :model-value="acceptLop"
+            density="compact"
+            color="primary"
+            @update:model-value="emit('update:acceptLop', !!$event)"
+          />
+          <span>Apply {{ lopDays }} as loss of pay (unpaid)</span>
+        </label>
       </AppCallout>
     </template>
     <div v-else class="preview__muted">{{ placeholder }}</div>
@@ -164,6 +166,26 @@ const approval = computed(() =>
 .preview__approval {
   margin: 0;
   color: rgb(var(--v-theme-ink-2));
+}
+.lop__message {
+  margin: 0;
+}
+.lop__agree {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.lop__agree--on {
+  border-color: rgb(var(--v-theme-primary));
 }
 .preview__note,
 .preview__muted {
