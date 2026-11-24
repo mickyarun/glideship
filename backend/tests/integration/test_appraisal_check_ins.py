@@ -76,6 +76,9 @@ async def test_employee_writes_until_it_closes(
     note = {"lines": {"team": ["Covered support during the launch"]}, "blocking": "Access logs"}
     saved = await client.put(f"{CHECK_INS}/{check_in}/note", json=note, headers=me)
     assert saved.status_code == 200 and saved.json()["status"] == "employee_added"
+    # October is the first of the quarter's three check-ins.
+    assert saved.json()["cycle_name"] == "Q4 2026"
+    assert saved.json()["place"] == {"number": 1, "of": 3}
     tag = {str(m.counted): {"heading": "delivery_quality"}}
     assert (
         await client.put(f"{CHECK_INS}/{check_in}/fact-tags", json=tag, headers=me)

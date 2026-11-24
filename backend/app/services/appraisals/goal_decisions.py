@@ -17,7 +17,8 @@
 Confirming is a person's act, so it is audited. A suggestion the employee
 takes up becomes their proposal for the manager to confirm, so nobody
 confirms their own goal by steering the suggestions. A confirmed
-suggested change takes the place of the goal it replaces.
+suggested change takes the place of the goal it replaces; a change the
+manager suggested is the employee's to confirm or decline.
 """
 
 import uuid
@@ -34,7 +35,7 @@ from app.services.appraisals import audit, crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalInvalidError
 from app.services.appraisals.goal_history import GoalText
-from app.services.appraisals.goal_rules import actions, next_position
+from app.services.appraisals.goal_rules import actions, by_manager, next_position
 from app.services.appraisals.goal_writes import (
     FULL,
     audit_goal,
@@ -49,7 +50,7 @@ async def accept_goal(db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGo
     """Confirm a proposal, or take up a suggestion, into a free slot."""
     if not actions(goal, goal_rights(ctx), pending_change=False).accept:
         raise AppraisalConflictError("This goal can't be confirmed now.")
-    if ctx.is_self:
+    if ctx.is_self and goal.status is GoalStatus.SUGGESTED:
         goal.status, goal.proposed_by = GoalStatus.PROPOSED, ctx.caller_id
         goal_history.record(
             db,
@@ -105,12 +106,14 @@ async def dismiss_goal(
     if not actions(goal, goal_rights(ctx), pending_change=False).dismiss:
         raise AppraisalConflictError("This goal can't be dismissed now.")
     reason = body.reason.strip() or None
-    declining = goal.status is GoalStatus.PROPOSED and not ctx.is_self
-    if declining and reason is None:
+    proposed = goal.status is GoalStatus.PROPOSED
+    # Whoever wrote a proposal may take it back; the other side declines it.
+    withdrawing = ctx.is_self != by_manager(goal) if proposed else ctx.is_self
+    if proposed and not withdrawing and not ctx.is_self and reason is None:
         raise AppraisalInvalidError("Say why you're not adding it; they'll see this.")
     goal.status = GoalStatus.DISMISSED
     crypto.seal(goal, "dismiss_reason", reason)
-    kind = GoalRevisionKind.REMOVED if ctx.is_self else GoalRevisionKind.DECLINED
+    kind = GoalRevisionKind.REMOVED if withdrawing else GoalRevisionKind.DECLINED
     goal_history.record(db, goal, ctx.caller_id, kind, reason=reason)
     if not ctx.is_self:
         audit_goal(db, ctx, goal)

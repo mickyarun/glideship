@@ -15,7 +15,9 @@
 """HR's calibration view: each manager's bands, agreement and big gaps.
 
 Bands and states only, never reasons. HR never changes a band; they send
-a review back with a note, or share it.
+a review back with a note, or share it. A flagged result (a big gap, a
+concern, or anyone on a team that rates high) is held out of sharing
+everything that's ready until HR marks it fair.
 """
 
 import uuid
@@ -31,7 +33,13 @@ from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.user import UserRepository
 from app.schemas.appraisal_calibration import Calibration, CalibrationPerson, CalibrationTeam
-from app.services.appraisals.calibration_math import Scored, figures
+from app.services.appraisals.calibration_math import (
+    Scored,
+    figures,
+    high_share,
+    others,
+    rates_high,
+)
 from app.services.appraisals.context import Caller
 from app.services.appraisals.hr_scope import hidden_users
 from app.services.appraisals.review_rules import submitted_band
@@ -61,47 +69,63 @@ async def calibration(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -
     for item in items:
         feedback[item.profile_id].append(item.status is FeedbackStatus.DONE)
     people_ids = {p.user_id for p in profiles.values()} | {a.manager_user_id for a in appraisals}
+    people_ids |= {a.looks_fair_by for a in appraisals if a.looks_fair_by}
     names = {u.id: u.name for u in await UserRepository(db).get_many_by_ids(list(people_ids))}
-    rows: list[CalibrationPerson] = []
     teams: dict[uuid.UUID, list[Scored]] = defaultdict(list)
     totals: Counter[uuid.UUID] = Counter()
     for a in appraisals:
-        if a.status is not AppraisalStatus.WITHDRAWN:
-            totals[a.manager_user_id] += 1
+        # Withdrawn people keep their row but leave the team's figures.
+        if a.status is AppraisalStatus.WITHDRAWN:
+            continue
+        totals[a.manager_user_id] += 1
+        if a.manager_submitted_at and a.final_band is not None:
+            teams[a.manager_user_id].append(Scored(submitted_band(a), a.final_band))
+    shares = {manager: high_share(teams[manager]) for manager in totals}
+    high = rates_high(shares)
+    rows = []
+    for a in appraisals:
         final = a.final_band if a.manager_submitted_at else None
         own = submitted_band(a)
-        # Withdrawn people keep their row but leave the team's figures.
-        if final is not None and a.status is not AppraisalStatus.WITHDRAWN:
-            teams[a.manager_user_id].append(Scored(own, final))
+        gap = final is not None and own is not None and abs(own - final) >= 2
+        concern = final is not None and bool(a.performance_concern)
+        flagged = gap or concern or (final is not None and a.manager_user_id in high)
         done = feedback[a.profile_id]
         rows.append(
             CalibrationPerson(
                 appraisal_id=a.id,
                 name=names.get(profiles[a.profile_id].user_id, ""),
+                manager_user_id=a.manager_user_id,
                 manager_name=names.get(a.manager_user_id, ""),
                 status=a.status,
                 self_band=own,
                 final_band=final,
-                gap=final is not None and own is not None and abs(own - final) >= 2,
-                concern=final is not None and bool(a.performance_concern),
+                gap=gap,
+                concern=concern,
                 feedback=len(done),
                 feedback_done=sum(done),
+                held=flagged and a.looks_fair_at is None,
+                looks_fair_at=a.looks_fair_at,
+                looks_fair_by_name=names.get(a.looks_fair_by, "") if a.looks_fair_by else "",
             )
         )
     team_rows = []
     # Every manager with someone to score, so one still writing shows as 0 of N.
     for manager in totals:
-        scored = teams[manager]
-        figs = figures(scored)
+        figs, rest = figures(teams[manager]), others(shares, manager)
         team_rows.append(
             CalibrationTeam(
+                manager_user_id=manager,
                 manager_name=names.get(manager, ""),
-                people=len(scored),
+                people=len(teams[manager]),
                 total=totals[manager],
                 bands=figs.bands,
                 agreement=figs.agreement,
                 gaps=figs.gaps,
                 flag=figs.flag,
+                high=shares[manager].high,
+                others_high=rest.high,
+                others_people=rest.people,
+                rates_high=manager in high,
             )
         )
     return Calibration(

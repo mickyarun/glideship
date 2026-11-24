@@ -34,7 +34,7 @@ from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.appraisal_check_in import MAX_LINKS, AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
-from app.schemas.appraisal_check_in import CheckInNote, FactTag, GoalValueIn, LinkCreate
+from app.schemas.appraisal_check_in_note import CheckInNote, FactTag, GoalValueIn, LinkCreate
 from app.services.appraisals import crypto
 from app.services.appraisals.context import CheckInContext, may_regenerate
 from app.services.appraisals.due_dates import may_change_after_send
@@ -170,13 +170,18 @@ async def save_goal_value(
     goal_id: uuid.UUID,
     body: GoalValueIn,
 ) -> None:
-    """Set this month's value for one of the period's goals."""
+    """Set this month's value for one of the period's goals; an empty one clears it."""
     check_in = await _require_open(db, ctx)
     if goal_id not in await _goal_ids(db, ctx):
         raise AppraisalNotFoundError("Goal not found.")
     value = await AppraisalGoalValueRepository(db, org_id=check_in.org_id).one(
         check_in.id, goal_id
     )
+    if not body.value.strip():
+        if value is not None:
+            await db.delete(value)
+            await db.flush()
+        return
     if value is None:
         value = AppraisalGoalValue(
             org_id=check_in.org_id, goal_id=goal_id, check_in_id=check_in.id

@@ -163,6 +163,12 @@ class Appraisal(BaseModel):
     acknowledged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # HR looked at a flagged result in the fairness check and found it fair:
+    # until then it is held out of sharing everything that's ready.
+    looks_fair_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    looks_fair_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     # Facts that belong to the whole period (retrospectives, estimates, new
     # skills), gathered when the review opens, as in ``AppraisalCheckIn.fact_refs``.
     period_facts: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)

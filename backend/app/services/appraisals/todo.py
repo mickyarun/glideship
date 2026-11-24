@@ -15,10 +15,12 @@
 """The caller's appraisal to-do list: what to do now, whose, and by when.
 
 Three parts, each only for those it applies to. Everyone: their open
-check-in to send, their review to write, their result to read. A
+check-in to send, their review to write, their result to read, and
+changes their manager suggested to their goals. A
 primary manager, for the appraisals they score: notes owed on sent
 check-ins (and those still waiting on one), reviews to send on to HR,
-proposed goals to confirm and people below the org's fewest goals. HR
+proposed goals to confirm and people below the org's fewest goals (both
+due by the cycle's goals date). HR
 (``appraisals:manage``): cycles whose period has ended and whose reviews
 can open, and reviews waiting in the fairness check. Late work comes first, then by due date.
 """
@@ -31,6 +33,7 @@ from app.core.permissions_people import APPRAISALS_MANAGE
 from app.models.appraisal_enums import AppraisalStatus, CycleStatus
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_todo import AppraisalTodoRepository
+from app.repositories.appraisal_todo_goals import AppraisalTodoGoalsRepository
 from app.schemas.appraisal_todo import TodoItem, TodoKind, TodoRole, TodoTarget
 from app.services.appraisals.context import Caller
 from app.services.appraisals.due_dates import is_late
@@ -44,7 +47,12 @@ def _item(today: date, **fields: object) -> TodoItem:
     return TodoItem.model_validate({**fields, "late": late})
 
 
-async def _own(repo: AppraisalTodoRepository, caller: Caller, today: date) -> list[TodoItem]:
+async def _own(
+    repo: AppraisalTodoRepository,
+    goals: AppraisalTodoGoalsRepository,
+    caller: Caller,
+    today: date,
+) -> list[TodoItem]:
     out = [
         _item(
             today,
@@ -68,11 +76,27 @@ async def _own(repo: AppraisalTodoRepository, caller: Caller, today: date) -> li
                 target_id=row.id,
             )
         )
+    out += [
+        _item(
+            today,
+            kind=TodoKind.CONFIRM_CHANGE,
+            role=TodoRole.OWN,
+            due_on=row.goals_due,
+            target=TodoTarget.GOALS,
+            target_id=row.appraisal_id,
+            count=row.count,
+        )
+        for row in await goals.own_changes(caller.user_id)
+    ]
     return out
 
 
 async def _team(
-    db: AsyncSession, repo: AppraisalTodoRepository, caller: Caller, today: date
+    db: AsyncSession,
+    repo: AppraisalTodoRepository,
+    goal_repo: AppraisalTodoGoalsRepository,
+    caller: Caller,
+    today: date,
 ) -> list[TodoItem]:
     team = {"role": TodoRole.TEAM}
     out = [
@@ -101,9 +125,10 @@ async def _team(
         for row in await repo.reviews_to_write(caller.user_id)
     ]
     floor = await goal_floor(db, caller.org_id)
-    for goals in await repo.goal_counts(caller.user_id):
+    for goals in await goal_repo.goal_counts(caller.user_id):
         common = {
             "person_name": goals.person_name,
+            "due_on": goals.goals_due,
             "target": TodoTarget.GOALS,
             "target_id": goals.appraisal_id,
             **team,
@@ -137,7 +162,8 @@ async def todo_list(db: AsyncSession, caller: Caller) -> list[TodoItem]:
     """Everything the caller has to do in appraisals now, late first, then by due date."""
     today = await org_today(db, caller.org_id)
     repo = AppraisalTodoRepository(db, org_id=caller.org_id, today=today)
-    items = await _own(repo, caller, today) + await _team(db, repo, caller, today)
+    goals = AppraisalTodoGoalsRepository(db, org_id=caller.org_id, today=today)
+    items = await _own(repo, goals, caller, today) + await _team(db, repo, goals, caller, today)
     if caller.perms.has(APPRAISALS_MANAGE):
         items += await _cycles(db, caller, today)
     return sorted(items, key=lambda i: (not i.late, i.due_on is None, i.due_on or today))

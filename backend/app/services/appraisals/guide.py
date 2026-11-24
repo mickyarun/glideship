@@ -41,6 +41,7 @@ async def guide(db: AsyncSession, caller: Caller) -> GuideRead:
             feedback_cadence=cycle.feedback_cadence,
             period_start=cycle.period_start,
             period_end=cycle.period_end,
+            goals_due=cycle.goals_due,
             self_due=cycle.self_due,
             manager_due=cycle.manager_due,
             ack_due=cycle.ack_due,

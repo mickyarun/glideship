@@ -20,7 +20,8 @@ from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.user import UserRepository
 from app.repositories.work_facts_other import readable_boards
-from app.schemas.appraisal_check_in import AiLine, CheckInNote, FactView, LinkRead
+from app.schemas.appraisal_check_in import AiLine, FactView, LinkRead
+from app.schemas.appraisal_check_in_note import CheckInNote
 from app.schemas.appraisal_review import (
     AppraisalRead,
     ManagerOnly,

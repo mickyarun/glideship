@@ -34,7 +34,7 @@ from app.schemas.appraisal_goal import (
     ReasonBody,
 )
 from app.schemas.appraisal_team import TeamRow
-from app.services.appraisals import goal_decisions, goal_writes
+from app.services.appraisals import goal_changes, goal_decisions, goal_writes
 from app.services.appraisals.appraisal_context import appraisal_context, goal_context
 from app.services.appraisals.appraisal_lists import my_appraisals, team_appraisals
 from app.services.appraisals.context import Caller
@@ -174,9 +174,9 @@ async def suggest_change(
     caller: Caller = Depends(get_caller),
     db: AsyncSession = Depends(get_db),
 ) -> GoalsRead:
-    """The employee proposes new wording for a confirmed goal."""
+    """Propose new wording for a confirmed goal; the other side decides."""
     goal, ctx = await goal_context(db, caller, goal_id)
-    await goal_writes.suggest_change(db, ctx, goal, body)
+    await goal_changes.suggest_change(db, ctx, goal, body)
     return await list_goals(db, ctx, log_view=False)
 
 

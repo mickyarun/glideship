@@ -47,6 +47,10 @@ from app.models.appraisal_enums import (
 )
 from app.models.base import BaseModel
 
+# ``suggestion_refs["from"]`` on a change the manager suggested to a confirmed goal:
+# the employee decides on it.
+FROM_MANAGER = "manager"
+
 
 class AppraisalGoal(BaseModel):
     """One goal: an outcome and how the person will know they got there."""

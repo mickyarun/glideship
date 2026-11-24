@@ -56,3 +56,6 @@ class TeamRow(AppraisalSummary):
     # The org's goal range per person, for the first-visit plan.
     min_goals: int
     max_goals: int
+    # The cycle's working days for a note after its check-in is sent, and its goals date.
+    note_due_days: int
+    goals_due: date

@@ -74,7 +74,11 @@ async def test_a_primary_manager_owes_notes_on_sent_check_ins_and_goals(
         ("waiting_on_check_in", "Priya"),
     ]
     assert {i["count"] for i in before if i["kind"] == "set_goals"} == {3}
-    assert not any(i["late"] or i["due_on"] for i in before)
+    # Goals were due by the cycle's goals date (8 October): late now. Notes
+    # waiting on a check-in have no date and are never late.
+    goals = [i for i in before if i["kind"] == "set_goals"]
+    assert all(i["due_on"] == "2026-10-08" and i["late"] for i in goals)
+    assert not any(i["late"] or i["due_on"] for i in before if i not in goals)
     await send_check_in(client, m, "emp")
     after = await _todo(client, m, "mgr")
     (note,) = [i for i in after if i["kind"] == "note"]

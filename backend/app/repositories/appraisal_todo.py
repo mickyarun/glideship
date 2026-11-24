@@ -24,18 +24,17 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import ColumnElement, and_, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, select
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CycleStatus, FeedbackStatus, GoalStatus
-from app.models.appraisal_goal import AppraisalGoal
+from app.models.appraisal_enums import AppraisalStatus, FeedbackStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.employee_profile import EmployeeProfile
 from app.models.employee_reporting_manager import EmployeeReportingManager
 from app.models.user import User
+from app.repositories.appraisal_todo_base import TodoReads
 
 
 @dataclass(frozen=True)
@@ -48,50 +47,9 @@ class TodoRow:
     status: AppraisalStatus | None = None
 
 
-@dataclass(frozen=True)
-class GoalCount:
-    """One report's goals in a period that hasn't reached its review."""
-
-    appraisal_id: uuid.UUID
-    person_name: str
-    accepted: int
-    proposed: int
-
-
-class AppraisalTodoRepository:
-    """To-do reads for one org."""
-
-    def __init__(self, db: AsyncSession, *, org_id: uuid.UUID, today: date) -> None:
-        """Initialize the repository; ``today`` is the org's date, for who has left."""
-        self._db = db
-        self._org = org_id
-        self._today = today
-
-    def _live(self) -> list[ColumnElement[bool]]:
-        """Appraisals still in progress, in cycles that haven't closed, of people still here.
-
-        Every query joins the person's profile; anyone whose leaving date
-        has passed drops off everyone's list.
-        """
-        return [
-            Appraisal.org_id == self._org,
-            Appraisal.status != AppraisalStatus.WITHDRAWN,
-            AppraisalCycle.status != CycleStatus.CLOSED,
-            or_(
-                EmployeeProfile.date_of_exit.is_(None),
-                EmployeeProfile.date_of_exit >= self._today,
-            ),
-        ]
-
-    def _primary(self, manager_user_id: uuid.UUID) -> ColumnElement[bool]:
-        """The caller is the person's primary manager and scores their appraisal."""
-        return and_(
-            EmployeeReportingManager.org_id == self._org,
-            EmployeeReportingManager.profile_id == Appraisal.profile_id,
-            EmployeeReportingManager.manager_user_id == manager_user_id,
-            EmployeeReportingManager.is_primary.is_(True),
-            Appraisal.manager_user_id == manager_user_id,
-        )
+class AppraisalTodoRepository(TodoReads):
+    """Check-ins, reviews and notes on the to-do list, for one org (goals:
+    :mod:`.appraisal_todo_goals`)."""
 
     async def own_check_ins(self, user_id: uuid.UUID) -> list[TodoRow]:
         """The caller's open check-ins not sent yet."""
@@ -177,28 +135,3 @@ class AppraisalTodoRepository:
             .where(*self._live(), Appraisal.status == AppraisalStatus.MANAGER_REVIEW)
         )
         return [TodoRow(row.id, row.name, row.manager_due) for row in result.all()]
-
-    async def goal_counts(self, manager_user_id: uuid.UUID) -> list[GoalCount]:
-        """Each report's confirmed and proposed goals, while their goals are still open."""
-        goal = AppraisalGoal
-        counted = and_(
-            goal.org_id == self._org,
-            goal.profile_id == Appraisal.profile_id,
-            goal.target_period_start == AppraisalCycle.period_start,
-        )
-        result = await self._db.execute(
-            select(
-                Appraisal.id,
-                User.name,
-                func.count(goal.id).filter(goal.status == GoalStatus.ACCEPTED).label("accepted"),
-                func.count(goal.id).filter(goal.status == GoalStatus.PROPOSED).label("proposed"),
-            )
-            .join(AppraisalCycle, AppraisalCycle.id == Appraisal.cycle_id)
-            .join(EmployeeReportingManager, self._primary(manager_user_id))
-            .join(EmployeeProfile, EmployeeProfile.id == Appraisal.profile_id)
-            .join(User, User.id == EmployeeProfile.user_id)
-            .outerjoin(goal, counted)
-            .where(*self._live(), Appraisal.status == AppraisalStatus.ENROLLED)
-            .group_by(Appraisal.id, User.name)
-        )
-        return [GoalCount(r.id, r.name, r.accepted, r.proposed) for r in result.all()]

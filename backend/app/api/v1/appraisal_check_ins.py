@@ -25,14 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._appraisal_deps import get_caller
 from app.core.deps import get_db
-from app.schemas.appraisal_check_in import (
-    CheckInNote,
-    CheckInRead,
-    CheckInSummary,
-    FactTag,
-    GoalValueIn,
-    LinkCreate,
-)
+from app.schemas.appraisal_check_in import CheckInRead, CheckInSummary
+from app.schemas.appraisal_check_in_note import CheckInNote, FactTag, GoalValueIn, LinkCreate
 from app.schemas.appraisal_guide import GuideRead
 from app.services.appraisals import check_in_writes
 from app.services.appraisals.check_in_lists import my_check_ins, team_check_ins

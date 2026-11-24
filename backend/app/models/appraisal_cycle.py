@@ -87,6 +87,8 @@ class AppraisalCycle(BaseModel):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    # Goals agreed by: a person with fewer than the org's fewest is late after it.
+    goals_due: Mapped[date] = mapped_column(Date, nullable=False)
     self_due: Mapped[date] = mapped_column(Date, nullable=False)
     manager_due: Mapped[date] = mapped_column(Date, nullable=False)
     # The employee acknowledges the shared result by this date.

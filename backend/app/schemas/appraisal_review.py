@@ -27,7 +27,8 @@ from app.models.appraisal_enums import (
     GoalResult,
     ReviewPeriod,
 )
-from app.schemas.appraisal_check_in import AiLine, CheckInNote, FactView, LinkRead
+from app.schemas.appraisal_check_in import AiLine, FactView, LinkRead
+from app.schemas.appraisal_check_in_note import CheckInNote
 from app.schemas.appraisal_growth import GrowthRead
 from app.schemas.appraisal_settings import MAX_GOALS_CAP
 

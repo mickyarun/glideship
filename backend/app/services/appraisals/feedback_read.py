@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import FeedbackStatus, GoalCheck
+from app.models.appraisal_enums import FeedbackStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -54,7 +54,7 @@ def in_period(check_in: AppraisalCheckIn, item: AppraisalManagerFeedback) -> boo
 async def _goals(
     db: AsyncSession, item: AppraisalManagerFeedback, cycle: AppraisalCycle | None
 ) -> list[FeedbackGoal]:
-    """This period's goals with the manager's statuses, for quarterly items."""
+    """This period's goals with the manager's note on each, for quarterly items."""
     if cycle is None:
         return []
     accepted = await AppraisalGoalRepository(db, org_id=item.org_id).accepted_for_period(
@@ -63,14 +63,11 @@ async def _goals(
     notes: dict[str, str] = crypto.unseal_json(item, "goal_notes") or {}
     out = []
     for goal in accepted:
-        key = str(goal.id)
-        status = (item.goal_status or {}).get(key, {}).get("status")
         out.append(
             FeedbackGoal(
                 id=goal.id,
                 title=crypto.unseal(goal, "title") or "",
-                status=GoalCheck(status) if status else None,
-                note=notes.get(key, ""),
+                note=notes.get(str(goal.id), ""),
             )
         )
     return out
@@ -153,5 +150,5 @@ async def shown_on_check_in(db: AsyncSession, ctx: CheckInContext) -> FeedbackSh
         done=item.status is FeedbackStatus.DONE,
         keep=crypto.unseal(item, "keep_note") or "",
         try_next=crypto.unseal(item, "try_note") or "",
-        goals=[g for g in await _goals(db, item, ctx.cycle) if g.status is not None],
+        goals=[g for g in await _goals(db, item, ctx.cycle) if g.note],
     )

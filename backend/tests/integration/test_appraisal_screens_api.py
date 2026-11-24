@@ -87,14 +87,15 @@ async def test_hr_sees_goals_months_and_late_counts_and_can_remind_once_a_day(
     assert progress["min_goals"] == 3
     october_counts = progress["check_in_periods"][0]
     assert (october_counts["sent"], october_counts["total"]) == (0, 2)
-    assert progress["remind_count"] == 2 and progress["reminded_at"] is None
+    # Two late check-ins, and Ravi: nobody has goals and the goals date has passed.
+    assert progress["remind_count"] == 3 and progress["reminded_at"] is None
     priya = next(p for p in progress["people"] if p["name"] == "Priya")
     assert priya["months"][0] == "late" and priya["manager_user_id"] == str(m.people["mgr"])
     sent = await client.post(f"{BASE}/cycles/{cycle}/remind", headers=hr)
-    assert sent.status_code == 200 and sent.json()["people"] == 2
+    assert sent.status_code == 200 and sent.json()["people"] == 3
     assert all("check-in was due" in text for _, text in await slack.flush())
     again = await client.post(f"{BASE}/cycles/{cycle}/remind", headers=hr)
     assert again.status_code == 409
     after = (await client.get(f"{BASE}/cycles/{cycle}/progress", headers=hr)).json()
-    assert after["reminded_at"] is not None
+    assert after["reminded_at"] is not None and after["reminded_today"]
     assert hr_remind is not None

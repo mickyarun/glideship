@@ -14,11 +14,13 @@
 
 """Assembling a check-in for one viewer: facts they may see, lines, links, goals."""
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions_people import APPRAISALS_MANAGE
+from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import DraftingMode
 from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_goal_value import AppraisalGoalValue
@@ -30,21 +32,35 @@ from app.repositories.user import UserRepository
 from app.repositories.work_facts_other import readable_boards
 from app.schemas.appraisal_check_in import (
     AiLine,
-    CheckInNote,
+    CheckInPlace,
     CheckInRead,
-    FactTag,
     FactView,
     GoalPanelItem,
     LinkRead,
 )
+from app.schemas.appraisal_check_in_note import CheckInNote, FactTag
 from app.services.appraisals import audit, crypto
 from app.services.appraisals.access import reads_content
+from app.services.appraisals.cadence import CADENCE_MONTHS, slices
 from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller, CheckInContext, may_regenerate
 from app.services.appraisals.due_dates import is_late, may_change_after_send
 from app.services.appraisals.fact_view import board_ids, for_viewer
 from app.services.appraisals.feedback_read import shown_on_check_in
 from app.services.appraisals.org_clock import org_today
+
+
+def _place(cycle: AppraisalCycle, start: date) -> CheckInPlace | None:
+    """Which check-in of the cycle this is, by its first day."""
+    starts = [
+        first
+        for first, _ in slices(
+            cycle.period_start, cycle.period_end, CADENCE_MONTHS[cycle.checkin_cadence]
+        )
+    ]
+    return (
+        CheckInPlace(number=starts.index(start) + 1, of=len(starts)) if start in starts else None
+    )
 
 
 async def read_check_in(
@@ -149,6 +165,8 @@ async def read_check_in(
             check_in.identity_warnings if is_self or caller.perms.has(APPRAISALS_MANAGE) else []
         ),
         appraisal_id=ctx.appraisal.id if ctx.appraisal else None,
+        cycle_name=ctx.cycle.name if ctx.cycle else None,
+        place=_place(ctx.cycle, check_in.period_start) if ctx.cycle else None,
         feedback=await shown_on_check_in(db, ctx),
         due_on=check_in.due_on,
         sent_at=check_in.sent_at,

@@ -37,6 +37,7 @@ from app.services.appraisals.errors import (
 )
 from app.services.appraisals.role_templates import ensure_seeded
 from app.services.appraisals.settings import load_appraisal_settings
+from app.services.appraisals.work_calendar import load_calendars
 
 
 def default_name(review: ReviewPeriod, start: date) -> str:
@@ -52,6 +53,10 @@ def cycle_read(cycle: AppraisalCycle) -> CycleRead:
     """The cycle as the API returns it, with its intro note decrypted."""
     data = {name: getattr(cycle, name) for name in CycleRead.model_fields if name != "intro_note"}
     return CycleRead(**data, intro_note=crypto.unseal(cycle, "intro_note") or "")
+
+
+# Goals are agreed by this many working days after the cycle starts, unless HR changes it.
+GOALS_DUE_DAYS = 5
 
 
 def enrolment_cutoff(start: date, end: date) -> date:
@@ -77,12 +82,14 @@ async def create_cycle(
         start, _ = period_after(await repo.latest_end(), datetime.now(UTC).date(), review)
     end = add_months(start, PERIOD_MONTHS[review]) - timedelta(days=1)
     self_due = end + timedelta(days=settings.self_due_days)
+    calendar = (await load_calendars(db, org_id, [], start)).default
     cycle = AppraisalCycle(
         id=uuid.uuid4(),
         org_id=org_id,
         name=body.name or default_name(review, start),
         period_start=start,
         period_end=end,
+        goals_due=calendar.shift(start, GOALS_DUE_DAYS),
         self_due=self_due,
         manager_due=end + timedelta(days=settings.manager_due_days),
         ack_due=end + timedelta(days=settings.ack_due_days),
@@ -147,6 +154,8 @@ async def update_cycle(
         cycle.scope = body.scope.model_dump(mode="json")
     if "intro_note" in body.model_fields_set:
         crypto.seal(cycle, "intro_note", body.intro_note)
+    if not cycle.period_start <= cycle.goals_due <= cycle.period_end:
+        raise AppraisalInvalidError("Goals are agreed by a day inside the period.")
     if not cycle.period_end <= cycle.self_due <= cycle.manager_due <= cycle.ack_due:
         raise AppraisalInvalidError(
             "Due dates must run self-score, then manager review, then reply, after the period."

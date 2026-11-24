@@ -15,8 +15,9 @@
 """HR's fairness check over the API: bands and states per manager and person, no reasons."""
 
 import uuid
+from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.appraisal_enums import AppraisalStatus
 from app.schemas.appraisal_review import Band
@@ -27,6 +28,7 @@ class CalibrationPerson(BaseModel):
 
     appraisal_id: uuid.UUID
     name: str
+    manager_user_id: uuid.UUID
     manager_name: str
     status: AppraisalStatus
     self_band: Band | None
@@ -36,11 +38,17 @@ class CalibrationPerson(BaseModel):
     concern: bool = False
     feedback: int
     feedback_done: int
+    # Flagged (a big gap, a concern, or a team that rates high) and not yet
+    # found fair: left out of sharing everything that's ready.
+    held: bool = False
+    looks_fair_at: datetime | None = None
+    looks_fair_by_name: str = ""
 
 
 class CalibrationTeam(BaseModel):
     """One manager's figures."""
 
+    manager_user_id: uuid.UUID
     manager_name: str
     # Reviews sent to HR, out of everyone the manager scores (withdrawn left out).
     people: int
@@ -49,6 +57,17 @@ class CalibrationTeam(BaseModel):
     agreement: float | None
     gaps: int
     flag: str | None
+    # Exceeded bands among this team's reviews, and among every other team's.
+    high: int = 0
+    others_high: int = 0
+    others_people: int = 0
+    rates_high: bool = False
+
+
+class LooksFairBody(BaseModel):
+    """Flagged results HR looked at and found fair."""
+
+    appraisal_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
 
 
 class Calibration(BaseModel):

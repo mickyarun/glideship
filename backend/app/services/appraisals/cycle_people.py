@@ -16,7 +16,9 @@
 
 Withdrawn people and leavers keep their rows, but nobody is chased for
 their check-ins or for notes about them: the cycle page, its counts and
-HR's reminder all use this one rule.
+HR's reminder all use this one rule. Goals are late once the cycle's
+"goals agreed by" date has passed with fewer than the org's fewest
+confirmed, until the review opens and goals lock.
 """
 
 import uuid
@@ -24,6 +26,7 @@ from collections.abc import Iterable, Mapping
 from datetime import date
 
 from app.models.appraisal import Appraisal
+from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import AppraisalStatus
 from app.models.employee_profile import EmployeeProfile
 
@@ -37,3 +40,23 @@ def not_chased(
         pid for pid, p in profiles.items() if p.date_of_exit is not None and p.date_of_exit < today
     }
     return withdrawn | gone
+
+
+def late_on_goals(
+    appraisals: Iterable[Appraisal],
+    accepted: Mapping[uuid.UUID, int],
+    cycle: AppraisalCycle,
+    floor: int,
+    today: date,
+    quiet: set[uuid.UUID],
+) -> set[uuid.UUID]:
+    """Profile ids still short of goals after the cycle's goals date."""
+    if today <= cycle.goals_due:
+        return set()
+    return {
+        a.profile_id
+        for a in appraisals
+        if a.status is AppraisalStatus.ENROLLED
+        and a.profile_id not in quiet
+        and accepted.get(a.profile_id, 0) < floor
+    }

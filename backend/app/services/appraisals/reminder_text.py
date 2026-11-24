@@ -75,6 +75,12 @@ def feedback_line(moment: Moment, batch: FeedbackBatch) -> str:
     return f"{label} feedback was due {due}: {progress}."
 
 
+def goals_late_line(people: int, due_on: date) -> str:
+    """A manager's line for reports still short of goals after the goals date."""
+    who = "1 person" if people == 1 else f"{people} people"
+    return f"Goals for {who} were due {short_date(due_on)}."
+
+
 def feedback_text(lines: Sequence[str], base_url: str) -> str:
     """A manager's whole reminder: every period due today, one link."""
     return "\n".join([*lines, link(base_url, TEAM_PATH, "Open team")])

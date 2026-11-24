@@ -22,6 +22,8 @@ from httpx import AsyncClient
 from sqlalchemy import update
 
 from app.models.appraisal import Appraisal
+from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import AppraisalStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.employee_reporting_manager import EmployeeReportingManager
@@ -120,3 +122,31 @@ async def test_hr_reminds_exactly_the_people_the_page_counts(
     assert sent["people"] == progress["remind_count"]
     ((user, text),) = await slack.flush()
     assert user == slack_ids[m.people["mgr"]] and "check-in was due" not in text
+
+
+async def test_hr_reminds_only_a_running_cycle_and_only_when_someone_is_late(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    hr = as_user(m.people["hr"], m.org)
+    cycle = await cycle_id(client, m)
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(AppraisalCheckIn)
+            .where(AppraisalCheckIn.org_id == m.org)
+            .values(due_on=date(2099, 1, 1))
+        )
+        await db.execute(
+            update(AppraisalCycle)
+            .where(AppraisalCycle.org_id == m.org)
+            .values(goals_due=date(2026, 12, 31))
+        )
+        await db.commit()
+    # Nobody is late: nothing goes out, and the day isn't used up.
+    quiet = await client.post(f"{BASE}/cycles/{cycle}/remind", headers=hr)
+    assert quiet.json() == {"people": 0, "reached": 0}
+    progress = (await client.get(f"{BASE}/cycles/{cycle}/progress", headers=hr)).json()
+    assert progress["reminded_at"] is None and not progress["reminded_today"]
+    await client.post(f"{BASE}/cycles/{cycle}/close", headers=hr)
+    closed = await client.post(f"{BASE}/cycles/{cycle}/remind", headers=hr)
+    assert closed.status_code == 409

@@ -32,6 +32,8 @@ class TodoKind(StrEnum):
     WAITING_ON_CHECK_IN = "waiting_on_check_in"
     MANAGER_REVIEW = "manager_review"
     CONFIRM_GOALS = "confirm_goals"
+    # The caller's manager suggested a change to one of their goals.
+    CONFIRM_CHANGE = "confirm_change"
     SET_GOALS = "set_goals"
     OPEN_REVIEWS = "open_reviews"
     FAIRNESS_CHECK = "fairness_check"
@@ -68,5 +70,6 @@ class TodoItem(BaseModel):
     late: bool = False
     target: TodoTarget
     target_id: uuid.UUID
-    # How many: goals to confirm or still to set, reviews in the fairness check.
+    # How many: goals to confirm or still to set, changes to look at, reviews
+    # in the fairness check.
     count: int | None = None

@@ -17,7 +17,8 @@
 HR's own appraisal and their own manager's are left out, rows and totals
 alike, because HR rights never reach either (see :mod:`.access`).
 Withdrawn people and leavers keep their row, but nothing of theirs counts
-as late (see :mod:`.cycle_people`), the same rule HR's reminder uses. A check-in's state is
+as late (see :mod:`.cycle_people`), the same rule HR's reminder uses, as
+are goals still short after the cycle's goals date. A check-in's state is
 what anyone but the person may know (:func:`.team_overview.month_state`).
 """
 
@@ -38,7 +39,7 @@ from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.user import UserRepository
 from app.schemas.appraisal_progress import CycleProgress, ManagerOverdue, ProgressRow
 from app.services.appraisals.context import Caller
-from app.services.appraisals.cycle_people import not_chased
+from app.services.appraisals.cycle_people import late_on_goals, not_chased
 from app.services.appraisals.feedback_read import is_overdue
 from app.services.appraisals.hr_scope import hidden_users
 from app.services.appraisals.org_clock import org_today
@@ -77,6 +78,11 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
     names = {u.id: u.name for u in await UserRepository(db).get_many_by_ids(list(user_ids))}
     today = await org_today(db, org_id)
     quiet = not_chased(appraisals, profiles, today)
+    floor = await goal_floor(db, org_id)
+    accepted = {
+        pid: goals.get((pid, cycle.period_start, GoalStatus.ACCEPTED), 0) for pid in profiles
+    }
+    short = late_on_goals(appraisals, accepted, cycle, floor, today, quiet)
     periods = slices_of(cycle)
 
     def late(item: AppraisalManagerFeedback) -> bool:
@@ -94,7 +100,8 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
                 manager_user_id=appraisal.manager_user_id,
                 manager_name=names.get(appraisal.manager_user_id, ""),
                 status=appraisal.status,
-                goals_accepted=goals.get((profile.id, cycle.period_start, GoalStatus.ACCEPTED), 0),
+                goals_accepted=accepted[profile.id],
+                goals_late=profile.id in short,
                 months=states,
                 check_ins=len(mine),
                 check_ins_added=states.count("sent"),
@@ -108,6 +115,7 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
     overdue = Counter(i.manager_user_id for i in items if late(i))
     live = [check_ins[a.profile_id] for a in appraisals if a.profile_id not in quiet]
     late_people = {r.user_id for r in rows if r.check_ins_late}
+    late_people |= {a.manager_user_id for a in appraisals if a.profile_id in short}
     return CycleProgress(
         people=sorted(rows, key=lambda r: r.name.lower()),
         feedback=len(items),
@@ -116,9 +124,11 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
             ManagerOverdue(name=names.get(user_id, ""), overdue=count)
             for user_id, count in overdue.most_common()
         ],
-        min_goals=await goal_floor(db, org_id),
+        min_goals=floor,
         check_in_periods=check_in_periods(periods, live),
         note_periods=note_periods([i for i in items if i.profile_id not in quiet]),
         remind_count=len(late_people | set(overdue)),
         reminded_at=cycle.hr_reminded_at,
+        reminded_today=cycle.hr_reminded_at is not None
+        and await org_today(db, org_id, now=cycle.hr_reminded_at) == today,
     )

@@ -32,6 +32,7 @@ from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.calibration import visible_appraisals
 from app.services.appraisals.context import Caller
 from app.services.appraisals.errors import AppraisalConflictError
+from app.services.appraisals.fairness import held_ids
 
 
 def _audit(db: AsyncSession, ctx: AppraisalContext, action: EmployeeAuditAction) -> None:
@@ -60,6 +61,8 @@ async def send_back(db: AsyncSession, ctx: AppraisalContext, note: str) -> None:
     appraisal.manager_submitted_at = None
     appraisal.final_band = None
     appraisal.review_notified_at = None
+    # Scored again, so it is looked at again.
+    appraisal.looks_fair_at, appraisal.looks_fair_by = None, None
     for goal in await AppraisalGoalRepository(db, org_id=appraisal.org_id).accepted_for_period(
         ctx.profile.id, ctx.cycle.period_start
     ):
@@ -84,15 +87,20 @@ async def share(db: AsyncSession, ctx: AppraisalContext) -> None:
 async def share_all(db: AsyncSession, caller: Caller, cycle: AppraisalCycle) -> int:
     """Share every review in calibration the caller may act on; how many.
 
+    Flagged results HR hasn't marked fair stay back (:mod:`.fairness`).
+
     The route needs ``appraisals:manage`` and the HR person's own review and
     their manager's are left out, so the per-review rights come to this.
     """
     if cycle.status is CycleStatus.CLOSED:
         raise AppraisalConflictError("This cycle is closed.")
     appraisals, profiles = await visible_appraisals(db, caller, cycle)
+    held = await held_ids(db, caller, cycle)
     repo = AppraisalRepository(db, org_id=cycle.org_id)
     now, shared = datetime.now(UTC), 0
     for appraisal in appraisals:
+        if appraisal.id in held:
+            continue
         locked = await repo.lock_row(appraisal.id)
         if locked is None or locked.status is not AppraisalStatus.CALIBRATION:
             continue

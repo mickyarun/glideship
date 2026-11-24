@@ -109,6 +109,8 @@ async def team_overview(db: AsyncSession, caller: Caller) -> list[TeamRow]:
             **row.model_dump(),
             min_goals=least,
             max_goals=most,
+            note_due_days=cycles[row.cycle_id].feedback_due_days,
+            goals_due=cycles[row.cycle_id].goals_due,
             months=_months(cycles[row.cycle_id], check_ins[(row.cycle_id, row.profile_id)], today),
             notes=[
                 NoteState(

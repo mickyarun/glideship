@@ -99,6 +99,8 @@ class GoalRead(BaseModel):
     created_at: datetime
     # A proposed change to a confirmed goal names the goal it would replace.
     replaces: uuid.UUID | None
+    # A change the manager suggested: the employee takes or declines it.
+    from_manager: bool = False
     dismiss_reason: str | None
     reword_note: str | None
     # For an AI suggestion: what it builds on, in one line.
@@ -117,6 +119,8 @@ class GoalsRead(BaseModel):
     period_end: date
     locked: bool
     limit: int
+    # Goals are agreed by this date; short of the minimum after it is late.
+    goals_due: date | None = None
     # The fewest confirmed goals the org asks for; below it the manager is asked for more.
     minimum: int
     accepted: int

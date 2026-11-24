@@ -62,6 +62,7 @@ class CycleUpdate(BaseModel):
     """Changes to a draft cycle."""
 
     name: str | None = Field(None, min_length=1, max_length=120)
+    goals_due: date | None = None
     self_due: date | None = None
     manager_due: date | None = None
     ack_due: date | None = None
@@ -97,6 +98,7 @@ class CycleRead(BaseModel):
     status: CycleStatus
     period_start: date
     period_end: date
+    goals_due: date
     self_due: date
     manager_due: date
     ack_due: date

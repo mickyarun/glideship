@@ -24,10 +24,11 @@ from app.api.v1.appraisal_cycles import load_cycle
 from app.core.deps import get_db
 from app.core.permission_deps import require_permissions
 from app.core.permissions_people import APPRAISALS_MANAGE
-from app.schemas.appraisal_calibration import Calibration
+from app.schemas.appraisal_calibration import Calibration, LooksFairBody
 from app.schemas.appraisal_progress import CycleProgress, RemindResult
 from app.services.appraisals.calibration import calibration
 from app.services.appraisals.context import Caller
+from app.services.appraisals.fairness import mark_fair
 from app.services.appraisals.hr_remind import remind_late
 from app.services.appraisals.progress import cycle_progress
 
@@ -64,3 +65,15 @@ async def get_calibration(
 ) -> Calibration:
     """Each manager's bands, agreement and big gaps."""
     return await calibration(db, caller, await load_cycle(db, caller, cycle_id))
+
+
+@router.post("/cycles/{cycle_id}/looks-fair")
+async def post_looks_fair(
+    cycle_id: uuid.UUID,
+    body: LooksFairBody,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Mark flagged results fair, so sharing everything ready includes them."""
+    cycle = await load_cycle(db, caller, cycle_id)
+    return {"marked": await mark_fair(db, caller, cycle, body.appraisal_ids)}

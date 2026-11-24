@@ -32,6 +32,8 @@ class ProgressRow(BaseModel):
     manager_name: str
     status: AppraisalStatus
     goals_accepted: int
+    # Still short of the fewest goals after the cycle's goals date.
+    goals_late: bool = False
     # Each check-in period's state, in order, as anyone but the person sees it.
     months: list[MonthStateName]
     check_ins: int
@@ -71,9 +73,12 @@ class CycleProgress(BaseModel):
     min_goals: int
     check_in_periods: list[PeriodCount]
     note_periods: list[PeriodCount]
-    # People a manual reminder would reach now: late check-ins and late notes.
+    # People a manual reminder would reach now: late check-ins, and managers
+    # with late notes or reports short of goals.
     remind_count: int
     reminded_at: datetime | None
+    # Already reminded today, in the org's time zone: the button waits a day.
+    reminded_today: bool = False
 
 
 class RemindResult(BaseModel):

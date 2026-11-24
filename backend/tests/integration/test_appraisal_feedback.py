@@ -263,7 +263,6 @@ async def test_quarterly_feedback_with_goal_statuses(
         {
             "id": str(goal.id),
             "title": "Organic clicks +25%",
-            "status": "at_risk",
             "note": "Behind in Sept",
         }
     ]

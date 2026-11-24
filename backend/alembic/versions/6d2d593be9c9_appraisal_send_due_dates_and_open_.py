@@ -6,7 +6,9 @@ ends, a manager note five working days after the check-in it answers is
 sent (a cycle's ``feedback_due_days`` now counts from that send). The
 self-review gains two open answers, check-ins get due-date reminders
 (a new ``digest_claim_kind`` value), and a cycle records when HR last
-reminded everyone late by hand.
+reminded everyone late by hand. A cycle gets a date goals are agreed by
+(existing cycles: the fifth weekday after they start), and an appraisal
+records who in HR found a flagged result fair, and when.
 
 Existing data carries forward. Everything people could read before this
 migration stays readable: every existing check-in with something in it
@@ -47,7 +49,7 @@ DUE_DAYS = 5
 CHECK_IN_DUE_KIND = "appraisal_check_in_due"
 OLD_FEEDBACK_DUE_DAYS = 10
 
-# The fifth weekday after each existing check-in's period ends.
+# The fifth weekday after a date: existing check-ins' due dates, cycles' goals.
 
 
 def weekdays_after(day: str) -> str:
@@ -200,6 +202,21 @@ def upgrade() -> None:
         unique=False,
         postgresql_where="sent_at IS NULL",
     )
+    op.add_column("appraisal_cycles", sa.Column("goals_due", sa.Date(), nullable=True))
+    op.execute(f"UPDATE appraisal_cycles SET goals_due = {weekdays_after('period_start')}")
+    op.alter_column("appraisal_cycles", "goals_due", existing_type=sa.Date(), nullable=False)
+    op.add_column(
+        "appraisals", sa.Column("looks_fair_at", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.add_column("appraisals", sa.Column("looks_fair_by", sa.UUID(), nullable=True))
+    op.create_foreign_key(
+        "fk_appraisals_looks_fair_by_users",
+        "appraisals",
+        "users",
+        ["looks_fair_by"],
+        ["id"],
+        ondelete="SET NULL",
+    )
     op.add_column("appraisals", sa.Column("self_proud", sa.LargeBinary(), nullable=True))
     op.add_column("appraisals", sa.Column("self_differently", sa.LargeBinary(), nullable=True))
 
@@ -228,6 +245,10 @@ def downgrade() -> None:
         "UPDATE appraisal_manager_feedback"
         f" SET due_on = period_end + {OLD_FEEDBACK_DUE_DAYS} WHERE due_on IS NULL"
     )
+    op.drop_constraint("fk_appraisals_looks_fair_by_users", "appraisals", type_="foreignkey")
+    op.drop_column("appraisals", "looks_fair_by")
+    op.drop_column("appraisals", "looks_fair_at")
+    op.drop_column("appraisal_cycles", "goals_due")
     op.drop_column("appraisals", "self_differently")
     op.drop_column("appraisals", "self_proud")
     op.drop_index(

@@ -44,7 +44,6 @@ class FeedbackGoal(BaseModel):
 
     id: uuid.UUID
     title: str
-    status: GoalCheck | None = None
     note: str = ""
 
 
