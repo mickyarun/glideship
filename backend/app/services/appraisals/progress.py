@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CheckInStatus, FeedbackStatus
+from app.models.appraisal_enums import AppraisalStatus, FeedbackStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
@@ -86,7 +86,8 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
                 status=appraisal.status,
                 check_ins=len(mine),
                 check_ins_added=sum(c.sent_at is not None for c in mine),
-                check_ins_missed=sum(c.status is CheckInStatus.MISSED for c in mine),
+                # Closed unsent counts as missed, written in or not: drafts stay private.
+                check_ins_missed=sum(c.closed_at is not None and c.sent_at is None for c in mine),
                 feedback=len(theirs),
                 feedback_done=sum(i.status is FeedbackStatus.DONE for i in theirs),
                 feedback_overdue=sum(late(i) for i in theirs),

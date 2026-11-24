@@ -33,6 +33,7 @@ from app.services.appraisals.availability import Absence, availability
 from app.services.appraisals.cadence import cadence_error, period_after, slices
 from app.services.appraisals.check_in_lifecycle import Tick, is_empty, latest_ended, should_open
 from app.services.appraisals.cycles import default_name, enrolment_cutoff
+from app.services.appraisals.feedback_open import should_open_feedback
 from tests.integration.appraisal_support import cycle_row
 
 Q, H, Y = ReviewPeriod.QUARTERLY, ReviewPeriod.HALF_YEARLY, ReviewPeriod.YEARLY
@@ -124,6 +125,16 @@ def test_when_a_check_in_opens() -> None:
     assert not should_open(cycle, appraisal, profile, december, _tick(cycle.self_due))
     appraisal.status = AppraisalStatus.WITHDRAWN
     assert not should_open(cycle, appraisal, profile, october, _tick(date(2026, 11, 2)))
+
+
+def test_the_last_note_opens_only_when_its_check_in_can() -> None:
+    cycle = cycle_row(None)  # type: ignore[arg-type]
+    appraisal = Appraisal(status=AppraisalStatus.ENROLLED)
+    profile = EmployeeProfile()
+    december = (date(2026, 12, 1), date(2026, 12, 31))
+    assert should_open_feedback(cycle, appraisal, profile, december, True, date(2027, 1, 4))
+    # Once the self-review is due, its check-in never opens: neither does the note.
+    assert not should_open_feedback(cycle, appraisal, profile, december, True, cycle.self_due)
 
 
 def test_stale_tags_dont_make_a_check_in_count_as_started() -> None:

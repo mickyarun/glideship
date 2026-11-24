@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CycleStatus, GoalStatus
+from app.models.appraisal_enums import AppraisalStatus, CycleStatus, FeedbackStatus, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.employee_profile import EmployeeProfile
@@ -134,7 +134,10 @@ class AppraisalTodoRepository:
         ]
 
     async def notes_to_send(self, manager_user_id: uuid.UUID) -> list[TodoRow]:
-        """Notes the caller hasn't sent; one with no due date waits on its check-in."""
+        """Notes the caller hasn't finished; one with no due date waits on its check-in.
+
+        Unfinished: not sent, or sent before sending existed but never finished.
+        """
         item = AppraisalManagerFeedback
         result = await self._db.execute(
             select(item.id, item.due_on, User.name)
@@ -149,7 +152,7 @@ class AppraisalTodoRepository:
             .where(
                 *self._live(),
                 item.manager_user_id == manager_user_id,
-                item.sent_at.is_(None),
+                item.status == FeedbackStatus.OPEN,
             )
         )
         return [TodoRow(row.id, row.name, row.due_on) for row in result.all()]

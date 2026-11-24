@@ -141,7 +141,10 @@ async def save_feedback(
         raise AppraisalConflictError("Only the person's manager can write this feedback now.")
     item = ctx.item
     seen = sent(item)
-    if seen and not may_change_after_send(
+    # A finished note can change until it's due. One sent but never finished
+    # (from before sending existed) stays open until the manager finishes it.
+    finished = item.status is FeedbackStatus.DONE
+    if finished and not may_change_after_send(
         item.due_on, item.sent_at, await org_today(db, item.org_id)
     ):
         raise AppraisalConflictError("This note was sent and its due date has passed.")

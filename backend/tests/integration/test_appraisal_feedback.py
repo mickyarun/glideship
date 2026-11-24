@@ -17,21 +17,23 @@
 import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, update
 
 from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import FeedbackStatus, GoalOrigin, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.employee_audit_event import EmployeeAuditAction, EmployeeAuditEvent
 from app.repositories.employee_profile import EmployeeProfileRepository
 from app.services.appraisals import crypto
-from app.services.appraisals.work_calendar import WorkCalendar
+from app.services.appraisals.note_clock import date_waiting_notes
 from app.services.file_storage import FileStorage
-from tests.integration.appraisal_month import Month, october, run_tick, send_check_in
+from tests.integration.appraisal_month import NOV_2, Month, october, run_tick, send_check_in
 from tests.integration.hr_support import configure_hr_storage
 from tests.integration.leave_support import Factory, as_user, give_role, report_to, setup_org
 
@@ -358,29 +360,30 @@ async def test_unsent_items_follow_a_new_manager_and_sent_ones_stay(
     assert (await client.put(priya, json={"keep": "z"}, headers=mgr)).status_code == 404
 
 
-async def test_a_note_opening_after_its_check_in_was_sent_is_due_from_then(
+async def _pin(factory: Factory, org: uuid.UUID, opened: datetime, **check_in: object) -> None:
+    """Pin when the notes opened, and set fields on the check-ins, so dates don't drift."""
+    async with factory() as db:
+        await db.execute(
+            update(AppraisalManagerFeedback)
+            .where(AppraisalManagerFeedback.org_id == org)
+            .values(created_at=opened, due_on=None)
+        )
+        if check_in:
+            await db.execute(
+                update(AppraisalCheckIn).where(AppraisalCheckIn.org_id == org).values(**check_in)
+            )
+        await db.commit()
+
+
+async def test_a_note_opening_after_its_check_in_was_sent_is_due_from_the_opening(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
     m = await october(client, pg_session_factory)
-    emp_profile = await _profile(pg_session_factory, m.org, m.people["emp"])
-    async with pg_session_factory() as db:
-        for item in await db.scalars(
-            select(AppraisalManagerFeedback).where(AppraisalManagerFeedback.org_id == m.org)
-        ):
-            await db.delete(item)
-        await db.execute(
-            update(AppraisalCheckIn)
-            .where(AppraisalCheckIn.profile_id == emp_profile)
-            .values(sent_at=datetime(2026, 11, 6, 15, tzinfo=UTC))
-        )
-        await db.commit()
-    # Five working days from when the note opened (the row's creation, which
-    # is now, whatever date the tick pretends), not from the earlier send.
-    await run_tick(pg_session_factory, m.org, datetime(2026, 11, 9, 6, tzinfo=UTC))
-    due = {i.profile_id: i.due_on for i in await _items(pg_session_factory, m.org)}
-    opened = max(date(2026, 11, 6), datetime.now(UTC).date())
-    assert due[emp_profile] == WorkCalendar().shift(opened, 5)
-    assert [d for p, d in due.items() if p != emp_profile] == [None]
+    sent = datetime(2026, 11, 6, 15, tzinfo=UTC)
+    await _pin(pg_session_factory, m.org, datetime(2026, 11, 9, 6, tzinfo=UTC), sent_at=sent)
+    await run_tick(pg_session_factory, m.org, datetime(2026, 11, 10, 6, tzinfo=UTC))
+    # Opened Monday 9 Nov, after Friday's send: five working days from the opening.
+    assert {i.due_on for i in await _items(pg_session_factory, m.org)} == {date(2026, 11, 16)}
 
 
 async def test_a_check_in_opens_due_five_working_days_after_its_month(
@@ -430,32 +433,47 @@ async def test_a_note_whose_check_in_closes_unsent_is_due_from_the_close(
 ) -> None:
     m = await october(client, pg_session_factory)
     assert {i.due_on for i in await _items(pg_session_factory, m.org)} == {None}
+    await _pin(pg_session_factory, m.org, NOV_2)
     # November's check-in opens on Tuesday 1 December, closing October's unsent.
-    closed_on = datetime(2026, 12, 1, 6, tzinfo=UTC)
-    await run_tick(pg_session_factory, m.org, closed_on)
+    await run_tick(pg_session_factory, m.org, datetime(2026, 12, 1, 6, tzinfo=UTC))
     october_items = [
         i for i in await _items(pg_session_factory, m.org) if i.period_end == date(2026, 10, 31)
     ]
-    start = max(closed_on.date(), datetime.now(UTC).date())
-    expected = WorkCalendar().shift(start, 5)
-    assert {i.due_on for i in october_items} == {expected}
+    assert {i.due_on for i in october_items} == {date(2026, 12, 8)}
 
 
-async def test_a_send_that_crosses_the_tick_is_dated_on_the_next_one(
+async def test_a_send_the_opening_tick_missed_is_dated_on_the_next_one(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
     m = await october(client, pg_session_factory)
     emp_profile = await _profile(pg_session_factory, m.org, m.people["emp"])
-    sent_at = datetime.now(UTC)
+    await _pin(pg_session_factory, m.org, NOV_2)
     async with pg_session_factory() as db:
-        # The send committed after the tick had opened the note undated.
+        # Committed without dating the note, as when the send crosses the tick
+        # that opens it: the send can't see the note, the tick can't see the send.
         await db.execute(
             update(AppraisalCheckIn)
             .where(AppraisalCheckIn.profile_id == emp_profile)
-            .values(sent_at=sent_at)
+            .values(sent_at=datetime(2026, 11, 3, 10, tzinfo=UTC))
         )
         await db.commit()
-    await run_tick(pg_session_factory, m.org, datetime(2026, 11, 3, 6, tzinfo=UTC))
+    await run_tick(pg_session_factory, m.org, datetime(2026, 11, 4, 6, tzinfo=UTC))
     due = {i.profile_id: i.due_on for i in await _items(pg_session_factory, m.org)}
-    assert due[emp_profile] == WorkCalendar().shift(sent_at.date(), 5)
+    assert due[emp_profile] == date(2026, 11, 10)
     assert [d for p, d in due.items() if p != emp_profile] == [None]
+
+
+async def test_the_note_clock_counts_in_the_orgs_own_days(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    # 23:30 UTC on Monday 30 Nov is already Tuesday 1 Dec in India.
+    closed = datetime(2026, 11, 30, 23, 30, tzinfo=UTC)
+    await _pin(pg_session_factory, m.org, NOV_2, closed_at=closed)
+    async with pg_session_factory() as db:
+        cycle = await db.scalar(select(AppraisalCycle).where(AppraisalCycle.org_id == m.org))
+        assert cycle is not None
+        dated = await date_waiting_notes(db, cycle, date(2026, 12, 1), ZoneInfo("Asia/Kolkata"))
+        await db.commit()
+    assert dated == 2
+    assert {i.due_on for i in await _items(pg_session_factory, m.org)} == {date(2026, 12, 8)}

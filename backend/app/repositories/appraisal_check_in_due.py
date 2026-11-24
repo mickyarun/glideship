@@ -46,7 +46,11 @@ class AppraisalCheckInDueRepository:
         self._org = org_id
 
     async def unsent(self, cycle_ids: Collection[uuid.UUID]) -> list[UnsentCheckIn]:
-        """Open, unsent check-ins with a due date in these cycles, unless withdrawn."""
+        """Open, unsent check-ins with a due date in these cycles, unless withdrawn.
+
+        Only ones whose opening was announced: the "ready" message goes first,
+        never on the same day as a due reminder.
+        """
         if not cycle_ids:
             return []
         check_in = AppraisalCheckIn
@@ -66,6 +70,7 @@ class AppraisalCheckInDueRepository:
                 check_in.closed_at.is_(None),
                 check_in.sent_at.is_(None),
                 check_in.due_on.is_not(None),
+                check_in.notified_at.is_not(None),
                 Appraisal.status != AppraisalStatus.WITHDRAWN,
             )
         )

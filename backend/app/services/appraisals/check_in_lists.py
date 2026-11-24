@@ -34,14 +34,13 @@ from app.services.appraisals.org_clock import org_today
 def shown_status(check_in: AppraisalCheckIn, is_self: bool) -> CheckInStatus:
     """The status as the viewer may see it.
 
-    Until it is sent, nobody but the person can tell they have written in
-    it: "added" shows as still open.
+    Until it is sent, nobody but the person can tell whether they have
+    written in it: an unsent check-in is open while it is, and missed once
+    it closes, written in or not.
     """
     if is_self or check_in.sent_at is not None:
         return check_in.status
-    return (
-        CheckInStatus.OPEN if check_in.status is CheckInStatus.EMPLOYEE_ADDED else check_in.status
-    )
+    return CheckInStatus.OPEN if check_in.closed_at is None else CheckInStatus.MISSED
 
 
 def _summary(

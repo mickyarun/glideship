@@ -213,7 +213,7 @@ async def test_redrafts_are_limited_and_keep_the_old_lines_meanwhile(
     assert (await client.post(f"{url}/regenerate", headers=manager)).status_code == 409
 
 
-async def test_a_manager_may_redraft_but_hr_may_not(
+async def test_a_manager_may_redraft_a_sent_check_in_but_hr_may_not(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage, model: Model
 ) -> None:
     m = await october(client, pg_session_factory, ai=True)
@@ -221,8 +221,13 @@ async def test_a_manager_may_redraft_but_hr_may_not(
     url = f"{CHECK_INS}/{row.id}/regenerate"
     model.reply = lambda _p: _good([str(m.counted)])
     await draft_sweeper.tick_once()
+    mgr = as_user(m.people["mgr"], m.org)
     assert (await client.post(url, headers=as_user(m.people["hr"], m.org))).status_code == 409
-    assert (await client.post(url, headers=as_user(m.people["mgr"], m.org))).status_code == 202
+    # Until it is sent, only the person may redraft it.
+    assert (await client.post(url, headers=mgr)).status_code == 409
+    sent = await client.post(f"{CHECK_INS}/{row.id}/send", headers=as_user(m.people["emp"], m.org))
+    assert sent.status_code == 200
+    assert (await client.post(url, headers=mgr)).status_code == 202
 
 
 @pytest.mark.parametrize(

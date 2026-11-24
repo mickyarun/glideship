@@ -53,8 +53,13 @@ def should_open_feedback(
     profile: EmployeeProfile,
     period: tuple[date, date],
     working: bool,
+    today: date,
 ) -> bool:
-    """Whether the person's item for ``period`` opens on this tick (pure)."""
+    """Whether the person's item for ``period`` opens on this tick (pure).
+
+    Like the check-in it answers, the last period's item doesn't open once
+    the self-review is due: there would be no check-in to date it from.
+    """
     start, end = period
     joined, exited = profile.date_of_joining, profile.date_of_exit
     return (
@@ -63,6 +68,7 @@ def should_open_feedback(
         and working
         and (joined is None or joined <= end)
         and (exited is None or exited >= start)
+        and not (end == cycle.period_end and today >= cycle.self_due)
     )
 
 
@@ -86,7 +92,7 @@ async def feedback_pass(
         person = profiles.get(appraisal.profile_id)
         if appraisal.profile_id in have or person is None:
             continue
-        if should_open_feedback(cycle, appraisal, person, period, working):
+        if should_open_feedback(cycle, appraisal, person, period, working, today):
             due.append(appraisal)
     if not due:
         return

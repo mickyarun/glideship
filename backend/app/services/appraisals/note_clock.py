@@ -24,7 +24,7 @@ tick opening the note. A clock never starts before its note opened, so
 nobody is handed a note that is already late.
 """
 
-from datetime import date
+from datetime import date, tzinfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,15 +52,20 @@ async def start_on_send(db: AsyncSession, check_in: AppraisalCheckIn) -> None:
     item.due_on = note_due(today, cycle.feedback_due_days, calendars.of(item.manager_user_id))
 
 
-async def date_waiting_notes(db: AsyncSession, cycle: AppraisalCycle, today: date) -> int:
-    """Date every note in the cycle whose check-in was sent or closed; how many."""
+async def date_waiting_notes(
+    db: AsyncSession, cycle: AppraisalCycle, today: date, zone: tzinfo
+) -> int:
+    """Date every note in the cycle whose check-in was sent or closed; how many.
+
+    Days are the org's own (``zone``), as everywhere else in appraisals.
+    """
     waiting = await AppraisalNoteClockRepository(db, org_id=cycle.org_id).ready_to_date(cycle.id)
     if not waiting:
         return 0
     managers = {item.manager_user_id for item, _, _ in waiting}
     calendars = await load_calendars(db, cycle.org_id, managers, today)
     for item, answered_at, opened_at in waiting:
-        start = max(answered_at.date(), opened_at.date())
+        start = max(answered_at.astimezone(zone).date(), opened_at.astimezone(zone).date())
         item.due_on = note_due(start, cycle.feedback_due_days, calendars.of(item.manager_user_id))
     await db.flush()
     return len(waiting)

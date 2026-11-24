@@ -133,7 +133,7 @@ async def cycle_pass(db: AsyncSession, cycle: AppraisalCycle, tick: Tick) -> Non
                 "appraisal_check_in_person_failed", org_id=str(org_id), profile_id=str(profile.id)
             )
     await feedback_pass(db, cycle, appraisals, profiles, tick.today, tick.working)
-    await date_waiting_notes(db, cycle, tick.today)
+    await date_waiting_notes(db, cycle, tick.today, tick.zone)
     await pass_self_due(db, cycle, tick.today)
 
 

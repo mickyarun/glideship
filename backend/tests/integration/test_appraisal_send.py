@@ -23,9 +23,10 @@ from types import ModuleType
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 
 from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.services.appraisals.work_calendar import WorkCalendar
 from app.services.file_storage import FileStorage
@@ -86,6 +87,47 @@ async def test_an_unsent_check_in_shows_its_facts_but_not_the_persons_words(
     assert not read["content_hidden"]
     assert read["note"]["lines"]["team"] == ["Paired on the refunds API"]
     assert [link["title"] for link in read["links"]] == ["Refunds spec"]
+
+
+async def test_a_closed_unsent_check_in_reads_as_missed_written_in_or_not(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    emp = as_user(m.people["emp"], m.org)
+    url = f"{CHECK_INS}/{(await client.get(f'{CHECK_INS}/mine', headers=emp)).json()[0]['id']}"
+    await client.put(f"{url}/note", json=NOTE, headers=emp)
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(AppraisalCheckIn)
+            .where(AppraisalCheckIn.org_id == m.org)
+            .values(closed_at=datetime.now(UTC))
+        )
+        await db.commit()
+    assert (await client.get(url, headers=emp)).json()["status"] == "employee_added"
+    mgr = as_user(m.people["mgr"], m.org)
+    team = (await client.get(f"{CHECK_INS}/team", headers=mgr)).json()
+    # Priya wrote in hers, Meena didn't: to the manager both are simply missed.
+    assert {r["person_name"]: r["status"] for r in team} == {"Priya": "missed", "Meena": "missed"}
+    assert (await client.get(url, headers=mgr)).json()["status"] == "missed"
+
+
+async def test_only_the_person_may_redraft_an_unsent_check_in(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory, ai=True)
+    async with pg_session_factory() as db:
+        await db.execute(
+            update(AppraisalCheckIn)
+            .where(AppraisalCheckIn.org_id == m.org)
+            .values(draft_status="ready")
+        )
+        await db.commit()
+    emp, mgr = as_user(m.people["emp"], m.org), as_user(m.people["mgr"], m.org)
+    url = f"{CHECK_INS}/{(await client.get(f'{CHECK_INS}/mine', headers=emp)).json()[0]['id']}"
+    assert (await client.get(url, headers=emp)).json()["can_regenerate"]
+    # The manager's answer never depends on whether the person has written yet.
+    assert not (await client.get(url, headers=mgr)).json()["can_regenerate"]
+    assert (await client.post(f"{url}/regenerate", headers=mgr)).status_code == 409
 
 
 async def test_late_is_past_due_and_unsent_and_edits_after_sending_stop_at_the_due_date(
@@ -204,9 +246,10 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
     assert {c.due_on for c in check_ins} == {max(date(2026, 11, 6), fresh)}
     assert notes[written["id"]].sent_at is not None
     assert [n.sent_at for k, n in notes.items() if k != written["id"]] == [None]
-    # The half-written note gets the same fresh window; the untouched one keeps its date.
+    # The half-written note gets the same fresh window. Meena's answers her
+    # blank, open check-in: it waits for it, with no date to be late against.
     assert notes[written["id"]].due_on == max(kept_due, fresh)
-    assert [n.due_on for k, n in notes.items() if k != written["id"]] == [kept_due]
+    assert [n.due_on for k, n in notes.items() if k != written["id"]] == [None]
     # The person reads the written note, as they could before.
     seen = await client.get(f"/api/v1/manager-feedback/{written['id']}", headers=emp)
     assert seen.status_code == 200 and seen.json()["keep"] == "Clear PRs"
@@ -230,6 +273,13 @@ async def test_rolling_back_clears_unsent_drafts_first(
     url = f"{CHECK_INS}/{(await client.get(f'{CHECK_INS}/mine', headers=emp)).json()[0]['id']}"
     await client.put(f"{url}/note", json=NOTE, headers=emp)
     await client.post(f"{url}/links", json=LINK, headers=emp)
+    ids = await team_ids(client, m)
+    goal = {"title": "p95 under 300 ms", "reason": "Q4"}
+    added = await client.post(f"{BASE}/{ids['Priya']}/goals", json=goal, headers=mgr)
+    goal_id = next(g["id"] for g in added.json()["goals"] if g["status"] == "accepted")
+    value = {"value": "410 ms", "source_note": "", "source_url": None}
+    put = await client.put(f"{url}/goal-values/{goal_id}", json=value, headers=emp)
+    assert put.status_code == 200
     rows = (await client.get("/api/v1/manager-feedback/team", headers=mgr)).json()
     drafts = [f"/api/v1/manager-feedback/{r['id']}" for r in rows]
     for draft in drafts:
@@ -250,6 +300,13 @@ async def test_rolling_back_clears_unsent_drafts_first(
         }
     assert check_in is not None and check_in.employee_note is None
     assert check_in.fact_tags == {} and check_in.status.value == "open"
+    async with pg_session_factory() as db:
+        values = await db.scalar(
+            select(func.count())
+            .select_from(AppraisalGoalValue)
+            .where(AppraisalGoalValue.check_in_id == check_in.id)
+        )
+    assert values == 0
     assert (await client.get(url, headers=emp)).json()["links"] == []
     # The sent note keeps its words; the unsent draft is gone.
     assert notes[drafts[0]].keep_note is not None

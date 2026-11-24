@@ -14,12 +14,14 @@ it, is marked sent at its last update. Blank check-ins stay unsent.
 Existing check-ins get a due date five weekdays after their period (the
 person's holidays aren't known here); one still open gets at least five
 weekdays from the day this runs, so people can keep writing it. Existing
-notes keep their due date, except one written but not finished, which
-also gets five weekdays from today so the manager can finish and send
-it. Cycles not yet closed and stored org settings take the decided five
-days for notes (closed cycles keep theirs; the downgrade puts back the
-old default of ten, not any earlier custom value). Orgs get
-``min_goals`` of three, or their ``max_goals`` when that is lower.
+notes keep their due date, except: one written but not finished also
+gets five weekdays from today, so the manager can finish and send it;
+and one answering a blank, still-open check-in loses its date and waits
+for that check-in, like any new note. Cycles not yet closed and stored
+org settings take the decided five days for notes (closed cycles keep
+theirs; the downgrade puts back the old default of ten, not any earlier
+custom value). Orgs get ``min_goals`` of three, or their ``max_goals``
+when that is lower.
 Autogenerate doesn't compare check constraints, so that swap is spelled
 out.
 
@@ -87,6 +89,19 @@ UPDATE organizations SET config = jsonb_set(
 WHERE jsonb_typeof(config -> 'appraisals') = 'object'
 """
 
+# A blank check-in stays unsent and open, so the note answering it has
+# nothing to answer yet: it loses its old due date and waits, dated once the
+# check-in is sent or closes. Notes on closed check-ins keep theirs, or they
+# would be dated from an old close and late at once.
+NOTES_WAITING_ON_CHECK_IN = """
+UPDATE appraisal_manager_feedback f SET due_on = NULL
+WHERE f.sent_at IS NULL AND EXISTS (
+    SELECT 1 FROM appraisal_check_ins c
+    WHERE c.org_id = f.org_id AND c.cycle_id = f.cycle_id AND c.profile_id = f.profile_id
+      AND c.period_end = f.period_end AND c.sent_at IS NULL AND c.closed_at IS NULL
+)
+"""
+
 # Run after the schema changes; a test runs the same statements.
 # A check-in counts as sent only if the manager could read something in it:
 # the person's lines, links, tags or goal values, or the AI draft. A blank
@@ -114,7 +129,10 @@ CLEAR_UNSENT = (
     " (SELECT id FROM appraisal_check_ins WHERE sent_at IS NULL)",
     "UPDATE appraisal_check_ins SET employee_note = NULL, ai_summary = NULL,"
     " fact_tags = '{}'::jsonb,"
-    " status = CASE WHEN status = 'employee_added' THEN 'open' ELSE status END"
+    # Written in but cleared: open while open, missed once closed, as if empty.
+    " status = CASE WHEN status = 'employee_added' THEN"
+    " (CASE WHEN closed_at IS NULL THEN 'open' ELSE 'missed' END)::appraisal_check_in_status"
+    " ELSE status END"
     " WHERE sent_at IS NULL",
 )
 
@@ -125,6 +143,7 @@ BACKFILL = (
     " WHERE sent_at IS NULL AND (keep_note IS NOT NULL OR try_note IS NOT NULL"
     " OR goal_status <> '{}'::jsonb)",
     UNFINISHED_NOTES_DUE,
+    NOTES_WAITING_ON_CHECK_IN,
     f"UPDATE appraisal_cycles SET feedback_due_days = {DUE_DAYS} WHERE status <> 'closed'",
     SETTINGS,
 )
