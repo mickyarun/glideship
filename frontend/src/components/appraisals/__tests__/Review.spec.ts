@@ -22,11 +22,12 @@ import TeamReviewsList from '@/components/appraisals/TeamReviewsList.vue'
 import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import type { Goal } from '@/types/appraisalGoals'
-import type { AppraisalRead, NextGoal } from '@/types/appraisalReview'
+import type { NextGoal } from '@/types/appraisalReview'
 import type { AppraisalSummary } from '@/types/appraisalGoals'
 import { evidenceOptions, pickReview, reviewChoices, selfProblem } from '@/utils/appraisalReview'
 import { goalSections, historyLine } from '@/utils/appraisalGoals'
 import { appraisalPlugins } from './mountAppraisal'
+import { review } from './reviewFixture'
 
 const NONE = { accept: false, dismiss: false, ask_reword: false, edit: false, remove: false, suggest_change: false }
 
@@ -36,26 +37,6 @@ function goal(overrides: Partial<Goal> = {}): Goal {
     status: 'proposed', suggestion_basis: null, proposed_by_name: 'Priya', added_mid_period: false,
     created_at: '2026-10-05T10:00:00Z', replaces: null, dismiss_reason: null, reword_note: null, why: null,
     history: [], actions: NONE, ...overrides,
-  }
-}
-
-function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
-  return {
-    id: 'a1', user_id: 'u1', person_name: 'Priya S', manager_name: 'Ravi', cycle_name: 'Q4 2026',
-    period_start: '2026-10-01', period_end: '2026-12-31', self_due: '2027-01-07', manager_due: '2027-01-14',
-    ack_due: '2027-01-28', status: 'self_review', drafting_mode: 'manual', summary_status: 'none', summary: [],
-    summary_hidden: false, period_facts: [],
-    timeline: [{
-      check_in_id: 'c1', period_start: '2026-10-01', status: 'employee_added', note: { lines: {}, blocking: '', next_month: '' },
-      facts: [{ source: 'board_cards', id: 'f1', key: 'OPS-1', title: 'Close', url: '/b', verb: 'done', done_at: null, private: false }],
-      links: [{ id: 'l1', url: 'https://doc.test', title: 'Spec', heading: 'team', goal_id: null }],
-    }],
-    goals: [{ id: 'g1', position: 1, title: 'Ship refunds', measure: '', added_mid_period: false, accepted_at: null, self_result: null, self_reason: null, self_evidence: [], result: null, draft_result: null, manager_reason: null }],
-    self_score: { band: null, reason: '', evidence: [], submitted_at: null },
-    manager_score: null, manager_only: null, send_back_note: null, reply: null, shared_at: null, acknowledged_at: null,
-    growth: { open: false, can_edit: false, is_self: true, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3, goals: [] },
-    can: { edit_self: true, edit_manager: false, send_back: false, share: false, acknowledge: false },
-    ...overrides,
   }
 }
 
@@ -97,11 +78,11 @@ describe('goals', () => {
 })
 
 describe('self-review', () => {
-  it('needs two pieces of evidence for band 1 or 2, and every goal scored', () => {
+  it('needs two examples for either Exceeded rating, and every goal scored', () => {
     const body = { band: 2, reason: '', evidence: ['f1'], goals: [{ goal_id: 'g1', result: 'achieved' as const, reason: '', evidence: [] }] }
-    expect(selfProblem(body, ['g1'])).toContain('two pieces of evidence')
+    expect(selfProblem(body, ['g1'])).toBe('"Exceeded most times" needs 2 examples. Pick them below.')
     expect(selfProblem({ ...body, evidence: ['f1', 'link:l1'] }, ['g1'])).toBe('')
-    expect(selfProblem({ ...body, band: 3, goals: [] }, ['g1'])).toContain('Score each goal')
+    expect(selfProblem({ ...body, band: 3, goals: [] }, ['g1'])).toContain('Pick how each goal ended')
   })
 
   it('offers the period as evidence and blocks submitting until the rules are met', async () => {
@@ -112,7 +93,7 @@ describe('self-review', () => {
     const submit = () => wrapper.findAll('button').find(b => b.text().startsWith('Submit'))
     expect(submit()?.attributes('disabled')).toBeDefined()
     await wrapper.findAll('[role="radio"]').find(b => b.text() === 'Achieved')?.trigger('click')
-    await wrapper.findAll('[role="radio"]').find(b => b.text() === 'Meets always (3)')?.trigger('click')
+    await wrapper.find('input[type="radio"][value="3"]').setValue(true)
     expect(submit()?.attributes('disabled')).toBeUndefined()
     await submit()?.trigger('click')
     const [sent] = wrapper.emitted('submit')![0] as [{ band: number; goals: { result: string }[] }]

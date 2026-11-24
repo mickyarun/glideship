@@ -6,6 +6,6 @@ Create the cycle from the org settings, then check readiness before you open it:
 
 Each template says what the four headings mean for a role, which records count and which goals it suggests. People are matched by department or designation; you can override the match for a cycle.
 
-## Reading calibration
+## Reading the fairness check
 
-Look at the spread of bands for each manager, how often they agreed with their reports, and the large gaps. Send a review back with a note when it needs another look, then share results.
+Look at the spread of ratings for each manager, how often they agreed with their reports, and the big differences. Send a review back with a note when it needs another look, then share results.

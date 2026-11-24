@@ -31,14 +31,9 @@
     </section>
     <section class="self__goal">
       <h3 class="self__title">Overall</h3>
-      <AppPillToggle
-        :model-value="form.band ?? 0"
-        :options="BAND_OPTIONS"
-        aria-label="Overall band"
-        @update:model-value="v => (form.band = Number(v))"
-      />
+      <BandScale v-model="form.band" label="Overall rating" />
       <v-textarea v-model="form.reason" label="Why, in up to three lines" rows="3" auto-grow maxlength="600" />
-      <EvidencePicker v-model="form.evidence" :options="options" label="Evidence (bands 1 and 2 need two)" />
+      <EvidencePicker v-model="form.evidence" :options="options" label="Examples (both Exceeded ratings need two)" />
     </section>
     <p v-if="problem" class="self__problem">{{ problem }}</p>
     <div class="self__actions">
@@ -53,10 +48,10 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
+import BandScale from '@/components/appraisals/BandScale.vue'
 import EvidencePicker from '@/components/appraisals/EvidencePicker.vue'
 import type { GoalResult } from '@/types/appraisalGoals'
 import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalReview'
-import { BAND_OPTIONS } from '@/utils/appraisalBands'
 import { RESULT_OPTIONS } from '@/utils/appraisalGoals'
 import { selfProblem } from '@/utils/appraisalReview'
 

@@ -45,16 +45,20 @@
       <SelfSubmitted v-if="isSelf && review.self_score?.submitted_at && !review.shared_at" :review="review" />
       <SelfReviewForm v-if="review.can.edit_self" :key="`self-${review.id}`" :review="review" :options="options" :busy="busy === 'save' || busy === 'submit' ? busy : null" @save="b => run('save', store.saveSelf(review!.id, b))" @submit="submitSelf" />
       <ManagerReviewForm v-else-if="review.can.edit_manager" :key="`mgr-${review.id}`" :review="review" :options="options" :busy="busy === 'save' || busy === 'submit' ? busy : null" @save="b => run('save', store.saveManager(review!.id, b))" @submit="b => run('submit', store.submitManager(review!.id, b))" />
-      <ReviewResult v-else-if="review.manager_score?.final_band && (review.shared_at || !isSelf)" :review="review" :is-self="isSelf" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
+      <ReviewResult v-else-if="showResult" :review="review" :is-self="isSelf" />
       <GrowthSection
         v-if="review.growth.open"
         :growth="review.growth"
         :busy="busy"
+        :period="periodWord(review.period_start, review.period_end)"
+        :manager="firstName(review.manager_name, 'your manager')"
+        :person="firstName(review.person_name, 'them')"
         @save="(s, f) => run('save', store.saveGrowth(review!.id, s, f))"
         @add="adding = true"
         @accept="g => run('save', store.acceptNextGoal(review!.id, g))"
         @remove="g => run('save', store.removeNextGoal(review!.id, g))"
       />
+      <AcknowledgeBox v-if="showResult" :review="review" :is-self="isSelf" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
       <GoalDialog :mode="adding ? 'next' : null" :busy="busy === 'save'" :error="message" @close="adding = false" @submit="addNext" />
     </template>
     <v-dialog v-model="sendingBack" max-width="520">
@@ -76,6 +80,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
+import AcknowledgeBox from '@/components/appraisals/AcknowledgeBox.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
 import GoalDialog from '@/components/appraisals/GoalDialog.vue'
 import GrowthSection from '@/components/appraisals/GrowthSection.vue'
@@ -89,7 +94,7 @@ import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAuthStore } from '@/stores/auth'
 import type { GoalBody } from '@/types/appraisalGoals'
 import type { SelfBody } from '@/types/appraisalReview'
-import { evidenceOptions, pickReview, reviewChoices } from '@/utils/appraisalReview'
+import { evidenceOptions, firstName, periodWord, pickReview, reviewChoices } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
 type Busy = 'save' | 'submit' | 'share' | 'back' | 'ack'
@@ -108,15 +113,22 @@ const adding = ref(false)
 // The caller's own other reviews; someone else's open by link from the team list.
 const others = computed(() => reviewChoices(store.mine).filter(r => r.id !== review.value?.id))
 
-const title = computed(() =>
-  review.value ? `${isSelf.value ? 'Your' : `${review.value.person_name}'s`} ${review.value.cycle_name} review` : 'Review',
-)
+// The result once there is a final rating: the person sees it only once shared.
+const showResult = computed(() => {
+  const r = review.value
+  return Boolean(r && !r.can.edit_self && !r.can.edit_manager && r.manager_score?.final_band && (r.shared_at || !isSelf.value))
+})
+const title = computed(() => {
+  const r = review.value
+  if (!r) return 'Review'
+  return `${isSelf.value ? 'Your' : `${r.person_name}'s`} ${r.cycle_name} ${showResult.value ? 'result' : 'review'}`
+})
 const subtitle = computed(() => {
   const r = review.value
   if (!r) return ''
-  if (r.status === 'self_review') return `Self-review due ${longDate(r.self_due)}`
+  if (r.status === 'self_review') return `Your review due ${longDate(r.self_due)}`
   if (r.status === 'manager_review') return `Manager review due ${longDate(r.manager_due)}`
-  if (r.status === 'shared') return `Reply by ${longDate(r.ack_due)}`
+  if (r.status === 'shared') return `Shared on ${longDate((r.shared_at ?? r.ack_due).slice(0, 10))} · Read by ${longDate(r.ack_due)}`
   return `${longDate(r.period_start)} – ${longDate(r.period_end)}`
 })
 const waiting = computed(() => {

@@ -50,9 +50,9 @@
         @update:model-value="v => (form.agree = v === 'agree')"
       />
       <template v-if="!form.agree">
-        <AppPillToggle :model-value="form.band ?? 0" :options="BAND_OPTIONS" aria-label="Band" @update:model-value="v => (form.band = Number(v))" />
+        <BandScale v-model="form.band" label="Overall rating" />
         <v-textarea v-model="form.reason" label="Reason (they read this)" rows="2" auto-grow maxlength="600" />
-        <EvidencePicker v-model="form.evidence" :options="options" label="Evidence (band 1 or 2 needs two, band 5 one)" />
+        <EvidencePicker v-model="form.evidence" :options="options" label="Examples (both Exceeded ratings need two, Did not meet one)" />
       </template>
     </section>
     <section class="mgr__card">
@@ -74,10 +74,11 @@
 import { computed, reactive } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
+import BandScale from '@/components/appraisals/BandScale.vue'
 import EvidencePicker from '@/components/appraisals/EvidencePicker.vue'
 import type { GoalResult } from '@/types/appraisalGoals'
 import type { AppraisalRead, EvidenceOption, ManagerBody, ReviewGoal } from '@/types/appraisalReview'
-import { BAND_OPTIONS, bandLabel } from '@/utils/appraisalBands'
+import { bandLabel } from '@/utils/appraisalBands'
 import { RESULT_OPTIONS, resultLabel } from '@/utils/appraisalGoals'
 
 const props = defineProps<{ review: AppraisalRead; options: EvidenceOption[]; busy: 'save' | 'submit' | null }>()
@@ -90,7 +91,7 @@ const YES_NO = [
 const who = computed(() => props.review.person_name.split(' ')[0] || 'They')
 const selfBand = computed(() => {
   const band = props.review.self_score?.submitted_at ? props.review.self_score.band : null
-  return band ? `${bandLabel(band)} (${band})` : 'No self-score'
+  return band ? bandLabel(band) : 'No self-review'
 })
 const byId = Object.fromEntries(props.review.goals.map(g => [g.id, g]))
 const goal_ = (id: string): ReviewGoal => byId[id]

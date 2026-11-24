@@ -33,9 +33,9 @@
         <AppPillToggle v-model="audience" :options="audiences" aria-label="Guide for" />
         <GuideSection v-for="(block, i) in blocks" :key="i" :block="block" />
         <template v-if="audience === 'everyone'">
-          <h3 class="guide__heading">The five bands</h3>
+          <h3 class="guide__heading">The five ratings, lowest first</h3>
           <ol class="guide__bands">
-            <li v-for="band in BANDS" :key="band.value"><strong>{{ band.label }}</strong> ({{ band.value }})</li>
+            <li v-for="band in BANDS" :key="band.value"><strong>{{ band.label }}</strong>: {{ band.meaning }}</li>
           </ol>
         </template>
       </v-card-text>

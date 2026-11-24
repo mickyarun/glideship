@@ -27,10 +27,11 @@ export const BASIS_LABELS: Record<SuggestionBasis, string> = {
   role_library: 'Role library',
 }
 
+/** Lowest first, so the choices read left to right from low to high. */
 export const RESULT_OPTIONS: { label: string; value: GoalResult }[] = [
-  { label: 'Achieved', value: 'achieved' },
-  { label: 'Partly', value: 'partly' },
   { label: 'Not yet', value: 'not_yet' },
+  { label: 'Partly', value: 'partly' },
+  { label: 'Achieved', value: 'achieved' },
 ]
 
 export function resultLabel(result: GoalResult | null): string {

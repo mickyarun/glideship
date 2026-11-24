@@ -14,40 +14,47 @@
  * limitations under the License.
  -->
 
-<!-- The growth conversation, once the result is shared: one strength to use
-     more, one thing to work on, and next period's goals. No band here. -->
+<!-- The plan for the next period, once the result is shared: one strength
+     to use more, one thing to work on, and next period's goals. Both people
+     fill it in, usually in the same 1:1. No rating here. -->
 <template>
-  <section class="growth" aria-labelledby="growth-title">
-    <h2 id="growth-title" class="growth__title">Growth conversation</h2>
-    <v-textarea v-model="strength" label="One strength to use more" rows="2" auto-grow maxlength="500" :readonly="!growth.can_edit" />
-    <v-textarea v-model="focus" label="One thing to work on" rows="2" auto-grow maxlength="500" :readonly="!growth.can_edit" />
+  <AppPanel :title="`Plan for next ${period}`">
+    <p class="growth__muted">You and {{ growth.is_self ? manager : person }} fill this in together, usually in the same 1:1. Either of you can edit it.</p>
+    <div class="growth__pair">
+      <v-textarea v-model="strength" label="One strength to use more" rows="2" auto-grow maxlength="500" :readonly="!growth.can_edit" />
+      <v-textarea v-model="focus" label="One thing to work on" rows="2" auto-grow maxlength="500" :readonly="!growth.can_edit" />
+    </div>
     <div v-if="growth.can_edit" class="growth__actions">
       <v-btn variant="outlined" :disabled="!dirty" :loading="busy === 'save'" @click="emit('save', strength.trim(), focus.trim())">Save</v-btn>
     </div>
-    <h3 class="growth__heading">Goals for the period from {{ longDate(growth.next_period_start) }} ({{ accepted }} of {{ growth.limit }})</h3>
+    <div class="growth__head">
+      <h3 class="growth__heading">Goals from {{ longDate(growth.next_period_start) }} · {{ accepted }} of {{ growth.limit }}</h3>
+      <v-btn v-if="growth.can_edit" size="small" variant="outlined" prepend-icon="mdi-plus" :disabled="atLimit" @click="emit('add')">Add a goal</v-btn>
+    </div>
     <p v-if="!growth.goals.length" class="growth__muted">None yet. A few that matter beat a long list.</p>
     <ul class="growth__goals">
       <li v-for="goal in growth.goals" :key="goal.id" class="growth__goal">
         <div>
           <span class="growth__goal-title">{{ goal.title }}</span>
-          <span class="growth__muted"><template v-if="goal.measure">{{ goal.measure }} · </template>{{ goal.status === 'accepted' ? 'Confirmed' : `Proposed by ${goal.proposed_by_name}` }}</span>
+          <span class="growth__muted"><template v-if="goal.measure">{{ goal.measure }} · </template>{{ standing(goal) }}</span>
         </div>
         <v-btn v-if="goal.can_accept" size="small" color="primary" :disabled="accepted >= growth.limit" @click="emit('accept', goal.id)">Confirm</v-btn>
         <v-btn v-if="goal.can_remove" size="small" variant="text" @click="emit('remove', goal.id)">Take back</v-btn>
       </li>
     </ul>
-    <v-btn v-if="growth.can_edit" size="small" variant="outlined" prepend-icon="mdi-plus" :disabled="atLimit" @click="emit('add')">
-      Add a goal for next period
-    </v-btn>
-  </section>
+  </AppPanel>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { GrowthRead } from '@/types/appraisalReview'
+import AppPanel from '@/components/common/AppPanel.vue'
+import type { GrowthRead, NextGoal } from '@/types/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
-const props = defineProps<{ growth: GrowthRead; busy: string | null }>()
+const props = withDefaults(
+  defineProps<{ growth: GrowthRead; busy: string | null; period?: string; manager?: string; person?: string }>(),
+  { period: 'quarter', manager: 'your manager', person: 'them' },
+)
 const emit = defineEmits<{ save: [strength: string, focus: string]; add: []; accept: [goalId: string]; remove: [goalId: string] }>()
 
 const strength = ref('')
@@ -59,38 +66,42 @@ const dirty = computed(() => strength.value.trim() !== props.growth.strength || 
 const accepted = computed(() => props.growth.goals.filter(g => g.status === 'accepted').length)
 // The employee can still propose at the limit; only the manager's adds take a slot.
 const atLimit = computed(() => !props.growth.is_self && accepted.value >= props.growth.limit)
+
+function standing(goal: NextGoal): string {
+  if (goal.status === 'accepted') return 'Confirmed'
+  return goal.can_accept ? `Proposed by ${goal.proposed_by_name}` : `Waiting for ${props.growth.is_self ? props.manager : props.person} to confirm`
+}
 </script>
 
 <style scoped>
-.growth {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 880px;
-  padding: 16px 20px;
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgb(var(--v-theme-rule));
-  border-radius: 12px;
-}
-.growth__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-.growth__heading {
-  margin: 8px 0 0;
-  font-size: 15px;
-  font-weight: 600;
+.growth__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 16px;
+  margin-top: 12px;
 }
 .growth__actions {
   display: flex;
   justify-content: flex-end;
 }
+.growth__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+.growth__heading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
 .growth__muted {
   display: block;
   margin: 0;
   font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .growth__goals {
   margin: 0;

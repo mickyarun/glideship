@@ -21,7 +21,7 @@
     <ul class="submitted__list">
       <li v-for="goal in review.goals" :key="goal.id"><strong>{{ goal.title }}</strong> · {{ resultLabel(goal.self_result) }}<template v-if="goal.self_reason"> · {{ goal.self_reason }}</template></li>
     </ul>
-    <p class="submitted__band">Overall: {{ bandLabel(review.self_score?.band ?? null) }} ({{ review.self_score?.band }})<template v-if="review.self_score?.reason"> · {{ review.self_score.reason }}</template></p>
+    <p class="submitted__band">Overall: {{ bandLabel(review.self_score?.band) }}<template v-if="review.self_score?.reason"> · {{ review.self_score.reason }}</template></p>
   </section>
 </template>
 

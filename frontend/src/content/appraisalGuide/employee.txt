@@ -13,6 +13,6 @@ Add what Glideship missed: a link, a win nobody filed, a blocker. If a heading i
 
 A few a period, up to the number your org sets. Each one says what done looks like and where the number comes from, for example "UAT automation at 80%, from the test report".
 
-## Scoring yourself
+## Your review
 
-Pick the band that fits and say why. Bands 1 and 2 need at least two pieces of evidence: records from your check-ins, links or goal values.
+Say how each goal ended, then pick the overall rating that fits and say why. Both "Exceeded" ratings need at least two examples: records from your check-ins, links or goal values.

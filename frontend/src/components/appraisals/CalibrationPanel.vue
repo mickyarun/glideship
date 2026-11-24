@@ -14,23 +14,23 @@
  * limitations under the License.
  -->
 
-<!-- HR's calibration: each manager's spread of bands, how often they kept
-     the self-score, big gaps and flags; then each person, to open, send
+<!-- HR's fairness check: each manager's spread of ratings, how often they
+     agreed with the person, big differences and flags; then each person, to open, send
      back or share. Bands and states only, never reasons. -->
 <template>
   <section class="calib" aria-labelledby="calib-title">
-    <h2 id="calib-title" class="calib__title">Calibration</h2>
+    <h2 id="calib-title" class="calib__title">Fairness check</h2>
     <p v-if="!calibration.teams.length" class="calib__empty">No manager has submitted a review yet.</p>
     <div v-else class="calib__scroll">
       <table class="calib__table">
         <thead>
-          <tr><th>Manager</th><th>Reviewed</th><th v-for="b in 5" :key="b">{{ b }}</th><th>Kept self-score</th><th>Gaps of 2+</th><th></th></tr>
+          <tr><th>Manager</th><th>Reviewed</th><th v-for="b in BANDS" :key="b.value">{{ b.label }}</th><th>Manager agreed</th><th>Big differences</th><th></th></tr>
         </thead>
         <tbody>
           <tr v-for="team in calibration.teams" :key="team.manager_name">
             <td>{{ team.manager_name }}</td>
             <td>{{ team.people }}</td>
-            <td v-for="b in 5" :key="b">{{ team.bands[String(b)] ?? 0 }}</td>
+            <td v-for="b in BANDS" :key="b.value">{{ team.bands[String(b.value)] ?? 0 }}</td>
             <td>{{ team.agreement === null ? '–' : `${Math.round(team.agreement * 100)}%` }}</td>
             <td>{{ team.gaps }}</td>
             <td class="calib__flag">{{ team.flag ?? '' }}</td>
@@ -41,15 +41,15 @@
     <div class="calib__scroll">
       <table class="calib__table">
         <thead>
-          <tr><th>Person</th><th>Manager</th><th>Stage</th><th>Self</th><th>Final</th><th>Feedback</th><th></th></tr>
+          <tr><th>Person</th><th>Manager</th><th>Stage</th><th>Their rating</th><th>Final</th><th>Notes</th><th></th></tr>
         </thead>
         <tbody>
           <tr v-for="person in calibration.people" :key="person.appraisal_id" :class="{ 'calib__gap': person.gap }">
             <td>{{ person.name }}</td>
             <td>{{ person.manager_name }}</td>
             <td>{{ STATUS_LABELS[person.status] }}</td>
-            <td>{{ person.self_band ?? '–' }}</td>
-            <td>{{ person.final_band ?? '–' }}<template v-if="person.gap"> · gap</template></td>
+            <td>{{ bandLabel(person.self_band) || '–' }}</td>
+            <td>{{ bandLabel(person.final_band) || '–' }}<template v-if="person.gap"> · big difference</template></td>
             <td>{{ person.feedback_done }}/{{ person.feedback }}</td>
             <td><v-btn size="small" variant="text" :to="{ name: 'appraisal-review', params: { id: person.appraisal_id } }">Open</v-btn></td>
           </tr>
@@ -61,6 +61,7 @@
 
 <script setup lang="ts">
 import type { Calibration } from '@/types/appraisalReview'
+import { BANDS, bandLabel } from '@/utils/appraisalBands'
 import { STATUS_LABELS } from '@/utils/appraisalSetup'
 
 defineProps<{ calibration: Calibration }>()

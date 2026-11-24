@@ -12,6 +12,6 @@ When AI drafting is off, you see the same records as a plain list and write your
 
 - Your check-ins: you, your managers and HR.
 - Your manager's feedback: you, as soon as they save it.
-- Your self-score: you, then your manager and HR once you submit it.
+- Your review: you, then your manager and HR once you send it.
 - Your manager's score and reasons: you, once HR shares the result.
 - Answers only your manager gives, such as readiness for the next level: never you.
