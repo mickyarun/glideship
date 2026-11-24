@@ -33,6 +33,9 @@ export interface AppraisalSettings {
   checkin_cadence: Cadence
   feedback_cadence: FeedbackCadence
   ai_enabled: boolean
+  /** Working days after a check-in's month ends. */
+  checkin_due_days: number
+  /** Working days after the check-in is sent. */
   feedback_due_days: number
   self_due_days: number
   manager_due_days: number
@@ -63,6 +66,7 @@ export interface CycleRead {
   review_period: ReviewPeriod
   checkin_cadence: Cadence
   feedback_cadence: FeedbackCadence
+  checkin_due_days: number
   feedback_due_days: number
   reminder_offsets: number[]
   overdue_nudge: boolean
@@ -92,6 +96,7 @@ export type CycleUpdate = Partial<
     | 'ack_due'
     | 'checkin_cadence'
     | 'feedback_cadence'
+    | 'checkin_due_days'
     | 'feedback_due_days'
     | 'reminder_offsets'
     | 'overdue_nudge'

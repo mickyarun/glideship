@@ -22,6 +22,8 @@ export interface TimelineMonth {
   check_in_id: string
   period_start: string
   status: CheckInStatus
+  /** Not sent yet: to anyone but the person, the note and links are empty. */
+  sent: boolean
   facts: FactView[]
   note: CheckInNote
   links: CheckInLink[]

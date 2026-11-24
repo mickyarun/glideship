@@ -66,7 +66,8 @@ class FeedbackRow(BaseModel):
     period_start: date
     period_end: date
     cadence: CheckInCadence
-    due_on: date
+    # Empty until the check-in it answers is sent.
+    due_on: date | None
     status: FeedbackStatus
     overdue: bool
     check_ins: int
@@ -83,7 +84,8 @@ class FeedbackRead(BaseModel):
     period_start: date
     period_end: date
     cadence: CheckInCadence
-    due_on: date
+    # Empty until the check-in it answers is sent.
+    due_on: date | None
     status: FeedbackStatus
     done_at: datetime | None
     overdue: bool
@@ -92,6 +94,10 @@ class FeedbackRead(BaseModel):
     try_next: str
     goals: list[FeedbackGoal]
     check_ins: list[FeedbackCheckIn]
+    sent_at: datetime | None = None
+    edited_after_send_at: datetime | None = None
+    # Not sent yet and not the caller's: what it says is left out.
+    content_hidden: bool = False
 
 
 class FeedbackShown(BaseModel):

@@ -15,7 +15,7 @@
 """Check-ins over the API: what the employee writes, and what anyone reads."""
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Self
 
@@ -157,8 +157,16 @@ class CheckInRead(BaseModel):
     identity_warnings: list[dict[str, str]]
     # The review this check-in belongs to: its goals page hangs off it.
     appraisal_id: uuid.UUID | None = None
-    # The manager's feedback answering this check-in, once some is written.
+    # The manager's feedback answering this check-in, once it is sent.
     feedback: FeedbackShown | None = None
+    due_on: date | None = None
+    sent_at: datetime | None = None
+    edited_after_send_at: datetime | None = None
+    late: bool = False
+    # The person may send it now (theirs, open, not sent yet).
+    can_send: bool = False
+    # Not sent yet and not the caller's: what the person wrote is left out.
+    content_hidden: bool = False
 
 
 class CheckInSummary(BaseModel):
@@ -172,3 +180,6 @@ class CheckInSummary(BaseModel):
     status: CheckInStatus
     closed: bool
     fact_count: int
+    due_on: date | None = None
+    sent_at: datetime | None = None
+    late: bool = False

@@ -33,7 +33,7 @@ from app.schemas.appraisal_review import (
     TimelineMonth,
 )
 from app.services.appraisals import audit, crypto
-from app.services.appraisals.access import AppraisalAccess
+from app.services.appraisals.access import AppraisalAccess, reads_content
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.context import Caller
 from app.services.appraisals.evidence import ids_of
@@ -100,14 +100,23 @@ async def read_review(
         shown = for_viewer(facts, is_self=ctx.is_self, perms=caller.perms, boards=boards)
         return [FactView.model_validate(f) for f in shown]
 
-    links = await repo.links_for([c.id for c in months])
+    # A month not sent yet shows its facts but not what the person wrote.
+    readable = {
+        c.id
+        for c in months
+        if reads_content(caller.user_id, profile.user_id, c.sent_at is not None)
+    }
+    links = await repo.links_for(list(readable))
     timeline = [
         TimelineMonth(
             check_in_id=c.id,
             period_start=c.period_start,
             status=c.status,
+            sent=c.sent_at is not None,
             facts=view(list(c.fact_refs or [])),
-            note=CheckInNote.model_validate(crypto.unseal_json(c, "employee_note") or {}),
+            note=CheckInNote.model_validate(
+                (crypto.unseal_json(c, "employee_note") if c.id in readable else None) or {}
+            ),
             links=[
                 LinkRead(
                     id=link.id,
@@ -116,7 +125,7 @@ async def read_review(
                     heading=link.heading,
                     goal_id=link.goal_id,
                 )
-                for link in links[c.id]
+                for link in links.get(c.id, [])
             ],
         )
         for c in months

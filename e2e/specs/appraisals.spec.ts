@@ -66,14 +66,16 @@ test('a manual review from check-in to growth conversation', async ({ signedIn, 
   await employee.getByLabel('Delivery & quality, line 1').fill('Ran the daily suite; caught 3 regressions')
   await employee.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(employee.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  await employee.getByRole('button', { name: 'Send to Maya' }).click()
+  await expect(employee.getByRole('button', { name: 'Send to Maya' })).toBeHidden()
 
   const manager = await signedIn(org.members.mgr)
   await openAppraisals(manager, '/appraisals/team')
   await manager.getByRole('link', { name: 'Write feedback' }).click()
   await manager.getByLabel('Keep doing').fill('Catching regressions before UAT')
   await manager.getByLabel('Try next').fill('Pair on the refunds tests')
-  await manager.getByRole('button', { name: 'Mark done' }).click()
-  await expect(manager.getByText('Marked done.')).toBeVisible()
+  await manager.getByRole('button', { name: 'Send to Eli' }).click()
+  await expect(manager.getByText('Sent. Eli can read it now.')).toBeVisible()
   await employee.reload()
   await expect(employee.getByText('Keep: Catching regressions before UAT')).toBeVisible()
 

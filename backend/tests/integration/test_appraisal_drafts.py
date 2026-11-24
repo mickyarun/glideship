@@ -236,6 +236,8 @@ async def test_period_summary_cites_months_and_facts(
     row = await _sweep(pg_session_factory, m)
     me = as_user(m.people["emp"], m.org)
     await client.put(f"{CHECK_INS}/{row.id}/note", json={"blocking": "Access logs"}, headers=me)
+    # Only a sent check-in's words reach the summary the manager reads.
+    assert (await client.post(f"{CHECK_INS}/{row.id}/send", headers=me)).status_code == 200
     async with pg_session_factory() as db:
         queued = await AppraisalRepository(db, org_id=m.org).queue_summaries(row.cycle_id)
         await db.commit()

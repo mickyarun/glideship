@@ -30,7 +30,8 @@
     <FormStep :number="2" :title="`How the ${period} runs`" hint="Filled in from Settings. Changes here apply to this cycle only.">
       <CycleRhythm v-model:check-ins="form.checkin_cadence" v-model:notes="form.feedback_cadence" :review="cycle.review_period" />
       <div class="setup__row">
-        <v-text-field v-model.number="form.feedback_due_days" type="number" min="1" max="60" label="Manager notes due, days after" hide-details="auto" />
+        <v-text-field v-model.number="form.checkin_due_days" type="number" min="1" max="20" label="Check-in due, working days after" hide-details="auto" />
+        <v-text-field v-model.number="form.feedback_due_days" type="number" min="1" max="20" label="Note due, working days after sending" hide-details="auto" />
         <v-text-field v-model="form.self_due" type="date" label="Their review due" hide-details="auto" />
         <v-text-field v-model="form.manager_due" type="date" label="Manager review due" hide-details="auto" />
         <v-text-field v-model="form.ack_due" type="date" label="Read the result by" hide-details="auto" />
@@ -100,7 +101,7 @@ const problem = computed(() =>
 }
 .setup__row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
 }
 .setup__more summary {
@@ -112,10 +113,5 @@ const problem = computed(() =>
 .setup__save {
   display: flex;
   justify-content: flex-end;
-}
-@media (max-width: 700px) {
-  .setup__row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 </style>

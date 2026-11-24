@@ -60,11 +60,12 @@ export function feedbackGroups(rows: FeedbackRow[]): FeedbackGroup[] {
     .map(([key, items]) => {
       const first = items[0]
       const done = items.filter(r => r.status === 'done').length
+      const due = first.due_on ? `due ${longDate(first.due_on)}` : 'due once the check-in is sent'
       const sorted = [...items].sort((a, b) => a.person_name.localeCompare(b.person_name))
       return {
         key,
         title: `${feedbackPeriod(first.period_start, first.cadence)} feedback`,
-        detail: `${CADENCE_WORD[first.cadence]}, for your reports · due ${longDate(first.due_on)} · ${done} of ${items.length} written`,
+        detail: `${CADENCE_WORD[first.cadence]}, for your reports · ${due} · ${done} of ${items.length} sent`,
         rows: sorted,
       }
     })

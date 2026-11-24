@@ -74,7 +74,7 @@ class AppraisalCycle(BaseModel):
             name="ck_appraisal_cycles_cutoff",
         ),
         CheckConstraint(
-            "feedback_due_days >= 0 AND hr_overdue_offset >= 0",
+            "feedback_due_days >= 0 AND checkin_due_days >= 1 AND hr_overdue_offset >= 0",
             name="ck_appraisal_cycles_offsets",
         ),
         Index("ix_appraisal_cycles_org_period", "org_id", "period_start"),
@@ -104,6 +104,9 @@ class AppraisalCycle(BaseModel):
     feedback_cadence: Mapped[FeedbackCadence] = mapped_column(
         pg_enum(FeedbackCadence, "appraisal_feedback_cadence"), nullable=False
     )
+    # Working days after a check-in period ends that the check-in is due.
+    checkin_due_days: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="5")
+    # Working days after a check-in is sent that the manager's note is due.
     feedback_due_days: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     # Working days relative to each due date, e.g. [-3, 0, 2].
     reminder_offsets: Mapped[list[int]] = mapped_column(ARRAY(SmallInteger), nullable=False)

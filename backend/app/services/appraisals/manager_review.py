@@ -62,7 +62,7 @@ async def _apply(
     _open(ctx)
     appraisal = ctx.appraisal
     own_band = submitted_band(appraisal)
-    pool = await evidence_pool(db, appraisal)
+    pool = await evidence_pool(db, appraisal, by_person=False)
     goals = await period_goals(db, ctx)
     evidence = pick(pool, body.evidence)
     band = BandDecision(body.agree, body.band, body.reason, len(evidence))

@@ -90,6 +90,7 @@ async def create_cycle(
         review_period=review,
         checkin_cadence=checkins,
         feedback_cadence=feedback,
+        checkin_due_days=settings.checkin_due_days,
         feedback_due_days=settings.feedback_due_days,
         reminder_offsets=list(settings.reminder_offsets),
         overdue_nudge=settings.overdue_nudge,

@@ -54,9 +54,11 @@ from app.repositories.appraisal_role_template import AppraisalRoleTemplateReposi
 from app.repositories.policy_holiday import PolicyHolidayRepository
 from app.services.appraisals.cadence import CADENCE_MONTHS, slices
 from app.services.appraisals.check_in_builder import create_check_in, refresh_check_in
+from app.services.appraisals.due_dates import check_in_due
 from app.services.appraisals.enrolment import enrol_late_joiners
 from app.services.appraisals.feedback_open import feedback_pass
 from app.services.appraisals.review_start import pass_self_due
+from app.services.appraisals.work_calendar import load_calendars
 from app.services.leave.digest_settings import org_zone
 from app.services.scheduling.tick_loop import run_tick_loop
 
@@ -137,8 +139,12 @@ async def _person_pass(
     """Open, refresh and close one person's check-ins in one cycle."""
     latest = latest_ended(cycle, tick.today)
     if latest and latest[0] not in mine and should_open(cycle, appraisal, profile, latest, tick):
+        calendars = await load_calendars(db, cycle.org_id, {profile.user_id}, tick.today)
+        due_on = check_in_due(
+            latest[1], tick.today, cycle.checkin_due_days, calendars.of(profile.user_id)
+        )
         mine[latest[0]] = await create_check_in(
-            db, appraisal, profile, template, latest, loose, tick.zone, tick.now
+            db, appraisal, profile, template, latest, loose, tick.zone, tick.now, due_on
         )
     running = cycle.status is not CycleStatus.CLOSED
     for start, check_in in sorted(mine.items()):

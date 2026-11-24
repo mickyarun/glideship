@@ -111,8 +111,15 @@ async def check_in_input(db: AsyncSession, check_in: AppraisalCheckIn) -> DraftI
 
 
 async def _month(db: AsyncSession, check_in: AppraisalCheckIn) -> dict[str, Any]:
-    note = crypto.unseal_json(check_in, "employee_note") or {}
+    """One month for the period summary, which the manager and HR read.
+
+    A check-in never sent gives only its facts: what the person wrote in
+    it was never theirs to read.
+    """
+    sent = check_in.sent_at is not None
+    note = (crypto.unseal_json(check_in, "employee_note") if sent else None) or {}
     repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
+    values = await repo.goal_values(check_in.id) if sent else []
     return {
         "check_in": str(check_in.id),
         "period_start": check_in.period_start.isoformat(),
@@ -122,8 +129,7 @@ async def _month(db: AsyncSession, check_in: AppraisalCheckIn) -> dict[str, Any]
         "own_lines": note.get("lines", {}),
         "blocking": note.get("blocking", ""),
         "goal_values": [
-            {"goal_id": str(v.goal_id), "value": crypto.unseal(v, "value")}
-            for v in await repo.goal_values(check_in.id)
+            {"goal_id": str(v.goal_id), "value": crypto.unseal(v, "value")} for v in values
         ],
     }
 

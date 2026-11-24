@@ -66,7 +66,8 @@ class CycleUpdate(BaseModel):
     self_due: date | None = None
     manager_due: date | None = None
     ack_due: date | None = None
-    feedback_due_days: int | None = Field(None, ge=1, le=60)
+    checkin_due_days: int | None = Field(None, ge=1, le=20)
+    feedback_due_days: int | None = Field(None, ge=1, le=20)
     reminder_offsets: list[int] | None = Field(None, max_length=6)
     checkin_cadence: CheckInCadence | None = None
     feedback_cadence: FeedbackCadence | None = None
@@ -103,6 +104,7 @@ class CycleRead(BaseModel):
     review_period: ReviewPeriod
     checkin_cadence: CheckInCadence
     feedback_cadence: FeedbackCadence
+    checkin_due_days: int
     feedback_due_days: int
     reminder_offsets: list[int]
     overdue_nudge: bool

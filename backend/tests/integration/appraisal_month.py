@@ -86,3 +86,13 @@ async def october(client: AsyncClient, factory: Factory, *, ai: bool = False) ->
     assert activated.status_code == 200, activated.text
     await run_tick(factory, org, NOV_2)
     return Month(org, p, counted)
+
+
+async def send_check_in(client: AsyncClient, m: Month, who: str) -> str:
+    """Send one person's October check-in; returns its id."""
+    headers = as_user(m.people[who], m.org)
+    mine = (await client.get("/api/v1/check-ins/mine", headers=headers)).json()
+    october_id = next(c["id"] for c in mine if c["period_start"] == "2026-10-01")
+    sent = await client.post(f"/api/v1/check-ins/{october_id}/send", headers=headers)
+    assert sent.status_code == 200, sent.text
+    return str(october_id)

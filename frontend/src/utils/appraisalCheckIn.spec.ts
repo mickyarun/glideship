@@ -20,6 +20,7 @@ import {
   factsBySource,
   monthTitle,
   safeHref,
+  sendLine,
   statusLabel,
   tagFromValue,
   tagOptions,
@@ -37,6 +38,7 @@ function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
     status: 'open', closed: false, can_edit: true, drafting_mode: 'manual', draft_status: 'none',
     ai_lines: [], ai_hidden: false, can_regenerate: false, heading_meanings: {}, facts: [], fact_tags: {},
     note: { lines: {}, blocking: '', next_month: '' }, links: [], goals: [], identity_warnings: [], feedback: null, appraisal_id: null,
+    due_on: '2026-11-06', sent_at: null, edited_after_send_at: null, late: false, can_send: true, content_hidden: false,
     ...overrides,
   }
 }
@@ -119,4 +121,14 @@ describe('safeHref', () => {
     'refuses %s',
     url => expect(safeHref(url)).toBeNull(),
   )
+})
+
+describe('sendLine', () => {
+  it('says when it is due and whether it was sent, late or edited after', () => {
+    expect(sendLine(checkIn())).toBe('Due Fri 6 Nov 2026 · Not sent yet')
+    expect(sendLine(checkIn({ late: true }))).toBe('Due Fri 6 Nov 2026 · Late, not sent yet')
+    const sent = checkIn({ sent_at: '2026-11-05T09:00:00Z', edited_after_send_at: '2026-11-06T09:00:00Z' })
+    expect(sendLine(sent)).toBe('Due Fri 6 Nov 2026 · Sent Thu 5 Nov 2026, edited after sending')
+    expect(sendLine(checkIn({ due_on: null }))).toBe('Not sent yet')
+  })
 })

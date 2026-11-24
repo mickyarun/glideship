@@ -40,6 +40,8 @@ class TimelineMonth(BaseModel):
     check_in_id: uuid.UUID
     period_start: date
     status: CheckInStatus
+    # Not sent yet: to anyone but the person, the note and links are empty.
+    sent: bool
     facts: list[FactView]
     note: CheckInNote
     links: list[LinkRead]

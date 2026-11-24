@@ -24,8 +24,10 @@
       <v-btn v-if="store.current?.appraisal_id" variant="text" :to="{ name: 'appraisal-goals', params: { id: store.current.appraisal_id } }">My goals</v-btn>
       <v-btn variant="text" :to="{ name: 'appraisal-my-review' }">Your review</v-btn>
       <AppraisalGuide />
+      <v-btn v-if="store.current?.can_send" color="primary" :loading="sending" @click="send">Send to {{ manager }}</v-btn>
     </template>
-    <AppCallout v-if="store.listError || store.error" variant="error">{{ store.listError || store.error }}</AppCallout>
+    <AppCallout v-if="store.listError || store.error || sendProblem" variant="error">{{ sendProblem || store.listError || store.error }}</AppCallout>
+    <AppCallout v-if="store.current?.can_send" variant="info">Only you see this until you send it. {{ manager }} reads it after.</AppCallout>
     <v-progress-linear v-if="(store.listLoading || store.loading) && !store.current" indeterminate color="primary" />
     <p v-else-if="!store.listLoading && !store.mine.length" class="my-month__empty">
       No check-ins yet. Your first one opens on the first working day after a month in an appraisal cycle ends.
@@ -43,10 +45,14 @@ import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
 import CheckInPage from '@/components/appraisals/CheckInPage.vue'
 import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import { useCheckInsStore } from '@/stores/checkIns'
-import { availabilityLine, monthTitle } from '@/utils/appraisalCheckIn'
+import { availabilityLine, monthTitle, sendLine } from '@/utils/appraisalCheckIn'
+import { firstName } from '@/utils/appraisalReview'
 
 const store = useCheckInsStore()
 const selected = ref<string | null>(null)
+const sending = ref(false)
+const sendProblem = ref('')
+const manager = computed(() => firstName(store.current?.manager_name, 'your manager'))
 
 const monthOptions = computed(() =>
   store.mine.slice(0, 6).map(c => ({ label: monthTitle(c.period_start), value: c.id })),
@@ -60,9 +66,16 @@ const title = computed(() => {
 const subtitle = computed(() => {
   const current = store.current
   if (!current) return ''
-  const next = current.can_edit ? ' · Open until the next check-in opens' : ''
-  return `${availabilityLine(current)}${next}`
+  return `${availabilityLine(current)} · ${sendLine(current)}`
 })
+
+async function send(): Promise<void> {
+  const current = store.current
+  if (!current) return
+  sending.value = true
+  sendProblem.value = (await store.send(current.id)) ?? ''
+  sending.value = false
+}
 
 async function pick(id: string): Promise<void> {
   selected.value = id

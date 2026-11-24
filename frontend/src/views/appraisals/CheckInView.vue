@@ -23,6 +23,9 @@
     </template>
     <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
     <v-progress-linear v-if="store.loading && !store.current" indeterminate color="primary" />
+    <AppCallout v-if="store.current?.content_hidden" variant="info">
+      {{ store.current.person_name }} hasn't sent this check-in yet. You'll read what they wrote once they do; the work below is what Glideship recorded.
+    </AppCallout>
     <CheckInPage v-if="store.current" :check-in="store.current" />
   </AppPage>
 </template>
@@ -34,7 +37,7 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import CheckInPage from '@/components/appraisals/CheckInPage.vue'
 import { useCheckInsStore } from '@/stores/checkIns'
-import { availabilityLine, monthTitle } from '@/utils/appraisalCheckIn'
+import { availabilityLine, monthTitle, sendLine } from '@/utils/appraisalCheckIn'
 
 const route = useRoute()
 const store = useCheckInsStore()
@@ -43,7 +46,7 @@ const title = computed(() =>
   store.current ? `${store.current.person_name}'s ${monthTitle(store.current.period_start)}` : 'Check-in',
 )
 const subtitle = computed(() =>
-  store.current ? `${availabilityLine(store.current)} · Only ${store.current.person_name} writes here` : '',
+  store.current ? `${availabilityLine(store.current)} · ${sendLine(store.current)}` : '',
 )
 
 watch(

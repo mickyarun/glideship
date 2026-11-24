@@ -37,6 +37,7 @@ from app.schemas.appraisal_guide import GuideRead
 from app.services.appraisals import check_in_writes
 from app.services.appraisals.check_in_lists import my_check_ins, team_check_ins
 from app.services.appraisals.check_in_read import read_check_in
+from app.services.appraisals.check_in_send import send_check_in
 from app.services.appraisals.context import Caller, CheckInContext, check_in_context
 from app.services.appraisals.errors import AppraisalNotFoundError
 from app.services.appraisals.guide import guide
@@ -101,6 +102,18 @@ async def post_regenerate(
     """Ask for a fresh AI draft, before the person has added anything."""
     ctx = await check_in_context(db, caller, check_in_id)
     await check_in_writes.regenerate(db, ctx)
+    return await read_check_in(db, caller, ctx, log_view=False)
+
+
+@router.post("/{check_in_id}/send", response_model=CheckInRead)
+async def post_send(
+    check_in_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> CheckInRead:
+    """Send the check-in: from now on the manager and HR read it."""
+    ctx = await _own(db, caller, check_in_id)
+    await send_check_in(db, ctx, caller.user_id)
     return await read_check_in(db, caller, ctx, log_view=False)
 
 

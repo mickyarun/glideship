@@ -29,6 +29,13 @@ The rules, by who the caller is to the person:
 * anyone else: nothing. Callers answer "not found" so a record's
   existence isn't revealed.
 
+Check-ins and manager notes are their writer's alone until sent: the
+person writes their check-ins, the manager on the note writes the note.
+Until then everyone else (managers, HR, the person) sees that the record
+exists and when it is due, never what is in it (:func:`reads_content`).
+The facts Glideship recorded on a check-in aren't the person's writing
+and stay visible as before.
+
 Nobody acts on their own appraisal as a manager or as HR, the owner
 included: on your own record you are only the employee. "Own" means the
 same account; a second, unmerged account of the same person isn't
@@ -122,6 +129,15 @@ def relation_for(
         is_other_manager=is_manager and not is_primary,
         is_callers_manager=not is_self and subject_user_id in callers_manager_ids,
     )
+
+
+def reads_content(caller_id: uuid.UUID, writer_id: uuid.UUID, sent: bool) -> bool:
+    """Whether the caller may read what was written: once sent, or as its writer.
+
+    Applies on top of :class:`AppraisalAccess`, which decides whether the
+    caller sees the record at all.
+    """
+    return sent or caller_id == writer_id
 
 
 def access_for(perms: PermissionSet, relation: Relation, stage: Stage) -> AppraisalAccess:

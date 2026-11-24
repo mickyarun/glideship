@@ -26,6 +26,7 @@ export function cycleForm(c: CycleRead): Required<CycleUpdate> {
     ack_due: c.ack_due,
     checkin_cadence: c.checkin_cadence,
     feedback_cadence: c.feedback_cadence,
+    checkin_due_days: c.checkin_due_days,
     feedback_due_days: c.feedback_due_days,
     reminder_offsets: [...c.reminder_offsets],
     overdue_nudge: c.overdue_nudge,

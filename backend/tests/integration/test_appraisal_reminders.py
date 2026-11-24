@@ -58,9 +58,28 @@ def slack(monkeypatch: pytest.MonkeyPatch, pg_session_factory: Factory) -> Slack
     return fake_slack(monkeypatch, pg_session_factory)
 
 
-async def _month(client: AsyncClient, factory: Factory) -> tuple[Month, dict[str, str]]:
-    """October, opened on 2 November, with everyone on Slack."""
+async def _month(
+    client: AsyncClient, factory: Factory, *, sent: bool = True
+) -> tuple[Month, dict[str, str]]:
+    """October, opened on 2 November, with everyone on Slack.
+
+    Both check-ins count as sent first thing on Monday 2 November, so both
+    notes are due five working days later, on Monday 9 November.
+    """
     m = await october(client, factory)
+    if sent:
+        async with factory() as db:
+            await db.execute(
+                update(AppraisalCheckIn)
+                .where(AppraisalCheckIn.org_id == m.org)
+                .values(sent_at=datetime(2026, 11, 2, 6, tzinfo=UTC))
+            )
+            await db.execute(
+                update(AppraisalManagerFeedback)
+                .where(AppraisalManagerFeedback.org_id == m.org)
+                .values(due_on=date(2026, 11, 9))
+            )
+            await db.commit()
     people = ("hr", "mgr", "emp", "quiet")
     ids = await link_slack(factory, m.org, *(m.people[p] for p in people))
     return m, {p: ids[m.people[p]] for p in people}
@@ -88,7 +107,7 @@ async def test_opening_day_tells_people_and_the_manager_once(
     assert set(sent) == {ids["emp"], ids["quiet"], ids["mgr"]}
     assert sent[ids["emp"]].startswith("Your October check-in is ready.")
     assert sent[ids["mgr"]].startswith(
-        "October feedback is open for your 2 reports. Due Tue 10 Nov."
+        "October feedback is open for your 2 reports. Due Mon 9 Nov."
     )
     assert "Priya" not in sent[ids["mgr"]] and "Meena" not in sent[ids["mgr"]]
     assert await _sent(slack, org, at(2, 11)) == {}
@@ -107,10 +126,10 @@ async def test_the_manager_is_reminded_on_the_schedule_and_hr_gets_the_list(
     m, ids = await _month(client, pg_session_factory)
     org = await _org(pg_session_factory, m.org)
     await _sent(slack, org, at(2))
-    before = await _sent(slack, org, at(5))
+    before = await _sent(slack, org, at(4))
     assert before == {ids["mgr"]: before[ids["mgr"]]}
-    assert before[ids["mgr"]].startswith("October feedback due Tue 10 Nov: 0 of 2 done.")
-    assert await _sent(slack, org, at(6)) == {}
+    assert before[ids["mgr"]].startswith("October feedback due Mon 9 Nov: 0 of 2 done.")
+    assert await _sent(slack, org, at(5)) == {}
     async with pg_session_factory() as db:
         item = (
             await db.scalars(
@@ -121,12 +140,12 @@ async def test_the_manager_is_reminded_on_the_schedule_and_hr_gets_the_list(
     mgr = as_user(m.people["mgr"], m.org)
     url = f"{FEEDBACK}/{item.id}"
     await client.put(url, json={"keep": "Clear PRs", "try_next": "Pair on UAT"}, headers=mgr)
-    assert (await client.post(f"{url}/done", headers=mgr)).status_code == 200
-    due = await _sent(slack, org, at(10))
+    assert (await client.post(f"{url}/send", headers=mgr)).status_code == 200
+    due = await _sent(slack, org, at(9))
     assert due[ids["mgr"]].startswith("October feedback is due today: 1 of 2 done.")
-    late = await _sent(slack, org, at(12))
-    assert late[ids["mgr"]].startswith("October feedback was due Tue 10 Nov: 1 of 2 done.")
-    hr_day = await _sent(slack, org, at(13))
+    late = await _sent(slack, org, at(11))
+    assert late[ids["mgr"]].startswith("October feedback was due Mon 9 Nov: 1 of 2 done.")
+    hr_day = await _sent(slack, org, at(12))
     assert set(hr_day) == {ids["hr"]}
     assert hr_day[ids["hr"]].startswith("Manager feedback still open past its due date: Ravi 1.")
 
@@ -140,10 +159,10 @@ async def test_nothing_once_everything_is_done(
     for row in (await client.get(f"{FEEDBACK}/team", headers=mgr)).json():
         url = f"{FEEDBACK}/{row['id']}"
         await client.put(url, json={"keep": "a", "try_next": "b"}, headers=mgr)
-        await client.post(f"{url}/done", headers=mgr)
+        await client.post(f"{url}/send", headers=mgr)
     opening = await _sent(slack, org, at(2))
     assert ids["mgr"] not in opening
-    for day in (5, 10, 12, 13):
+    for day in (4, 9, 11, 12):
         assert await _sent(slack, org, at(day)) == {}, day
 
 
@@ -154,7 +173,7 @@ async def test_a_muted_manager_still_appears_on_hrs_list(
     await mute(pg_session_factory, m.people["mgr"], "appraisal_reminders")
     org = await _org(pg_session_factory, m.org)
     assert ids["mgr"] not in await _sent(slack, org, at(2))
-    hr_day = await _sent(slack, org, at(13))
+    hr_day = await _sent(slack, org, at(12))
     assert hr_day[ids["hr"]].startswith("Manager feedback still open past its due date: Ravi 2.")
     async with pg_session_factory() as db:
         claim = await db.scalar(
@@ -165,6 +184,18 @@ async def test_a_muted_manager_still_appears_on_hrs_list(
             )
         )
     assert claim is not None and claim.status is DigestClaimStatus.SKIPPED
+
+
+async def test_a_note_waiting_on_an_unsent_check_in_is_not_reminded(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage, slack: Slack
+) -> None:
+    m, ids = await _month(client, pg_session_factory, sent=False)
+    org = await _org(pg_session_factory, m.org)
+    opening = await _sent(slack, org, at(2))
+    assert ids["mgr"] not in opening and ids["emp"] in opening
+    for day in (4, 9, 11, 12, 13):
+        assert ids["mgr"] not in await _sent(slack, org, at(day)), day
+        assert ids["hr"] not in await _sent(slack, org, at(day, 11)), day
 
 
 async def test_no_slack_means_no_claims(
@@ -206,7 +237,7 @@ async def test_an_item_opened_after_the_days_reminder_is_announced_next_time(
     assert await _sent(slack, org, at(2, 12)) == {}
     next_day = await _sent(slack, org, at(3))
     assert next_day[ids["mgr"]].startswith("October feedback is open for your 2 reports.")
-    assert await _sent(slack, org, at(4)) == {}
+    assert await _sent(slack, org, at(5)) == {}
 
 
 async def test_withdrawn_people_drop_out_of_reminders(
@@ -227,7 +258,7 @@ async def test_withdrawn_people_drop_out_of_reminders(
     opening = await _sent(slack, org, at(2))
     assert opening[ids["mgr"]].startswith("October feedback is open for your 1 report.")
     assert ids["emp"] not in opening
-    hr_day = await _sent(slack, org, at(13))
+    hr_day = await _sent(slack, org, at(12))
     assert hr_day[ids["hr"]].startswith("Manager feedback still open past its due date: Ravi 1.")
 
 

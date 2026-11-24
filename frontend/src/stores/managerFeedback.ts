@@ -64,8 +64,8 @@ export const useManagerFeedbackStore = defineStore('managerFeedback', () => {
 
   const save = (id: string, body: FeedbackBody) =>
     write(() => api.put<FeedbackRead>(`${BASE}/${id}`, body), "Couldn't save the feedback. Try again.")
-  const markDone = (id: string) =>
-    write(() => api.post<FeedbackRead>(`${BASE}/${id}/done`), "Couldn't mark it done. Try again.")
+  const send = (id: string) =>
+    write(() => api.post<FeedbackRead>(`${BASE}/${id}/send`), "Couldn't send it. Try again.")
 
-  return { team, current, teamError, error, loading, fetchTeam, fetchOne, save, markDone }
+  return { team, current, teamError, error, loading, fetchTeam, fetchOne, save, send }
 })

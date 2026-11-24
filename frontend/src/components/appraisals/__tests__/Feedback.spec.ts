@@ -33,6 +33,7 @@ function item(overrides: Partial<FeedbackRead> = {}): FeedbackRead {
     id: 'f1', profile_id: 'p1', person_name: 'Priya', manager_name: 'Ravi',
     period_start: '2026-10-01', period_end: '2026-10-31', cadence: 'monthly', due_on: '2026-11-10',
     status: 'open', done_at: null, overdue: false, can_edit: true, keep: '', try_next: '', goals: [],
+    sent_at: null, edited_after_send_at: null, content_hidden: false,
     check_ins: [{ id: 'c1', period_start: '2026-10-01', status: 'employee_added', closed: false }],
     ...overrides,
   }
@@ -83,7 +84,7 @@ describe('TeamFeedbackList', () => {
       },
     })
     expect(wrapper.find('.team-feedback__title').text()).toBe('October feedback')
-    expect(wrapper.find('.team-feedback__detail').text()).toBe('Monthly, for your reports · due Tue 10 Nov 2026 · 1 of 2 written')
+    expect(wrapper.find('.team-feedback__detail').text()).toBe('Monthly, for your reports · due Tue 10 Nov 2026 · 1 of 2 sent')
     expect(wrapper.find('.team-feedback__late').text()).toBe('Overdue')
     const links = wrapper.findAll('a')
     expect(links.map(a => a.text())).toEqual(['Write feedback', 'Open'])
@@ -100,30 +101,36 @@ describe('FeedbackView', () => {
     return wrapper
   }
 
-  it('saves both lines, and only marks done once both are written', async () => {
+  it('saves both lines, and only sends once both are written', async () => {
     const wrapper = await view(item())
     expect(apiGet).toHaveBeenCalledWith('/v1/manager-feedback/f1')
-    const done = () => wrapper.findAll('button').find(b => b.text() === 'Mark done')
+    const done = () => wrapper.findAll('button').find(b => b.text() === 'Send to Priya')
     expect(done()?.attributes('disabled')).toBeDefined()
     const [keep, tryNext] = wrapper.findAll('textarea:not(.v-textarea__sizer)')
     await keep.setValue('Clear PRs')
     await tryNext.setValue('Pair on UAT')
     apiPut.mockResolvedValue({ data: item({ keep: 'Clear PRs', try_next: 'Pair on UAT' }) })
-    apiPost.mockResolvedValue({ data: item({ keep: 'Clear PRs', try_next: 'Pair on UAT', status: 'done' }) })
+    apiPost.mockResolvedValue({ data: item({ keep: 'Clear PRs', try_next: 'Pair on UAT', status: 'done', sent_at: '2026-11-05T10:00:00Z' }) })
     await done()?.trigger('click')
     await flushPromises()
     expect(apiPut).toHaveBeenCalledWith('/v1/manager-feedback/f1', { keep: 'Clear PRs', try_next: 'Pair on UAT', goals: [] })
-    expect(apiPost).toHaveBeenCalledWith('/v1/manager-feedback/f1/done')
-    expect(wrapper.text()).toContain('Marked done.')
+    expect(apiPost).toHaveBeenCalledWith('/v1/manager-feedback/f1/send')
+    expect(wrapper.text()).toContain('Sent. Priya can read it now.')
   })
 
-  it('keeps the typing and never marks done when the save fails', async () => {
+  it("tells HR a note isn't sent yet rather than showing it", async () => {
+    const wrapper = await view(item({ can_edit: false, content_hidden: true, due_on: null }))
+    expect(wrapper.text()).toContain("Not sent yet. You'll read it once Ravi sends it.")
+    expect(wrapper.text()).toContain('Due once the check-in is sent')
+  })
+
+  it('keeps the typing and never sends when the save fails', async () => {
     const wrapper = await view(item())
     const [keep, tryNext] = wrapper.findAll('textarea:not(.v-textarea__sizer)')
     await keep.setValue('Clear PRs')
     await tryNext.setValue('Pair on UAT')
     apiPut.mockRejectedValue(new Error('offline'))
-    await wrapper.findAll('button').find(b => b.text() === 'Mark done')?.trigger('click')
+    await wrapper.findAll('button').find(b => b.text() === 'Send to Priya')?.trigger('click')
     await flushPromises()
     expect(apiPost).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Network error. Please check your connection.')

@@ -67,6 +67,8 @@ SEALED: tuple[SealedTable, ...] = (
         (
             "ai_period_summary",
             "self_reason",
+            "self_proud",
+            "self_differently",
             "manager_reason",
             "concern_note",
             "send_back_note",

@@ -91,8 +91,8 @@ describe('feedback groups', () => {
     ])
     expect(groups.map(g => g.title)).toEqual(['October feedback', 'September feedback'])
     expect(groups.map(g => g.detail)).toEqual([
-      'Monthly, for your reports · due Tue 10 Nov 2026 · 1 of 2 written',
-      'Monthly, for your reports · due Sat 10 Oct 2026 · 0 of 1 written',
+      'Monthly, for your reports · due Tue 10 Nov 2026 · 1 of 2 sent',
+      'Monthly, for your reports · due Sat 10 Oct 2026 · 0 of 1 sent',
     ])
     expect(groups[0].rows.map(r => r.person_name)).toEqual(['Meena', 'Sam'])
   })

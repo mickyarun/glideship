@@ -23,7 +23,7 @@ export function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
     ack_due: '2027-01-28', status: 'self_review', drafting_mode: 'manual', summary_status: 'none', summary: [],
     summary_hidden: false, period_facts: [],
     timeline: [{
-      check_in_id: 'c1', period_start: '2026-10-01', status: 'employee_added', note: { lines: {}, blocking: '', next_month: '' },
+      check_in_id: 'c1', period_start: '2026-10-01', status: 'employee_added', sent: true, note: { lines: {}, blocking: '', next_month: '' },
       facts: [{ source: 'board_cards', id: 'f1', key: 'OPS-1', title: 'Close', url: '/b', verb: 'done', done_at: null, private: false }],
       links: [{ id: 'l1', url: 'https://doc.test', title: 'Spec', heading: 'team', goal_id: null }],
     }],

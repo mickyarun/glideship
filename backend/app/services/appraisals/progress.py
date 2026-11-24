@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CheckInStatus, FeedbackStatus
+from app.models.appraisal_enums import AppraisalStatus, CheckInStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
@@ -88,7 +88,7 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
                 check_ins_added=sum(c.status is CheckInStatus.EMPLOYEE_ADDED for c in mine),
                 check_ins_missed=sum(c.status is CheckInStatus.MISSED for c in mine),
                 feedback=len(theirs),
-                feedback_done=sum(i.status is FeedbackStatus.DONE for i in theirs),
+                feedback_done=sum(i.sent_at is not None for i in theirs),
                 feedback_overdue=sum(late(i) for i in theirs),
             )
         )
@@ -96,7 +96,7 @@ async def cycle_progress(db: AsyncSession, caller: Caller, cycle: AppraisalCycle
     return CycleProgress(
         people=sorted(rows, key=lambda r: r.name.lower()),
         feedback=len(items),
-        feedback_done=sum(i.status is FeedbackStatus.DONE for i in items),
+        feedback_done=sum(i.sent_at is not None for i in items),
         managers_overdue=[
             ManagerOverdue(name=names.get(user_id, ""), overdue=count)
             for user_id, count in overdue.most_common()

@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Loading and writing one manager feedback item.
+"""Loading, writing and sending one manager note (a feedback item).
 
 The primary manager writes it while the cycle runs; the item must also be
-theirs, so a finished item stays with the manager who wrote it after the
-reporting line changes. The employee sees what is saved straight away.
-Marking it done needs both lines; goal statuses are optional and only
-quarterly items have them. The person sees the item once anything is saved.
+theirs, so a sent note stays with the manager who wrote it after the
+reporting line changes. Until it is sent only that manager reads it; the
+person doesn't see it at all, HR and other managers see that it exists.
+Sending needs both lines; goal statuses are optional and only quarterly
+items have them. After sending it can still change until its due date,
+and each change is marked.
 """
 
 import uuid
@@ -40,13 +42,15 @@ from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.employee_profile import EmployeeProfileRepository
 from app.schemas.appraisal_feedback import FeedbackBody
 from app.services.appraisals import audit, crypto
-from app.services.appraisals.access import AppraisalAccess
+from app.services.appraisals.access import AppraisalAccess, reads_content
 from app.services.appraisals.context import Caller, rights_over, stage_for
+from app.services.appraisals.due_dates import may_change_after_send
 from app.services.appraisals.errors import (
     AppraisalConflictError,
     AppraisalInvalidError,
     AppraisalNotFoundError,
 )
+from app.services.appraisals.org_clock import org_today
 
 NOT_FOUND = "Feedback not found."
 
@@ -68,14 +72,14 @@ class FeedbackContext:
         return self.access.write_feedback and self.item.manager_user_id == self.caller_id
 
     @property
-    def written(self) -> bool:
-        """Something is saved, so the employee sees it."""
-        return written(self.item)
+    def readable(self) -> bool:
+        """The caller may read what is written: it was sent, or it is theirs."""
+        return reads_content(self.caller_id, self.item.manager_user_id, sent(self.item))
 
 
-def written(item: AppraisalManagerFeedback) -> bool:
-    """A line or a goal status is saved: the employee sees the item from then on."""
-    return item.keep_note is not None or item.try_note is not None or bool(item.goal_status)
+def sent(item: AppraisalManagerFeedback) -> bool:
+    """The manager sent it: the person and HR read it from then on."""
+    return item.sent_at is not None
 
 
 async def feedback_context(
@@ -83,7 +87,7 @@ async def feedback_context(
 ) -> FeedbackContext:
     """Load an item the caller may see; "not found" otherwise.
 
-    The employee only sees an item once the manager has written something.
+    The person only sees an item once the manager has sent it.
     """
     item = await AppraisalFeedbackRepository(db, org_id=caller.org_id).get_by_id(feedback_id)
     if item is None:
@@ -97,7 +101,7 @@ async def feedback_context(
     cycle = await AppraisalCycleRepository(db, org_id=caller.org_id).get_by_id(item.cycle_id)
     access = await rights_over(db, caller, profile, appraisal, stage_for(appraisal, cycle))
     ctx = FeedbackContext(item, profile, appraisal, cycle, access, caller.user_id)
-    hidden = caller.user_id == profile.user_id and not ctx.written
+    hidden = caller.user_id == profile.user_id and not ctx.readable
     if not access.view_feedback or hidden:
         raise AppraisalNotFoundError(NOT_FOUND)
     return ctx
@@ -128,14 +132,19 @@ async def _goal_checks(
 async def save_feedback(
     db: AsyncSession, caller: Caller, ctx: FeedbackContext, body: FeedbackBody
 ) -> None:
-    """Store the lines and, when sent, the goal statuses; an empty line clears it.
+    """Store the lines and, when given, the goal statuses; an empty line clears it.
 
-    Changing what the person may already have read is audited, ids only.
+    After sending, both lines must stay and changes stop at the due date;
+    changing what the person may already have read is audited, ids only.
     """
     if not ctx.can_edit:
         raise AppraisalConflictError("Only the person's manager can write this feedback now.")
     item = ctx.item
-    seen = written(item)
+    seen = sent(item)
+    if seen and not may_change_after_send(
+        item.due_on, item.sent_at, await org_today(db, item.org_id)
+    ):
+        raise AppraisalConflictError("This note was sent and its due date has passed.")
     before = (crypto.unseal(item, "keep_note"), crypto.unseal(item, "try_note"), item.goal_status)
     keep, try_next = body.keep.strip(), body.try_next.strip()
     crypto.seal(item, "keep_note", keep)
@@ -144,11 +153,11 @@ async def save_feedback(
         goals, notes = await _goal_checks(db, ctx, body) if body.goals else ({}, {})
         item.goal_status = goals
         crypto.seal_json(item, "goal_notes", notes or None)
-    if item.status is FeedbackStatus.DONE and not (keep and try_next):
-        # Done means both lines are there; clearing one reopens it.
-        item.status, item.done_at = FeedbackStatus.OPEN, None
+    if seen and not (keep and try_next):
+        raise AppraisalInvalidError("A sent note keeps both lines.")
     after = (keep or None, try_next or None, item.goal_status)
     if seen and before != after:
+        item.edited_after_send_at = datetime.now(UTC)
         _audit(db, caller, ctx, EmployeeAuditAction.APPRAISAL_CHANGED)
     await db.flush()
 
@@ -167,15 +176,16 @@ def _audit(
     )
 
 
-async def mark_done(db: AsyncSession, caller: Caller, ctx: FeedbackContext) -> None:
-    """Mark the item done once both lines are written."""
+async def send_feedback(db: AsyncSession, caller: Caller, ctx: FeedbackContext) -> None:
+    """Send the note once both lines are written: the person and HR read it from now."""
     if not ctx.can_edit:
-        raise AppraisalConflictError("Only the person's manager can finish this feedback now.")
+        raise AppraisalConflictError("Only the person's manager can send this note now.")
     item = ctx.item
     if not (crypto.unseal(item, "keep_note") and crypto.unseal(item, "try_note")):
         raise AppraisalInvalidError("Write what to keep doing and what to try next first.")
-    if item.status is FeedbackStatus.DONE:
+    if sent(item):
         return
-    item.status, item.done_at = FeedbackStatus.DONE, datetime.now(UTC)
+    now = datetime.now(UTC)
+    item.status, item.done_at, item.sent_at = FeedbackStatus.DONE, now, now
     _audit(db, caller, ctx, EmployeeAuditAction.APPRAISAL_FEEDBACK_GIVEN)
     await db.flush()

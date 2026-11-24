@@ -34,7 +34,8 @@ export interface FeedbackRow {
   period_start: string
   period_end: string
   cadence: Cadence
-  due_on: string
+  /** Empty until the check-in it answers is sent. */
+  due_on: string | null
   status: FeedbackStatus
   overdue: boolean
   check_ins: number
@@ -56,9 +57,14 @@ export interface FeedbackRead {
   period_start: string
   period_end: string
   cadence: Cadence
-  due_on: string
+  /** Empty until the check-in it answers is sent. */
+  due_on: string | null
   status: FeedbackStatus
   done_at: string | null
+  sent_at: string | null
+  edited_after_send_at: string | null
+  /** Not sent yet and not the caller's: keep, try next and goals are left out. */
+  content_hidden: boolean
   overdue: boolean
   can_edit: boolean
   keep: string

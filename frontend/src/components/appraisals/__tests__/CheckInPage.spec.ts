@@ -35,6 +35,7 @@ function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
     identity_warnings: [],
     feedback: null,
     appraisal_id: null,
+    due_on: '2026-11-06', sent_at: null, edited_after_send_at: null, late: false, can_send: true, content_hidden: false,
     ...overrides,
   }
 }

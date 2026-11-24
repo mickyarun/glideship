@@ -144,8 +144,15 @@ export const useCheckInsStore = defineStore('checkIns', () => {
     )
   }
 
+  /** Send the check-in: from now on the manager and HR read it. */
+  async function send(id: string): Promise<string | null> {
+    const problem = await write(() => api.post(`${BASE}/${id}/send`), "Couldn't send it. Try again.")
+    if (!problem) await fetchMine()
+    return problem
+  }
+
   return {
     mine, team, current, loading, error, listLoading, listError,
-    fetchMine, fetchTeam, fetchOne, refreshDraft, regenerate, saveNote, saveTag, addLink, removeLink, saveGoalValue,
+    fetchMine, fetchTeam, fetchOne, refreshDraft, regenerate, saveNote, saveTag, addLink, removeLink, saveGoalValue, send,
   }
 })

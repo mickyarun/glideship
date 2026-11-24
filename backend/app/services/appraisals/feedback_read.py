@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import FeedbackStatus, GoalCheck
+from app.models.appraisal_enums import GoalCheck
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -35,13 +35,14 @@ from app.schemas.appraisal_feedback import (
 )
 from app.services.appraisals import audit, crypto
 from app.services.appraisals.context import Caller, CheckInContext
-from app.services.appraisals.feedback import FeedbackContext, written
+from app.services.appraisals.due_dates import is_late
+from app.services.appraisals.feedback import FeedbackContext, sent
 from app.services.appraisals.org_clock import org_today
 
 
 def is_overdue(item: AppraisalManagerFeedback, today: date) -> bool:
-    """Still open after its due date (pure)."""
-    return item.status is FeedbackStatus.OPEN and today > item.due_on
+    """Late: past its due date and not sent (pure)."""
+    return is_late(item.due_on, item.sent_at, today)
 
 
 def in_period(check_in: AppraisalCheckIn, item: AppraisalManagerFeedback) -> bool:
@@ -91,6 +92,8 @@ async def read_feedback(
     users = UserRepository(db)
     person = await users.get_by_id_in_org(profile.user_id, caller.org_id)
     manager = await users.get_by_id_in_org(item.manager_user_id, caller.org_id)
+    # Until sent, only the manager writing it reads what it says.
+    readable = ctx.readable
     check_ins = await AppraisalCheckInRepository(db, org_id=caller.org_id).for_person_in_cycle(
         profile.id, item.cycle_id
     )
@@ -107,9 +110,12 @@ async def read_feedback(
         done_at=item.done_at,
         overdue=is_overdue(item, await org_today(db, caller.org_id)),
         can_edit=ctx.can_edit,
-        keep=crypto.unseal(item, "keep_note") or "",
-        try_next=crypto.unseal(item, "try_note") or "",
-        goals=await _goals(db, item, ctx.cycle),
+        keep=(crypto.unseal(item, "keep_note") if readable else None) or "",
+        try_next=(crypto.unseal(item, "try_note") if readable else None) or "",
+        goals=await _goals(db, item, ctx.cycle) if readable else [],
+        sent_at=item.sent_at,
+        edited_after_send_at=item.edited_after_send_at,
+        content_hidden=not readable,
         check_ins=[
             FeedbackCheckIn(
                 id=c.id,
@@ -124,7 +130,7 @@ async def read_feedback(
 
 
 async def shown_on_check_in(db: AsyncSession, ctx: CheckInContext) -> FeedbackShown | None:
-    """The feedback answering this check-in, once the manager has written some.
+    """The feedback answering this check-in, once the manager has sent it.
 
     Monthly feedback sits on its month; quarterly feedback on the quarter's
     last check-in.
@@ -135,7 +141,7 @@ async def shown_on_check_in(db: AsyncSession, ctx: CheckInContext) -> FeedbackSh
     item = await AppraisalFeedbackRepository(db, org_id=check_in.org_id).covering(
         check_in.cycle_id, check_in.profile_id, check_in.period_end
     )
-    if item is None or not written(item):
+    if item is None or not sent(item):
         return None
     manager = await UserRepository(db).get_by_id_in_org(item.manager_user_id, item.org_id)
     return FeedbackShown(
@@ -143,7 +149,7 @@ async def shown_on_check_in(db: AsyncSession, ctx: CheckInContext) -> FeedbackSh
         period_start=item.period_start,
         period_end=item.period_end,
         cadence=item.cadence,
-        done=item.status is FeedbackStatus.DONE,
+        done=sent(item),
         keep=crypto.unseal(item, "keep_note") or "",
         try_next=crypto.unseal(item, "try_note") or "",
         goals=[g for g in await _goals(db, item, ctx.cycle) if g.status is not None],

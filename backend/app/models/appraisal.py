@@ -129,11 +129,15 @@ class Appraisal(BaseModel):
 
     self_band: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     self_reason: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # The two open answers: what they're most proud of, what they'd do differently.
+    self_proud: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    self_differently: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     # Fact refs cited for the band, as in ``AppraisalCheckIn.fact_refs``.
     self_evidence: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
     manager_band: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # The manager's words to the person: always written, read in the result.
     manager_reason: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     manager_evidence: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, default=list

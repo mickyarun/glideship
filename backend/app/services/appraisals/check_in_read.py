@@ -37,9 +37,12 @@ from app.schemas.appraisal_check_in import (
     LinkRead,
 )
 from app.services.appraisals import audit, crypto
+from app.services.appraisals.access import reads_content
 from app.services.appraisals.context import Caller, CheckInContext, may_regenerate
+from app.services.appraisals.due_dates import is_late, may_change_after_send
 from app.services.appraisals.fact_view import board_ids, for_viewer
 from app.services.appraisals.feedback_read import shown_on_check_in
+from app.services.appraisals.org_clock import org_today
 
 
 async def read_check_in(
@@ -87,12 +90,20 @@ async def read_check_in(
     )
     mode = ctx.appraisal.drafting_mode if ctx.appraisal else DraftingMode.MANUAL
     shown = for_viewer(facts, is_self=is_self, perms=caller.perms, boards=boards)
+    # Until it is sent, what the person wrote (lines, links, tags, values and
+    # the draft written for them) is theirs alone; the facts stay visible.
+    readable = reads_content(caller.user_id, profile.user_id, check_in.sent_at is not None)
+    if not readable:
+        values = {}
     # The summary is written from every fact; if any is private to this
     # viewer, the prose could name it, so they don't get the summary.
     # A redraft under way or failed keeps showing the lines it would replace.
     drafted = check_in.ai_summary is not None
     hidden = drafted and any(f["private"] for f in shown)
-    lines = crypto.unseal_json(check_in, "ai_summary") if drafted and not hidden else None
+    lines = (
+        crypto.unseal_json(check_in, "ai_summary") if drafted and not hidden and readable else None
+    )
+    today = await org_today(db, org_id)
     return CheckInRead(
         id=check_in.id,
         profile_id=profile.id,
@@ -105,7 +116,7 @@ async def read_check_in(
         available_days=check_in.available_days,
         status=check_in.status,
         closed=check_in.closed_at is not None,
-        can_edit=ctx.is_open,
+        can_edit=ctx.is_open and may_change_after_send(check_in.due_on, check_in.sent_at, today),
         drafting_mode=mode,
         draft_status=check_in.draft_status,
         ai_lines=[AiLine.model_validate(line) for line in lines or []],
@@ -113,8 +124,10 @@ async def read_check_in(
         can_regenerate=may_regenerate(ctx),
         heading_meanings=dict(template.heading_meanings) if template else {},
         facts=[FactView.model_validate(f) for f in shown],
-        fact_tags=_tags(check_in.fact_tags or {}),
-        note=CheckInNote.model_validate(crypto.unseal_json(check_in, "employee_note") or {}),
+        fact_tags=_tags(check_in.fact_tags or {}) if readable else {},
+        note=CheckInNote.model_validate(
+            (crypto.unseal_json(check_in, "employee_note") if readable else None) or {}
+        ),
         links=[
             LinkRead(
                 id=link.id,
@@ -123,7 +136,7 @@ async def read_check_in(
                 heading=link.heading,
                 goal_id=link.goal_id,
             )
-            for link in await repo.links(check_in.id)
+            for link in (await repo.links(check_in.id) if readable else [])
         ],
         goals=[_goal_item(g, values.get(g.id)) for g in goals],
         # Only the person and HR act on a possible duplicate account.
@@ -132,6 +145,12 @@ async def read_check_in(
         ),
         appraisal_id=ctx.appraisal.id if ctx.appraisal else None,
         feedback=await shown_on_check_in(db, ctx),
+        due_on=check_in.due_on,
+        sent_at=check_in.sent_at,
+        edited_after_send_at=check_in.edited_after_send_at,
+        late=is_late(check_in.due_on, check_in.sent_at, today),
+        can_send=ctx.is_open and is_self and check_in.sent_at is None,
+        content_hidden=not readable,
     )
 
 

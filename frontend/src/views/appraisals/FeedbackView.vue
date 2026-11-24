@@ -24,8 +24,9 @@
     <v-progress-linear v-if="store.loading && !item" indeterminate color="primary" />
     <template v-if="item">
       <AppCallout v-if="item.can_edit" variant="info">
-        {{ item.person_name || 'They' }} sees what you save straight away. Write about the work, not the person.
+        Only you see this until you send it. Write about the work, not the person.
       </AppCallout>
+      <AppCallout v-else-if="item.content_hidden" variant="info">Not sent yet. You'll read it once {{ item.manager_name || 'the manager' }} sends it.</AppCallout>
       <AppCallout v-if="message" :variant="messageKind">{{ message }}</AppCallout>
       <section class="fb__check-ins" aria-label="Their check-ins">
         <h2 class="fb__heading">Their check-ins</h2>
@@ -53,7 +54,7 @@
       <div v-if="item.can_edit" class="fb__save">
         <v-btn variant="outlined" :loading="saving" :disabled="!dirty" @click="save">Save</v-btn>
         <v-btn color="primary" :loading="finishing" :disabled="!canFinish" @click="finish">
-          {{ item.status === 'done' ? 'Done' : 'Mark done' }}
+          {{ item.sent_at ? 'Sent' : `Send to ${firstName(item.person_name, 'them')}` }}
         </v-btn>
       </div>
     </template>
@@ -72,6 +73,7 @@ import { useManagerFeedbackStore } from '@/stores/managerFeedback'
 import type { FeedbackBody, GoalCheck } from '@/types/appraisalFeedback'
 import { monthTitle, statusLabel } from '@/utils/appraisalCheckIn'
 import { feedbackPeriod } from '@/utils/appraisalFeedback'
+import { firstName } from '@/utils/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
 const route = useRoute()
@@ -93,8 +95,9 @@ const title = computed(() =>
 const subtitle = computed(() => {
   const current = item.value
   if (!current) return ''
-  const state = current.status === 'done' ? 'Done' : current.overdue ? 'Overdue' : 'Open'
-  return `Due ${longDate(current.due_on)} · ${state}`
+  const state = current.sent_at ? 'Sent' : current.overdue ? 'Late' : 'Not sent'
+  const due = current.due_on ? `Due ${longDate(current.due_on)}` : 'Due once the check-in is sent'
+  return `${due} · ${state}`
 })
 
 function body(): FeedbackBody {
@@ -114,7 +117,7 @@ function saved(): FeedbackBody {
 }
 
 const dirty = computed(() => JSON.stringify(body()) !== JSON.stringify(saved()))
-const canFinish = computed(() => Boolean(keep.value.trim() && tryNext.value.trim()) && item.value?.status !== 'done')
+const canFinish = computed(() => Boolean(keep.value.trim() && tryNext.value.trim()) && !item.value?.sent_at)
 
 // Only a different item resets the form, so a save never wipes typing.
 watch(
@@ -154,9 +157,9 @@ async function finish(): Promise<void> {
   const current = item.value
   if (!current || (dirty.value && !(await save()))) return
   finishing.value = true
-  const problem = await store.markDone(current.id)
+  const problem = await store.send(current.id)
   finishing.value = false
-  message.value = problem ?? 'Marked done.'
+  message.value = problem ?? `Sent. ${firstName(current.person_name, 'They')} can read it now.`
   messageKind.value = problem ? 'error' : 'success'
 }
 </script>

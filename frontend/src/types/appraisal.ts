@@ -95,8 +95,15 @@ export interface CheckInRead {
   identity_warnings: { user_id: string; name: string }[]
   /** The review this check-in belongs to: its goals page hangs off it. */
   appraisal_id: string | null
-  /** The manager's feedback answering this check-in, once some is written. */
+  /** The manager's feedback answering this check-in, once it is sent. */
   feedback: FeedbackShown | null
+  due_on: string | null
+  sent_at: string | null
+  edited_after_send_at: string | null
+  late: boolean
+  can_send: boolean
+  /** Not sent yet and not the caller's: what the person wrote is left out. */
+  content_hidden: boolean
 }
 
 export interface CheckInSummary {
@@ -108,6 +115,9 @@ export interface CheckInSummary {
   status: CheckInStatus
   closed: boolean
   fact_count: number
+  due_on: string | null
+  sent_at: string | null
+  late: boolean
 }
 
 export interface LinkCreate {

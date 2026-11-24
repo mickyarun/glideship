@@ -21,6 +21,7 @@ import type {
   FactTag,
   FactView,
 } from '@/types/appraisal'
+import { longDate } from '@/utils/appraisalSetup'
 
 export const HEADINGS: { value: EvidenceHeading; label: string }[] = [
   { value: 'delivery_quality', label: 'Delivery & quality' },
@@ -138,4 +139,13 @@ export function emptyHeadings(checkIn: CheckInRead): EvidenceHeading[] {
   for (const link of checkIn.links) filled.add(link.heading)
   for (const tag of Object.values(checkIn.fact_tags)) if (tag.heading) filled.add(tag.heading)
   return HEADINGS.map(h => h.value).filter(h => !filled.has(h))
+}
+
+/** Where a check-in is with sending: "Due Fri 6 Nov 2026 · Not sent", "Sent", "Late". */
+export function sendLine(c: Pick<CheckInRead, 'due_on' | 'sent_at' | 'late' | 'edited_after_send_at'>): string {
+  const due = c.due_on ? `Due ${longDate(c.due_on)}` : ''
+  const state = c.sent_at
+    ? `Sent ${longDate(c.sent_at.slice(0, 10))}${c.edited_after_send_at ? ', edited after sending' : ''}`
+    : c.late ? 'Late, not sent yet' : 'Not sent yet'
+  return [due, state].filter(Boolean).join(' · ')
 }

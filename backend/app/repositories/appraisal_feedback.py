@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CycleStatus, FeedbackStatus
+from app.models.appraisal_enums import AppraisalStatus, CycleStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.repositories.appraisal import OPEN
 from app.repositories.base import BaseRepository, rowcount
@@ -100,10 +100,11 @@ class AppraisalFeedbackRepository(BaseRepository[AppraisalManagerFeedback]):
     async def with_open_items(
         self, cycle_ids: Collection[uuid.UUID]
     ) -> list[AppraisalManagerFeedback]:
-        """Items in each (manager, cycle, period) group that still has one open.
+        """Items with a due date, in each (manager, cycle, period) group with one unsent.
 
         People who were withdrawn are left out altogether: their items can't
-        be written any more, so nobody is reminded about them.
+        be written any more, so nobody is reminded about them. Items with no
+        due date are waiting on a check-in and aren't due yet.
         """
         if not cycle_ids:
             return []
@@ -117,7 +118,7 @@ class AppraisalFeedbackRepository(BaseRepository[AppraisalManagerFeedback]):
         open_group = (
             select(item.manager_user_id, item.cycle_id, item.period_start)
             .join(Appraisal, live)
-            .where(in_cycles, item.status == FeedbackStatus.OPEN)
+            .where(in_cycles, item.sent_at.is_(None), item.due_on.is_not(None))
             .distinct()
             .subquery()
         )
@@ -132,7 +133,7 @@ class AppraisalFeedbackRepository(BaseRepository[AppraisalManagerFeedback]):
                     item.period_start == open_group.c.period_start,
                 ),
             )
-            .where(in_cycles)
+            .where(in_cycles, item.due_on.is_not(None))
         )
         return list(result.scalars().all())
 
@@ -149,9 +150,10 @@ class AppraisalFeedbackRepository(BaseRepository[AppraisalManagerFeedback]):
             )
 
     async def move_open(self, profile_id: uuid.UUID, manager_user_id: uuid.UUID) -> int:
-        """Hand the person's open items to a new manager, where they now score.
+        """Hand the person's unsent items to a new manager, where they now score.
 
-        Only items whose appraisal moved with them: still in progress, in a
+        An unsent draft was the old manager's alone, so it is cleared. Only
+        items whose appraisal moved with them: still in progress, in a
         cycle that hasn't closed, and scored by ``manager_user_id``. An item
         on a shared appraisal stays put, since the writer must be its scorer.
         """
@@ -172,10 +174,17 @@ class AppraisalFeedbackRepository(BaseRepository[AppraisalManagerFeedback]):
             .where(
                 item.org_id == self._org,
                 item.profile_id == profile_id,
-                item.status == FeedbackStatus.OPEN,
+                item.sent_at.is_(None),
                 item.manager_user_id != manager_user_id,
                 item.cycle_id.in_(scored_by_new),
             )
-            .values(manager_user_id=manager_user_id)
+            # An unsent draft was the old manager's alone; the new one starts afresh.
+            .values(
+                manager_user_id=manager_user_id,
+                keep_note=None,
+                try_note=None,
+                goal_notes=None,
+                goal_status={},
+            )
         )
         return rowcount(result)

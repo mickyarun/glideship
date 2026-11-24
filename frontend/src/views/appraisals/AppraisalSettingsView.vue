@@ -31,11 +31,17 @@
         <CadenceFields v-model:review="form.review_period" v-model:check-ins="form.checkin_cadence" v-model:feedback="form.feedback_cadence" />
         <YearPreview :review="form.review_period" :check-ins="form.checkin_cadence" :feedback="form.feedback_cadence" :self-due-days="form.self_due_days" />
       </section>
-      <section class="settings__card" aria-labelledby="settings-due">
-        <h2 id="settings-due" class="settings__heading">Due dates, in days after the period ends</h2>
+      <section class="settings__card" aria-labelledby="settings-monthly">
+        <h2 id="settings-monthly" class="settings__heading">Check-ins and manager notes, in working days</h2>
         <div class="settings__row">
-          <v-text-field v-model.number="form.feedback_due_days" type="number" min="0" max="60" label="Manager feedback" />
-          <v-text-field v-model.number="form.self_due_days" type="number" min="0" max="60" label="Self-score" />
+          <v-text-field v-model.number="form.checkin_due_days" type="number" min="1" max="20" label="Check-in due, after its month ends" />
+          <v-text-field v-model.number="form.feedback_due_days" type="number" min="1" max="20" label="Manager note due, after the check-in is sent" />
+        </div>
+      </section>
+      <section class="settings__card" aria-labelledby="settings-due">
+        <h2 id="settings-due" class="settings__heading">Review due dates, in days after the period ends</h2>
+        <div class="settings__row">
+          <v-text-field v-model.number="form.self_due_days" type="number" min="0" max="60" label="Their review" />
           <v-text-field v-model.number="form.manager_due_days" type="number" min="0" max="90" label="Manager review" />
           <v-text-field v-model.number="form.ack_due_days" type="number" min="0" max="120" label="Reply to the result" />
         </div>
