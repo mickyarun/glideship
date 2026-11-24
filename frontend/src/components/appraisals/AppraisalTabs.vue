@@ -28,6 +28,7 @@
       :aria-current="tab.key === active ? 'page' : undefined"
     >
       {{ tab.label }}
+      <span v-if="counts[tab.key]" class="appraisal-tabs__count" :aria-label="`${counts[tab.key]} to do`">{{ counts[tab.key] }}</span>
     </RouterLink>
   </nav>
 </template>
@@ -35,9 +36,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { appraisalTabs, tabForRoute } from '@/utils/appraisalTabs'
+import { type AppraisalTabKey, appraisalTabs, tabForRoute } from '@/utils/appraisalTabs'
 
-const props = withDefaults(defineProps<{ hasReports: boolean; canManage: boolean; ownPage?: boolean }>(), { ownPage: false })
+const props = withDefaults(
+  defineProps<{ hasReports: boolean; canManage: boolean; ownPage?: boolean; counts?: Partial<Record<AppraisalTabKey, number>> }>(),
+  { ownPage: false, counts: () => ({}) },
+)
 
 const route = useRoute()
 const tabs = computed(() => appraisalTabs({ hasReports: props.hasReports, canManage: props.canManage }))
@@ -67,6 +71,16 @@ const active = computed(() => tabForRoute(route.name ? String(route.name) : null
 .appraisal-tabs__tab:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
+}
+.appraisal-tabs__count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
 }
 .appraisal-tabs__tab--on {
   color: rgb(var(--v-theme-primary));

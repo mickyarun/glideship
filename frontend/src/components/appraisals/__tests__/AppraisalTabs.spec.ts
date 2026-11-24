@@ -18,7 +18,9 @@ import { describe, expect, it } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AppraisalTabs from '@/components/appraisals/AppraisalTabs.vue'
 import { peopleRoutes } from '@/router/routes/people'
+import type { TodoItem } from '@/types/appraisalTodo'
 import { appraisalTabs, tabForRoute } from '@/utils/appraisalTabs'
+import { todoCounts, todoRoute } from '@/utils/appraisalTodo'
 import { appraisalPlugins } from './mountAppraisal'
 
 describe('appraisal tabs', () => {
@@ -58,5 +60,22 @@ describe('appraisal tabs', () => {
     expect(router.resolve({ name: 'appraisal-review', params: { id: 'a1' } }).path).toBe('/appraisals/reviews/a1')
     expect(router.resolve('/appraisals/cycles/c1').name).toBe('appraisal-cycle')
     expect(router.resolve('/appraisals/review').matched).toHaveLength(3)
+  })
+
+  it('counts what is to do on each tab', async () => {
+    const item = (role: TodoItem['role'], target: TodoItem['target']): TodoItem => ({
+      kind: 'note', role, person_name: 'Priya', cycle_name: null, due_on: null, late: false, target, target_id: 'x1', count: null,
+    })
+    const items = [item('team', 'feedback'), item('team', 'goals'), item('own', 'check_in')]
+    expect(todoCounts(items)).toEqual({ own: 1, team: 2, cycles: 0 })
+    expect(todoRoute(items[0])).toEqual({ name: 'appraisal-feedback', params: { id: 'x1' } })
+    expect(todoRoute(item('cycles', 'cycle'))).toEqual({ name: 'appraisal-cycle', params: { id: 'x1' } })
+    const { plugins } = await appraisalPlugins('/appraisals')
+    const wrapper = mount(AppraisalTabs, {
+      global: { plugins: plugins as never[] },
+      props: { hasReports: true, canManage: true, counts: todoCounts(items) },
+    })
+    expect(wrapper.findAll('a').map(a => a.text())).toEqual(['Your team 2', 'Your own 1', 'Cycles'])
+    expect(wrapper.find('[aria-label="2 to do"]').exists()).toBe(true)
   })
 })

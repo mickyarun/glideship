@@ -58,7 +58,11 @@
     to="/appraisals"
     :active="onAppraisals"
     rounded="lg"
-  />
+  >
+    <template v-if="todo.items.length > 0 && !rail" #append>
+      <span class="people-nav__pill" :aria-label="`${todo.items.length} to do`">{{ todo.items.length }}</span>
+    </template>
+  </v-list-item>
   <v-list-item
     v-if="canViewEmployees"
     prepend-icon="mdi-account-multiple-outline"
@@ -82,10 +86,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import NavHeading from '@/components/layout/NavHeading.vue'
 import { usePermissions } from '@/composables/usePermissions'
+import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
 import { useLeaveStore } from '@/stores/leave'
 
 defineProps<{ rail: boolean; showHeading: boolean }>()
@@ -95,9 +100,18 @@ const leaveStore = useLeaveStore()
 const route = useRoute()
 // One link for every appraisal page; the tabs inside pick the page.
 const onAppraisals = computed(() => route.path.startsWith('/appraisals'))
+const todo = useAppraisalTodoStore()
+// The count changes as people work through it: refresh on each appraisal page.
+watch(
+  () => route.path,
+  path => {
+    if (path.startsWith('/appraisals')) void todo.fetch()
+  },
+)
 
 onMounted(() => {
   void leaveStore.fetchApprovalCount()
+  void todo.fetch()
 })
 </script>
 

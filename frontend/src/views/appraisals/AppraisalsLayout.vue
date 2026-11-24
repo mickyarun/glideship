@@ -19,7 +19,7 @@
      links keep their paths and names. -->
 <template>
   <div class="appraisals">
-    <AppraisalTabs class="appraisals__tabs" :has-reports="leaveStore.approvalCount.has_reports" :can-manage="canManageAppraisals" :own-page="ownReview" />
+    <AppraisalTabs class="appraisals__tabs" :has-reports="leaveStore.approvalCount.has_reports" :can-manage="canManageAppraisals" :own-page="ownReview" :counts="todo.counts" />
     <RouterView />
   </div>
 </template>
@@ -30,6 +30,7 @@ import { RouterView, useRoute } from 'vue-router'
 import AppraisalTabs from '@/components/appraisals/AppraisalTabs.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import { useAppraisalReviewStore } from '@/stores/appraisalReview'
+import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
 import { useAuthStore } from '@/stores/auth'
 import { useLeaveStore } from '@/stores/leave'
 
@@ -38,6 +39,7 @@ const leaveStore = useLeaveStore()
 const route = useRoute()
 const reviews = useAppraisalReviewStore()
 const auth = useAuthStore()
+const todo = useAppraisalTodoStore()
 // A review opened by id belongs under "Your own" when it is the viewer's.
 // Only once the review on screen is the one in the route, not the last one still loaded.
 const ownReview = computed(() => {
