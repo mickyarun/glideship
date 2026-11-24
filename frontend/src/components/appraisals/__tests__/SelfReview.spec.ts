@@ -63,6 +63,16 @@ describe('your review', () => {
     expect(wrapper.text()).not.toMatch(/\bband\b/i)
   })
 
+  it("shows each goal's earlier examples, and sends only what is still shown", async () => {
+    const wrapper = await mountForm()
+    expect(wrapper.text()).toContain('Examples picked earlier:')
+    await wrapper.find('button[aria-label="Remove OPS-1"]').trigger('click')
+    expect(wrapper.text()).not.toContain('Examples picked earlier:')
+    await wrapper.findAll('button').find(b => b.text() === 'Save')!.trigger('click')
+    const [sent] = wrapper.emitted('save')![0] as [{ goals: { evidence: string[] }[] }]
+    expect(sent.goals[1].evidence).toEqual([])
+  })
+
   it('puts the quarter beside the form, each check-in with a link to open it', async () => {
     const { plugins } = await appraisalPlugins()
     const wrapper = mount(ReviewEvidence, { global: { plugins: plugins as never[] }, props: { review: twoGoals, isSelf: true } })

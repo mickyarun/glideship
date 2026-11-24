@@ -34,6 +34,7 @@
           :aria-label="`Result for ${byId[goal.goal_id].title}`"
           @update:model-value="v => (goal.result = v as GoalResult)"
         />
+        <EvidenceChips v-model="goal.evidence" :options="options" label="Examples picked earlier:" />
         <v-text-field v-model="goal.reason" label="Why" :aria-label="`Why, ${byId[goal.goal_id].title}`" maxlength="300" density="compact" hide-details="auto" />
       </div>
       <p v-if="!form.goals.length" class="self__muted">No goals were confirmed this {{ period }}.</p>
@@ -56,21 +57,23 @@
 import { computed, reactive } from 'vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
 import BandScale from '@/components/appraisals/BandScale.vue'
+import EvidenceChips from '@/components/appraisals/EvidenceChips.vue'
 import EvidencePicker from '@/components/appraisals/EvidencePicker.vue'
 import FormStep from '@/components/appraisals/FormStep.vue'
 import type { GoalResult } from '@/types/appraisalGoals'
 import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalReview'
 import { HIGH_BAND_EVIDENCE, HIGH_BANDS_NAME } from '@/utils/appraisalBands'
 import { RESULT_OPTIONS } from '@/utils/appraisalGoals'
-import { firstName, periodWord, selfProblem, selfProgress } from '@/utils/appraisalReview'
+import { firstName, selfProblem, selfProgress } from '@/utils/appraisalReview'
+import { periodWord } from '@/utils/appraisalSetup'
 
 const props = defineProps<{ review: AppraisalRead; options: EvidenceOption[]; busy: 'save' | 'submit' | null }>()
 const emit = defineEmits<{ save: [body: SelfBody]; submit: [body: SelfBody] }>()
 
 const byId = Object.fromEntries(props.review.goals.map(g => [g.id, g]))
 const manager = firstName(props.review.manager_name, 'Your manager')
-const period = periodWord(props.review.period_start, props.review.period_end)
-// Each goal keeps the examples it already had; the form asks for examples once, overall.
+const period = periodWord(props.review.review_period)
+// The form asks for examples once, overall; each goal's earlier ones show as chips to remove.
 const form = reactive<SelfBody>({
   band: props.review.self_score?.band ?? null,
   reason: props.review.self_score?.reason ?? '',
