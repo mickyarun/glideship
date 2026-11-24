@@ -7,8 +7,9 @@ sent (a cycle's ``feedback_due_days`` now counts from that send). The
 self-review gains two open answers.
 
 Existing data carries forward. Everything people could read before this
-migration stays readable: every existing check-in, and every manager
-note with something written in it, is marked sent at its last update.
+migration stays readable: every existing check-in with something in it
+the manager could read, and every manager note with something written in
+it, is marked sent at its last update. Blank check-ins stay unsent.
 Existing check-ins get a due date five weekdays after their period (the
 person's holidays aren't known here); one still open gets at least five
 weekdays from the day this runs, so people can keep writing it. Existing
@@ -85,8 +86,38 @@ WHERE jsonb_typeof(config -> 'appraisals') = 'object'
 """
 
 # Run after the schema changes; a test runs the same statements.
+# A check-in counts as sent only if the manager could read something in it:
+# the person's lines, links, tags or goal values, or the AI draft. A blank
+# one stays unsent, so the person gets the normal Send step.
+CHECK_INS_WITH_CONTENT = """
+UPDATE appraisal_check_ins c SET sent_at = c.updated_at
+WHERE c.sent_at IS NULL AND (
+    c.employee_note IS NOT NULL
+    OR c.ai_summary IS NOT NULL
+    OR c.fact_tags <> '{}'::jsonb
+    OR EXISTS (SELECT 1 FROM appraisal_evidence_links l WHERE l.check_in_id = c.id)
+    OR EXISTS (SELECT 1 FROM appraisal_goal_values v WHERE v.check_in_id = c.id)
+)
+"""
+
+# Rolling back drops "sent", after which every check-in and note is readable
+# by its manager or person again. Clear unsent drafts first so a downgrade
+# never shows anyone what its writer hadn't sent.
+CLEAR_UNSENT = (
+    "UPDATE appraisal_manager_feedback SET keep_note = NULL, try_note = NULL,"
+    " goal_notes = NULL, goal_status = '{}'::jsonb WHERE sent_at IS NULL",
+    "DELETE FROM appraisal_evidence_links WHERE check_in_id IN"
+    " (SELECT id FROM appraisal_check_ins WHERE sent_at IS NULL)",
+    "DELETE FROM appraisal_goal_values WHERE check_in_id IN"
+    " (SELECT id FROM appraisal_check_ins WHERE sent_at IS NULL)",
+    "UPDATE appraisal_check_ins SET employee_note = NULL, ai_summary = NULL,"
+    " fact_tags = '{}'::jsonb,"
+    " status = CASE WHEN status = 'employee_added' THEN 'open' ELSE status END"
+    " WHERE sent_at IS NULL",
+)
+
 BACKFILL = (
-    "UPDATE appraisal_check_ins SET sent_at = updated_at WHERE sent_at IS NULL",
+    CHECK_INS_WITH_CONTENT,
     CHECK_IN_DUE,
     "UPDATE appraisal_manager_feedback SET sent_at = updated_at"
     " WHERE sent_at IS NULL AND (keep_note IS NOT NULL OR try_note IS NOT NULL"
@@ -148,6 +179,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    for statement in CLEAR_UNSENT:
+        op.execute(statement)
     op.execute(
         "UPDATE organizations SET config = jsonb_set(config, '{appraisals}',"
         " (config -> 'appraisals') - 'min_goals' - 'checkin_due_days'"

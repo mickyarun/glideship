@@ -167,6 +167,9 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
     await client.put(
         f"/api/v1/manager-feedback/{written['id']}", json={"keep": "Clear PRs"}, headers=mgr
     )
+    emp = as_user(m.people["emp"], m.org)
+    priya = (await client.get(f"{CHECK_INS}/mine", headers=emp)).json()[0]["id"]
+    await client.put(f"{CHECK_INS}/{priya}/note", json=NOTE, headers=emp)
     kept_due = date(2026, 11, 10)
     async with pg_session_factory() as db:
         # As the rows stood before sending existed: nothing sent, notes due by period.
@@ -194,7 +197,10 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
         }
     # Still open, so still being written: at least five weekdays from today.
     fresh = WorkCalendar().shift(datetime.now(UTC).date(), 5)
-    assert all(c.sent_at == c.updated_at for c in check_ins)
+    # Priya wrote in hers: sent. Meena's is blank: she gets the Send step.
+    sent = {str(c.id): c.sent_at is not None for c in check_ins}
+    assert sent.pop(priya) and set(sent.values()) == {False}
+    assert all(c.sent_at in (None, c.updated_at) for c in check_ins)
     assert {c.due_on for c in check_ins} == {max(date(2026, 11, 6), fresh)}
     assert notes[written["id"]].sent_at is not None
     assert [n.sent_at for k, n in notes.items() if k != written["id"]] == [None]
@@ -202,7 +208,6 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
     assert notes[written["id"]].due_on == max(kept_due, fresh)
     assert [n.due_on for k, n in notes.items() if k != written["id"]] == [kept_due]
     # The person reads the written note, as they could before.
-    emp = as_user(m.people["emp"], m.org)
     seen = await client.get(f"/api/v1/manager-feedback/{written['id']}", headers=emp)
     assert seen.status_code == 200 and seen.json()["keep"] == "Clear PRs"
     # The manager can still finish it and send it.
@@ -215,6 +220,40 @@ async def test_the_backfill_marks_existing_writing_sent_and_keeps_due_dates(
     mine = (await client.get(f"{CHECK_INS}/mine", headers=emp)).json()
     note = await client.put(f"{CHECK_INS}/{mine[0]['id']}/note", json=NOTE, headers=emp)
     assert note.status_code == 200
+
+
+async def test_rolling_back_clears_unsent_drafts_first(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    emp, mgr = as_user(m.people["emp"], m.org), as_user(m.people["mgr"], m.org)
+    url = f"{CHECK_INS}/{(await client.get(f'{CHECK_INS}/mine', headers=emp)).json()[0]['id']}"
+    await client.put(f"{url}/note", json=NOTE, headers=emp)
+    await client.post(f"{url}/links", json=LINK, headers=emp)
+    rows = (await client.get("/api/v1/manager-feedback/team", headers=mgr)).json()
+    drafts = [f"/api/v1/manager-feedback/{r['id']}" for r in rows]
+    for draft in drafts:
+        await client.put(draft, json={"keep": "Draft", "try_next": "Draft"}, headers=mgr)
+    await client.post(f"{drafts[0]}/send", headers=mgr)
+    async with pg_session_factory() as db:
+        for statement in _migration().CLEAR_UNSENT:
+            await db.execute(text(statement))
+        await db.commit()
+        check_in = await db.scalar(
+            select(AppraisalCheckIn).where(AppraisalCheckIn.id == uuid.UUID(url.rsplit("/", 1)[1]))
+        )
+        notes = {
+            f"/api/v1/manager-feedback/{n.id}": n
+            for n in await db.scalars(
+                select(AppraisalManagerFeedback).where(AppraisalManagerFeedback.org_id == m.org)
+            )
+        }
+    assert check_in is not None and check_in.employee_note is None
+    assert check_in.fact_tags == {} and check_in.status.value == "open"
+    assert (await client.get(url, headers=emp)).json()["links"] == []
+    # The sent note keeps its words; the unsent draft is gone.
+    assert notes[drafts[0]].keep_note is not None
+    assert notes[drafts[1]].keep_note is None and notes[drafts[1]].goal_status == {}
 
 
 async def test_goal_values_across_months_show_only_sent_check_ins_to_others(
