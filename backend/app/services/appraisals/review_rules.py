@@ -65,11 +65,11 @@ def self_problem(
 ) -> str | None:
     """Why a self-review can't be submitted yet, or None."""
     if band is None:
-        return "Pick an overall band."
+        return "Pick an overall rating."
     if band in HIGH_BANDS and evidence < HIGH_EVIDENCE:
-        return "Bands 1 and 2 need at least two pieces of evidence."
+        return 'Both "Exceeded" ratings need at least two examples.'
     if any(result is None for result in results.values()):
-        return "Score each goal: achieved, partly or not yet."
+        return "Pick how each goal ended: not yet, partly or achieved."
     return None
 
 
@@ -89,13 +89,13 @@ def band_problem(self_band: int | None, decision: BandDecision) -> str | None:
         return None if self_band is not None else "There is no self-score to agree with."
     band = decision.band
     if band is None:
-        return "Pick the band."
+        return "Pick the rating."
     if not decision.reason.strip():
         return "Say why; they'll read this."
     if band in HIGH_BANDS and decision.evidence < HIGH_EVIDENCE:
-        return "Band 1 or 2 needs at least two pieces of evidence."
+        return 'Both "Exceeded" ratings need at least two examples.'
     if band == LOW_BAND and decision.evidence < 1:
-        return "Band 5 needs evidence."
+        return '"Did not meet" needs at least one example.'
     return None
 
 

@@ -85,8 +85,8 @@ test('a manual review from check-in to growth conversation', async ({ signedIn, 
   await employee.goto('/appraisals/review')
   await pick(employee, 'Result for Ship refunds', 'Achieved')
   await pick(employee, 'Result for Automate UAT', 'Partly')
-  await pick(employee, 'Overall band', 'Meets always (3)')
-  await employee.getByRole('button', { name: 'Submit to Maya Manager' }).click()
+  await employee.getByRole('group', { name: 'Overall rating' }).getByText('Met every time', { exact: true }).click()
+  await employee.getByRole('button', { name: 'Send to Maya' }).click()
   await expect(employee.getByText('Waiting for Maya Manager.')).toBeVisible()
 
   await manager.goto(`/appraisals/reviews/${eli.id}`)

@@ -14,33 +14,40 @@
  * limitations under the License.
  -->
 
-<!-- The employee's self-review: each goal's result with a reason and
-     evidence, then the overall band with why. Read the period first. -->
+<!-- Your review: how each goal ended with a line on why, then the overall
+     rating in words with the reason and examples. The quarter's check-ins
+     and work sit beside it. -->
 <template>
   <form class="self" @submit.prevent>
-    <section v-for="goal in form.goals" :key="goal.goal_id" class="self__goal">
-      <h3 class="self__title">{{ titles[goal.goal_id] }}</h3>
-      <AppPillToggle
-        :model-value="goal.result ?? ''"
-        :options="RESULT_OPTIONS"
-        :aria-label="`Result for ${titles[goal.goal_id]}`"
-        @update:model-value="v => (goal.result = v as GoalResult)"
-      />
-      <v-text-field v-model="goal.reason" label="Why, in one line" maxlength="300" density="compact" />
-      <EvidencePicker v-model="goal.evidence" :options="options" label="Evidence for this goal" :max="5" />
-    </section>
-    <section class="self__goal">
-      <h3 class="self__title">Overall</h3>
+    <p class="self__lead">
+      {{ manager }} reads this next, then HR · <strong>{{ progress.done }} of {{ progress.total }} complete</strong>
+    </p>
+    <FormStep :number="1" title="How did each goal end?" hint="Pick one and say why in a line.">
+      <div v-for="goal in form.goals" :key="goal.goal_id" class="self__goal">
+        <div>
+          <h3 class="self__goal-title">{{ byId[goal.goal_id].title }}</h3>
+          <p v-if="byId[goal.goal_id].measure" class="self__muted">{{ byId[goal.goal_id].measure }}</p>
+        </div>
+        <AppPillToggle
+          :model-value="goal.result ?? ''"
+          :options="RESULT_OPTIONS"
+          :aria-label="`Result for ${byId[goal.goal_id].title}`"
+          @update:model-value="v => (goal.result = v as GoalResult)"
+        />
+        <v-text-field v-model="goal.reason" label="Why" maxlength="300" density="compact" hide-details="auto" />
+      </div>
+      <p v-if="!form.goals.length" class="self__muted">No goals were confirmed this {{ period }}.</p>
+    </FormStep>
+    <FormStep :number="2" :title="`Overall, how did your ${period} go?`" :hint="`Compared with what your role expects. ${manager} can agree or change it, and will say why.`">
       <BandScale v-model="form.band" label="Overall rating" />
-      <v-textarea v-model="form.reason" label="Why, in up to three lines" rows="3" auto-grow maxlength="600" />
-      <EvidencePicker v-model="form.evidence" :options="options" label="Examples (both Exceeded ratings need two)" />
-    </section>
-    <p v-if="problem" class="self__problem">{{ problem }}</p>
-    <div class="self__actions">
+      <v-textarea v-model="form.reason" label="Why this one?" rows="2" auto-grow maxlength="600" hide-details="auto" />
+      <EvidencePicker v-model="form.evidence" :options="options" label="Examples" />
+      <p class="self__muted">{{ examplesLine }}</p>
+    </FormStep>
+    <div class="self__foot">
+      <p v-if="problem" class="self__muted">{{ problem }}</p>
       <v-btn variant="outlined" :loading="busy === 'save'" @click="emit('save', body())">Save</v-btn>
-      <v-btn color="primary" :disabled="Boolean(problem)" :loading="busy === 'submit'" @click="emit('submit', body())">
-        Submit to {{ review.manager_name || 'my manager' }}
-      </v-btn>
+      <v-btn color="primary" :disabled="Boolean(problem)" :loading="busy === 'submit'" @click="emit('submit', body())">Send to {{ manager }}</v-btn>
     </div>
   </form>
 </template>
@@ -50,15 +57,20 @@ import { computed, reactive } from 'vue'
 import AppPillToggle from '@/components/common/AppPillToggle.vue'
 import BandScale from '@/components/appraisals/BandScale.vue'
 import EvidencePicker from '@/components/appraisals/EvidencePicker.vue'
+import FormStep from '@/components/appraisals/FormStep.vue'
 import type { GoalResult } from '@/types/appraisalGoals'
 import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalReview'
+import { HIGH_BAND_EVIDENCE } from '@/utils/appraisalBands'
 import { RESULT_OPTIONS } from '@/utils/appraisalGoals'
-import { selfProblem } from '@/utils/appraisalReview'
+import { firstName, periodWord, selfProblem, selfProgress } from '@/utils/appraisalReview'
 
 const props = defineProps<{ review: AppraisalRead; options: EvidenceOption[]; busy: 'save' | 'submit' | null }>()
 const emit = defineEmits<{ save: [body: SelfBody]; submit: [body: SelfBody] }>()
 
-const titles = Object.fromEntries(props.review.goals.map(g => [g.id, g.title]))
+const byId = Object.fromEntries(props.review.goals.map(g => [g.id, g]))
+const manager = firstName(props.review.manager_name, 'Your manager')
+const period = periodWord(props.review.period_start, props.review.period_end)
+// Each goal keeps the examples it already had; the form asks for examples once, overall.
 const form = reactive<SelfBody>({
   band: props.review.self_score?.band ?? null,
   reason: props.review.self_score?.reason ?? '',
@@ -72,6 +84,10 @@ const form = reactive<SelfBody>({
 })
 
 const problem = computed(() => selfProblem(form, props.review.goals.map(g => g.id)))
+const progress = computed(() => selfProgress(form))
+const examplesLine = computed(
+  () => `Both "Exceeded" ratings need ${HIGH_BAND_EVIDENCE} examples. You have ${form.evidence.length}.`,
+)
 
 function body(): SelfBody {
   return JSON.parse(JSON.stringify(form)) as SelfBody
@@ -83,30 +99,38 @@ function body(): SelfBody {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 880px;
+  min-width: 0;
+}
+.self__lead {
+  margin: 0;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 .self__goal {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px 20px;
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgb(var(--v-theme-rule));
-  border-radius: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(var(--v-theme-rule));
 }
-.self__title {
+.self__goal-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
-.self__problem {
+.self__muted {
   margin: 0;
   font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  color: rgb(var(--v-theme-on-surface-variant));
 }
-.self__actions {
+.self__foot {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 12px;
+}
+.self__foot .self__muted {
+  flex: 1 1 240px;
 }
 </style>

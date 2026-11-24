@@ -90,7 +90,7 @@ describe('self-review', () => {
     const { plugins } = await appraisalPlugins()
     const r = review()
     const wrapper = mount(SelfReviewForm, { global: { plugins: plugins as never[] }, props: { review: r, options: evidenceOptions(r), busy: null } })
-    const submit = () => wrapper.findAll('button').find(b => b.text().startsWith('Submit'))
+    const submit = () => wrapper.findAll('button').find(b => b.text().startsWith('Send to'))
     expect(submit()?.attributes('disabled')).toBeDefined()
     await wrapper.findAll('[role="radio"]').find(b => b.text() === 'Achieved')?.trigger('click')
     await wrapper.find('input[type="radio"][value="3"]').setValue(true)

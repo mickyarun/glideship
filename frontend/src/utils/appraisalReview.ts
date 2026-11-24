@@ -19,6 +19,7 @@ import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalR
 import type { AppraisalStatus } from '@/types/appraisalSetup'
 import { HIGH_BAND_EVIDENCE, bandLabel, isHighBand } from '@/utils/appraisalBands'
 import { sourceLabel } from '@/utils/appraisalCheckIn'
+import { longDate } from '@/utils/appraisalSetup'
 
 /** Everything in the period that can be cited, as the viewer may see it. */
 export function evidenceOptions(review: AppraisalRead): EvidenceOption[] {
@@ -101,4 +102,21 @@ export function pickReview(mine: AppraisalSummary[]): AppraisalSummary | null {
   return (
     mine.find(r => ACTIVE.includes(r.status)) ?? mine.find(r => r.status === 'acknowledged') ?? mine[0] ?? null
   )
+}
+
+/** The line under the review's title: what is due and when. */
+export function reviewSubtitle(r: AppraisalRead): string {
+  if (r.status === 'self_review') return `Due ${longDate(r.self_due)}`
+  if (r.status === 'manager_review') return `Manager review due ${longDate(r.manager_due)}`
+  if (r.status === 'shared') return `Shared on ${longDate((r.shared_at ?? r.ack_due).slice(0, 10))} · Read by ${longDate(r.ack_due)}`
+  return `${longDate(r.period_start)} – ${longDate(r.period_end)}`
+}
+
+/** What the viewer is waiting on when there's nothing for them to do, or ''. */
+export function reviewWaiting(r: AppraisalRead, isSelf: boolean): string {
+  if (r.can.edit_self || r.can.edit_manager || r.can.acknowledge) return ''
+  if (r.status === 'enrolled') return 'This review opens after the period ends. Until then, the work goes in your check-ins and goals.'
+  if (r.status === 'manager_review' && isSelf) return `Waiting for ${r.manager_name || 'your manager'}.`
+  if (r.status === 'calibration' && isSelf) return "With HR for a fairness check. You'll see the result when it's shared."
+  return ''
 }
