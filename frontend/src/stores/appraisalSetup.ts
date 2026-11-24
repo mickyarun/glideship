@@ -30,12 +30,9 @@ import type {
 } from '@/types/appraisalSetup'
 import type { Calibration } from '@/types/appraisalReview'
 import { extractApiError } from '@/utils/errors'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const BASE = '/v1/appraisals'
-
-function people(n: number): string {
-  return n === 1 ? '1 person' : `${n} people`
-}
 
 export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   const settings = ref<AppraisalSettings | null>(null)
@@ -152,11 +149,11 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   }
 
   const startReview = (id: string) =>
-    count(id, 'start-review', n => `Review opened for ${people(n)}.`, "Couldn't open the review.")
+    count(id, 'start-review', n => `Review opened for ${peopleCount(n)}.`, "Couldn't open the review.")
   const shareAll = (id: string) =>
     count(id, 'share', n => `Shared ${n === 1 ? '1 result' : `${n} results`}.`, "Couldn't share the results.")
   const suggestAll = (id: string) =>
-    count(id, 'suggest-goals', n => `Asked for suggested goals for ${people(n)}.`, "Couldn't ask for suggestions.")
+    count(id, 'suggest-goals', n => `Asked for suggested goals for ${peopleCount(n)}.`, "Couldn't ask for suggestions.")
 
   /** Slack everyone late now; the message to show. */
   async function remind(id: string): Promise<string> {
@@ -166,7 +163,7 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
     )
     if (data) await fetchCycle(id)
     if (problem || !data) return problem ?? ''
-    return `Reminded ${people(data.people)}. ${data.reached} got it on Slack.`
+    return `Reminded ${peopleCount(data.people)}. ${data.reached} got it on Slack.`
   }
 
   return {

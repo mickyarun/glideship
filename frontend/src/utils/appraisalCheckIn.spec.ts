@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { CheckInRead } from '@/types/appraisal'
-import { localDay, monthTitle, safeHref, sendLine, statusLabel } from '@/utils/appraisalCheckIn'
+import { localDay, monthLine, monthTitle, safeHref, sendLine } from '@/utils/appraisalCheckIn'
 
 function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
   return {
@@ -32,10 +32,12 @@ describe('monthTitle', () => {
   it('names the month', () => expect(monthTitle('2026-10-01')).toBe('October 2026'))
 })
 
-describe('statusLabel', () => {
-  it('reads an untouched closed check-in as closed', () => {
-    expect(statusLabel('open', true)).toBe('Closed')
-    expect(statusLabel('missed', true)).toBe('Missed')
+describe('monthLine', () => {
+  it('reads a sent check-in as sent, whatever its status', () => {
+    const fact = checkIn().facts
+    expect(monthLine({ status: 'employee_added', sent: true, facts: fact })).toBe('Sent · 0 items')
+    expect(monthLine({ status: 'employee_added', sent: false, facts: fact })).toBe('Not sent · 0 items')
+    expect(monthLine({ status: 'missed', sent: false, facts: fact })).toBe('Missed · 0 items')
   })
 })
 

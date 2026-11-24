@@ -31,19 +31,22 @@
     <details v-for="month in review.timeline" :key="month.check_in_id" class="review-evidence__month">
       <summary>
         <span class="review-evidence__month-title">{{ monthName(month.period_start) }} check-in</span>
-        <span class="review-evidence__line">{{ statusLabel(month.status, false) }} · {{ month.facts.length }} items</span>
+        <span class="review-evidence__line">{{ monthLine(month) }}</span>
       </summary>
       <ul class="review-evidence__facts">
         <li v-for="fact in month.facts" :key="fact.id">
           <a v-if="safeHref(fact.url)" :href="safeHref(fact.url) ?? undefined" target="_blank" rel="noopener noreferrer">{{ fact.key }}</a>
           <span v-else>{{ fact.key }}</span>
           <span v-if="fact.title"> · {{ fact.title }}</span>
+          <p v-if="month.note.item_notes[fact.key]" class="review-evidence__line">“{{ month.note.item_notes[fact.key] }}”</p>
         </li>
       </ul>
       <template v-for="(lines, heading) in month.note.lines" :key="heading">
         <p v-for="(line, i) in lines" :key="`${heading}${i}`" class="review-evidence__line">“{{ line }}”</p>
       </template>
-      <p v-if="month.note.blocking" class="review-evidence__line">Blocking: {{ month.note.blocking }}</p>
+      <p v-if="month.note.went_well" class="review-evidence__line">Also: {{ month.note.went_well }}</p>
+      <p v-if="month.note.blocking" class="review-evidence__line">In the way: {{ month.note.blocking }}</p>
+      <p v-if="month.note.next_month" class="review-evidence__line">Next focus: {{ month.note.next_month }}</p>
       <p v-for="link in month.links" :key="link.id" class="review-evidence__line">
         Link: <a v-if="safeHref(link.url)" :href="safeHref(link.url) ?? undefined" target="_blank" rel="noopener noreferrer">{{ link.title || link.url }}</a>
       </p>
@@ -61,7 +64,7 @@ import { RouterLink } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import type { AppraisalRead } from '@/types/appraisalReview'
-import { safeHref, statusLabel } from '@/utils/appraisalCheckIn'
+import { monthLine, safeHref } from '@/utils/appraisalCheckIn'
 import { evidenceOptions, firstName } from '@/utils/appraisalReview'
 import { periodWord } from '@/utils/appraisalSetup'
 

@@ -13,7 +13,8 @@
 // limitations under the License.
 
 /** Wording and grouping for check-ins (pure, so the screens stay simple). */
-import type { CheckInRead, CheckInStatus, EvidenceHeading } from '@/types/appraisal'
+import type { CheckInRead, EvidenceHeading } from '@/types/appraisal'
+import type { TimelineMonth } from '@/types/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
 
 export const HEADINGS: { value: EvidenceHeading; label: string }[] = [
@@ -39,19 +40,15 @@ const SOURCE_LABELS: Record<string, string> = {
 /** Every record source a role template can count, in the order HR sees them. */
 export const FACT_SOURCES = Object.keys(SOURCE_LABELS)
 
-const STATUS_LABELS: Record<CheckInStatus, string> = {
-  open: 'Not started',
-  employee_added: 'Started',
-  missed: 'Missed',
-}
-
 export function sourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? source
 }
 
-export function statusLabel(status: CheckInStatus, closed: boolean): string {
-  if (status === 'open' && closed) return 'Closed'
-  return STATUS_LABELS[status]
+/** A month in the review's timeline: sent or not, and how much work it lists. */
+export function monthLine(month: Pick<TimelineMonth, 'status' | 'sent' | 'facts'>): string {
+  const state = month.sent ? 'Sent' : month.status === 'missed' ? 'Missed' : 'Not sent'
+  const n = month.facts.length
+  return `${state} · ${n} item${n === 1 ? '' : 's'}`
 }
 
 /** "October 2026", from the period's first day (an ISO date). */

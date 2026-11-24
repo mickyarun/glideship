@@ -19,12 +19,12 @@
 <template>
   <div class="running">
     <StepStrip :steps="steps" label="Where this cycle is" />
-    <DoNowCard v-if="now === 'remind'" :title="remindTitle" :body="remindBody" :action="remindedToday ? '' : `Remind ${progress.remind_count} ${people(progress.remind_count)}`" :busy="busy === 'remind'" @act="emit('remind')" />
+    <DoNowCard v-if="now === 'remind'" :title="remindTitle" :body="remindBody" :action="remindedToday ? '' : `Remind ${peopleCount(progress.remind_count)}`" :busy="busy === 'remind'" @act="emit('remind')" />
     <DoNowCard v-else-if="now === 'open_reviews'" title="Open the reviews" body="The period has ended. Opening reviews asks everyone for their review and locks goals." action="Start the review" :busy="busy === 'review'" @act="emit('review')" />
     <DoNowCard v-else-if="now === 'fairness'" title="Check fairness, then share results" body="Look for managers who rate very differently and big gaps before results go out." action="Open the fairness check" :to="{ name: 'appraisal-fairness', params: { id: cycle.id } }" />
     <DoNowCard v-else title="Nothing needs you right now" body="Slack reminds people before anything is due. Late work shows up here." />
     <AppCallout v-if="noManager" variant="warning">
-      Fix before reviews open: {{ noManager }} {{ people(noManager) }} {{ noManager === 1 ? 'has' : 'have' }} no manager, so nobody can review them.
+      Fix before reviews open: {{ peopleCount(noManager) }} {{ noManager === 1 ? 'has' : 'have' }} no manager, so nobody can review them.
       <template #actions><v-btn size="small" variant="outlined" to="/people">Assign managers</v-btn></template>
     </AppCallout>
     <ul class="running__tiles">
@@ -68,19 +68,19 @@ import { cycleDoNow, lateCounts, latestMonthLabel, managerRows, tiles } from '@/
 import { longDate } from '@/utils/appraisalSetup'
 import { cycleSteps } from '@/utils/appraisalSteps'
 import { todayIso } from '@/utils/appraisalTodoWords'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const props = defineProps<{ cycle: CycleRead; progress: CycleProgress; readiness: Readiness | null; busy: string | null }>()
 const emit = defineEmits<{ remind: []; review: [] }>()
 const today = todayIso()
 
-const people = (n: number) => (n === 1 ? 'person' : 'people')
 const steps = computed(() =>
   cycleSteps({ status: props.cycle.status, people: props.progress.people.length, periodEnd: props.cycle.period_end, ackDue: props.cycle.ack_due }),
 )
 const now = computed(() => cycleDoNow(props.cycle, props.progress, today))
 const late = computed(() => lateCounts(props.progress))
 const remindedToday = computed(() => Boolean(props.progress.reminded_at && localDay(props.progress.reminded_at) === today))
-const remindTitle = computed(() => `${props.progress.remind_count} ${people(props.progress.remind_count)} are late`)
+const remindTitle = computed(() => `${peopleCount(props.progress.remind_count)} ${props.progress.remind_count === 1 ? 'is' : 'are'} late`)
 const remindBody = computed(() => {
   const l = late.value
   const what = `${l.checkIns} check-in${l.checkIns === 1 ? '' : 's'} not sent and ${l.notes} manager note${l.notes === 1 ? '' : 's'} overdue.`

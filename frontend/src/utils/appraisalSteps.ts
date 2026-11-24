@@ -16,6 +16,7 @@
 
 import type { AppraisalStatus } from '@/types/appraisalSetup'
 import { longDate } from '@/utils/appraisalSetup'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 export type StepState = 'done' | 'now' | 'next'
 
@@ -98,7 +99,7 @@ export function cycleSteps(f: CycleFacts): Step[] {
   const now = { draft: 0, active: 1, reviewing: 2, closed: 4 }[f.status]
   return states(
     [
-      { title: 'Set up', detail: `${f.people} people`, later: 'First' },
+      { title: 'Set up', detail: peopleCount(f.people), later: 'First' },
       { title: 'Goals and check-ins', detail: `Until ${longDate(f.periodEnd)}`, later: 'Next' },
       { title: 'Reviews and fairness check', detail: 'You share results after 1:1s', later: `You open it, ${earlyAfter(f.periodEnd).toLowerCase()}` },
       { title: 'Close', detail: 'Everyone has read their result', later: `By ${longDate(f.ackDue)}` },
