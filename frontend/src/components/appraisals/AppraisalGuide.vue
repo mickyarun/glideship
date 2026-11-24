@@ -63,8 +63,10 @@ const titleId = useId()
 const title = ref<HTMLElement | null>(null)
 const opener = ref<{ $el: HTMLElement } | null>(null)
 
-// The reader's own side each time the facts arrive; they can switch after.
-watch(guide, value => (role.value = defaultRole(value)))
+// The reader's own side each time it opens, or when the facts arrive; they can switch after.
+watch([open, guide], ([isOpen, value], [wasOpen]) => {
+  if ((isOpen && !wasOpen) || value) role.value = defaultRole(value)
+})
 
 function focusTitle(): void {
   title.value?.focus()

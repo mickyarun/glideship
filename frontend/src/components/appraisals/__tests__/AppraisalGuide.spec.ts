@@ -66,6 +66,14 @@ describe('the words', () => {
     expect(guideSteps('employee', facts())[0].rest).toBe('with your manager. They confirm 3 to 6.')
     expect(guideSteps('manager', facts())[1].rest).toBe('with Keep doing and Try next, within 5 working days of it being sent.')
   })
+
+  it('says when notes come, as the cycle runs them, and reads a single goal count', () => {
+    expect(guideSteps('employee', facts({ feedback_cadence: 'in_review' }))[1].rest).toBe("About 10 minutes. Your manager's notes come with your review.")
+    expect(guideSteps('manager', facts({ feedback_cadence: 'in_review' }))[1].lead).toBe('Read each check-in')
+    expect(guideSteps('manager', facts({ feedback_cadence: 'quarterly' }))[1].lead).toBe('Reply once a quarter')
+    expect(guideSteps('manager', facts({ max_goals: 3 }))[0].rest).toBe('for each person, 3 each, by the goals date.')
+    expect(guideSteps('employee', facts({ max_goals: 3 }))[0].rest).toBe('with your manager. They confirm 3.')
+  })
 })
 
 describe('the dialog', () => {
@@ -86,13 +94,22 @@ describe('the dialog', () => {
     expect(text).toContain('Q4 2026 · October to December')
     expect(text).toContain('Reply to each check-in')
     const words = [...document.body.querySelectorAll('.guide__bands li')].map(li => li.textContent?.trim())
+    expect(words).toHaveLength(5)
     expect(words).toEqual(BANDS.map(b => b.label))
     const hr = [...document.body.querySelectorAll<HTMLButtonElement>('[aria-pressed]')].find(b => b.textContent?.trim() === 'HR')!
     expect(hr.getAttribute('aria-pressed')).toBe('false')
+    // Every side is its own tab stop.
+    expect([...document.body.querySelectorAll('[aria-pressed]')].map(b => b.getAttribute('tabindex'))).toEqual(['0', '0', '0'])
     hr.click()
     await settle()
     expect(hr.getAttribute('aria-pressed')).toBe('true')
     expect(document.body.textContent).toContain('Each cycle')
+    // Closed and opened again, it starts on the reader's own side.
+    useAppraisalGuide().open.value = false
+    await settle()
+    await wrapper.find('button').trigger('click')
+    await settle()
+    expect(document.body.textContent).toContain('Reply to each check-in')
   })
 
   it('closes with Got it or Esc, and gives focus back to its button', async () => {

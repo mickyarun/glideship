@@ -64,6 +64,27 @@ function goalRange(guide: GuideRead | null): string {
   return guide.min_goals === guide.max_goals ? `${guide.min_goals}` : `${guide.min_goals} to ${guide.max_goals}`
 }
 
+/** "3 to 6 each" reads well; "3" alone gets "each" too. */
+function perPerson(range: string): string {
+  return range.includes(' to ') ? range : `${range} each`
+}
+
+/** The employee's second step: when their manager's notes come. */
+function notesForEmployee(guide: GuideRead | null): string {
+  if (guide?.feedback_cadence === 'in_review') return "About 10 minutes. Your manager's notes come with your review."
+  if (guide?.feedback_cadence === 'quarterly') return 'About 10 minutes, and your manager replies with notes once a quarter.'
+  return 'About 10 minutes, and your manager replies with notes.'
+}
+
+/** The manager's second step: notes after each check-in, once a quarter, or with the review. */
+function notesForManager(guide: GuideRead | null): GuidePart {
+  const days = guide?.feedback_due_days
+  const within = days ? `, within ${days} working day${days === 1 ? '' : 's'} of it being sent` : ''
+  if (guide?.feedback_cadence === 'in_review') return { lead: 'Read each check-in', rest: 'as it comes in. Your notes go with the review.' }
+  if (guide?.feedback_cadence === 'quarterly') return { lead: 'Reply once a quarter', rest: `with Keep doing and Try next on the latest check-in${within}.` }
+  return { lead: 'Reply to each check-in', rest: `with Keep doing and Try next${within}.` }
+}
+
 /** The role's four steps through a period. */
 export function guideSteps(role: GuideRole, guide: GuideRead | null): GuidePart[] {
   const range = goalRange(guide)
@@ -72,16 +93,15 @@ export function guideSteps(role: GuideRole, guide: GuideRead | null): GuidePart[
     const often = guide?.checkin_cadence === 'quarterly' ? 'once a quarter' : 'once a month'
     return [
       { lead: 'Agree goals', rest: `with your manager.${range ? ` They confirm ${range}.` : ''}` },
-      { lead: `Check in ${often}.`, rest: 'About 10 minutes, and your manager replies with notes.' },
+      { lead: `Check in ${often}.`, rest: notesForEmployee(guide) },
       { lead: 'Write your review', rest: `when HR opens it${guide?.self_due ? `, by ${shortDay(guide.self_due)}` : ''}.` },
       { lead: 'Read your result', rest: `after your 1:1, and set next ${period}'s goals.` },
     ]
   }
   if (role === 'manager') {
-    const days = guide?.feedback_due_days
     return [
-      { lead: 'Set goals', rest: `for each person${range ? `, ${range}` : ''}, by the goals date.` },
-      { lead: 'Reply to each check-in', rest: `with Keep doing and Try next${days ? `, within ${days} working day${days === 1 ? '' : 's'} of it being sent` : ''}.` },
+      { lead: 'Set goals', rest: `for each person${range ? `, ${perPerson(range)}` : ''}, by the goals date.` },
+      notesForManager(guide),
       { lead: 'Review each person', rest: 'when HR opens reviews: agree with what they wrote or change it, and say why.' },
       { lead: 'Hold the 1:1.', rest: 'HR shares the result after it.' },
     ]

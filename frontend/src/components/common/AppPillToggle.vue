@@ -39,7 +39,7 @@
       :aria-pressed="pressed ? opt.value === modelValue : undefined"
       :aria-disabled="opt.disabled || undefined"
       :disabled="opt.disabled"
-      :tabindex="opt.value === focusValue ? 0 : -1"
+      :tabindex="pressed || opt.value === focusValue ? 0 : -1"
       @click="select(opt.value)"
     >
       {{ opt.label }}
@@ -68,7 +68,8 @@ interface Props {
   // is for a row of many options that scrolls sideways (phone tabs):
   // separate 44px pills, the picked one filled, rather than one track.
   size?: 'sm' | 'md' | 'touch'
-  // Toggle buttons (aria-pressed) rather than radios.
+  // Toggle buttons (aria-pressed) rather than radios: each one is its own
+  // tab stop, as buttons are; arrow keys still move between them.
   pressed?: boolean
 }
 

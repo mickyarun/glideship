@@ -89,9 +89,11 @@ test('a manual review from goals to the read result', async ({ signedIn, stack }
   await employee.getByRole('button', { name: 'How appraisals work' }).click()
   const guide = employee.getByRole('dialog', { name: 'How appraisals work' })
   await expect(guide.getByText('Each quarter')).toBeVisible()
-  const box = await guide.boundingBox()
+  // The card is what would scroll: it must fit whole and have nothing hidden.
+  const card = guide.locator('.v-card')
+  const box = await card.boundingBox()
   expect(box && box.height).toBeLessThanOrEqual(employee.viewportSize()!.height)
-  expect(await guide.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
+  expect(await card.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true)
   await guide.getByRole('button', { name: 'Got it' }).click()
   await expect(guide).toBeHidden()
   await employee.getByRole('link', { name: 'Start check-in' }).first().click()

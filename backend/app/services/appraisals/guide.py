@@ -22,14 +22,14 @@ from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.schemas.appraisal_guide import GuideRead
 from app.services.appraisals import crypto
 from app.services.appraisals.context import Caller
-from app.services.appraisals.settings import goal_floor, goal_limit, load_appraisal_settings
+from app.services.appraisals.settings import load_appraisal_settings
 
 
 async def guide(db: AsyncSession, caller: Caller) -> GuideRead:
     """The running cycle's rules and HR's note, else the org's settings, with the goal range."""
     facts = await _facts(db, caller)
-    facts.min_goals = await goal_floor(db, caller.org_id)
-    facts.max_goals = await goal_limit(db, caller.org_id)
+    settings = await load_appraisal_settings(db, caller.org_id)
+    facts.min_goals, facts.max_goals = settings.min_goals, settings.max_goals
     return facts
 
 
