@@ -12,16 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** A draft cycle's setup form: its editable settings and the period's name (pure). */
+/** A draft cycle's setup form: its editable settings (pure). */
 
-import type { CycleRead, CycleUpdate, ReviewPeriod } from '@/types/appraisalSetup'
+import type { CycleRead, CycleUpdate } from '@/types/appraisalSetup'
 
-const PERIOD_NOUNS: Record<ReviewPeriod, string> = { quarterly: 'quarter', half_yearly: 'half-year', yearly: 'year' }
-
-/** "quarter", "half-year" or "year": the word for one review period. */
-export function periodNoun(review: ReviewPeriod): string {
-  return PERIOD_NOUNS[review]
-}
 
 /** A cycle's editable settings, copied for a form. */
 export function cycleForm(c: CycleRead): Required<CycleUpdate> {

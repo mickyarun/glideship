@@ -16,7 +16,7 @@
 
 import type { AiLine, CheckInLink, CheckInNote, CheckInStatus, DraftStatus, DraftingMode, FactView } from '@/types/appraisal'
 import type { GoalResult } from '@/types/appraisalGoals'
-import type { AppraisalStatus } from '@/types/appraisalSetup'
+import type { AppraisalStatus, ReviewPeriod } from '@/types/appraisalSetup'
 
 export interface TimelineMonth {
   check_in_id: string
@@ -101,6 +101,7 @@ export interface AppraisalRead {
   person_name: string
   manager_name: string | null
   cycle_name: string
+  review_period: ReviewPeriod
   period_start: string
   period_end: string
   self_due: string

@@ -60,8 +60,8 @@ import CycleRhythm from '@/components/appraisals/CycleRhythm.vue'
 import FormStep from '@/components/appraisals/FormStep.vue'
 import ReminderFields from '@/components/appraisals/ReminderFields.vue'
 import type { CycleRead, CycleUpdate } from '@/types/appraisalSetup'
-import { cycleForm, periodNoun } from '@/utils/appraisalCycleForm'
-import { cadenceProblem, longDate } from '@/utils/appraisalSetup'
+import { cycleForm } from '@/utils/appraisalCycleForm'
+import { cadenceProblem, longDate, periodWord } from '@/utils/appraisalSetup'
 
 type Form = Required<CycleUpdate>
 
@@ -81,7 +81,7 @@ watch(
   f => emit('dirty', JSON.stringify(f) !== JSON.stringify(cycleForm(props.cycle))),
   { deep: true },
 )
-const period = computed(() => periodNoun(props.cycle.review_period))
+const period = computed(() => periodWord(props.cycle.review_period))
 const problem = computed(() =>
   cadenceProblem(props.cycle.review_period, form.value.checkin_cadence, form.value.feedback_cadence),
 )

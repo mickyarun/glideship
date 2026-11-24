@@ -25,6 +25,7 @@ from app.models.appraisal_enums import (
     DraftingMode,
     DraftStatus,
     GoalResult,
+    ReviewPeriod,
 )
 from app.schemas.appraisal_check_in import AiLine, CheckInNote, FactView, LinkRead
 from app.schemas.appraisal_growth import GrowthRead
@@ -108,6 +109,7 @@ class AppraisalRead(BaseModel):
     person_name: str
     manager_name: str | None
     cycle_name: str
+    review_period: ReviewPeriod
     period_start: date
     period_end: date
     self_due: date

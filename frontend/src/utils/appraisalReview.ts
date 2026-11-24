@@ -65,14 +65,6 @@ export function firstName(name: string | null | undefined, fallback: string): st
   return name?.trim().split(/\s+/)[0] || fallback
 }
 
-/** "quarter", "half-year" or "year", from the period's length in months. */
-export function periodWord(start: string, end: string): string {
-  const [y1, m1] = start.split('-').map(Number)
-  const [y2, m2] = end.split('-').map(Number)
-  const months = (y2 - y1) * 12 + (m2 - m1) + 1
-  if (months <= 3) return 'quarter'
-  return months <= 6 ? 'half-year' : 'year'
-}
 
 /** How the shared rating came about, in one line: same as the person's, or changed. */
 export function overallLine(review: AppraisalRead, isSelf: boolean): string {

@@ -140,6 +140,7 @@ async def read_review(
         person_name=person.name if person else "",
         manager_name=manager.name if manager else None,
         cycle_name=cycle.name,
+        review_period=cycle.review_period,
         period_start=cycle.period_start,
         period_end=cycle.period_end,
         self_due=cycle.self_due,

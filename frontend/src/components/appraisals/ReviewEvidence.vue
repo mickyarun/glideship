@@ -62,10 +62,11 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import type { AppraisalRead } from '@/types/appraisalReview'
 import { safeHref, statusLabel } from '@/utils/appraisalCheckIn'
-import { evidenceOptions, firstName, periodWord } from '@/utils/appraisalReview'
+import { evidenceOptions, firstName } from '@/utils/appraisalReview'
+import { periodWord } from '@/utils/appraisalSetup'
 
 const props = defineProps<{ review: AppraisalRead; isSelf: boolean }>()
-const period = computed(() => periodWord(props.review.period_start, props.review.period_end))
+const period = computed(() => periodWord(props.review.review_period))
 const title = computed(() =>
   props.isSelf ? `Your ${period.value} at a glance` : `${firstName(props.review.person_name, 'Their')}'s ${period.value}`,
 )

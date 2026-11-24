@@ -18,7 +18,8 @@ import { describe, expect, it } from 'vitest'
 import CycleRhythm from '@/components/appraisals/CycleRhythm.vue'
 import CycleSetupForm from '@/components/appraisals/CycleSetupForm.vue'
 import type { CycleRead } from '@/types/appraisalSetup'
-import { cycleForm, periodNoun } from '@/utils/appraisalCycleForm'
+import { cycleForm } from '@/utils/appraisalCycleForm'
+import { periodWord } from '@/utils/appraisalSetup'
 import { appraisalPlugins } from './mountAppraisal'
 
 const draft: CycleRead = {
@@ -65,6 +66,6 @@ describe('new cycle', () => {
     const form = cycleForm(draft)
     form.reminder_offsets.push(5)
     expect(draft.reminder_offsets).toEqual([-3, 0, 2])
-    expect(periodNoun('half_yearly')).toBe('half-year')
+    expect(periodWord('half_yearly')).toBe('half-year')
   })
 })

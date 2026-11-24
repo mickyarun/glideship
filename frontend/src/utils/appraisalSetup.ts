@@ -46,6 +46,12 @@ export const STATUS_LABELS: Record<AppraisalStatus, string> = {
 }
 
 const PERIOD_MONTHS: Record<ReviewPeriod, number> = { quarterly: 3, half_yearly: 6, yearly: 12 }
+const PERIOD_WORDS: Record<ReviewPeriod, string> = { quarterly: 'quarter', half_yearly: 'half-year', yearly: 'year' }
+
+/** "quarter", "half-year" or "year": the word for one review period. */
+export function periodWord(review: ReviewPeriod): string {
+  return PERIOD_WORDS[review]
+}
 
 /**
  * Why a combination can't run, or null. The same rules as the backend's

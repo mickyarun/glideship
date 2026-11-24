@@ -18,7 +18,7 @@ import type { AppraisalRead } from '@/types/appraisalReview'
 
 export function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
   return {
-    id: 'a1', user_id: 'u1', person_name: 'Priya S', manager_name: 'Ravi', cycle_name: 'Q4 2026',
+    id: 'a1', user_id: 'u1', person_name: 'Priya S', manager_name: 'Ravi', cycle_name: 'Q4 2026', review_period: 'quarterly',
     period_start: '2026-10-01', period_end: '2026-12-31', self_due: '2027-01-07', manager_due: '2027-01-14',
     ack_due: '2027-01-28', status: 'self_review', drafting_mode: 'manual', summary_status: 'none', summary: [],
     summary_hidden: false, period_facts: [],

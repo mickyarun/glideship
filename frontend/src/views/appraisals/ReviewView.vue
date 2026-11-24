@@ -51,7 +51,7 @@
           v-if="review.growth.open"
           :growth="review.growth"
           :busy="busy"
-          :period="periodWord(review.period_start, review.period_end)"
+          :period="periodWord(review.review_period)"
           :manager="firstName(review.manager_name, 'your manager')"
           :person="firstName(review.person_name, 'them')"
           @save="(s, f) => run('save', store.saveGrowth(review!.id, s, f))"
@@ -88,7 +88,8 @@ import { useAppraisalReviewStore } from '@/stores/appraisalReview'
 import { useAuthStore } from '@/stores/auth'
 import type { GoalBody } from '@/types/appraisalGoals'
 import type { SelfBody } from '@/types/appraisalReview'
-import { evidenceOptions, firstName, periodWord, pickReview, reviewChoices, reviewSubtitle, reviewWaiting } from '@/utils/appraisalReview'
+import { evidenceOptions, firstName, pickReview, reviewChoices, reviewSubtitle, reviewWaiting } from '@/utils/appraisalReview'
+import { periodWord } from '@/utils/appraisalSetup'
 
 type Busy = 'save' | 'submit' | 'share' | 'back' | 'ack'
 
