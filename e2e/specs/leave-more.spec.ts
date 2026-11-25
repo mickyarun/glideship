@@ -18,7 +18,7 @@
  */
 import { approveLeave, requestLeave, requestWfh } from '../fixtures/api.ts'
 import type { StackClient } from '../fixtures/client.ts'
-import { upcomingWeekdays } from '../fixtures/dates.ts'
+import { upcomingWeekdays, weekdayThisYear } from '../fixtures/dates.ts'
 import { expect, test } from '../fixtures/test.ts'
 import { pickOption } from '../screens/forms.ts'
 import { allCaughtUp, dayLabel, myRequests, openApproval, showCalendarMonth } from '../screens/leave.ts'
@@ -56,8 +56,11 @@ test('a work-from-home day is asked for, approved and marked on the calendar', a
 })
 
 test('a morning off is a half day, shown as one', async ({ signedIn, stack }) => {
+  // The balance it checks is this leave year's, so the day must fall in it.
+  const days = weekdayThisYear()
+  test.skip(days === null, 'No working weekday left this year to book')
+  if (days === null) return
   const org = await team(stack)
-  const days = upcomingWeekdays()
   const employee = await signedIn(org.members.emp)
   await employee.goto('/leave')
   await employee.getByRole('button', { name: 'Request leave' }).click()

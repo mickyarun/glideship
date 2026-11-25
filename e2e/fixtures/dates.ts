@@ -40,3 +40,29 @@ export function upcomingWeekdays(weeksAhead = 3): LeaveDays {
   tuesday.setDate(monday.getDate() + 1)
   return { from: iso(monday), to: iso(tuesday), start: monday }
 }
+
+/** Days around the year end that a seeded holiday list may close. */
+const YEAR_END_HOLIDAYS = new Set(['12-24', '12-25', '12-26', '12-31'])
+
+/**
+ * One weekday that falls in this calendar year, for specs that read this
+ * leave year's balance. Three weeks out when that is still this year,
+ * otherwise the first working weekday from tomorrow. Null in the last days
+ * of the year when no such day is left.
+ */
+export function weekdayThisYear(): LeaveDays | null {
+  const planned = upcomingWeekdays().start
+  const today = new Date()
+  if (planned.getFullYear() === today.getFullYear()) {
+    return { from: iso(planned), to: iso(planned), start: planned }
+  }
+  const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+  while (day.getFullYear() === today.getFullYear()) {
+    const weekday = day.getDay() !== 0 && day.getDay() !== 6
+    if (weekday && !YEAR_END_HOLIDAYS.has(iso(day).slice(5))) {
+      return { from: iso(day), to: iso(day), start: new Date(day) }
+    }
+    day.setDate(day.getDate() + 1)
+  }
+  return null
+}
