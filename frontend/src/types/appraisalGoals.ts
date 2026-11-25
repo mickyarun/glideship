@@ -58,6 +58,8 @@ export interface Goal {
   added_mid_period: boolean
   created_at: string
   replaces: string | null
+  /** A change the manager suggested: the employee takes or declines it. */
+  from_manager: boolean
   dismiss_reason: string | null
   reword_note: string | null
   why: string | null
@@ -73,6 +75,10 @@ export interface GoalsRead {
   period_end: string
   locked: boolean
   limit: number
+  /** Goals are agreed by this date. */
+  goals_due: string | null
+  /** The fewest confirmed goals the org asks for. */
+  minimum: number
   accepted: number
   can_propose: boolean
   can_add: boolean
@@ -99,6 +105,8 @@ export interface GoalBody {
 export interface AppraisalSummary {
   id: string
   user_id: string
+  profile_id: string
+  cycle_id: string
   person_name: string
   cycle_name: string
   period_start: string
@@ -106,4 +114,6 @@ export interface AppraisalSummary {
   status: AppraisalStatus
   goals_accepted: number
   goals_proposed: number
+  /** This person's goals date: the cycle's, or a fresh window from a late enrolment. */
+  goals_due: string | null
 }

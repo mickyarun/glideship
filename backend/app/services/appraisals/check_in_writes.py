@@ -15,12 +15,15 @@
 """What the employee adds to their check-in, until it closes.
 
 Only the person themself writes here; a manager's words go into manager
-feedback. Every write is checked against the open check-in: tags may
+feedback. Once sent, it can still change until its due date; each change
+after sending is marked so the reader can tell (sending:
+:mod:`.check_in_send`). Every write is checked against the open check-in: tags may
 only name facts on it and the period's own goals.
 """
 
 import uuid
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,22 +33,34 @@ from app.models.appraisal_evidence_link import AppraisalEvidenceLink
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.appraisal_check_in import MAX_LINKS, AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
-from app.schemas.appraisal_check_in import CheckInNote, FactTag, GoalValueIn, LinkCreate
+from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
+from app.schemas.appraisal_check_in_note import CheckInNote, FactTag, GoalValueIn, LinkCreate
 from app.services.appraisals import crypto
 from app.services.appraisals.context import CheckInContext, may_regenerate
+from app.services.appraisals.due_dates import may_change_after_send
 from app.services.appraisals.errors import (
     AppraisalConflictError,
     AppraisalInvalidError,
     AppraisalNotFoundError,
 )
+from app.services.appraisals.org_clock import org_today
 
 CLOSED = "This check-in has closed."
+SENT_AND_DUE = "This check-in was sent and its due date has passed."
 
 
-def _require_open(ctx: CheckInContext) -> AppraisalCheckIn:
+async def _require_open(db: AsyncSession, ctx: CheckInContext) -> AppraisalCheckIn:
+    """The check-in, if the person may still change it; a change after sending is marked."""
     if not ctx.is_open:
         raise AppraisalConflictError(CLOSED)
-    return ctx.check_in
+    check_in = ctx.check_in
+    if check_in.sent_at is not None:
+        if not may_change_after_send(
+            check_in.due_on, check_in.sent_at, await org_today(db, check_in.org_id)
+        ):
+            raise AppraisalConflictError(SENT_AND_DUE)
+        check_in.edited_after_send_at = datetime.now(UTC)
+    return check_in
 
 
 def _mark_added(check_in: AppraisalCheckIn) -> None:
@@ -75,7 +90,7 @@ async def regenerate(db: AsyncSession, ctx: CheckInContext) -> None:
 
 async def save_note(db: AsyncSession, ctx: CheckInContext, note: CheckInNote) -> None:
     """Replace the employee's lines, blocker and next-month plan."""
-    check_in = _require_open(ctx)
+    check_in = await _require_open(db, ctx)
     crypto.seal_json(
         check_in, "employee_note", None if note.is_empty else note.model_dump(mode="json")
     )
@@ -88,7 +103,7 @@ async def save_tags(
     db: AsyncSession, ctx: CheckInContext, tags: Mapping[str, FactTag | None]
 ) -> None:
     """Set which goal (or heading) each fact or link helped; None clears a tag."""
-    check_in = _require_open(ctx)
+    check_in = await _require_open(db, ctx)
     repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
     known = {f["id"] for f in check_in.fact_refs or []} | {
         str(link.id) for link in await repo.links(check_in.id)
@@ -114,7 +129,7 @@ async def add_link(
     db: AsyncSession, ctx: CheckInContext, actor_id: uuid.UUID, body: LinkCreate
 ) -> AppraisalEvidenceLink:
     """Add one of up to five links."""
-    check_in = _require_open(ctx)
+    check_in = await _require_open(db, ctx)
     repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
     if len(await repo.links(check_in.id)) >= MAX_LINKS:
         raise AppraisalConflictError(f"Up to {MAX_LINKS} links on a check-in.")
@@ -138,7 +153,7 @@ async def add_link(
 
 async def remove_link(db: AsyncSession, ctx: CheckInContext, link_id: uuid.UUID) -> None:
     """Remove a link, and any tag on it."""
-    check_in = _require_open(ctx)
+    check_in = await _require_open(db, ctx)
     repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
     link = await repo.link(link_id)
     if link is None or link.check_in_id != check_in.id:
@@ -155,12 +170,18 @@ async def save_goal_value(
     goal_id: uuid.UUID,
     body: GoalValueIn,
 ) -> None:
-    """Set this month's value for one of the period's goals."""
-    check_in = _require_open(ctx)
+    """Set this month's value for one of the period's goals; an empty one clears it."""
+    check_in = await _require_open(db, ctx)
     if goal_id not in await _goal_ids(db, ctx):
         raise AppraisalNotFoundError("Goal not found.")
-    repo = AppraisalCheckInRepository(db, org_id=check_in.org_id)
-    value = await repo.goal_value(check_in.id, goal_id)
+    value = await AppraisalGoalValueRepository(db, org_id=check_in.org_id).one(
+        check_in.id, goal_id
+    )
+    if not body.value.strip():
+        if value is not None:
+            await db.delete(value)
+            await db.flush()
+        return
     if value is None:
         value = AppraisalGoalValue(
             org_id=check_in.org_id, goal_id=goal_id, check_in_id=check_in.id

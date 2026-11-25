@@ -14,78 +14,116 @@
  * limitations under the License.
  -->
 
-<!-- The shared result: the final band and goal results, every change the
-     manager made with its reason, and the reply to acknowledge it. -->
+<!-- The shared result: the overall rating in words on the five-word scale,
+     how it came about, the manager's words, then each goal as the person
+     said it and as the manager saw it. -->
 <template>
-  <section class="result" aria-labelledby="result-title">
-    <h2 id="result-title" class="result__title">Final band: {{ bandText(score?.final_band ?? null) }}</h2>
-    <p v-if="bandChanged" class="result__change">
-      Changed from {{ bandText(review.self_score?.band ?? null) }}: {{ score?.reason }}
-    </p>
-    <ul class="result__goals">
-      <li v-for="goal in review.goals" :key="goal.id">
-        <strong>{{ goal.title }}</strong> · {{ resultLabel(goal.result) }}
-        <template v-if="goal.manager_reason"> ({{ said }} {{ resultLabel(goal.self_result) }}; {{ goal.manager_reason }})</template>
-      </li>
-    </ul>
-    <template v-if="review.can.acknowledge">
-      <v-textarea v-model="reply" label="Your reply (optional; HR reads it too)" rows="2" auto-grow maxlength="1000" />
-      <div class="result__actions">
-        <v-btn color="primary" :loading="busy" @click="emit('acknowledge', reply.trim())">Acknowledge</v-btn>
-      </div>
+  <AppPanel title="Overall">
+    <p class="result__word">{{ bandLabel(final) || 'Not rated' }}</p>
+    <p class="result__muted">{{ overallLine(review, isSelf) }}</p>
+    <BandScale class="result__scale" :model-value="final" label="Overall rating" readonly compact />
+    <template v-if="score?.reason">
+      <h3 class="result__heading">{{ manager }}'s words</h3>
+      <p class="result__words">{{ score.reason }}</p>
     </template>
-    <p v-else-if="review.acknowledged_at" class="result__change">
-      Acknowledged<template v-if="review.reply">: “{{ review.reply }}”</template>
-    </p>
-  </section>
+  </AppPanel>
+  <AppPanel title="Goals" flush>
+    <div class="result__scroll">
+      <table class="result__table">
+        <thead>
+          <tr><th scope="col">Goal</th><th scope="col">{{ isSelf ? 'You said' : `${person} said` }}</th><th scope="col">{{ manager }}</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="goal in review.goals" :key="goal.id">
+            <td>{{ goal.title }}</td>
+            <td>{{ goal.self_result ? resultLabel(goal.self_result) : '–' }}</td>
+            <td>
+              <span :class="{ result__changed: goal.result !== goal.self_result }">{{ managerCall(goal) }}</span>
+              <span v-if="goal.manager_reason" class="result__muted result__quote">“{{ goal.manager_reason }}”</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </AppPanel>
+  <AppPanel :title="isSelf ? 'In your words' : `In ${person}'s words`">
+    <OpenAnswers :score="review.self_score" :who="isSelf ? 'You' : person" />
+  </AppPanel>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { AppraisalRead } from '@/types/appraisalReview'
+import { computed } from 'vue'
+import AppPanel from '@/components/common/AppPanel.vue'
+import BandScale from '@/components/appraisals/BandScale.vue'
+import OpenAnswers from '@/components/appraisals/OpenAnswers.vue'
+import type { AppraisalRead, ReviewGoal } from '@/types/appraisalReview'
 import { bandLabel } from '@/utils/appraisalBands'
 import { resultLabel } from '@/utils/appraisalGoals'
+import { firstName, overallLine } from '@/utils/appraisalReview'
 
-const props = defineProps<{ review: AppraisalRead; busy: boolean; isSelf: boolean }>()
-const emit = defineEmits<{ acknowledge: [reply: string] }>()
-const reply = ref('')
+const props = defineProps<{ review: AppraisalRead; isSelf: boolean }>()
 const score = computed(() => props.review.manager_score)
-const bandChanged = computed(() => Boolean(score.value?.reason))
-const said = computed(() => (props.isSelf ? 'you said' : `${props.review.person_name.split(' ')[0]} said`))
+const final = computed(() => score.value?.final_band ?? null)
+const manager = computed(() => firstName(props.review.manager_name, 'Your manager'))
+const person = computed(() => firstName(props.review.person_name, 'They'))
 
-function bandText(band: number | null): string {
-  return band ? `${bandLabel(band)} (${band})` : 'not scored'
+/** What the manager made of one goal: rated from scratch, changed, or agreed. */
+function managerCall(goal: ReviewGoal): string {
+  if (goal.self_result === null) return `Rated ${resultLabel(goal.result)}`
+  if (goal.result !== goal.self_result) return `Changed to ${resultLabel(goal.result)}`
+  return goal.manager_reason ? 'Agreed, with a note' : 'Agreed'
 }
 </script>
 
 <style scoped>
-.result {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 880px;
-  padding: 16px 20px;
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgb(var(--v-theme-rule));
-  border-radius: 12px;
-}
-.result__title {
+.result__word {
   margin: 0;
-  font-size: 18px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+}
+.result__muted {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.result__scale {
+  margin-top: 12px;
+}
+.result__heading {
+  margin: 16px 0 4px;
+  font-size: 13px;
   font-weight: 600;
 }
-.result__change {
+.result__words {
   margin: 0;
   font-size: 14px;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  white-space: pre-line;
 }
-.result__goals {
-  margin: 0;
-  padding-left: 20px;
+.result__scroll {
+  overflow-x: auto;
+}
+.result__table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 14px;
 }
-.result__actions {
-  display: flex;
-  justify-content: flex-end;
+.result__table th,
+.result__table td {
+  padding: 10px 20px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid rgb(var(--v-theme-rule));
+}
+.result__table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.result__changed {
+  font-weight: 600;
+}
+.result__quote {
+  display: block;
 }
 </style>

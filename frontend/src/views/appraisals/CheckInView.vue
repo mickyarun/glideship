@@ -14,51 +14,177 @@
  * limitations under the License.
  -->
 
-<!-- One check-in by id: a manager reading a report's month, or HR. The
-     API answers "not found" for anyone else. -->
+<!-- One check-in, four questions: where each goal stands, what went well,
+     what got in the way, next month's focus. The person writes it (saved as
+     they type) and sends it; anyone else reads what was sent. One AI line
+     offers a first draft of question 2. -->
 <template>
   <AppPage :title="title" :subtitle="subtitle">
-    <template #eyebrow>
-      <router-link :to="{ name: 'appraisal-team' }" class="check-in-view__back">Team check-ins</router-link>
+    <template v-if="eyebrow" #eyebrow><p class="ci__eyebrow">{{ eyebrow }}</p></template>
+    <template #actions><AppraisalGuide /></template>
+    <AppCallout v-if="store.error || problem" variant="error">{{ problem || store.error }}</AppCallout>
+    <v-progress-linear v-if="store.loading && !checkIn" indeterminate color="primary" />
+    <template v-if="checkIn && loaded">
+      <AppCallout v-if="checkIn.content_hidden" variant="info">
+        {{ checkIn.person_name }} hasn't sent this yet. You'll read it once they do.
+      </AppCallout>
+      <AppCallout v-else-if="aiReady" variant="info">
+        A first draft of question 2 is ready, written from your {{ month }} work.
+        <template #actions>
+          <v-btn size="small" variant="outlined" @click="useDraft">Use draft</v-btn>
+          <v-btn size="small" variant="text" @click="dismissed = true">Dismiss</v-btn>
+        </template>
+      </AppCallout>
+      <div v-if="!checkIn.content_hidden" class="ci">
+        <CheckInGoalsStep :goals="checkIn.goals" :month="month" :editable="editable" :previous="previous" @save="saveValue" />
+        <CheckInWorkStep v-model:notes="draft.item_notes" v-model:went-well="draft.went_well" :facts="checkIn.facts" :tags="checkIn.fact_tags" :goals="checkIn.goals" :editable="editable" :manager="manager" :month="month" :legacy="legacy" @tick="tick" />
+        <CheckInTextStep v-model="draft.blocking" :number="3" title="What got in the way?" :hint="`Optional. ${manager} uses this to unblock you, not to score you.`" label="What got in the way" :editable="editable" />
+        <CheckInTextStep v-model="draft.next_month" :number="4" :title="`What's your focus for ${nextMonth}?`" hint="One or two lines." :label="`Focus for ${nextMonth}`" :editable="editable" />
+        <CheckInNotesShown v-if="checkIn.feedback" :feedback="checkIn.feedback" />
+        <footer v-if="editable" class="ci__foot">
+          <span class="ci__saved">{{ SAVE_WORDS[state] }}<template v-if="checkIn.sent_at && checkIn.due_on"> · you can edit after sending until {{ longDate(checkIn.due_on) }}</template></span>
+          <v-btn v-if="checkIn.can_send" color="primary" :loading="sending" @click="send">Send to {{ manager }}</v-btn>
+        </footer>
+      </div>
     </template>
-    <AppCallout v-if="store.error" variant="error">{{ store.error }}</AppCallout>
-    <v-progress-linear v-if="store.loading && !store.current" indeterminate color="primary" />
-    <CheckInPage v-if="store.current" :check-in="store.current" />
   </AppPage>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
-import CheckInPage from '@/components/appraisals/CheckInPage.vue'
+import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
+import CheckInGoalsStep from '@/components/appraisals/CheckInGoalsStep.vue'
+import CheckInNotesShown from '@/components/appraisals/CheckInNotesShown.vue'
+import CheckInTextStep from '@/components/appraisals/CheckInTextStep.vue'
+import CheckInWorkStep from '@/components/appraisals/CheckInWorkStep.vue'
+import { SAVE_WORDS } from '@/composables/useAutosave'
+import { useCheckInDraft } from '@/composables/useCheckInDraft'
+import { useAppraisalReviewStore } from '@/stores/appraisalReview'
+import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
+import { useAuthStore } from '@/stores/auth'
 import { useCheckInsStore } from '@/stores/checkIns'
-import { availabilityLine, monthTitle } from '@/utils/appraisalCheckIn'
+import { monthTitle, sendLine } from '@/utils/appraisalCheckIn'
+import { previousValues } from '@/utils/appraisalHome'
+import { firstName } from '@/utils/appraisalReview'
+import { longDate } from '@/utils/appraisalSetup'
+
 
 const route = useRoute()
 const store = useCheckInsStore()
+const reviews = useAppraisalReviewStore()
+const todo = useAppraisalTodoStore()
+const auth = useAuthStore()
+const checkIn = computed(() => store.current)
+const { draft, state, problem, flush } = useCheckInDraft(checkIn)
+const dismissed = ref(false)
+const sending = ref(false)
+const previous = ref<Record<string, string>>({})
 
-const title = computed(() =>
-  store.current ? `${store.current.person_name}'s ${monthTitle(store.current.period_start)}` : 'Check-in',
-)
-const subtitle = computed(() =>
-  store.current ? `${availabilityLine(store.current)} · Only ${store.current.person_name} writes here` : '',
-)
+// The store can still hold the last check-in opened while this one loads.
+const loaded = computed(() => checkIn.value?.id === route.params.id)
+const editable = computed(() => Boolean(checkIn.value?.can_edit))
+const isSelf = computed(() => checkIn.value?.user_id === auth.user?.id)
+const month = computed(() => (checkIn.value ? monthTitle(checkIn.value.period_start).split(' ')[0] : ''))
+const nextMonth = computed(() => {
+  const end = checkIn.value?.period_end
+  return end ? monthTitle(new Date(Date.UTC(Number(end.slice(0, 4)), Number(end.slice(5, 7)), 1)).toISOString().slice(0, 10)).split(' ')[0] : ''
+})
+const manager = computed(() => firstName(checkIn.value?.manager_name, 'your manager'))
+const title = computed(() => {
+  const c = checkIn.value
+  if (!c) return 'Check-in'
+  return isSelf.value ? `${month.value} check-in` : `${c.person_name}'s ${month.value} check-in`
+})
+// "Check-in 2 of 3 · Q4 2026"
+const eyebrow = computed(() => {
+  const c = loaded.value ? checkIn.value : null
+  if (!c?.place) return c?.cycle_name ?? ''
+  return [`Check-in ${c.place.number} of ${c.place.of}`, c.cycle_name].filter(Boolean).join(' · ')
+})
+const subtitle = computed(() => {
+  const c = checkIn.value
+  if (!c) return ''
+  return editable.value && !c.sent_at ? `${sendLine(c)} · Your managers and HR see this once you send it` : sendLine(c)
+})
+const aiReady = computed(() => editable.value && !dismissed.value && Boolean(checkIn.value?.ai_lines.length))
+const legacy = computed(() => Object.values(checkIn.value?.note.lines ?? {}).flat())
+
+function useDraft(): void {
+  const lines = (checkIn.value?.ai_lines ?? []).map(l => l.text).join('\n')
+  draft.went_well = draft.went_well.trim() ? `${draft.went_well.trim()}\n${lines}` : lines
+  dismissed.value = true
+}
+
+// Ticks and goal boxes save on their own; sending waits for any on their way,
+// so a check-in sent straight after a change is never marked edited after sending.
+const saving = new Set<Promise<string | null>>()
+
+function track(action: Promise<string | null>): Promise<string | null> {
+  const done = action.then(p => {
+    problem.value = p ?? ''
+    return p
+  })
+  saving.add(done)
+  void done.finally(() => saving.delete(done))
+  return done
+}
+
+function tick(factId: string, on: boolean): void {
+  if (checkIn.value) void track(store.saveTag(checkIn.value.id, factId, on ? { goal_id: null, heading: null } : null))
+}
+
+function saveValue(goalId: string, value: string): void {
+  if (checkIn.value) void track(store.saveGoalValue(checkIn.value.id, goalId, { value, source_note: '', source_url: null }))
+}
+
+async function send(): Promise<void> {
+  const c = checkIn.value
+  const failed = (await Promise.all(saving)).some(Boolean)
+  if (!c || failed || !(await flush())) return
+  sending.value = true
+  problem.value = (await store.send(c.id)) ?? ''
+  sending.value = false
+  if (!problem.value) void todo.fetch()
+}
 
 watch(
   () => route.params.id,
-  id => {
-    store.current = null
-    if (typeof id === 'string') void store.fetchOne(id)
+  async id => {
+    dismissed.value = false
+    if (typeof id !== 'string') return
+    await flush()
+    await store.fetchOne(id)
+    const c = store.current
+    if (c?.appraisal_id) previous.value = previousValues(await reviews.fetchGoalValues(c.appraisal_id), c.period_start)
   },
   { immediate: true },
 )
 </script>
 
 <style scoped>
-.check-in-view__back {
+.ci {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 880px;
+}
+.ci__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ci__eyebrow {
+  margin: 0 0 4px;
   font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+.ci__saved {
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 </style>

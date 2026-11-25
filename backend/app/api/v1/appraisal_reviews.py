@@ -27,10 +27,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._appraisal_deps import get_caller
 from app.core.deps import get_db
-from app.schemas.appraisal_review import AppraisalRead, ManagerBody, NoteBody, ReplyBody, SelfBody
+from app.schemas.appraisal_goal_values import GoalValues
+from app.schemas.appraisal_review import AppraisalRead, ManagerBody, SelfBody
+from app.schemas.appraisal_sharing import NoteBody, ReplyBody
 from app.services.appraisals import manager_review, self_review, sharing
 from app.services.appraisals.appraisal_context import appraisal_context
 from app.services.appraisals.context import Caller
+from app.services.appraisals.goal_values import read_goal_values
 from app.services.appraisals.review_read import read_review
 
 router = APIRouter(tags=["appraisals"])
@@ -44,6 +47,16 @@ async def get_appraisal(
 ) -> AppraisalRead:
     """The review, evidence first, as the caller may see it."""
     return await read_review(db, caller, await appraisal_context(db, caller, appraisal_id))
+
+
+@router.get("/{appraisal_id}/goal-values", response_model=list[GoalValues])
+async def get_goal_values(
+    appraisal_id: uuid.UUID,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> list[GoalValues]:
+    """Each goal's value on every check-in the caller may read, month by month."""
+    return await read_goal_values(db, await appraisal_context(db, caller, appraisal_id))
 
 
 @router.put("/{appraisal_id}/self", response_model=AppraisalRead)

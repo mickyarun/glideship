@@ -20,6 +20,8 @@ import pytest
 
 from app.models.appraisal_enums import GoalOrigin, GoalResult, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
+from app.schemas.appraisal_review import ManagerBody, SelfBody
+from app.schemas.appraisal_settings import MAX_GOALS_CAP
 from app.services.appraisals.calibration_math import Scored, figures
 from app.services.appraisals.goal_rules import GoalRights, actions, next_position
 from app.services.appraisals.review_rules import (
@@ -28,18 +30,38 @@ from app.services.appraisals.review_rules import (
     band_problem,
     final_band,
     final_result,
+    goal_ids_problem,
     goal_problem,
     self_problem,
+    words_problem,
 )
 
 ACHIEVED, PARTLY = GoalResult.ACHIEVED, GoalResult.PARTLY
 
 
 def test_self_score_needs_a_band_evidence_for_high_bands_and_every_goal() -> None:
-    assert self_problem(None, 0, {}) == "Pick an overall band."
-    assert self_problem(2, 1, {}) == "Bands 1 and 2 need at least two pieces of evidence."
-    assert self_problem(2, 2, {"g": None}) == "Score each goal: achieved, partly or not yet."
+    assert self_problem(None, 0, {}) == "Pick an overall rating."
+    assert self_problem(2, 1, {}) == "The rating you picked needs at least two examples."
+    unscored = self_problem(2, 2, {"g": None})
+    assert unscored == "Pick how each goal ended: not yet, partly or achieved."
     assert self_problem(3, 0, {"g": ACHIEVED}) is None
+
+
+def test_review_bodies_take_up_to_the_settings_cap_of_goals() -> None:
+    def goals(n: int) -> list[dict[str, str]]:
+        return [{"goal_id": str(uuid.uuid4())} for _ in range(n)]
+
+    for body in (SelfBody, ManagerBody):
+        assert len(body.model_validate({"goals": goals(MAX_GOALS_CAP)}).goals) == MAX_GOALS_CAP
+        with pytest.raises(ValueError, match="at most"):
+            body.model_validate({"goals": goals(MAX_GOALS_CAP + 1)})
+
+
+def test_review_goals_must_be_the_periods_own_and_each_once() -> None:
+    period = {"a", "b", "c", "d"}
+    assert goal_ids_problem(["a", "b", "c", "d"], period) is None
+    assert goal_ids_problem(["a", "a"], period) == "Each goal can only be scored once."
+    assert goal_ids_problem(["z"], period) == "That goal isn't one of this period's goals."
 
 
 @pytest.mark.parametrize(
@@ -47,14 +69,18 @@ def test_self_score_needs_a_band_evidence_for_high_bands_and_every_goal() -> Non
     [
         (3, BandDecision(True, None, "", 0), None),
         (None, BandDecision(True, None, "", 0), "There is no self-score to agree with."),
-        (3, BandDecision(False, None, "x", 0), "Pick the band."),
+        (3, BandDecision(False, None, "x", 0), "Pick the rating."),
         (3, BandDecision(False, 4, " ", 0), "Say why; they'll read this."),
         (
             3,
             BandDecision(False, 2, "Shipped", 1),
-            "Band 1 or 2 needs at least two pieces of evidence.",
+            "The rating you picked needs at least two examples.",
         ),
-        (3, BandDecision(False, 5, "Missed", 0), "Band 5 needs evidence."),
+        (
+            3,
+            BandDecision(False, 5, "Missed", 0),
+            "The rating you picked needs at least one example.",
+        ),
         (3, BandDecision(False, 5, "Missed", 1), None),
         (None, BandDecision(False, 3, "From scratch", 0), None),
     ],
@@ -80,8 +106,8 @@ def test_calibration_figures() -> None:
     assert figs.bands == {1: 0, 2: 1, 3: 2, 4: 1, 5: 0}
     assert figs.agreement == pytest.approx(2 / 3)
     assert figs.gaps == 1 and figs.flag is None
-    assert figures([Scored(3, 3)] * 3).flag == "Agreed with every self-score."
-    assert figures([Scored(1, 3)] * 5).flag == "Changed nearly every self-score."
+    assert figures([Scored(3, 3)] * 3).flag == "Kept every person's own rating."
+    assert figures([Scored(1, 3)] * 5).flag == "Changed nearly every person's rating."
     assert figures([Scored(3, 3)] * 2).flag is None
     assert figures([Scored(None, 3)]).agreement is None
 
@@ -117,3 +143,8 @@ def test_next_position() -> None:
     assert next_position({1, 2, 3}, 5) == 4
     # Lowered after goals were confirmed: slot 2 is empty but four are confirmed.
     assert next_position({1, 3, 4, 5}, 2) is None
+
+
+def test_the_managers_words_are_always_written() -> None:
+    assert words_problem("  ") == "Write your words for them; they'll read them."
+    assert words_problem("A steady quarter") is None

@@ -40,9 +40,11 @@ from app.services.appraisals.review_rules import (
     band_problem,
     final_band,
     final_result,
+    goal_ids_problem,
     goal_problem,
     submitted_band,
     submitted_result,
+    words_problem,
 )
 from app.services.appraisals.self_review import period_goals
 
@@ -65,9 +67,10 @@ async def _apply(
     goals = await period_goals(db, ctx)
     evidence = pick(pool, body.evidence)
     band = BandDecision(body.agree, body.band, body.reason, len(evidence))
+    sent = goal_ids_problem([str(g.goal_id) for g in body.goals], set(goals))
+    if sent:
+        raise AppraisalInvalidError(sent)
     decisions = {str(g.goal_id): g for g in body.goals}
-    if set(decisions) - set(goals):
-        raise AppraisalInvalidError("That goal isn't one of this period's goals.")
     problems = []
     for key, goal in goals.items():
         item = decisions.get(key)
@@ -83,15 +86,21 @@ async def _apply(
         )
         problems.append(goal_problem(own, decision))
     appraisal.manager_band = final_band(own_band, band)
-    crypto.seal(appraisal, "manager_reason", body.reason.strip() if not body.agree else None)
-    appraisal.manager_evidence = evidence
+    # The manager's words to the person, kept whether they agree or change.
+    crypto.seal(appraisal, "manager_reason", body.reason.strip() or None)
+    # Examples only back a change; agreeing keeps none, even ones picked before.
+    appraisal.manager_evidence = [] if body.agree else evidence
     appraisal.ready_next_level = body.ready_next_level
     appraisal.performance_concern = body.performance_concern
     crypto.seal(
         appraisal, "concern_note", body.concern_note.strip() if body.performance_concern else None
     )
     if submit:
-        problem = band_problem(own_band, band) or next((p for p in problems if p), None)
+        problem = (
+            words_problem(body.reason)
+            or band_problem(own_band, band)
+            or next((p for p in problems if p), None)
+        )
         if problem:
             raise AppraisalInvalidError(problem)
         for goal in goals.values():

@@ -14,32 +14,53 @@
 
 """Assembling a check-in for one viewer: facts they may see, lines, links, goals."""
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions_people import APPRAISALS_MANAGE
+from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import DraftingMode
 from app.models.appraisal_goal import AppraisalGoal
 from app.models.appraisal_goal_value import AppraisalGoalValue
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
+from app.repositories.appraisal_goal_value import AppraisalGoalValueRepository
 from app.repositories.appraisal_role_template import AppraisalRoleTemplateRepository
 from app.repositories.user import UserRepository
 from app.repositories.work_facts_other import readable_boards
 from app.schemas.appraisal_check_in import (
     AiLine,
-    CheckInNote,
+    CheckInPlace,
     CheckInRead,
-    FactTag,
     FactView,
     GoalPanelItem,
     LinkRead,
 )
+from app.schemas.appraisal_check_in_note import CheckInNote, FactTag
 from app.services.appraisals import audit, crypto
+from app.services.appraisals.access import reads_content
+from app.services.appraisals.cadence import CADENCE_MONTHS, slices
+from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller, CheckInContext, may_regenerate
+from app.services.appraisals.due_dates import is_late, may_change_after_send
 from app.services.appraisals.fact_view import board_ids, for_viewer
 from app.services.appraisals.feedback_read import shown_on_check_in
+from app.services.appraisals.org_clock import org_today
+
+
+def _place(cycle: AppraisalCycle, start: date) -> CheckInPlace | None:
+    """Which check-in of the cycle this is, by its first day."""
+    starts = [
+        first
+        for first, _ in slices(
+            cycle.period_start, cycle.period_end, CADENCE_MONTHS[cycle.checkin_cadence]
+        )
+    ]
+    return (
+        CheckInPlace(number=starts.index(start) + 1, of=len(starts)) if start in starts else None
+    )
 
 
 async def read_check_in(
@@ -68,7 +89,10 @@ async def read_check_in(
         else await readable_boards(db, org_id, caller.user_id, caller.perms, board_ids(facts))
     )
     repo = AppraisalCheckInRepository(db, org_id=org_id)
-    values = {v.goal_id: v for v in await repo.goal_values(check_in.id)}
+    values = {
+        v.goal_id: v
+        for v in await AppraisalGoalValueRepository(db, org_id=org_id).for_check_in(check_in.id)
+    }
     period_start = ctx.cycle.period_start if ctx.cycle else check_in.period_start
     goals = await AppraisalGoalRepository(db, org_id=org_id).accepted_for_period(
         profile.id, period_start
@@ -87,12 +111,20 @@ async def read_check_in(
     )
     mode = ctx.appraisal.drafting_mode if ctx.appraisal else DraftingMode.MANUAL
     shown = for_viewer(facts, is_self=is_self, perms=caller.perms, boards=boards)
+    # Until it is sent, what the person wrote (lines, links, tags, values and
+    # the draft written for them) is theirs alone; the facts stay visible.
+    readable = reads_content(caller.user_id, profile.user_id, check_in.sent_at is not None)
+    if not readable:
+        values = {}
     # The summary is written from every fact; if any is private to this
     # viewer, the prose could name it, so they don't get the summary.
     # A redraft under way or failed keeps showing the lines it would replace.
     drafted = check_in.ai_summary is not None
     hidden = drafted and any(f["private"] for f in shown)
-    lines = crypto.unseal_json(check_in, "ai_summary") if drafted and not hidden else None
+    lines = (
+        crypto.unseal_json(check_in, "ai_summary") if drafted and not hidden and readable else None
+    )
+    today = await org_today(db, org_id)
     return CheckInRead(
         id=check_in.id,
         profile_id=profile.id,
@@ -103,9 +135,9 @@ async def read_check_in(
         period_end=check_in.period_end,
         working_days=check_in.working_days,
         available_days=check_in.available_days,
-        status=check_in.status,
+        status=shown_status(check_in, is_self),
         closed=check_in.closed_at is not None,
-        can_edit=ctx.is_open,
+        can_edit=ctx.is_open and may_change_after_send(check_in.due_on, check_in.sent_at, today),
         drafting_mode=mode,
         draft_status=check_in.draft_status,
         ai_lines=[AiLine.model_validate(line) for line in lines or []],
@@ -113,8 +145,10 @@ async def read_check_in(
         can_regenerate=may_regenerate(ctx),
         heading_meanings=dict(template.heading_meanings) if template else {},
         facts=[FactView.model_validate(f) for f in shown],
-        fact_tags=_tags(check_in.fact_tags or {}),
-        note=CheckInNote.model_validate(crypto.unseal_json(check_in, "employee_note") or {}),
+        fact_tags=_tags(check_in.fact_tags or {}) if readable else {},
+        note=CheckInNote.model_validate(
+            (crypto.unseal_json(check_in, "employee_note") if readable else None) or {}
+        ),
         links=[
             LinkRead(
                 id=link.id,
@@ -123,7 +157,7 @@ async def read_check_in(
                 heading=link.heading,
                 goal_id=link.goal_id,
             )
-            for link in await repo.links(check_in.id)
+            for link in (await repo.links(check_in.id) if readable else [])
         ],
         goals=[_goal_item(g, values.get(g.id)) for g in goals],
         # Only the person and HR act on a possible duplicate account.
@@ -131,7 +165,15 @@ async def read_check_in(
             check_in.identity_warnings if is_self or caller.perms.has(APPRAISALS_MANAGE) else []
         ),
         appraisal_id=ctx.appraisal.id if ctx.appraisal else None,
+        cycle_name=ctx.cycle.name if ctx.cycle else None,
+        place=_place(ctx.cycle, check_in.period_start) if ctx.cycle else None,
         feedback=await shown_on_check_in(db, ctx),
+        due_on=check_in.due_on,
+        sent_at=check_in.sent_at,
+        edited_after_send_at=check_in.edited_after_send_at,
+        late=is_late(check_in.due_on, check_in.sent_at, today),
+        can_send=ctx.is_open and is_self and check_in.sent_at is None,
+        content_hidden=not readable,
     )
 
 

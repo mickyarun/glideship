@@ -82,8 +82,9 @@ async def create_check_in(
     loose: Sequence[LooseAccount],
     zone: tzinfo,
     now: datetime,
+    due_on: date,
 ) -> AppraisalCheckIn:
-    """A new check-in for one period, facts included."""
+    """A new check-in for one period, facts included, due on ``due_on``."""
     check_in = AppraisalCheckIn(
         id=uuid.uuid4(),
         org_id=appraisal.org_id,
@@ -91,6 +92,7 @@ async def create_check_in(
         cycle_id=appraisal.cycle_id,
         period_start=period[0],
         period_end=period[1],
+        due_on=due_on,
         draft_status=(
             DraftStatus.PENDING if appraisal.drafting_mode is DraftingMode.AI else DraftStatus.NONE
         ),

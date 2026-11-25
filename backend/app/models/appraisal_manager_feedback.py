@@ -14,8 +14,9 @@
 
 """A manager's feedback for one report over one month or quarter.
 
-Keep doing, try next and a status for each goal. The employee sees it as
-soon as the manager saves it. ``manager_user_id`` is snapshotted when the
+Keep doing, try next and a status for each goal. Only the manager who
+writes it sees it until they send it (``sent_at``); then the person and
+HR do. ``manager_user_id`` is snapshotted when the
 item opens and moves to a new primary manager while it is still open.
 """
 
@@ -50,6 +51,12 @@ class AppraisalManagerFeedback(BaseModel):
             "status <> 'done' OR done_at IS NOT NULL", name="ck_appraisal_feedback_done_at"
         ),
         Index("ix_appraisal_feedback_manager", "org_id", "manager_user_id", "status"),
+        Index(
+            "ix_appraisal_feedback_unsent",
+            "org_id",
+            "manager_user_id",
+            postgresql_where="sent_at IS NULL",
+        ),
     )
 
     org_id: Mapped[uuid.UUID] = mapped_column(
@@ -71,7 +78,10 @@ class AppraisalManagerFeedback(BaseModel):
     cadence: Mapped[CheckInCadence] = mapped_column(
         pg_enum(CheckInCadence, "appraisal_checkin_cadence"), nullable=False
     )
-    due_on: Mapped[date] = mapped_column(Date, nullable=False)
+    # Working days after the check-in it answers is sent, on the manager's
+    # calendar; empty until then, as nothing is due before there is
+    # something to answer.
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     keep_note: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     try_note: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     # Goal id → {"status": on_track | at_risk | off_track}. Notes on each
@@ -86,3 +96,10 @@ class AppraisalManagerFeedback(BaseModel):
     done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # When the manager was told it opened; empty until a reminder pass does.
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Until sent, only the writing manager sees it. Rows written before
+    # sending existed count as sent.
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The last change after sending (allowed until the due date).
+    edited_after_send_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

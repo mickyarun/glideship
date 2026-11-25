@@ -30,20 +30,16 @@ from app.models.appraisal_cycle import AppraisalCycle
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.schemas.appraisal_cycle import (
     CycleCreate,
-    CycleProgress,
     CycleRead,
     CycleUpdate,
     EnrolmentReport,
     Readiness,
 )
-from app.schemas.appraisal_review import Calibration
 from app.services.appraisals import cycles, sharing
-from app.services.appraisals.calibration import calibration
 from app.services.appraisals.context import Caller
 from app.services.appraisals.enrolment import activate
 from app.services.appraisals.errors import AppraisalNotFoundError
 from app.services.appraisals.goal_suggest_queue import suggest_for_cycle
-from app.services.appraisals.progress import cycle_progress
 from app.services.appraisals.readiness import readiness
 from app.services.appraisals.review_start import start_review
 
@@ -52,7 +48,7 @@ router = APIRouter(
 )
 
 
-async def _cycle(db: AsyncSession, caller: Caller, cycle_id: uuid.UUID) -> AppraisalCycle:
+async def load_cycle(db: AsyncSession, caller: Caller, cycle_id: uuid.UUID) -> AppraisalCycle:
     cycle = await AppraisalCycleRepository(db, org_id=caller.org_id).get_by_id(cycle_id)
     if cycle is None:
         raise AppraisalNotFoundError("Cycle not found.")
@@ -85,7 +81,7 @@ async def get_cycle(
     db: AsyncSession = Depends(get_db),
 ) -> CycleRead:
     """One cycle."""
-    return cycles.cycle_read(await _cycle(db, caller, cycle_id))
+    return cycles.cycle_read(await load_cycle(db, caller, cycle_id))
 
 
 @router.patch("/cycles/{cycle_id}", response_model=CycleRead)
@@ -117,7 +113,7 @@ async def get_readiness(
     db: AsyncSession = Depends(get_db),
 ) -> Readiness:
     """AI or manual, people HR should look at, and possible duplicate accounts."""
-    return await readiness(db, await _cycle(db, caller, cycle_id))
+    return await readiness(db, await load_cycle(db, caller, cycle_id))
 
 
 @router.post("/cycles/{cycle_id}/activate", response_model=EnrolmentReport)
@@ -128,16 +124,6 @@ async def activate_cycle(
 ) -> EnrolmentReport:
     """Open the cycle and enrol everyone in its scope."""
     return await activate(db, caller.org_id, cycle_id, caller.user_id)
-
-
-@router.get("/cycles/{cycle_id}/progress", response_model=CycleProgress)
-async def get_progress(
-    cycle_id: uuid.UUID,
-    caller: Caller = Depends(get_caller),
-    db: AsyncSession = Depends(get_db),
-) -> CycleProgress:
-    """Who's done and who's overdue."""
-    return await cycle_progress(db, caller, await _cycle(db, caller, cycle_id))
 
 
 @router.post("/cycles/{cycle_id}/close", response_model=CycleRead)
@@ -160,16 +146,6 @@ async def post_start_review(
     return {"opened": await start_review(db, caller.org_id, cycle_id)}
 
 
-@router.get("/cycles/{cycle_id}/calibration", response_model=Calibration)
-async def get_calibration(
-    cycle_id: uuid.UUID,
-    caller: Caller = Depends(get_caller),
-    db: AsyncSession = Depends(get_db),
-) -> Calibration:
-    """Each manager's bands, agreement and big gaps."""
-    return await calibration(db, caller, await _cycle(db, caller, cycle_id))
-
-
 @router.post("/cycles/{cycle_id}/share")
 async def post_share_all(
     cycle_id: uuid.UUID,
@@ -177,7 +153,7 @@ async def post_share_all(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
     """Share every review waiting for HR that the caller may act on."""
-    return {"shared": await sharing.share_all(db, caller, await _cycle(db, caller, cycle_id))}
+    return {"shared": await sharing.share_all(db, caller, await load_cycle(db, caller, cycle_id))}
 
 
 @router.post("/cycles/{cycle_id}/suggest-goals", status_code=status.HTTP_202_ACCEPTED)
@@ -187,5 +163,5 @@ async def post_suggest_goals(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
     """Queue AI goal suggestions for everyone in AI mode whose goals are still open."""
-    cycle = await _cycle(db, caller, cycle_id)
+    cycle = await load_cycle(db, caller, cycle_id)
     return {"queued": await suggest_for_cycle(db, caller.org_id, cycle.id)}

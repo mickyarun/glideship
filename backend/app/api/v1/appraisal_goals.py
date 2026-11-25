@@ -33,12 +33,14 @@ from app.schemas.appraisal_goal import (
     GoalsRead,
     ReasonBody,
 )
-from app.services.appraisals import goal_decisions, goal_writes
+from app.schemas.appraisal_team import TeamRow
+from app.services.appraisals import goal_changes, goal_decisions, goal_writes
 from app.services.appraisals.appraisal_context import appraisal_context, goal_context
 from app.services.appraisals.appraisal_lists import my_appraisals, team_appraisals
 from app.services.appraisals.context import Caller
 from app.services.appraisals.goal_read import goal_options, list_goals
 from app.services.appraisals.goal_suggest_queue import suggest_for
+from app.services.appraisals.team_overview import team_overview
 
 router = APIRouter(tags=["appraisals"])
 
@@ -57,6 +59,14 @@ async def list_team(
 ) -> list[AppraisalSummary]:
     """The caller's direct reports' appraisals, newest first."""
     return await team_appraisals(db, caller)
+
+
+@router.get("/team-overview", response_model=list[TeamRow])
+async def list_team_overview(
+    caller: Caller = Depends(get_caller), db: AsyncSession = Depends(get_db)
+) -> list[TeamRow]:
+    """The caller's reports in running cycles: goals, each month's check-in, each note."""
+    return await team_overview(db, caller)
 
 
 @router.get("/{appraisal_id}/goals", response_model=GoalsRead)
@@ -164,9 +174,9 @@ async def suggest_change(
     caller: Caller = Depends(get_caller),
     db: AsyncSession = Depends(get_db),
 ) -> GoalsRead:
-    """The employee proposes new wording for a confirmed goal."""
+    """Propose new wording for a confirmed goal; the other side decides."""
     goal, ctx = await goal_context(db, caller, goal_id)
-    await goal_writes.suggest_change(db, ctx, goal, body)
+    await goal_changes.suggest_change(db, ctx, goal, body)
     return await list_goals(db, ctx, log_view=False)
 
 

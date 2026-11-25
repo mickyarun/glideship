@@ -19,6 +19,7 @@ import { ref } from 'vue'
 
 import api from '@/services/api'
 import type { AppraisalSummary, GoalBody } from '@/types/appraisalGoals'
+import type { GoalValues } from '@/types/appraisalGoalValues'
 import type { AppraisalRead, ManagerBody, SelfBody } from '@/types/appraisalReview'
 import { extractApiError } from '@/utils/errors'
 
@@ -32,6 +33,7 @@ export const useAppraisalReviewStore = defineStore('appraisalReview', () => {
   const loading = ref(false)
 
   async function fetchLists(): Promise<void> {
+    error.value = ''
     try {
       const [own, reports] = await Promise.all([
         api.get<AppraisalSummary[]>(`${BASE}/mine`),
@@ -91,7 +93,18 @@ export const useAppraisalReviewStore = defineStore('appraisalReview', () => {
   const removeNextGoal = (id: string, goalId: string) =>
     act(() => api.delete<AppraisalRead>(url(id, `/next-goals/${goalId}`)), "Couldn't take the goal back.")
 
+  /** Each goal's value month by month; empty when it can't be loaded. */
+  async function fetchGoalValues(id: string): Promise<GoalValues[]> {
+    try {
+      return (await api.get<GoalValues[]>(url(id, '/goal-values'))).data
+    } catch (err) {
+      error.value = extractApiError(err, "Couldn't load the goal values. Reload to try again.")
+      return []
+    }
+  }
+
   return {
+    fetchGoalValues,
     saveGrowth, addNextGoal, acceptNextGoal, removeNextGoal,
     mine, team, current, error, loading, fetchLists, fetchOne,
     saveSelf, submitSelf, saveManager, submitManager, sendBack, share, acknowledge,

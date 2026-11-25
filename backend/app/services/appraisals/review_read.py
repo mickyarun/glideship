@@ -17,58 +17,29 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_enums import AppraisalStatus
-from app.models.appraisal_goal import AppraisalGoal
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_goal import AppraisalGoalRepository
 from app.repositories.user import UserRepository
 from app.repositories.work_facts_other import readable_boards
-from app.schemas.appraisal_check_in import AiLine, CheckInNote, FactView, LinkRead
+from app.schemas.appraisal_check_in import AiLine, FactView, LinkRead
+from app.schemas.appraisal_check_in_note import CheckInNote
 from app.schemas.appraisal_review import (
     AppraisalRead,
     ManagerOnly,
     ManagerScore,
-    ReviewActions,
-    ReviewGoal,
     SelfScore,
     TimelineMonth,
 )
 from app.services.appraisals import audit, crypto
-from app.services.appraisals.access import AppraisalAccess
+from app.services.appraisals.access import reads_content
 from app.services.appraisals.appraisal_context import AppraisalContext
+from app.services.appraisals.check_in_lists import shown_status
 from app.services.appraisals.context import Caller
 from app.services.appraisals.evidence import ids_of
 from app.services.appraisals.fact_view import board_ids, for_viewer
+from app.services.appraisals.fairness import held_ids
 from app.services.appraisals.growth import read_growth
-
-
-def _goal(goal: AppraisalGoal, access: AppraisalAccess) -> ReviewGoal:
-    own, manager = access.view_self_score, access.view_manager_score
-    return ReviewGoal(
-        id=goal.id,
-        position=goal.position,
-        title=crypto.unseal(goal, "title") or "",
-        measure=crypto.unseal(goal, "measure") or "",
-        added_mid_period=goal.added_mid_period,
-        accepted_at=goal.accepted_at,
-        self_result=goal.self_result if own else None,
-        self_reason=crypto.unseal(goal, "self_reason") if own else None,
-        self_evidence=ids_of(goal.self_evidence) if own else [],
-        result=goal.final_result if manager else None,
-        draft_result=goal.manager_result if access.edit_manager_score else None,
-        manager_reason=crypto.unseal(goal, "manager_reason") if manager else None,
-    )
-
-
-def _actions(ctx: AppraisalContext) -> ReviewActions:
-    access, status = ctx.access, ctx.appraisal.status
-    calibrating = status is AppraisalStatus.CALIBRATION
-    return ReviewActions(
-        edit_self=access.edit_self_score and status is AppraisalStatus.SELF_REVIEW,
-        edit_manager=access.edit_manager_score and status is AppraisalStatus.MANAGER_REVIEW,
-        send_back=access.send_back and calibrating,
-        share=access.share and calibrating,
-        acknowledge=ctx.is_self and status is AppraisalStatus.SHARED,
-    )
+from app.services.appraisals.review_parts import review_actions, review_goal
 
 
 async def read_review(
@@ -100,14 +71,23 @@ async def read_review(
         shown = for_viewer(facts, is_self=ctx.is_self, perms=caller.perms, boards=boards)
         return [FactView.model_validate(f) for f in shown]
 
-    links = await repo.links_for([c.id for c in months])
+    # A month not sent yet shows its facts but not what the person wrote.
+    readable = {
+        c.id
+        for c in months
+        if reads_content(caller.user_id, profile.user_id, c.sent_at is not None)
+    }
+    links = await repo.links_for(list(readable))
     timeline = [
         TimelineMonth(
             check_in_id=c.id,
             period_start=c.period_start,
-            status=c.status,
+            status=shown_status(c, ctx.is_self),
+            sent=c.sent_at is not None,
             facts=view(list(c.fact_refs or [])),
-            note=CheckInNote.model_validate(crypto.unseal_json(c, "employee_note") or {}),
+            note=CheckInNote.model_validate(
+                (crypto.unseal_json(c, "employee_note") if c.id in readable else None) or {}
+            ),
             links=[
                 LinkRead(
                     id=link.id,
@@ -116,7 +96,7 @@ async def read_review(
                     heading=link.heading,
                     goal_id=link.goal_id,
                 )
-                for link in links[c.id]
+                for link in links.get(c.id, [])
             ],
         )
         for c in months
@@ -140,6 +120,7 @@ async def read_review(
         person_name=person.name if person else "",
         manager_name=manager.name if manager else None,
         cycle_name=cycle.name,
+        review_period=cycle.review_period,
         period_start=cycle.period_start,
         period_end=cycle.period_end,
         self_due=cycle.self_due,
@@ -152,12 +133,14 @@ async def read_review(
         summary_hidden=hidden,
         timeline=timeline,
         period_facts=view(list(appraisal.period_facts or [])),
-        goals=[_goal(g, access) for g in goals],
+        goals=[review_goal(g, access) for g in goals],
         self_score=SelfScore(
             band=appraisal.self_band,
             reason=crypto.unseal(appraisal, "self_reason") or "",
             evidence=ids_of(appraisal.self_evidence),
             submitted_at=appraisal.self_submitted_at,
+            proud=crypto.unseal(appraisal, "self_proud") or "",
+            differently=crypto.unseal(appraisal, "self_differently") or "",
         )
         if access.view_self_score
         else None,
@@ -182,7 +165,10 @@ async def read_review(
         if ctx.is_self or access.view_calibration
         else None,
         shared_at=appraisal.shared_at,
+        held=access.share
+        and appraisal.status is AppraisalStatus.CALIBRATION
+        and appraisal.id in await held_ids(db, caller, cycle),
         acknowledged_at=appraisal.acknowledged_at,
         growth=await read_growth(db, ctx),
-        can=_actions(ctx),
+        can=review_actions(ctx),
     )

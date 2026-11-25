@@ -40,6 +40,9 @@ export default defineConfig<{ stackTarget: StackTarget }>({
     screenshot: 'only-on-failure',
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
+    // Headless Chromium on macOS otherwise asks the login keychain for its
+    // storage key, which blocks or prompts outside an interactive session.
+    launchOptions: { args: ['--use-mock-keychain'] },
   },
   // The whole stack: Docker Postgres and Redis, the fake-backed backend,
   // multiplayer and Vite, on ports of its own. Locally a running

@@ -12,75 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Check-ins over the API: what the employee writes, and what anyone reads."""
+"""Check-ins over the API: what anyone reads (what the employee writes:
+:mod:`.appraisal_check_in_note`)."""
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Self
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from pydantic import BaseModel
 
 from app.models.appraisal_enums import CheckInStatus, DraftingMode, DraftStatus, EvidenceHeading
+from app.schemas.appraisal_check_in_note import CheckInNote, FactTag
 from app.schemas.appraisal_feedback import FeedbackShown
-
-LINE = 300
-MAX_LINES = 10
-
-
-class CheckInNote(BaseModel):
-    """The employee's own words; everything is optional."""
-
-    lines: dict[EvidenceHeading, list[str]] = Field(default_factory=dict)
-    blocking: str = Field("", max_length=1000)
-    next_month: str = Field("", max_length=1000)
-
-    @field_validator("lines")
-    @classmethod
-    def _short_lines(
-        cls, lines: dict[EvidenceHeading, list[str]]
-    ) -> dict[EvidenceHeading, list[str]]:
-        cleaned = {h: [t.strip() for t in texts if t.strip()] for h, texts in lines.items()}
-        if any(len(texts) > MAX_LINES for texts in cleaned.values()):
-            raise ValueError(f"Up to {MAX_LINES} lines under each heading.")
-        if any(len(t) > LINE for texts in cleaned.values() for t in texts):
-            raise ValueError(f"Each line must be {LINE} characters or fewer.")
-        return {h: texts for h, texts in cleaned.items() if texts}
-
-    @property
-    def is_empty(self) -> bool:
-        """Nothing written at all."""
-        return not self.lines and not self.blocking.strip() and not self.next_month.strip()
-
-
-class FactTag(BaseModel):
-    """Which goal a fact or link helped; with no goal, which heading it goes under."""
-
-    goal_id: uuid.UUID | None = None
-    heading: EvidenceHeading | None = None
-
-    @model_validator(mode="after")
-    def _one_place(self) -> Self:
-        if self.goal_id is None and self.heading is None:
-            raise ValueError("Pick a goal or a heading.")
-        return self
-
-
-class LinkCreate(BaseModel):
-    """A link the employee adds: a ticket, a doc, a report, a published page."""
-
-    url: HttpUrl
-    title: str = Field("", max_length=200)
-    heading: EvidenceHeading
-    goal_id: uuid.UUID | None = None
-
-
-class GoalValueIn(BaseModel):
-    """This month's value for a goal's measure, and where it came from."""
-
-    value: str = Field(min_length=1, max_length=100)
-    source_note: str = Field("", max_length=200)
-    source_url: HttpUrl | None = None
 
 
 class FactView(BaseModel):
@@ -126,6 +69,13 @@ class AiLine(BaseModel):
     fact_ids: list[str]
 
 
+class CheckInPlace(BaseModel):
+    """Which of the cycle's check-ins this is: "2 of 3"."""
+
+    number: int
+    of: int
+
+
 class CheckInRead(BaseModel):
     """One check-in as the caller may see it."""
 
@@ -157,8 +107,18 @@ class CheckInRead(BaseModel):
     identity_warnings: list[dict[str, str]]
     # The review this check-in belongs to: its goals page hangs off it.
     appraisal_id: uuid.UUID | None = None
-    # The manager's feedback answering this check-in, once some is written.
+    cycle_name: str | None = None
+    place: CheckInPlace | None = None
+    # The manager's feedback answering this check-in, once it is sent.
     feedback: FeedbackShown | None = None
+    due_on: date | None = None
+    sent_at: datetime | None = None
+    edited_after_send_at: datetime | None = None
+    late: bool = False
+    # The person may send it now (theirs, open, not sent yet).
+    can_send: bool = False
+    # Not sent yet and not the caller's: what the person wrote is left out.
+    content_hidden: bool = False
 
 
 class CheckInSummary(BaseModel):
@@ -172,3 +132,6 @@ class CheckInSummary(BaseModel):
     status: CheckInStatus
     closed: bool
     fact_count: int
+    due_on: date | None = None
+    sent_at: datetime | None = None
+    late: bool = False

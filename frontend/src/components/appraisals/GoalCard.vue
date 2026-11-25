@@ -27,9 +27,7 @@
       {{ originLine(goal) }}<template v-if="goal.added_mid_period"> · added mid-period</template>
     </p>
     <p v-if="goal.why" class="goal__why">Why this: {{ goal.why }}</p>
-    <p v-if="goal.status === 'proposed' && !goal.reword_note" class="goal__waiting">
-      {{ goal.replaces ? 'A suggested change, waiting' : 'Waiting' }} for {{ managerName || 'the manager' }} to confirm.
-    </p>
+    <p v-if="goal.status === 'proposed' && !goal.reword_note" class="goal__waiting">{{ waitingLine }}</p>
     <AppCallout v-if="goal.status === 'proposed' && goal.reword_note" variant="warning" title="Asked to reword">
       {{ goal.reword_note }}
     </AppCallout>
@@ -42,7 +40,7 @@
     </details>
     <div v-if="hasActions" class="goal__actions">
       <v-btn v-if="goal.actions.accept" size="small" color="primary" :disabled="slotsFull" @click="emit('accept')">
-        {{ goal.status === 'suggested' ? 'Use this goal' : 'Confirm' }}
+        {{ goal.status === 'suggested' ? 'Use this goal' : goal.from_manager ? 'Take this change' : 'Confirm' }}
       </v-btn>
       <v-btn v-if="goal.actions.ask_reword" size="small" variant="outlined" @click="emit('reword')">Ask to reword</v-btn>
       <v-btn v-if="goal.actions.edit" size="small" variant="outlined" @click="emit('edit')">Edit</v-btn>
@@ -77,7 +75,19 @@ const slotsFull = computed(() => Boolean(props.full) && !props.goal.replaces && 
 const hasActions = computed(() => Object.values(props.goal.actions).some(Boolean))
 const dismissLabel = computed(() => {
   if (props.goal.status === 'suggested') return 'Dismiss'
-  return props.asEmployee ? 'Withdraw' : 'Not this period'
+  // Whoever suggested it takes it back; the other side turns it down.
+  const mine = props.asEmployee !== props.goal.from_manager
+  if (props.goal.from_manager) return mine ? 'Take it back' : 'Not this one'
+  return mine ? 'Withdraw' : 'Not this period'
+})
+const waitingLine = computed(() => {
+  const manager = props.managerName || 'Your manager'
+  if (props.goal.from_manager) {
+    return props.asEmployee
+      ? `${manager} suggested this change. Take it, or say it's not the one.`
+      : 'A change you suggested, waiting for them to take it.'
+  }
+  return `${props.goal.replaces ? 'A suggested change, waiting' : 'Waiting'} for ${props.managerName || 'the manager'} to confirm.`
 })
 </script>
 

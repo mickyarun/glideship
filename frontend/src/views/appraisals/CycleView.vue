@@ -14,21 +14,20 @@
  * limitations under the License.
  -->
 
-<!-- One cycle for HR. A draft shows its settings and readiness, then opens;
-     a running cycle shows progress and can be closed. -->
+<!-- One cycle for HR. A draft is set up in three steps on one page (who and
+     when, how it runs, check and open). A running cycle shows where it is,
+     the one thing to do now, the counts and each manager, and can close. -->
 <template>
-  <AppPage :title="cycle?.name || 'Cycle'" :subtitle="subtitle">
+  <AppPage :title="cycle?.status === 'draft' ? `Start ${cycle.name}` : cycle?.name || 'Cycle'" :subtitle="subtitle">
     <template #actions>
       <v-btn variant="text" :to="{ name: 'appraisal-cycles' }">All cycles</v-btn>
       <AppraisalGuide />
       <template v-if="cycle?.status === 'draft'">
         <v-btn variant="outlined" color="error" :loading="busy === 'delete'" @click="remove">Delete draft</v-btn>
-        <v-btn color="primary" :loading="busy === 'open'" @click="open">Open cycle</v-btn>
       </template>
       <template v-else-if="cycle && cycle.status !== 'closed'">
         <v-btn v-if="cycle.ai_drafting && cycle.status === 'active'" variant="text" :loading="busy === 'suggest'" @click="count('suggest', store.suggestAll(cycle.id))">Suggest goals for everyone</v-btn>
-        <v-btn v-if="cycle.status === 'active'" color="primary" :loading="busy === 'review'" @click="count('review', store.startReview(cycle.id))">Start the review</v-btn>
-        <v-btn v-if="cycle.status === 'reviewing'" color="primary" :loading="busy === 'share'" @click="count('share', store.shareAll(cycle.id))">Share all ready results</v-btn>
+        <v-btn v-if="cycle.status === 'reviewing'" variant="text" :to="{ name: 'appraisal-fairness', params: { id: cycle.id } }">Fairness check</v-btn>
         <v-btn variant="outlined" @click="confirmClose = true">Close cycle</v-btn>
       </template>
     </template>
@@ -36,18 +35,29 @@
     <AppCallout v-if="message" :variant="messageKind">{{ message }}</AppCallout>
     <v-progress-linear v-if="store.loading && !cycle" indeterminate color="primary" />
     <div v-if="cycle?.status === 'draft'" class="cycle__draft">
-      <CycleSetupForm :cycle="cycle" :saving="busy === 'save'" @save="save" />
-      <CycleReadiness v-if="store.readiness" :readiness="store.readiness" />
+      <CycleSetupForm :cycle="cycle" :saving="busy === 'save'" :people="store.readiness?.in_scope ?? null" @save="save" @dirty="d => (unsaved = d)" />
+      <FormStep :number="3" title="Check and open" hint="We check everyone has a manager and a role template. Nothing goes out until you open it.">
+        <CycleReadiness v-if="store.readiness" :readiness="store.readiness" />
+        <div class="cycle__open">
+          <span v-if="unsaved" class="cycle__unsaved">Save step 2 first: opening uses what's saved.</span>
+          <v-btn color="primary" :disabled="unsaved" :loading="busy === 'open'" @click="open">Open {{ cycle.name }}</v-btn>
+        </div>
+      </FormStep>
     </div>
-    <template v-else>
-      <CalibrationPanel v-if="store.calibration" :calibration="store.calibration" />
-      <CycleProgressTable v-if="store.progress" :progress="store.progress" />
-    </template>
+    <CycleRunning
+      v-else-if="cycle && store.progress"
+      :cycle="cycle"
+      :progress="store.progress"
+      :readiness="store.readiness"
+      :busy="busy"
+      @remind="remind"
+      @review="count('review', store.startReview(cycle.id))"
+    />
     <v-dialog v-model="confirmClose" max-width="480">
       <v-card>
         <v-card-title>Close {{ cycle?.name }}?</v-card-title>
         <v-card-text>
-          Everything in it becomes read-only: check-ins close on the next tick and feedback not written stays "not done". Nothing is deleted.
+          Everything in it becomes read-only: check-ins close on the next tick and notes not sent stay "not done". Nothing is deleted.
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -65,41 +75,47 @@ import { useRoute, useRouter } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
-import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
-import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
-import CycleProgressTable from '@/components/appraisals/CycleProgressTable.vue'
 import CycleReadiness from '@/components/appraisals/CycleReadiness.vue'
+import CycleRunning from '@/components/appraisals/CycleRunning.vue'
 import CycleSetupForm from '@/components/appraisals/CycleSetupForm.vue'
-import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
+import FormStep from '@/components/appraisals/FormStep.vue'
+import { type Outcome, useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import type { CycleUpdate } from '@/types/appraisalSetup'
 import { CYCLE_STATUS, longDate } from '@/utils/appraisalSetup'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const route = useRoute()
 const router = useRouter()
 const store = useAppraisalSetupStore()
 const cycle = computed(() => store.cycle)
-const busy = ref<'save' | 'open' | 'delete' | 'close' | 'suggest' | 'review' | 'share' | null>(null)
+const busy = ref<'save' | 'open' | 'delete' | 'close' | 'suggest' | 'review' | 'remind' | null>(null)
 const confirmClose = ref(false)
+const unsaved = ref(false)
 const message = ref('')
 const messageKind = ref<'error' | 'success'>('success')
 
-const subtitle = computed(() =>
-  cycle.value
-    ? `${CYCLE_STATUS[cycle.value.status]} · ${longDate(cycle.value.period_start)} – ${longDate(cycle.value.period_end)}`
-    : '',
-)
+const subtitle = computed(() => {
+  const c = cycle.value
+  if (!c) return ''
+  if (c.status === 'draft') return 'New cycle · 3 short steps. Defaults come from Settings, so most cycles only need step 1.'
+  return `${CYCLE_STATUS[c.status]} · ${longDate(c.period_start)} – ${longDate(c.period_end)}`
+})
 
 function report(problem: string | null, ok: string): void {
   message.value = problem ?? ok
   messageKind.value = problem ? 'error' : 'success'
 }
 
-async function count(kind: 'suggest' | 'review' | 'share', action: Promise<string>): Promise<void> {
+async function remind(): Promise<void> {
+  if (cycle.value) await count('remind', store.remind(cycle.value.id))
+}
+
+async function count(kind: 'suggest' | 'review' | 'remind', action: Promise<Outcome>): Promise<void> {
   busy.value = kind
-  const text = await action
+  const { ok, text } = await action
   busy.value = null
   message.value = text
-  messageKind.value = text.startsWith("Couldn't") ? 'error' : 'success'
+  messageKind.value = ok ? 'success' : 'error'
 }
 
 async function save(form: CycleUpdate): Promise<void> {
@@ -115,7 +131,7 @@ async function open(): Promise<void> {
   const [result, problem] = await store.activate(cycle.value.id)
   busy.value = null
   const skipped = result?.no_primary_manager.length ?? 0
-  report(problem, `Opened. ${result?.enrolled ?? 0} people enrolled${skipped ? `, ${skipped} without a primary manager` : ''}.`)
+  report(problem, `Opened. ${peopleCount(result?.enrolled ?? 0)} enrolled${skipped ? `, ${skipped} without a primary manager` : ''}.`)
 }
 
 async function remove(): Promise<void> {
@@ -139,7 +155,6 @@ watch(
   () => route.params.id,
   id => {
     message.value = ''
-    void useAppraisalGuide().showOnFirstVisit()
     if (typeof id === 'string') void store.fetchCycle(id)
   },
   { immediate: true },
@@ -148,15 +163,20 @@ watch(
 
 <style scoped>
 .cycle__draft {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: start;
+  max-width: 960px;
 }
-/* The setup form needs the width for its rows of dates; readiness goes below. */
-@media (max-width: 1200px) {
-  .cycle__draft {
-    grid-template-columns: 1fr;
-  }
+.cycle__open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.cycle__unsaved {
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 </style>

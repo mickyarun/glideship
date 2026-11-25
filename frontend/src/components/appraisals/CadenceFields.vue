@@ -37,7 +37,7 @@
     <v-select
       :model-value="feedback"
       :items="feedbackItems"
-      label="Manager feedback"
+      label="Manager notes"
       hide-details
       @update:model-value="(v: FeedbackCadence) => emit('update:feedback', v)"
     />

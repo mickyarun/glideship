@@ -18,22 +18,18 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import api from '@/services/api'
-import type {
-  AppraisalSettings,
-  CycleCreate,
-  CycleProgress,
-  CycleRead,
-  CycleUpdate,
-  EnrolmentReport,
-  Readiness,
-} from '@/types/appraisalSetup'
-import type { Calibration } from '@/types/appraisalReview'
+import type { AppraisalSettings, CycleCreate, CycleRead, CycleUpdate, EnrolmentReport, Readiness } from '@/types/appraisalSetup'
+import type { Calibration } from '@/types/appraisalCalibration'
+import type { CycleProgress, RemindResult } from '@/types/appraisalProgress'
 import { extractApiError } from '@/utils/errors'
+import { peopleCount } from '@/utils/leavePolicyDisplay'
 
 const BASE = '/v1/appraisals'
 
-function people(n: number): string {
-  return n === 1 ? '1 person' : `${n} people`
+/** What a cycle action did, and the line to show for it. */
+export interface Outcome {
+  ok: boolean
+  text: string
 }
 
 export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
@@ -67,7 +63,7 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
     cycles.value = (await load<CycleRead[]>('cycles', "Couldn't load the cycles.")) ?? []
   }
 
-  /** The cycle, with readiness while it's a draft and progress once it runs. */
+  /** The cycle, with readiness while it's a draft or open, and progress once it runs. */
   async function fetchCycle(id: string): Promise<void> {
     cycle.value = await load<CycleRead>(`cycles/${id}`, "Couldn't load this cycle.")
     readiness.value = null
@@ -79,6 +75,10 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
       return
     }
     progress.value = await load<CycleProgress>(`cycles/${id}/progress`, "Couldn't load progress.")
+    // While goals and check-ins run, readiness says who still has no manager.
+    if (cycle.value.status === 'active') {
+      readiness.value = await load<Readiness>(`cycles/${id}/readiness`, "Couldn't check readiness.")
+    }
     // Calibration starts once the review has opened.
     if (cycle.value.status !== 'active') {
       calibration.value = await load<Calibration>(`cycles/${id}/calibration`, "Couldn't load calibration.")
@@ -140,39 +140,37 @@ export const useAppraisalSetupStore = defineStore('appraisalSetup', () => {
   }
 
   /** A cycle action with a count back; the message to show. */
-  async function count(id: string, path: string, ok: (n: number) => string, fallback: string): Promise<string> {
-    const [data, problem] = await attempt(() => api.post<Record<string, number>>(`${BASE}/cycles/${id}/${path}`), fallback)
+  async function count(id: string, path: string, ok: (n: number) => string, fallback: string, body?: object): Promise<Outcome> {
+    const [data, problem] = await attempt(() => api.post<Record<string, number>>(`${BASE}/cycles/${id}/${path}`, body), fallback)
     if (data) await fetchCycle(id)
-    return problem ?? ok(Object.values(data ?? {})[0] ?? 0)
+    return problem ? { ok: false, text: problem } : { ok: true, text: ok(Object.values(data ?? {})[0] ?? 0) }
   }
 
   const startReview = (id: string) =>
-    count(id, 'start-review', n => `Review opened for ${people(n)}.`, "Couldn't open the review.")
+    count(id, 'start-review', n => `Review opened for ${peopleCount(n)}.`, "Couldn't open the review.")
   const shareAll = (id: string) =>
     count(id, 'share', n => `Shared ${n === 1 ? '1 result' : `${n} results`}.`, "Couldn't share the results.")
+  /** Mark flagged results fair, so sharing everything ready includes them. */
+  const looksFair = (id: string, appraisalIds: string[]) =>
+    count(id, 'looks-fair', n => `Marked fair: ${n === 1 ? '1 result' : `${n} results`} can now be shared.`, "Couldn't mark it fair.", { appraisal_ids: appraisalIds })
   const suggestAll = (id: string) =>
-    count(id, 'suggest-goals', n => `Asked for suggested goals for ${people(n)}.`, "Couldn't ask for suggestions.")
+    count(id, 'suggest-goals', n => `Asked for suggested goals for ${peopleCount(n)}.`, "Couldn't ask for suggestions.")
+
+  /** Slack everyone late now; the message to show. */
+  async function remind(id: string): Promise<Outcome> {
+    const [data, problem] = await attempt(
+      () => api.post<RemindResult>(`${BASE}/cycles/${id}/remind`),
+      "Couldn't send the reminders.",
+    )
+    if (data) await fetchCycle(id)
+    if (problem || !data) return { ok: false, text: problem ?? "Couldn't send the reminders." }
+    if (!data.people) return { ok: true, text: 'Nobody is late right now, so nothing was sent.' }
+    return { ok: true, text: `Reminded ${peopleCount(data.people)}. ${data.reached} got it on Slack.` }
+  }
 
   return {
-    calibration,
-    startReview,
-    shareAll,
-    suggestAll,
-    settings,
-    cycles,
-    cycle,
-    readiness,
-    progress,
-    error,
-    loading,
-    fetchSettings,
-    fetchCycles,
-    fetchCycle,
-    saveSettings,
-    createCycle,
-    updateCycle,
-    deleteCycle,
-    activate,
-    close,
+    settings, cycles, cycle, readiness, progress, calibration, error, loading,
+    fetchSettings, fetchCycles, fetchCycle, saveSettings, createCycle, updateCycle, deleteCycle, activate, close,
+    remind, looksFair, startReview, shareAll, suggestAll,
   }
 })

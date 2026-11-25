@@ -15,28 +15,49 @@
 """Lists of check-ins: the caller's own, and their direct reports' latest."""
 
 import uuid
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
+from app.models.appraisal_enums import CheckInStatus
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.employee_profile import EmployeeProfileRepository
 from app.repositories.user import UserRepository
 from app.schemas.appraisal_check_in import CheckInSummary
 from app.services.appraisals.context import Caller
+from app.services.appraisals.due_dates import is_late
+from app.services.appraisals.org_clock import org_today
 
 
-def _summary(check_in: AppraisalCheckIn, user_id: uuid.UUID, name: str) -> CheckInSummary:
+def shown_status(check_in: AppraisalCheckIn, is_self: bool) -> CheckInStatus:
+    """The status as the viewer may see it.
+
+    Until it is sent, nobody but the person can tell whether they have
+    written in it: an unsent check-in is open while it is, and missed once
+    it closes, written in or not.
+    """
+    if is_self or check_in.sent_at is not None:
+        return check_in.status
+    return CheckInStatus.OPEN if check_in.closed_at is None else CheckInStatus.MISSED
+
+
+def _summary(
+    check_in: AppraisalCheckIn, user_id: uuid.UUID, name: str, today: date, *, is_self: bool
+) -> CheckInSummary:
     return CheckInSummary(
         id=check_in.id,
         user_id=user_id,
         person_name=name,
         period_start=check_in.period_start,
         period_end=check_in.period_end,
-        status=check_in.status,
+        status=shown_status(check_in, is_self),
         closed=check_in.closed_at is not None,
         fact_count=len(check_in.fact_refs or []),
+        due_on=check_in.due_on,
+        sent_at=check_in.sent_at,
+        late=is_late(check_in.due_on, check_in.sent_at, today),
     )
 
 
@@ -46,7 +67,8 @@ async def my_check_ins(db: AsyncSession, caller: Caller) -> list[CheckInSummary]
     if profile is None:
         return []
     rows = await AppraisalCheckInRepository(db, org_id=caller.org_id).for_profiles([profile.id])
-    return [_summary(c, caller.user_id, "") for c in rows]
+    today = await org_today(db, caller.org_id)
+    return [_summary(c, caller.user_id, "", today, is_self=True) for c in rows]
 
 
 async def team_check_ins(db: AsyncSession, caller: Caller) -> list[CheckInSummary]:
@@ -62,9 +84,11 @@ async def team_check_ins(db: AsyncSession, caller: Caller) -> list[CheckInSummar
     latest = await AppraisalCheckInRepository(db, org_id=caller.org_id).latest_for_profiles(
         list(profiles)
     )
+    today = await org_today(db, caller.org_id)
     out = []
     for check_in in latest:
         profile = profiles[check_in.profile_id]
         user = users.get(profile.user_id)
-        out.append(_summary(check_in, profile.user_id, user.name if user else ""))
+        name = user.name if user else ""
+        out.append(_summary(check_in, profile.user_id, name, today, is_self=False))
     return sorted(out, key=lambda s: s.person_name.lower())

@@ -17,7 +17,8 @@
 ``fact_refs`` is the list of work Glideship recorded, saved by SQL alone,
 so a check-in is complete without any AI. The AI summary is optional
 prose on top, tracked by ``draft_status`` so a sweeper can claim pending
-drafts from the database rather than an in-memory queue.
+drafts from the database rather than an in-memory queue. What the person
+writes stays theirs until they send it (``sent_at``).
 """
 
 import uuid
@@ -64,6 +65,13 @@ class AppraisalCheckIn(BaseModel):
             postgresql_where="closed_at IS NULL",
         ),
         # The sweeper's claim query.
+        # The to-do list and late checks: what is still to send.
+        Index(
+            "ix_appraisal_check_ins_unsent",
+            "org_id",
+            "due_on",
+            postgresql_where="sent_at IS NULL",
+        ),
         Index(
             "ix_appraisal_check_ins_pending_draft",
             "draft_claimed_at",
@@ -130,3 +138,14 @@ class AppraisalCheckIn(BaseModel):
     # When the person was told it is ready (or had no way to be told). Empty
     # means the next reminder pass says so, however late it opened.
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Working days after the period ends (on the person's calendar), set
+    # when it opens. Empty only on rows from before due dates existed.
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Until sent, only the person sees what they wrote; the manager and HR
+    # see that it exists. Rows from before sending existed count as sent.
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The last change after sending (allowed until the due date), so the
+    # reader can see it moved after they may have read it.
+    edited_after_send_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

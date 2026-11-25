@@ -18,24 +18,25 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import api from '@/services/api'
-import type { FeedbackBody, FeedbackRead, FeedbackRow } from '@/types/appraisalFeedback'
+import { useAppraisalTodoStore } from '@/stores/appraisalTodo'
+import type { FeedbackBody, FeedbackRead, MyNote } from '@/types/appraisalFeedback'
 import { extractApiError } from '@/utils/errors'
 
 const BASE = '/v1/manager-feedback'
 
 export const useManagerFeedbackStore = defineStore('managerFeedback', () => {
-  const team = ref<FeedbackRow[]>([])
+  const mine = ref<MyNote[]>([])
   const current = ref<FeedbackRead | null>(null)
-  const teamError = ref('')
   const error = ref('')
   const loading = ref(false)
 
-  async function fetchTeam(): Promise<void> {
-    teamError.value = ''
+  /** The sent notes about the caller, newest first; empty when they can't load. */
+  async function fetchMine(): Promise<void> {
     try {
-      team.value = (await api.get<FeedbackRow[]>(`${BASE}/team`)).data
+      mine.value = (await api.get<MyNote[]>(`${BASE}/mine`)).data
     } catch (err) {
-      teamError.value = extractApiError(err, "Couldn't load your team's feedback. Reload to try again.")
+      mine.value = []
+      error.value = extractApiError(err, "Couldn't load your manager's notes. Reload to try again.")
     }
   }
 
@@ -64,8 +65,11 @@ export const useManagerFeedbackStore = defineStore('managerFeedback', () => {
 
   const save = (id: string, body: FeedbackBody) =>
     write(() => api.put<FeedbackRead>(`${BASE}/${id}`, body), "Couldn't save the feedback. Try again.")
-  const markDone = (id: string) =>
-    write(() => api.post<FeedbackRead>(`${BASE}/${id}/done`), "Couldn't mark it done. Try again.")
+  async function send(id: string): Promise<string | null> {
+    const problem = await write(() => api.post<FeedbackRead>(`${BASE}/${id}/send`), "Couldn't send it. Try again.")
+    if (!problem) await useAppraisalTodoStore().fetch()
+    return problem
+  }
 
-  return { team, current, teamError, error, loading, fetchTeam, fetchOne, save, markDone }
+  return { mine, current, error, loading, fetchMine, fetchOne, save, send }
 })

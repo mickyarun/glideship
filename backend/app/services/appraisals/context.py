@@ -75,7 +75,11 @@ class CheckInContext:
 
 
 def may_regenerate(ctx: CheckInContext) -> bool:
-    """AI mode, still open, nothing added, redrafts left, and theirs or their report's."""
+    """AI mode, still open, nothing added, redrafts left, and theirs or their report's.
+
+    Until it is sent only the person may redraft it: anyone else asking
+    could tell from the answer whether they have written in it.
+    """
     check_in = ctx.check_in
     return (
         ctx.appraisal is not None
@@ -84,7 +88,10 @@ def may_regenerate(ctx: CheckInContext) -> bool:
         and check_in.status is CheckInStatus.OPEN
         and check_in.draft_status is not DraftStatus.PENDING
         and check_in.redrafts < MAX_REDRAFTS
-        and (ctx.access.edit_check_ins or ctx.access.write_feedback)
+        and (
+            ctx.access.edit_check_ins
+            or (ctx.access.write_feedback and check_in.sent_at is not None)
+        )
     )
 
 

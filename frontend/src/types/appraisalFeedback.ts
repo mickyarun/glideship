@@ -23,22 +23,7 @@ export type GoalCheck = 'on_track' | 'at_risk' | 'off_track'
 export interface FeedbackGoal {
   id: string
   title: string
-  status: GoalCheck | null
   note: string
-}
-
-export interface FeedbackRow {
-  id: string
-  profile_id: string
-  person_name: string
-  period_start: string
-  period_end: string
-  cadence: Cadence
-  due_on: string
-  status: FeedbackStatus
-  overdue: boolean
-  check_ins: number
-  check_ins_added: number
 }
 
 export interface FeedbackCheckIn {
@@ -56,9 +41,14 @@ export interface FeedbackRead {
   period_start: string
   period_end: string
   cadence: Cadence
-  due_on: string
+  /** Empty until the check-in it answers is sent. */
+  due_on: string | null
   status: FeedbackStatus
   done_at: string | null
+  sent_at: string | null
+  edited_after_send_at: string | null
+  /** Not sent yet and not the caller's: keep, try next and goals are left out. */
+  content_hidden: boolean
   overdue: boolean
   can_edit: boolean
   keep: string
@@ -70,7 +60,20 @@ export interface FeedbackRead {
 export interface FeedbackBody {
   keep: string
   try_next: string
-  goals: { goal_id: string; status: GoalCheck; note: string }[]
+  /** Null keeps the goal statuses already saved. */
+  goals: { goal_id: string; status: GoalCheck; note: string }[] | null
+}
+
+/** A sent note about the caller, for their home page. */
+export interface MyNote {
+  id: string
+  manager_name: string | null
+  period_start: string
+  period_end: string
+  cadence: Cadence
+  sent_at: string
+  keep: string
+  try_next: string
 }
 
 /** The manager's feedback as it sits on the employee's check-in. */

@@ -17,7 +17,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from app.models.appraisal_enums import (
     AppraisalStatus,
@@ -25,9 +25,12 @@ from app.models.appraisal_enums import (
     DraftingMode,
     DraftStatus,
     GoalResult,
+    ReviewPeriod,
 )
-from app.schemas.appraisal_check_in import AiLine, CheckInNote, FactView, LinkRead
+from app.schemas.appraisal_check_in import AiLine, FactView, LinkRead
+from app.schemas.appraisal_check_in_note import CheckInNote
 from app.schemas.appraisal_growth import GrowthRead
+from app.schemas.appraisal_settings import MAX_GOALS_CAP
 
 Band = int
 
@@ -38,6 +41,8 @@ class TimelineMonth(BaseModel):
     check_in_id: uuid.UUID
     period_start: date
     status: CheckInStatus
+    # Not sent yet: to anyone but the person, the note and links are empty.
+    sent: bool
     facts: list[FactView]
     note: CheckInNote
     links: list[LinkRead]
@@ -63,12 +68,14 @@ class ReviewGoal(BaseModel):
 
 
 class SelfScore(BaseModel):
-    """The employee's overall band."""
+    """The employee's overall band and their two open answers."""
 
     band: Band | None
     reason: str
     evidence: list[str]
     submitted_at: datetime | None
+    proud: str = ""
+    differently: str = ""
 
 
 class ManagerScore(BaseModel):
@@ -107,6 +114,7 @@ class AppraisalRead(BaseModel):
     person_name: str
     manager_name: str | None
     cycle_name: str
+    review_period: ReviewPeriod
     period_start: date
     period_end: date
     self_due: date
@@ -126,6 +134,8 @@ class AppraisalRead(BaseModel):
     send_back_note: str | None
     reply: str | None
     shared_at: datetime | None
+    # For HR: the fairness check holds this result out of sharing everything ready.
+    held: bool = False
     acknowledged_at: datetime | None
     growth: GrowthRead
     can: ReviewActions
@@ -146,7 +156,11 @@ class SelfBody(BaseModel):
     band: Band | None = Field(None, ge=1, le=5)
     reason: str = Field("", max_length=600)
     evidence: list[str] = Field(default_factory=list, max_length=10)
-    goals: list[SelfGoalIn] = Field(default_factory=list, max_length=3)
+    # The two open answers: optional, and read by the manager and in the result.
+    proud: str = Field("", max_length=1000)
+    differently: str = Field("", max_length=1000)
+    # The period's own goals bound it in the service; the org limit can reach the cap.
+    goals: list[SelfGoalIn] = Field(default_factory=list, max_length=MAX_GOALS_CAP)
 
 
 class ManagerGoalIn(BaseModel):
@@ -163,60 +177,11 @@ class ManagerBody(BaseModel):
 
     agree: bool = False
     band: Band | None = Field(None, ge=1, le=5)
+    # The manager's words to the person: always written, read in the result,
+    # and the reason when the rating changes.
     reason: str = Field("", max_length=600)
     evidence: list[str] = Field(default_factory=list, max_length=10)
-    goals: list[ManagerGoalIn] = Field(default_factory=list, max_length=3)
+    goals: list[ManagerGoalIn] = Field(default_factory=list, max_length=MAX_GOALS_CAP)
     ready_next_level: bool | None = None
     performance_concern: bool | None = None
     concern_note: str = Field("", max_length=500)
-
-
-class NoteBody(BaseModel):
-    """HR's note when sending a review back; the manager reads it."""
-
-    note: str = Field(min_length=1, max_length=600)
-
-    @field_validator("note")
-    @classmethod
-    def _not_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Say what to look at again.")
-        return value
-
-
-class ReplyBody(BaseModel):
-    """The employee's optional reply when acknowledging; HR reads it too."""
-
-    reply: str = Field("", max_length=1000)
-
-
-class CalibrationPerson(BaseModel):
-    """One reviewed person in calibration: bands and states, no reasons."""
-
-    appraisal_id: uuid.UUID
-    name: str
-    manager_name: str
-    status: AppraisalStatus
-    self_band: Band | None
-    final_band: Band | None
-    gap: bool
-    feedback: int
-    feedback_done: int
-
-
-class CalibrationTeam(BaseModel):
-    """One manager's figures."""
-
-    manager_name: str
-    people: int
-    bands: dict[int, int]
-    agreement: float | None
-    gaps: int
-    flag: str | None
-
-
-class Calibration(BaseModel):
-    """The cycle's calibration view."""
-
-    teams: list[CalibrationTeam]
-    people: list[CalibrationPerson]

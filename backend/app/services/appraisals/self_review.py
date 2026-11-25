@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The employee's self-review: a result and reason per goal, and an overall band.
+"""The employee's self-review: a result and reason per goal, two open
+answers (most proud of, would do differently) and an overall band.
 
 Saved as they go; submitting checks the rules in :mod:`.review_rules` and
 passes the review to the manager. Evidence comes only from the period.
@@ -32,7 +33,7 @@ from app.services.appraisals import audit, crypto
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalInvalidError
 from app.services.appraisals.evidence import evidence_pool, pick
-from app.services.appraisals.review_rules import self_problem
+from app.services.appraisals.review_rules import goal_ids_problem, self_problem
 
 
 async def period_goals(db: AsyncSession, ctx: AppraisalContext) -> dict[str, AppraisalGoal]:
@@ -51,15 +52,18 @@ async def save_self(db: AsyncSession, ctx: AppraisalContext, body: SelfBody) -> 
         raise AppraisalConflictError("The self-review isn't open for changes.")
     pool = await evidence_pool(db, appraisal)
     goals = await period_goals(db, ctx)
+    problem = goal_ids_problem([str(item.goal_id) for item in body.goals], set(goals))
+    if problem:
+        raise AppraisalInvalidError(problem)
     for item in body.goals:
-        goal = goals.get(str(item.goal_id))
-        if goal is None:
-            raise AppraisalInvalidError("That goal isn't one of this period's goals.")
+        goal = goals[str(item.goal_id)]
         goal.self_result = item.result
         crypto.seal(goal, "self_reason", item.reason.strip())
         goal.self_evidence = pick(pool, item.evidence)
     appraisal.self_band = body.band
     crypto.seal(appraisal, "self_reason", body.reason.strip())
+    crypto.seal(appraisal, "self_proud", body.proud.strip() or None)
+    crypto.seal(appraisal, "self_differently", body.differently.strip() or None)
     appraisal.self_evidence = pick(pool, body.evidence)
     await db.flush()
 

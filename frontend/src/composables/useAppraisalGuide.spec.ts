@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/** The guide opens on a first visit only, survives broken storage, and is per person. */
+/** The guide opens only when asked, and its facts are per person. */
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiGet = vi.fn()
 vi.mock('@/services/api', () => ({ default: { get: apiGet } }))
@@ -33,47 +33,28 @@ beforeEach(() => {
   setActivePinia(createPinia())
   apiGet.mockReset()
   apiGet.mockImplementation(async () => ({ data: { cycle_name: 'Q4 2026', is_manager: false, is_hr: false } }))
-  localStorage.clear()
   useAppraisalGuide().open.value = false
   // A new person each test: the loaded facts are kept per person.
   signIn(crypto.randomUUID())
 })
 
-afterEach(() => vi.restoreAllMocks())
-
 describe('useAppraisalGuide', () => {
-  it('opens on the first visit only', async () => {
+  it('opens only when asked, and loads its facts once per person', async () => {
     const guide = useAppraisalGuide()
-    await guide.showOnFirstVisit()
-    expect(guide.open.value).toBe(true)
-    guide.open.value = false
-    await guide.showOnFirstVisit()
     expect(guide.open.value).toBe(false)
+    await guide.load()
+    expect(guide.open.value).toBe(false)
+    expect(guide.guide.value?.cycle_name).toBe('Q4 2026')
+    await guide.show()
+    expect(guide.open.value).toBe(true)
+    expect(apiGet).toHaveBeenCalledTimes(1)
   })
 
-  it('still opens when storage throws, and again next time', async () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('blocked')
-    })
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('blocked')
-    })
-    const guide = useAppraisalGuide()
-    await guide.showOnFirstVisit()
-    expect(guide.open.value).toBe(true)
-    guide.open.value = false
-    await guide.showOnFirstVisit()
-    expect(guide.open.value).toBe(true)
-  })
-
-  it('is not marked seen when it fails to load', async () => {
+  it('says so when the facts fail to load', async () => {
     apiGet.mockRejectedValueOnce(new Error('offline'))
     const guide = useAppraisalGuide()
-    await guide.showOnFirstVisit()
+    expect(await guide.load()).toBe(false)
     expect(guide.error.value).not.toBe('')
-    guide.open.value = false
-    await guide.showOnFirstVisit()
-    expect(guide.open.value).toBe(true)
   })
 
   it('loads again for another person', async () => {

@@ -47,7 +47,6 @@ import { useRouter } from 'vue-router'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
-import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import { CYCLE_STATUS, longDate } from '@/utils/appraisalSetup'
 
@@ -65,7 +64,6 @@ async function create(): Promise<void> {
 }
 
 onMounted(() => {
-  void useAppraisalGuide().showOnFirstVisit()
   void store.fetchCycles()
 })
 </script>

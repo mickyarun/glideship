@@ -17,7 +17,7 @@
 import type { Goal, GoalHistory, GoalResult, SuggestionBasis } from '@/types/appraisalGoals'
 
 /** Which goal form the dialog shows. */
-export type GoalDialogMode = 'propose' | 'add' | 'next' | 'edit' | 'edit-reason' | 'suggest-change' | 'reword' | 'decline'
+export type GoalDialogMode = 'propose' | 'add' | 'next' | 'edit' | 'edit-reason' | 'suggest-change' | 'offer-change' | 'reword' | 'decline' | 'turn-down'
 
 export const BASIS_LABELS: Record<SuggestionBasis, string> = {
   feedback: 'From your feedback',
@@ -27,10 +27,11 @@ export const BASIS_LABELS: Record<SuggestionBasis, string> = {
   role_library: 'Role library',
 }
 
+/** Lowest first, so the choices read left to right from low to high. */
 export const RESULT_OPTIONS: { label: string; value: GoalResult }[] = [
-  { label: 'Achieved', value: 'achieved' },
-  { label: 'Partly', value: 'partly' },
   { label: 'Not yet', value: 'not_yet' },
+  { label: 'Partly', value: 'partly' },
+  { label: 'Achieved', value: 'achieved' },
 ]
 
 export function resultLabel(result: GoalResult | null): string {
@@ -77,4 +78,17 @@ export function goalSections(goals: Goal[]): Record<'accepted' | 'waiting' | 'su
     suggested: goals.filter(g => g.status === 'suggested'),
     dismissed: goals.filter(g => g.status === 'dismissed'),
   }
+}
+
+/** "2 of 3–6 · add 1 more": confirmed goals against the org's floor and limit. */
+export function goalMeter(accepted: number, minimum: number, limit: number): string {
+  const range = minimum === limit ? `${limit}` : `${minimum}–${limit}`
+  const more = minimum - accepted
+  const tail = more > 0 ? ` · add ${more} more` : accepted >= limit ? ' · full' : ''
+  return `${accepted} of ${range}${tail}`
+}
+
+/** Why the person suggested it, in their words, when they gave a reason. */
+export function proposalReason(goal: Goal): string {
+  return goal.why ?? goal.history.find(h => h.kind === 'created')?.reason ?? ''
 }

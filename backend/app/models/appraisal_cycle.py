@@ -19,13 +19,14 @@ is created, so changing the org settings never moves a running cycle.
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     LargeBinary,
@@ -74,7 +75,7 @@ class AppraisalCycle(BaseModel):
             name="ck_appraisal_cycles_cutoff",
         ),
         CheckConstraint(
-            "feedback_due_days >= 0 AND hr_overdue_offset >= 0",
+            "feedback_due_days >= 0 AND checkin_due_days >= 1 AND hr_overdue_offset >= 0",
             name="ck_appraisal_cycles_offsets",
         ),
         Index("ix_appraisal_cycles_org_period", "org_id", "period_start"),
@@ -86,6 +87,8 @@ class AppraisalCycle(BaseModel):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    # Goals agreed by: a person with fewer than the org's fewest is late after it.
+    goals_due: Mapped[date] = mapped_column(Date, nullable=False)
     self_due: Mapped[date] = mapped_column(Date, nullable=False)
     manager_due: Mapped[date] = mapped_column(Date, nullable=False)
     # The employee acknowledges the shared result by this date.
@@ -104,6 +107,9 @@ class AppraisalCycle(BaseModel):
     feedback_cadence: Mapped[FeedbackCadence] = mapped_column(
         pg_enum(FeedbackCadence, "appraisal_feedback_cadence"), nullable=False
     )
+    # Working days after a check-in period ends that the check-in is due.
+    checkin_due_days: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="5")
+    # Working days after a check-in is sent that the manager's note is due.
     feedback_due_days: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     # Working days relative to each due date, e.g. [-3, 0, 2].
     reminder_offsets: Mapped[list[int]] = mapped_column(ARRAY(SmallInteger), nullable=False)
@@ -122,6 +128,8 @@ class AppraisalCycle(BaseModel):
     enrolment_cutoff: Mapped[date] = mapped_column(Date, nullable=False)
     # HR's note at the top of the guide, encrypted.
     intro_note: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # When HR last sent the manual "remind the late ones" message.
+    hr_reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

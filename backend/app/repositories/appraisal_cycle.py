@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appraisal import Appraisal
 from app.models.appraisal_check_in import AppraisalCheckIn
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import CycleStatus
+from app.models.appraisal_enums import AppraisalStatus, CycleStatus
 from app.models.leave_policy import LeavePolicy
 from app.models.organization import Organization
 from app.repositories.base import BaseRepository
@@ -44,6 +44,17 @@ def _needs_pass() -> ColumnElement[bool]:
         AppraisalCycle.status.in_(RUNNING),
         and_(AppraisalCycle.status == CycleStatus.CLOSED, still_open),
     )
+
+
+@dataclass(frozen=True)
+class CycleWait:
+    """A running cycle and how many reviews wait on HR's fairness check."""
+
+    id: uuid.UUID
+    name: str
+    status: CycleStatus
+    period_end: date
+    in_check: int
 
 
 class AppraisalCycleRepository(BaseRepository[AppraisalCycle]):
@@ -123,6 +134,26 @@ class AppraisalCycleRepository(BaseRepository[AppraisalCycle]):
             await self._db.execute(delete(model).where(model.cycle_id == cycle.id))
         await self._db.delete(cycle)
         await self._db.flush()
+
+    async def waiting_on_hr(self) -> list[CycleWait]:
+        """Running cycles, with how many reviews sit in the fairness check."""
+        in_check = func.count(Appraisal.id).filter(Appraisal.status == AppraisalStatus.CALIBRATION)
+        result = await self._db.execute(
+            select(
+                AppraisalCycle.id,
+                AppraisalCycle.name,
+                AppraisalCycle.status,
+                AppraisalCycle.period_end,
+                in_check.label("in_check"),
+            )
+            .outerjoin(Appraisal, Appraisal.cycle_id == AppraisalCycle.id)
+            .where(
+                AppraisalCycle.org_id == self._org,
+                AppraisalCycle.status.in_([CycleStatus.ACTIVE, CycleStatus.REVIEWING]),
+            )
+            .group_by(AppraisalCycle.id)
+        )
+        return [CycleWait(r.id, r.name, r.status, r.period_end, r.in_check) for r in result.all()]
 
 
 @dataclass(frozen=True)

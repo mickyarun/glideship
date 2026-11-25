@@ -26,7 +26,14 @@ from app.services.appraisals.settings import load_appraisal_settings
 
 
 async def guide(db: AsyncSession, caller: Caller) -> GuideRead:
-    """The running cycle's rules and HR's note, else the org's settings."""
+    """The running cycle's rules and HR's note, else the org's settings, with the goal range."""
+    facts = await _facts(db, caller)
+    settings = await load_appraisal_settings(db, caller.org_id)
+    facts.min_goals, facts.max_goals = settings.min_goals, settings.max_goals
+    return facts
+
+
+async def _facts(db: AsyncSession, caller: Caller) -> GuideRead:
     running = await AppraisalCycleRepository(db, org_id=caller.org_id).running()
     cycle = max(running, key=lambda c: c.period_start, default=None)
     is_manager = bool(

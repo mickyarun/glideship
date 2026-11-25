@@ -138,12 +138,15 @@ async def test_the_guide_uses_the_running_cycle_and_knows_the_audience(
     emp, mgr = as_user(p["emp"], org), as_user(p["mgr"], org)
     before = (await client.get("/api/v1/check-ins/guide", headers=emp)).json()
     assert before["cycle_name"] is None and before["review_period"] == "quarterly"
+    assert (before["min_goals"], before["max_goals"]) == (3, 3)
     hr = as_user(p["hr"], org)
     cycle = await _draft(client, org, p["hr"], intro_note="Ask HR anything.")
     await client.post(f"{BASE}/cycles/{cycle}/activate", headers=hr)
     guide = (await client.get("/api/v1/check-ins/guide", headers=emp)).json()
     assert guide["cycle_name"] == "Q4 2026" and guide["intro_note"] == "Ask HR anything."
     assert guide["self_due"] == "2027-01-07"
+    # The org's defaults: three goals each, no more than three.
+    assert (guide["min_goals"], guide["max_goals"]) == (3, 3)
     assert (guide["is_manager"], guide["is_hr"]) == (False, False)
     assert (await client.get("/api/v1/check-ins/guide", headers=mgr)).json()["is_manager"]
     assert (await client.get("/api/v1/check-ins/guide", headers=hr)).json()["is_hr"]

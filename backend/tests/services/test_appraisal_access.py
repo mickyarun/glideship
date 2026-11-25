@@ -29,6 +29,7 @@ from app.services.appraisals.access import (
     Relation,
     Stage,
     access_for,
+    reads_content,
     relation_for,
 )
 
@@ -222,3 +223,10 @@ def test_relation_for_spots_the_callers_own_manager() -> None:
     hr, their_manager = uuid.uuid4(), uuid.uuid4()
     relation = relation_for(hr, their_manager, None, (), callers_manager_ids={their_manager})
     assert relation == HRS_MANAGER
+
+
+def test_unsent_writing_is_its_writers_alone() -> None:
+    writer, reader = uuid.uuid4(), uuid.uuid4()
+    assert reads_content(writer, writer, sent=False)
+    assert not reads_content(reader, writer, sent=False)
+    assert reads_content(reader, writer, sent=True)

@@ -34,15 +34,9 @@ is in neither group.
 from fastapi import APIRouter, Depends
 
 from app.api.health import router as health_router
+from app.api.people_router import people_router
 from app.api.v1.agent_skills import router as agent_skills_router
 from app.api.v1.ai_settings import router as ai_settings_router
-from app.api.v1.appraisal_admin import router as appraisal_admin_router
-from app.api.v1.appraisal_check_ins import router as appraisal_check_ins_router
-from app.api.v1.appraisal_cycles import router as appraisal_cycles_router
-from app.api.v1.appraisal_feedback import router as appraisal_feedback_router
-from app.api.v1.appraisal_goals import router as appraisal_goals_router
-from app.api.v1.appraisal_growth import router as appraisal_growth_router
-from app.api.v1.appraisal_reviews import router as appraisal_reviews_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.backlash import internal_router as backlash_internal_router
 from app.api.v1.backlash import router as backlash_router
@@ -55,39 +49,17 @@ from app.api.v1.bugs import router as bugs_router
 from app.api.v1.claude import router as claude_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.design_system import router as design_system_router
-from app.api.v1.employee_avatars import router as employee_avatars_router
-from app.api.v1.employee_documents import router as employee_documents_router
-from app.api.v1.employee_login import router as employee_login_router
-from app.api.v1.employee_sensitive import router as employee_sensitive_router
-from app.api.v1.employee_updates import router as employee_updates_router
-from app.api.v1.employees import router as employees_router
 from app.api.v1.features import router as features_router
 from app.api.v1.github_webhook import router as github_webhook_router
 from app.api.v1.internal_colyseus import router as internal_colyseus_router
 from app.api.v1.jira_import import router as jira_router
 from app.api.v1.jobs import router as jobs_router
 from app.api.v1.learnings import router as learnings_router
-from app.api.v1.leave import router as leave_router
-from app.api.v1.leave_approvals import router as leave_approvals_router
-from app.api.v1.leave_balances import router as leave_balances_router
-from app.api.v1.leave_calendar import router as leave_calendar_router
-from app.api.v1.leave_calendar_sync import router as leave_calendar_sync_router
-from app.api.v1.leave_changes import router as leave_changes_router
-from app.api.v1.leave_digest import router as leave_digest_router
-from app.api.v1.leave_history import router as leave_history_router
-from app.api.v1.leave_holidays import router as leave_holidays_router
-from app.api.v1.leave_library import router as leave_library_router
-from app.api.v1.leave_policies import router as leave_policies_router
-from app.api.v1.leave_reports import router as leave_reports_router
-from app.api.v1.leave_reports_export import router as leave_reports_export_router
-from app.api.v1.leave_slack_status import router as leave_slack_status_router
-from app.api.v1.leave_types import router as leave_types_router
 from app.api.v1.me import router as me_router
 from app.api.v1.me_followups import router as me_followups_router
 from app.api.v1.members import router as members_router
 from app.api.v1.minigames import router as minigames_router
 from app.api.v1.notifications import router as notifications_router
-from app.api.v1.offices import router as offices_router
 from app.api.v1.organizations import router as orgs_router
 from app.api.v1.public import router as public_router
 from app.api.v1.quiz import router as quiz_router
@@ -118,7 +90,6 @@ from app.api.v1.ws import router as ws_router
 from app.api.v1.xp import router as xp_router
 from app.api.v1.yield_offers import router as yield_offers_router
 from app.core.deps import require_permissions
-from app.core.http_cache import no_store
 from app.core.permissions import WORKSPACE_ENGINEERING
 from app.mcp.server import router as mcp_router
 from app.mcp.streamable import router as mcp_remote_router
@@ -137,62 +108,9 @@ api_router.include_router(me_followups_router, prefix="/api/v1")
 api_router.include_router(notifications_router, prefix="/api/v1/notifications")
 api_router.include_router(ws_router, prefix="/api/v1")
 api_router.include_router(public_router, prefix="/api/v1/public")
-# People workspace: open to every member; each route checks its own
-# employees:* / leave:* permission or "own record". Nothing here may be
-# cached: it carries leave reasons, balances and personal details.
-PEOPLE_NO_STORE = [Depends(no_store)]
-for employee_part in (
-    employees_router,
-    employee_updates_router,
-    employee_sensitive_router,
-    employee_documents_router,
-    employee_login_router,
-    employee_avatars_router,
-):
-    api_router.include_router(
-        employee_part, prefix="/api/v1/employees", dependencies=PEOPLE_NO_STORE
-    )
-api_router.include_router(offices_router, prefix="/api/v1/offices", dependencies=PEOPLE_NO_STORE)
-for leave_part in (
-    leave_router,
-    leave_approvals_router,
-    leave_changes_router,
-    leave_calendar_router,
-    leave_balances_router,
-    leave_policies_router,
-    leave_types_router,
-    leave_library_router,
-    leave_holidays_router,
-    leave_digest_router,
-    leave_calendar_sync_router,
-    leave_slack_status_router,
-    leave_reports_router,
-    leave_reports_export_router,
-    leave_history_router,
-):
-    api_router.include_router(leave_part, prefix="/api/v1/leave", dependencies=PEOPLE_NO_STORE)
-api_router.include_router(
-    appraisal_check_ins_router, prefix="/api/v1/check-ins", dependencies=PEOPLE_NO_STORE
-)
-api_router.include_router(
-    appraisal_admin_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
-)
-api_router.include_router(
-    appraisal_cycles_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
-)
-api_router.include_router(
-    appraisal_goals_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
-)
-api_router.include_router(
-    appraisal_growth_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
-)
-# Last under this prefix: its "/{appraisal_id}" would otherwise swallow "/mine".
-api_router.include_router(
-    appraisal_reviews_router, prefix="/api/v1/appraisals", dependencies=PEOPLE_NO_STORE
-)
-api_router.include_router(
-    appraisal_feedback_router, prefix="/api/v1/manager-feedback", dependencies=PEOPLE_NO_STORE
-)
+# People workspace: employees, offices, leave and appraisals; never cached
+# (see :mod:`app.api.people_router`).
+api_router.include_router(people_router)
 # Org-level settings routes; each is gated by its own org/integration
 # permission. The engineering-only settings sub-routers are mounted below.
 api_router.include_router(settings_router, prefix="/api/v1/settings")

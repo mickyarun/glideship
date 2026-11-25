@@ -31,11 +31,17 @@
         <CadenceFields v-model:review="form.review_period" v-model:check-ins="form.checkin_cadence" v-model:feedback="form.feedback_cadence" />
         <YearPreview :review="form.review_period" :check-ins="form.checkin_cadence" :feedback="form.feedback_cadence" :self-due-days="form.self_due_days" />
       </section>
-      <section class="settings__card" aria-labelledby="settings-due">
-        <h2 id="settings-due" class="settings__heading">Due dates, in days after the period ends</h2>
+      <section class="settings__card" aria-labelledby="settings-monthly">
+        <h2 id="settings-monthly" class="settings__heading">Check-ins and manager notes, in working days</h2>
         <div class="settings__row">
-          <v-text-field v-model.number="form.feedback_due_days" type="number" min="0" max="60" label="Manager feedback" />
-          <v-text-field v-model.number="form.self_due_days" type="number" min="0" max="60" label="Self-score" />
+          <v-text-field v-model.number="form.checkin_due_days" type="number" min="1" max="20" label="Check-in due, after its month ends" />
+          <v-text-field v-model.number="form.feedback_due_days" type="number" min="1" max="20" label="Manager note due, after the check-in is sent" />
+        </div>
+      </section>
+      <section class="settings__card" aria-labelledby="settings-due">
+        <h2 id="settings-due" class="settings__heading">Review due dates, in days after the period ends</h2>
+        <div class="settings__row">
+          <v-text-field v-model.number="form.self_due_days" type="number" min="0" max="60" label="Their review" />
           <v-text-field v-model.number="form.manager_due_days" type="number" min="0" max="90" label="Manager review" />
           <v-text-field v-model.number="form.ack_due_days" type="number" min="0" max="120" label="Reply to the result" />
         </div>
@@ -54,8 +60,11 @@
         <v-switch v-model="form.ai_enabled" color="primary" label="AI drafts check-ins and period summaries" hide-details />
         <p class="settings__hint">Off means everyone gets the manual check-in, whatever AI provider is connected.</p>
         <v-switch v-model="form.suggest_goals_on_open" color="primary" label="Suggest goals for everyone when a cycle opens" hide-details />
-        <v-text-field v-model.number="form.max_goals" type="number" min="1" :max="MAX_GOAL_LIMIT" label="Confirmed goals per person per period" :error-messages="goalsProblem ?? undefined" />
-        <p class="settings__hint">Applies to running cycles too. Lowering it keeps goals already confirmed; it only stops new ones.</p>
+        <div class="settings__row">
+          <v-text-field v-model.number="form.min_goals" type="number" min="1" :max="form.max_goals" label="Fewest goals per person" :error-messages="floorProblem ?? undefined" />
+          <v-text-field v-model.number="form.max_goals" type="number" min="1" :max="MAX_GOAL_LIMIT" label="Most goals per person" :error-messages="goalsProblem ?? undefined" />
+        </div>
+        <p class="settings__hint">Both apply to running cycles too. Below the fewest, the manager's to-do list asks for more goals. Lowering the most keeps goals already confirmed; it only stops new ones.</p>
       </section>
       <div class="settings__save">
         <v-btn type="submit" color="primary" :loading="saving" :disabled="Boolean(problem)">Save settings</v-btn>
@@ -69,13 +78,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import AppCallout from '@/components/common/AppCallout.vue'
 import AppPage from '@/components/common/AppPage.vue'
 import AppraisalGuide from '@/components/appraisals/AppraisalGuide.vue'
-import { useAppraisalGuide } from '@/composables/useAppraisalGuide'
 import CadenceFields from '@/components/appraisals/CadenceFields.vue'
 import ReminderFields from '@/components/appraisals/ReminderFields.vue'
 import YearPreview from '@/components/appraisals/YearPreview.vue'
 import { useAppraisalSetupStore } from '@/stores/appraisalSetup'
 import type { AppraisalSettings } from '@/types/appraisalSetup'
-import { MAX_GOAL_LIMIT, cadenceProblem, goalLimitProblem } from '@/utils/appraisalSetup'
+import { MAX_GOAL_LIMIT, cadenceProblem, goalFloorProblem, goalLimitProblem } from '@/utils/appraisalSetup'
 
 const store = useAppraisalSetupStore()
 const form = ref<AppraisalSettings | null>(null)
@@ -84,10 +92,11 @@ const message = ref('')
 const messageKind = ref<'error' | 'success'>('success')
 
 const goalsProblem = computed(() => (form.value ? goalLimitProblem(form.value.max_goals) : null))
+const floorProblem = computed(() => (form.value ? goalFloorProblem(form.value.min_goals, form.value.max_goals) : null))
 const problem = computed(() => {
   const f = form.value
   if (!f) return null
-  return goalsProblem.value ?? cadenceProblem(f.review_period, f.checkin_cadence, f.feedback_cadence)
+  return goalsProblem.value ?? floorProblem.value ?? cadenceProblem(f.review_period, f.checkin_cadence, f.feedback_cadence)
 })
 
 watch(
@@ -107,7 +116,6 @@ async function save(): Promise<void> {
 }
 
 onMounted(() => {
-  void useAppraisalGuide().showOnFirstVisit()
   void store.fetchSettings()
 })
 </script>

@@ -23,20 +23,23 @@
      default) prevents clicks on the active option from deselecting
      it — useful when the parent assumes a non-null mode at all
      times. An option with ``disabled: true`` stays in view but can't be
-     picked (click or arrow keys); say why beside the toggle. -->
+     picked (click or arrow keys); say why beside the toggle. ``pressed``
+     makes it a group of toggle buttons (aria-pressed) instead of a radio
+     group, for a switch between views such as tabs in a dialog. -->
 <template>
-  <div ref="root" class="app-pill-toggle" :class="`app-pill-toggle--${size}`" role="radiogroup" @keydown="onKey">
+  <div ref="root" class="app-pill-toggle" :class="`app-pill-toggle--${size}`" :role="pressed ? 'group' : 'radiogroup'" @keydown="onKey">
     <button
       v-for="opt in options"
       :key="String(opt.value)"
       type="button"
-      role="radio"
+      :role="pressed ? undefined : 'radio'"
       class="app-pill-toggle__option"
       :class="{ 'app-pill-toggle__option--active': opt.value === modelValue }"
-      :aria-checked="opt.value === modelValue"
+      :aria-checked="pressed ? undefined : opt.value === modelValue"
+      :aria-pressed="pressed ? opt.value === modelValue : undefined"
       :aria-disabled="opt.disabled || undefined"
       :disabled="opt.disabled"
-      :tabindex="opt.value === focusValue ? 0 : -1"
+      :tabindex="pressed || opt.value === focusValue ? 0 : -1"
       @click="select(opt.value)"
     >
       {{ opt.label }}
@@ -65,11 +68,15 @@ interface Props {
   // is for a row of many options that scrolls sideways (phone tabs):
   // separate 44px pills, the picked one filled, rather than one track.
   size?: 'sm' | 'md' | 'touch'
+  // Toggle buttons (aria-pressed) rather than radios: each one is its own
+  // tab stop, as buttons are; arrow keys still move between them.
+  pressed?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   mandatory: true,
   size: 'md',
+  pressed: false,
 })
 
 const emit = defineEmits<(e: 'update:modelValue', value: T) => void>()
@@ -106,7 +113,7 @@ function onKey(event: KeyboardEvent): void {
   event.preventDefault()
   if (next < 0) return
   select(props.options[next].value)
-  void nextTick(() => root.value?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus())
+  void nextTick(() => root.value?.querySelectorAll<HTMLElement>('button')[next]?.focus())
 }
 
 function select(value: T): void {

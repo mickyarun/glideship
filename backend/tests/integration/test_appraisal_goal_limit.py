@@ -48,7 +48,8 @@ async def test_the_limit_follows_the_org_setting_mid_cycle(
 
     async def set_limit(n: int) -> int:
         settings = (await client.get(f"{BASE}/settings", headers=hr)).json()
-        put = await client.put(f"{BASE}/settings", json={**settings, "max_goals": n}, headers=hr)
+        lower = {"max_goals": n, "min_goals": min(settings["min_goals"], max(n, 1))}
+        put = await client.put(f"{BASE}/settings", json={**settings, **lower}, headers=hr)
         return put.status_code
 
     assert [await add(f"Goal {n}") for n in range(4)] == [201, 201, 201, 409]
@@ -76,3 +77,7 @@ async def test_the_limit_follows_the_org_setting_mid_cycle(
 
     assert await set_limit(0) == 422
     assert await set_limit(21) == 422
+    # The floor can't sit above the limit.
+    settings = (await client.get(f"{BASE}/settings", headers=hr)).json()
+    upside_down = {**settings, "min_goals": settings["max_goals"] + 1}
+    assert (await client.put(f"{BASE}/settings", json=upside_down, headers=hr)).status_code == 422

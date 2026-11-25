@@ -35,50 +35,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.permissions_people import APPRAISALS_MANAGE
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import FeedbackStatus
 from app.models.appraisal_manager_feedback import AppraisalManagerFeedback
 from app.models.digest_claim import DigestClaimKind
-from app.repositories.appraisal import AppraisalRepository
-from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_cycle import AppraisalCycleRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
 from app.repositories.employee_reporting_manager import EmployeeReportingManagerRepository
 from app.repositories.user import UserRepository
 from app.services.appraisals import reminder_text
+from app.services.appraisals.check_in_reminder_stage import check_in_due_stream, ready_stream
 from app.services.appraisals.reminder_message import Message, Outbox
 from app.services.appraisals.reminders import Schedule, hr_list_today, moment
 from app.services.appraisals.review_reminder_stage import review_streams
 from app.services.appraisals.work_calendar import load_calendars
 from app.services.notifications import NotificationCategory, category_default
 
-GroupKey = tuple[uuid.UUID, uuid.UUID, date]
+GroupKey = tuple[uuid.UUID, uuid.UUID, date, date]
 READY = DigestClaimKind.APPRAISAL_CHECK_IN_READY
+CHECK_IN_DUE = DigestClaimKind.APPRAISAL_CHECK_IN_DUE
 FEEDBACK = DigestClaimKind.APPRAISAL_FEEDBACK_DUE
 HR_LIST = DigestClaimKind.APPRAISAL_HR_OVERDUE
-
-
-async def _ready(
-    db: AsyncSession, org_id: uuid.UUID, cycles: list[AppraisalCycle], skip: set[uuid.UUID]
-) -> Outbox:
-    waiting = await AppraisalCheckInRepository(db, org_id=org_id).unannounced(
-        [c.id for c in cycles]
-    )
-    profiles = await AppraisalRepository(db, org_id=org_id).profiles_by_id(
-        list({c.profile_id for c in waiting})
-    )
-    labels: dict[uuid.UUID, list[str]] = defaultdict(list)
-    ids: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
-    for check_in in sorted(waiting, key=lambda c: c.period_start):
-        profile = profiles.get(check_in.profile_id)
-        if profile is None or profile.user_id in skip:
-            continue
-        labels[profile.user_id].append(f"{check_in.period_start:%B}")
-        ids[profile.user_id].append(check_in.id)
-    base = settings.frontend_url
-    return {
-        user: Message(reminder_text.check_in_ready_text(names, base), check_ins=ids[user])
-        for user, names in labels.items()
-    }
 
 
 async def _still_managing(
@@ -94,10 +69,17 @@ async def _still_managing(
 def _groups(
     items: Collection[AppraisalManagerFeedback],
 ) -> dict[GroupKey, list[AppraisalManagerFeedback]]:
-    """Items by (manager, cycle, period): one line in one manager's reminder."""
+    """Items by (manager, cycle, period, due date): one line in one manager's reminder.
+
+    Each note is due a set time after its check-in was sent, so notes for
+    one period can fall due on different days. Only items with a due date
+    are passed in.
+    """
     groups: dict[GroupKey, list[AppraisalManagerFeedback]] = defaultdict(list)
     for item in items:
-        groups[(item.manager_user_id, item.cycle_id, item.period_start)].append(item)
+        if item.due_on is not None:
+            key = (item.manager_user_id, item.cycle_id, item.period_start, item.due_on)
+            groups[key].append(item)
     return groups
 
 
@@ -120,23 +102,23 @@ async def _feedback(
     lines: dict[uuid.UUID, list[str]] = defaultdict(list)
     announces: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
     overdue: Counter[uuid.UUID] = Counter()
-    for (manager, cycle_id, _), group in sorted(groups.items(), key=lambda g: g[0][2]):
+    for (manager, cycle_id, _, due_on), group in sorted(groups.items(), key=lambda g: g[0][2:]):
         schedule, first = Schedule.of(cycles[cycle_id]), group[0]
-        still_open = [i for i in group if i.status is FeedbackStatus.OPEN]
-        if hr_list_today(day, first.due_on, schedule, calendars.default):
+        still_open = [i for i in group if i.sent_at is None]
+        if hr_list_today(day, due_on, schedule, calendars.default):
             overdue[manager] += len(still_open)
         mine = [i for i in group if (i.profile_id, manager) in managing]
-        waiting = [i for i in mine if i.status is FeedbackStatus.OPEN]
+        waiting = [i for i in mine if i.sent_at is None]
         if manager in skip or not waiting:
             continue
         unannounced = [i.id for i in waiting if i.notified_at is None]
-        when = moment(day, not unannounced, first.due_on, schedule, calendars.of(manager))
+        when = moment(day, not unannounced, due_on, schedule, calendars.of(manager))
         if when is None:
             continue
         batch = reminder_text.FeedbackBatch(
             period_start=first.period_start,
             cadence=first.cadence,
-            due_on=first.due_on,
+            due_on=due_on,
             total=len(mine),
             done=len(mine) - len(waiting),
         )
@@ -184,8 +166,15 @@ async def compose_day(
         return {}
     by_id = {c.id: c for c in cycles}
     feedback, overdue = await _feedback(db, org_id, by_id, day, skip.get(FEEDBACK, set()))
+    ready = await ready_stream(db, org_id, cycles, skip.get(READY, set()))
+    # Nobody gets "ready" and "due" on the same day: anyone told it's ready
+    # today, now or on an earlier pass, waits for tomorrow's due reminder.
+    told_ready = skip.get(READY, set()) | set(ready)
     return {
-        READY: await _ready(db, org_id, cycles, skip.get(READY, set())),
+        READY: ready,
+        CHECK_IN_DUE: await check_in_due_stream(
+            db, org_id, cycles, day, skip.get(CHECK_IN_DUE, set()) | told_ready
+        ),
         FEEDBACK: feedback,
         HR_LIST: await _hr(db, org_id, overdue, skip.get(HR_LIST, set())),
         **await review_streams(db, org_id, cycles, day, skip),

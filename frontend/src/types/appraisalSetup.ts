@@ -33,6 +33,9 @@ export interface AppraisalSettings {
   checkin_cadence: Cadence
   feedback_cadence: FeedbackCadence
   ai_enabled: boolean
+  /** Working days after a check-in's month ends. */
+  checkin_due_days: number
+  /** Working days after the check-in is sent. */
   feedback_due_days: number
   self_due_days: number
   manager_due_days: number
@@ -43,6 +46,8 @@ export interface AppraisalSettings {
   hr_overdue_offset: number
   suggest_goals_on_open: boolean
   max_goals: number
+  /** The fewest confirmed goals per person; never above max_goals. */
+  min_goals: number
 }
 
 export interface CycleScope {
@@ -57,12 +62,15 @@ export interface CycleRead {
   status: CycleStatus
   period_start: string
   period_end: string
+  /** Goals agreed by: short of the minimum after it is late. */
+  goals_due: string
   self_due: string
   manager_due: string
   ack_due: string
   review_period: ReviewPeriod
   checkin_cadence: Cadence
   feedback_cadence: FeedbackCadence
+  checkin_due_days: number
   feedback_due_days: number
   reminder_offsets: number[]
   overdue_nudge: boolean
@@ -87,11 +95,13 @@ export type CycleUpdate = Partial<
   Pick<
     CycleRead,
     | 'name'
+    | 'goals_due'
     | 'self_due'
     | 'manager_due'
     | 'ack_due'
     | 'checkin_cadence'
     | 'feedback_cadence'
+    | 'checkin_due_days'
     | 'feedback_due_days'
     | 'reminder_offsets'
     | 'overdue_nudge'
@@ -124,26 +134,6 @@ export interface EnrolmentReport {
   no_template: string[]
 }
 
-export interface ProgressRow {
-  user_id: string
-  name: string
-  manager_name: string
-  status: AppraisalStatus
-  check_ins: number
-  check_ins_added: number
-  check_ins_missed: number
-  feedback: number
-  feedback_done: number
-  feedback_overdue: number
-}
-
-export interface CycleProgress {
-  people: ProgressRow[]
-  feedback: number
-  feedback_done: number
-  managers_overdue: { name: string; overdue: number }[]
-}
-
 export interface GuideRead {
   cycle_name: string | null
   review_period: ReviewPeriod
@@ -155,6 +145,9 @@ export interface GuideRead {
   manager_due: string | null
   ack_due: string | null
   feedback_due_days: number
+  /** The org's goal range per person. */
+  min_goals: number
+  max_goals: number
   reminder_offsets: number[]
   ai_drafting: boolean
   intro_note: string

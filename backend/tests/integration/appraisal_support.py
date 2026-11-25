@@ -52,6 +52,7 @@ def cycle_row(org_id: uuid.UUID, **overrides: Any) -> AppraisalCycle:
         "name": "Q4 2026",
         "period_start": date(2026, 10, 1),
         "period_end": date(2026, 12, 31),
+        "goals_due": date(2026, 10, 8),
         "self_due": date(2027, 1, 7),
         "manager_due": date(2027, 1, 14),
         "ack_due": date(2027, 1, 28),

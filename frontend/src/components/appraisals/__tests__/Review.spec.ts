@@ -15,18 +15,17 @@
 /** Goals and reviews on screen: actions, the evidence rules, agree or change, calibration. */
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import CalibrationPanel from '@/components/appraisals/CalibrationPanel.vue'
 import GrowthSection from '@/components/appraisals/GrowthSection.vue'
 import GoalCard from '@/components/appraisals/GoalCard.vue'
-import TeamReviewsList from '@/components/appraisals/TeamReviewsList.vue'
 import ManagerReviewForm from '@/components/appraisals/ManagerReviewForm.vue'
 import SelfReviewForm from '@/components/appraisals/SelfReviewForm.vue'
 import type { Goal } from '@/types/appraisalGoals'
-import type { AppraisalRead, NextGoal } from '@/types/appraisalReview'
+import type { NextGoal } from '@/types/appraisalReview'
 import type { AppraisalSummary } from '@/types/appraisalGoals'
 import { evidenceOptions, pickReview, reviewChoices, selfProblem } from '@/utils/appraisalReview'
 import { goalSections, historyLine } from '@/utils/appraisalGoals'
 import { appraisalPlugins } from './mountAppraisal'
+import { review } from './reviewFixture'
 
 const NONE = { accept: false, dismiss: false, ask_reword: false, edit: false, remove: false, suggest_change: false }
 
@@ -34,28 +33,8 @@ function goal(overrides: Partial<Goal> = {}): Goal {
   return {
     id: 'g1', position: null, title: 'Refunds UAT at 80%', measure: 'test report', origin: 'employee_own',
     status: 'proposed', suggestion_basis: null, proposed_by_name: 'Priya', added_mid_period: false,
-    created_at: '2026-10-05T10:00:00Z', replaces: null, dismiss_reason: null, reword_note: null, why: null,
+    created_at: '2026-10-05T10:00:00Z', replaces: null, from_manager: false, dismiss_reason: null, reword_note: null, why: null,
     history: [], actions: NONE, ...overrides,
-  }
-}
-
-function review(overrides: Partial<AppraisalRead> = {}): AppraisalRead {
-  return {
-    id: 'a1', user_id: 'u1', person_name: 'Priya S', manager_name: 'Ravi', cycle_name: 'Q4 2026',
-    period_start: '2026-10-01', period_end: '2026-12-31', self_due: '2027-01-07', manager_due: '2027-01-14',
-    ack_due: '2027-01-28', status: 'self_review', drafting_mode: 'manual', summary_status: 'none', summary: [],
-    summary_hidden: false, period_facts: [],
-    timeline: [{
-      check_in_id: 'c1', period_start: '2026-10-01', status: 'employee_added', note: { lines: {}, blocking: '', next_month: '' },
-      facts: [{ source: 'board_cards', id: 'f1', key: 'OPS-1', title: 'Close', url: '/b', verb: 'done', done_at: null, private: false }],
-      links: [{ id: 'l1', url: 'https://doc.test', title: 'Spec', heading: 'team', goal_id: null }],
-    }],
-    goals: [{ id: 'g1', position: 1, title: 'Ship refunds', measure: '', added_mid_period: false, accepted_at: null, self_result: null, self_reason: null, self_evidence: [], result: null, draft_result: null, manager_reason: null }],
-    self_score: { band: null, reason: '', evidence: [], submitted_at: null },
-    manager_score: null, manager_only: null, send_back_note: null, reply: null, shared_at: null, acknowledged_at: null,
-    growth: { open: false, can_edit: false, is_self: true, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3, goals: [] },
-    can: { edit_self: true, edit_manager: false, send_back: false, share: false, acknowledge: false },
-    ...overrides,
   }
 }
 
@@ -97,11 +76,11 @@ describe('goals', () => {
 })
 
 describe('self-review', () => {
-  it('needs two pieces of evidence for band 1 or 2, and every goal scored', () => {
-    const body = { band: 2, reason: '', evidence: ['f1'], goals: [{ goal_id: 'g1', result: 'achieved' as const, reason: '', evidence: [] }] }
-    expect(selfProblem(body, ['g1'])).toContain('two pieces of evidence')
+  it('needs two examples for either Exceeded rating, and every goal scored', () => {
+    const body = { band: 2, reason: '', evidence: ['f1'], proud: '', differently: '', goals: [{ goal_id: 'g1', result: 'achieved' as const, reason: '', evidence: [] }] }
+    expect(selfProblem(body, ['g1'])).toBe('"Exceeded most times" needs 2 examples. Pick them under Examples.')
     expect(selfProblem({ ...body, evidence: ['f1', 'link:l1'] }, ['g1'])).toBe('')
-    expect(selfProblem({ ...body, band: 3, goals: [] }, ['g1'])).toContain('Score each goal')
+    expect(selfProblem({ ...body, band: 3, goals: [] }, ['g1'])).toContain('Pick how each goal ended')
   })
 
   it('offers the period as evidence and blocks submitting until the rules are met', async () => {
@@ -109,10 +88,10 @@ describe('self-review', () => {
     const { plugins } = await appraisalPlugins()
     const r = review()
     const wrapper = mount(SelfReviewForm, { global: { plugins: plugins as never[] }, props: { review: r, options: evidenceOptions(r), busy: null } })
-    const submit = () => wrapper.findAll('button').find(b => b.text().startsWith('Submit'))
+    const submit = () => wrapper.findAll('button').find(b => b.text().startsWith('Send to'))
     expect(submit()?.attributes('disabled')).toBeDefined()
     await wrapper.findAll('[role="radio"]').find(b => b.text() === 'Achieved')?.trigger('click')
-    await wrapper.findAll('[role="radio"]').find(b => b.text() === 'Meets always (3)')?.trigger('click')
+    await wrapper.find('input[type="radio"][value="3"]').setValue(true)
     expect(submit()?.attributes('disabled')).toBeUndefined()
     await submit()?.trigger('click')
     const [sent] = wrapper.emitted('submit')![0] as [{ band: number; goals: { result: string }[] }]
@@ -130,33 +109,16 @@ describe('manager review', () => {
     expect(agrees.every(b => b.attributes('disabled') !== undefined)).toBe(true)
     const scored = review({
       status: 'manager_review',
-      self_score: { band: 3, reason: 'Steady', evidence: [], submitted_at: '2027-01-05T10:00:00Z' },
+      self_score: { band: 3, reason: 'Steady', evidence: [], submitted_at: '2027-01-05T10:00:00Z', proud: '', differently: '' },
       goals: [{ ...review().goals[0], self_result: 'achieved' }],
       can: { ...review().can, edit_self: false, edit_manager: true },
     })
     const agreeing = mount(ManagerReviewForm, { global: { plugins: plugins as never[] }, props: { review: scored, options: [], busy: null } })
-    await agreeing.findAll('button').find(b => b.text() === 'Submit to HR')?.trigger('click')
+    await agreeing.find('textarea').setValue('A steady quarter')
+    await agreeing.findAll('button').find(b => b.text() === 'Send to HR')?.trigger('click')
     const [body] = agreeing.emitted('submit')![0] as [{ agree: boolean; goals: { agree: boolean }[] }]
     expect(body.agree).toBe(true)
     expect(body.goals[0].agree).toBe(true)
-  })
-})
-
-describe('calibration', () => {
-  it('shows agreement and flags', async () => {
-    const { plugins } = await appraisalPlugins()
-    const wrapper = mount(CalibrationPanel, {
-      global: { plugins: plugins as never[] },
-      props: {
-        calibration: {
-          teams: [{ manager_name: 'Ravi', people: 3, bands: { '3': 3 }, agreement: 1, gaps: 0, flag: 'Agreed with every self-score.' }],
-          people: [{ appraisal_id: 'a1', name: 'Priya', manager_name: 'Ravi', status: 'calibration', self_band: 1, final_band: 3, gap: true, feedback: 2, feedback_done: 1 }],
-        },
-      },
-    })
-    expect(wrapper.text()).toContain('100%')
-    expect(wrapper.text()).toContain('Agreed with every self-score.')
-    expect(wrapper.find('.calib__gap').exists()).toBe(true)
   })
 })
 
@@ -165,13 +127,14 @@ describe('review fixes', () => {
     const { plugins } = await appraisalPlugins()
     const drafted = review({
       status: 'manager_review',
-      self_score: { band: 3, reason: '', evidence: [], submitted_at: '2027-01-05T10:00:00Z' },
+      self_score: { band: 3, reason: '', evidence: [], submitted_at: '2027-01-05T10:00:00Z', proud: '', differently: '' },
       goals: [{ ...review().goals[0], self_result: 'achieved', draft_result: 'partly', manager_reason: 'Half shipped' }],
       can: { ...review().can, edit_self: false, edit_manager: true },
     })
     const wrapper = mount(ManagerReviewForm, { global: { plugins: plugins as never[] }, props: { review: drafted, options: [], busy: null } })
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('Half shipped')
-    await wrapper.findAll('button').find(b => b.text() === 'Submit to HR')?.trigger('click')
+    await wrapper.find('textarea').setValue('Close to done')
+    await wrapper.findAll('button').find(b => b.text() === 'Send to HR')?.trigger('click')
     const [body] = wrapper.emitted('submit')![0] as [{ goals: { agree: boolean; result: string }[] }]
     expect(body.goals[0]).toMatchObject({ agree: false, result: 'partly' })
   })
@@ -233,8 +196,8 @@ describe('growth conversation by role', () => {
 
 describe('which review opens', () => {
   const row = (id: string, status: AppraisalSummary['status']): AppraisalSummary => ({
-    id, user_id: 'u1', person_name: 'Priya', cycle_name: id, period_start: '2026-10-01', period_end: '2026-12-31',
-    status, goals_accepted: 0, goals_proposed: 0,
+    id, user_id: 'u1', profile_id: 'p1', cycle_id: 'c1', person_name: 'Priya', cycle_name: id, period_start: '2026-10-01', period_end: '2026-12-31',
+    status, goals_accepted: 0, goals_proposed: 0, goals_due: null,
   })
 
   it('prefers one in progress, then the newest finished, over a cycle not yet reviewed', () => {
@@ -251,18 +214,3 @@ describe('which review opens', () => {
   })
 })
 
-describe('team reviews list', () => {
-  const summary = (status: AppraisalSummary['status']): AppraisalSummary => ({
-    id: 'a1', user_id: 'u1', person_name: 'Priya', cycle_name: 'Q4 2026', period_start: '2026-10-01', period_end: '2026-12-31',
-    status, goals_accepted: 6, goals_proposed: 0,
-  })
-
-  it('offers Goals only until the review exists, and names the stage in words', async () => {
-    const { plugins } = await appraisalPlugins()
-    const wrapper = mount(TeamReviewsList, { global: { plugins: plugins as never[] }, props: { rows: [summary('enrolled')] } })
-    expect(wrapper.text()).toContain('Q4 2026 · Goals and check-ins · 6 goals')
-    expect(wrapper.findAll('a, button').map(b => b.text())).toEqual(['Goals'])
-    const open = mount(TeamReviewsList, { global: { plugins: plugins as never[] }, props: { rows: [summary('self_review')] } })
-    expect(open.findAll('a, button').map(b => b.text())).toEqual(['Goals', 'Review'])
-  })
-})

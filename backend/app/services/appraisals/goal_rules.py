@@ -18,6 +18,8 @@ Three accepted goals a period at most. The employee proposes their own
 goals, withdraws or rewords a proposal, and suggests a change to a
 confirmed goal; the primary manager confirms, asks for a rewording,
 declines with a reason, edits with a reason, adds and removes their own.
+Either side may suggest a change to a confirmed goal; the other decides:
+a change the manager suggested is the employee's to take or decline.
 Suggested goals can be edited, taken up or dismissed by either; one the
 employee takes up still goes to the manager to confirm. Everything locks
 when the self-review opens, so nobody moves the target while it's scored.
@@ -28,7 +30,7 @@ from dataclasses import dataclass
 from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
 from app.models.appraisal_enums import AppraisalStatus, CycleStatus, GoalOrigin, GoalStatus
-from app.models.appraisal_goal import AppraisalGoal
+from app.models.appraisal_goal import FROM_MANAGER, AppraisalGoal
 
 
 def is_locked(appraisal: Appraisal, cycle: AppraisalCycle) -> bool:
@@ -67,21 +69,30 @@ class GoalActions:
     suggest_change: bool = False
 
 
+def by_manager(goal: AppraisalGoal) -> bool:
+    """A proposal the manager wrote: a change to one of the person's confirmed goals."""
+    return goal.status is GoalStatus.PROPOSED and goal.suggestion_refs.get("from") == FROM_MANAGER
+
+
 def actions(goal: AppraisalGoal, rights: GoalRights, pending_change: bool) -> GoalActions:
     """The caller's actions on one goal."""
     status, origin = goal.status, goal.origin
-    # Only the employee proposes: written themself or picked from the library.
-    own_proposal = status is GoalStatus.PROPOSED
+    # The employee's proposal (written themself or picked from the library),
+    # or a change the manager suggested, which the employee decides on.
+    managers = by_manager(goal)
+    own_proposal = status is GoalStatus.PROPOSED and not managers
     suggested = status is GoalStatus.SUGGESTED
     either = rights.employee or rights.manager
     return GoalActions(
-        accept=(rights.manager and own_proposal) or (either and suggested),
-        dismiss=(either and (own_proposal or suggested)),
+        accept=(rights.manager and own_proposal)
+        or (rights.employee and managers)
+        or (either and suggested),
+        dismiss=either and (status is GoalStatus.PROPOSED or suggested),
         ask_reword=rights.manager and own_proposal,
         edit=(rights.manager and status is not GoalStatus.DISMISSED)
         or (rights.employee and (own_proposal or suggested)),
         remove=rights.manager
         and status is GoalStatus.ACCEPTED
         and origin is GoalOrigin.MANAGER_ADDED,
-        suggest_change=rights.employee and status is GoalStatus.ACCEPTED and not pending_change,
+        suggest_change=either and status is GoalStatus.ACCEPTED and not pending_change,
     )

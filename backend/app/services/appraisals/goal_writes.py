@@ -157,22 +157,3 @@ async def remove_goal(db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGo
         db, goal, ctx.caller_id, GoalRevisionKind.REMOVED, before=GoalText.of(goal)
     )
     await db.flush()
-
-
-async def suggest_change(
-    db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGoal, body: GoalEdit
-) -> AppraisalGoal:
-    """The employee proposes new wording for a confirmed goal; the manager decides."""
-    repo = AppraisalGoalRepository(db, org_id=ctx.cycle.org_id)
-    pending = any(
-        g.suggestion_refs.get("replaces") == str(goal.id) and g.status is GoalStatus.PROPOSED
-        for g in await repo.for_period(ctx.profile.id, ctx.cycle.period_start)
-    )
-    if not actions(goal, goal_rights(ctx), pending_change=pending).suggest_change:
-        raise AppraisalConflictError("A change can't be suggested for this goal now.")
-    change = await add_goal(
-        db, ctx, GoalBody(title=body.title, measure=body.measure, reason=body.reason)
-    )
-    change.suggestion_refs = {"replaces": str(goal.id)}
-    await db.flush()
-    return change

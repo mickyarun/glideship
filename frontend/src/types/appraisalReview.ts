@@ -16,12 +16,14 @@
 
 import type { AiLine, CheckInLink, CheckInNote, CheckInStatus, DraftStatus, DraftingMode, FactView } from '@/types/appraisal'
 import type { GoalResult } from '@/types/appraisalGoals'
-import type { AppraisalStatus } from '@/types/appraisalSetup'
+import type { AppraisalStatus, ReviewPeriod } from '@/types/appraisalSetup'
 
 export interface TimelineMonth {
   check_in_id: string
   period_start: string
   status: CheckInStatus
+  /** Not sent yet: to anyone but the person, the note and links are empty. */
+  sent: boolean
   facts: FactView[]
   note: CheckInNote
   links: CheckInLink[]
@@ -48,6 +50,8 @@ export interface SelfScore {
   reason: string
   evidence: string[]
   submitted_at: string | null
+  proud: string
+  differently: string
 }
 
 export interface ManagerScore {
@@ -101,6 +105,7 @@ export interface AppraisalRead {
   person_name: string
   manager_name: string | null
   cycle_name: string
+  review_period: ReviewPeriod
   period_start: string
   period_end: string
   self_due: string
@@ -120,6 +125,8 @@ export interface AppraisalRead {
   send_back_note: string | null
   reply: string | null
   shared_at: string | null
+  /** For HR: the fairness check holds this result out of sharing everything ready. */
+  held: boolean
   acknowledged_at: string | null
   growth: GrowthRead
   can: ReviewActions
@@ -129,6 +136,9 @@ export interface SelfBody {
   band: number | null
   reason: string
   evidence: string[]
+  /** The two open answers; optional. */
+  proud: string
+  differently: string
   goals: { goal_id: string; result: GoalResult | null; reason: string; evidence: string[] }[]
 }
 
@@ -141,32 +151,6 @@ export interface ManagerBody {
   ready_next_level: boolean | null
   performance_concern: boolean | null
   concern_note: string
-}
-
-export interface CalibrationPerson {
-  appraisal_id: string
-  name: string
-  manager_name: string
-  status: AppraisalStatus
-  self_band: number | null
-  final_band: number | null
-  gap: boolean
-  feedback: number
-  feedback_done: number
-}
-
-export interface CalibrationTeam {
-  manager_name: string
-  people: number
-  bands: Record<string, number>
-  agreement: number | null
-  gaps: number
-  flag: string | null
-}
-
-export interface Calibration {
-  teams: CalibrationTeam[]
-  people: CalibrationPerson[]
 }
 
 /** One citable piece of evidence, resolved for display. */

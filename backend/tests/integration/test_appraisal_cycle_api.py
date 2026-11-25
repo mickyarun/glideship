@@ -88,6 +88,13 @@ async def test_new_cycle_is_prefilled_from_settings(
     assert (cycle["period_end"], cycle["self_due"]) == ("2026-12-31", "2027-01-07")
     assert cycle["status"] == "draft" and cycle["enrolment_cutoff"] == "2026-10-31"
     assert cycle["reminder_offsets"] == [-3, 0, 2]
+    # Goals agreed by five working days after the start: Thu 1 Oct to Thu 8 Oct.
+    assert cycle["goals_due"] == "2026-10-08"
+    url, hr = f"{BASE}/cycles/{cycle['id']}", as_user(p["hr"], org)
+    outside = await client.patch(url, json={"goals_due": "2027-01-04"}, headers=hr)
+    assert outside.status_code == 422
+    moved = await client.patch(url, json={"goals_due": "2026-10-15"}, headers=hr)
+    assert moved.json()["goals_due"] == "2026-10-15"
 
 
 async def test_activation_enrols_people_with_a_primary_manager(

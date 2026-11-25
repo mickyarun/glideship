@@ -52,6 +52,7 @@ logger = structlog.get_logger(__name__)
 CATEGORY = NotificationCategory.APPRAISAL_REMINDERS
 KINDS = (
     DigestClaimKind.APPRAISAL_CHECK_IN_READY,
+    DigestClaimKind.APPRAISAL_CHECK_IN_DUE,
     DigestClaimKind.APPRAISAL_FEEDBACK_DUE,
     DigestClaimKind.APPRAISAL_HR_OVERDUE,
     DigestClaimKind.APPRAISAL_SELF_DUE,

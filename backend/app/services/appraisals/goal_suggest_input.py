@@ -49,11 +49,13 @@ class SuggestInput(DraftInput):
 
 
 async def _feedback(db: AsyncSession, appraisal: Appraisal) -> list[dict[str, Any]]:
-    """The latest written feedback: its "try next" line and goals at risk."""
+    """The latest sent feedback: its "try next" line and goals at risk."""
     items = await AppraisalFeedbackRepository(db, org_id=appraisal.org_id).for_profiles(
         [appraisal.profile_id]
     )
     for item in items:
+        if item.sent_at is None:
+            continue
         try_next = crypto.unseal(item, "try_note")
         statuses = item.goal_status or {}
         watch = [goal_id for goal_id, v in statuses.items() if v.get("status") in WATCH]
@@ -65,12 +67,15 @@ async def _feedback(db: AsyncSession, appraisal: Appraisal) -> list[dict[str, An
 
 
 async def _blockers(db: AsyncSession, appraisal: Appraisal) -> list[dict[str, str]]:
-    """What the person said was blocking them in their latest check-ins."""
+    """What the person said was blocking them in their latest sent check-ins.
+
+    Suggestions are read by the manager too, so unsent words stay out.
+    """
     check_ins = await AppraisalCheckInRepository(db, org_id=appraisal.org_id).for_profiles(
         [appraisal.profile_id]
     )
     out = []
-    for check_in in check_ins[:RECENT_CHECK_INS]:
+    for check_in in [c for c in check_ins if c.sent_at is not None][:RECENT_CHECK_INS]:
         note = crypto.unseal_json(check_in, "employee_note") or {}
         if str(note.get("blocking", "")).strip():
             out.append({"id": str(check_in.id), "blocking": str(note["blocking"]).strip()})

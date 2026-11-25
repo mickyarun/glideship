@@ -128,6 +128,9 @@ async def test_feedback_and_approved_trends_reach_the_suggestions(
         json={"keep": "Clear PRs", "try_next": "Answer support tickets faster"},
         headers=mgr,
     )
+    # Only a sent note feeds suggestions, which the person reads too.
+    sent = await client.post(f"/api/v1/manager-feedback/{item['id']}/send", headers=mgr)
+    assert sent.status_code == 200
     async with pg_session_factory() as db:
         row = await db.get(Appraisal, uuid.UUID(appraisal))
         assert row is not None and row.role_template_id is not None

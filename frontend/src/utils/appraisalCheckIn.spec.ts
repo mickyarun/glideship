@@ -13,22 +13,8 @@
 // limitations under the License.
 
 import { describe, expect, it } from 'vitest'
-import type { CheckInRead, FactView } from '@/types/appraisal'
-import {
-  availabilityLine,
-  emptyHeadings,
-  factsBySource,
-  monthTitle,
-  safeHref,
-  statusLabel,
-  tagFromValue,
-  tagOptions,
-  tagValue,
-} from '@/utils/appraisalCheckIn'
-
-function fact(source: string, id: string): FactView {
-  return { source, id, key: id, title: id, url: null, verb: 'done', done_at: null, private: false }
-}
+import type { CheckInRead } from '@/types/appraisal'
+import { localDay, monthLine, monthTitle, safeHref, sendLine } from '@/utils/appraisalCheckIn'
 
 function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
   return {
@@ -36,76 +22,22 @@ function checkIn(overrides: Partial<CheckInRead> = {}): CheckInRead {
     period_start: '2026-10-01', period_end: '2026-10-31', working_days: 22, available_days: '20',
     status: 'open', closed: false, can_edit: true, drafting_mode: 'manual', draft_status: 'none',
     ai_lines: [], ai_hidden: false, can_regenerate: false, heading_meanings: {}, facts: [], fact_tags: {},
-    note: { lines: {}, blocking: '', next_month: '' }, links: [], goals: [], identity_warnings: [], feedback: null, appraisal_id: null,
+    note: { lines: {}, went_well: '', item_notes: {}, blocking: '', next_month: '' }, links: [], goals: [], identity_warnings: [], feedback: null, appraisal_id: null, cycle_name: 'Q4 2026', place: { number: 1, of: 3 },
+    due_on: '2026-11-06', sent_at: null, edited_after_send_at: null, late: false, can_send: true, content_hidden: false,
     ...overrides,
   }
 }
-
-describe('availabilityLine', () => {
-  it('says how many days were free and how many on leave', () => {
-    expect(availabilityLine({ working_days: 22, available_days: '20' })).toBe(
-      '20 of 22 working days · 2 on leave',
-    )
-  })
-
-  it('shows half days', () => {
-    expect(availabilityLine({ working_days: 22, available_days: '21.5' })).toBe(
-      '21.5 of 22 working days · 0.5 on leave',
-    )
-  })
-
-  it('drops the leave part when there was none', () => {
-    expect(availabilityLine({ working_days: 21, available_days: '21.0' })).toBe('21 working days')
-  })
-})
 
 describe('monthTitle', () => {
   it('names the month', () => expect(monthTitle('2026-10-01')).toBe('October 2026'))
 })
 
-describe('statusLabel', () => {
-  it('reads an untouched closed check-in as closed', () => {
-    expect(statusLabel('open', true)).toBe('Closed')
-    expect(statusLabel('missed', true)).toBe('Missed')
-  })
-})
-
-describe('factsBySource', () => {
-  it('groups facts by source in label order', () => {
-    const groups = factsBySource([fact('pull_requests', 'a'), fact('board_cards', 'b'), fact('board_cards', 'c')])
-    expect(groups.map(g => [g.label, g.facts.length])).toEqual([['Board cards', 2], ['Pull requests', 1]])
-  })
-})
-
-describe('tag picker', () => {
-  const goals = [{ id: 'g1', position: 1, title: 'Close in 5 days', measure: null, value: null, source_note: null, source_url: null }]
-
-  it('lists goals first, then each heading without a goal', () => {
-    expect(tagOptions(goals).map(o => o.title)).toEqual([
-      'Goal 1 · Close in 5 days',
-      'No goal · Delivery & quality',
-      'No goal · Initiative',
-      'No goal · Team',
-      'No goal · Growth',
-    ])
-  })
-
-  it('round-trips a goal and a heading', () => {
-    for (const value of ['goal:g1', 'heading:team']) {
-      expect(tagValue(tagFromValue(value) ?? undefined)).toBe(value)
-    }
-    expect(tagFromValue(null)).toBeNull()
-  })
-})
-
-describe('emptyHeadings', () => {
-  it('counts lines, links and tags as filling a heading', () => {
-    const filled = checkIn({
-      note: { lines: { team: ['Covered support'] }, blocking: '', next_month: '' },
-      links: [{ id: 'l1', url: 'https://x.test', title: '', heading: 'initiative', goal_id: null }],
-      fact_tags: { f1: { goal_id: null, heading: 'growth' } },
-    })
-    expect(emptyHeadings(filled)).toEqual(['delivery_quality'])
+describe('monthLine', () => {
+  it('reads a sent check-in as sent, whatever its status', () => {
+    const fact = checkIn().facts
+    expect(monthLine({ status: 'employee_added', sent: true, facts: fact })).toBe('Sent · 0 items')
+    expect(monthLine({ status: 'employee_added', sent: false, facts: fact })).toBe('Not sent · 0 items')
+    expect(monthLine({ status: 'missed', sent: false, facts: fact })).toBe('Missed · 0 items')
   })
 })
 
@@ -119,4 +51,16 @@ describe('safeHref', () => {
     'refuses %s',
     url => expect(safeHref(url)).toBeNull(),
   )
+})
+
+describe('sendLine', () => {
+  it('says when it is due and whether it was sent, late or edited after', () => {
+    expect(sendLine(checkIn())).toBe('Due Fri 6 Nov 2026 · Not sent yet')
+    expect(sendLine(checkIn({ late: true }))).toBe('Due Fri 6 Nov 2026 · Late, not sent yet')
+    const sent = checkIn({ sent_at: '2026-11-05T09:00:00Z', edited_after_send_at: '2026-11-06T09:00:00Z' })
+    expect(sendLine(sent)).toBe('Due Fri 6 Nov 2026 · Sent Thu 5 Nov 2026, edited after sending')
+    expect(sendLine(checkIn({ due_on: null }))).toBe('Not sent yet')
+    const noon = new Date(2026, 10, 5, 12).toISOString()
+    expect(localDay(noon)).toBe('2026-11-05')
+  })
 })

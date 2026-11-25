@@ -21,7 +21,6 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.appraisal_enums import (
-    AppraisalStatus,
     CheckInCadence,
     CycleStatus,
     DraftingMode,
@@ -63,10 +62,12 @@ class CycleUpdate(BaseModel):
     """Changes to a draft cycle."""
 
     name: str | None = Field(None, min_length=1, max_length=120)
+    goals_due: date | None = None
     self_due: date | None = None
     manager_due: date | None = None
     ack_due: date | None = None
-    feedback_due_days: int | None = Field(None, ge=1, le=60)
+    checkin_due_days: int | None = Field(None, ge=1, le=20)
+    feedback_due_days: int | None = Field(None, ge=1, le=20)
     reminder_offsets: list[int] | None = Field(None, max_length=6)
     checkin_cadence: CheckInCadence | None = None
     feedback_cadence: FeedbackCadence | None = None
@@ -97,12 +98,14 @@ class CycleRead(BaseModel):
     status: CycleStatus
     period_start: date
     period_end: date
+    goals_due: date
     self_due: date
     manager_due: date
     ack_due: date
     review_period: ReviewPeriod
     checkin_cadence: CheckInCadence
     feedback_cadence: FeedbackCadence
+    checkin_due_days: int
     feedback_due_days: int
     reminder_offsets: list[int]
     overdue_nudge: bool
@@ -149,34 +152,3 @@ class Readiness(BaseModel):
     no_primary_manager: list[PersonRef]
     no_template: list[PersonRef]
     identity: list[IdentityFlag]
-
-
-class ProgressRow(BaseModel):
-    """One enrolled person's progress through the cycle: counts and states only."""
-
-    user_id: uuid.UUID
-    name: str
-    manager_name: str
-    status: AppraisalStatus
-    check_ins: int
-    check_ins_added: int
-    check_ins_missed: int
-    feedback: int
-    feedback_done: int
-    feedback_overdue: int
-
-
-class ManagerOverdue(BaseModel):
-    """A manager with feedback still open past its due date."""
-
-    name: str
-    overdue: int
-
-
-class CycleProgress(BaseModel):
-    """Who's done and who's overdue."""
-
-    people: list[ProgressRow]
-    feedback: int
-    feedback_done: int
-    managers_overdue: list[ManagerOverdue]

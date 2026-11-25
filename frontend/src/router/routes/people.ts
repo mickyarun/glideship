@@ -17,6 +17,7 @@
  * role. Leave, WFH and employee records land here.
  */
 import type { RouteRecordRaw } from 'vue-router'
+import { appraisalRoutes } from './appraisals'
 
 export const peopleRoutes: RouteRecordRaw[] = [
   {
@@ -49,66 +50,7 @@ export const peopleRoutes: RouteRecordRaw[] = [
     name: 'leave-reports',
     component: () => import('@/views/leave/LeaveReportsView.vue'),
   },
-  {
-    // Everyone: their own check-ins. The API decides what each person sees.
-    path: 'appraisals',
-    name: 'appraisal-my-month',
-    component: () => import('@/views/appraisals/MyMonthView.vue'),
-  },
-  {
-    path: 'appraisals/team',
-    name: 'appraisal-team',
-    component: () => import('@/views/appraisals/TeamCheckInsView.vue'),
-  },
-  {
-    path: 'appraisals/check-ins/:id',
-    name: 'appraisal-check-in',
-    component: () => import('@/views/appraisals/CheckInView.vue'),
-  },
-  {
-    // The manager writes; the person and HR read. The API decides.
-    path: 'appraisals/feedback/:id',
-    name: 'appraisal-feedback',
-    component: () => import('@/views/appraisals/FeedbackView.vue'),
-  },
-  {
-    // HR only (appraisals:manage); the API refuses everyone else.
-    path: 'appraisals/cycles',
-    name: 'appraisal-cycles',
-    component: () => import('@/views/appraisals/CyclesView.vue'),
-  },
-  {
-    path: 'appraisals/cycles/:id',
-    name: 'appraisal-cycle',
-    component: () => import('@/views/appraisals/CycleView.vue'),
-  },
-  {
-    path: 'appraisals/settings',
-    name: 'appraisal-settings',
-    component: () => import('@/views/appraisals/AppraisalSettingsView.vue'),
-  },
-  {
-    path: 'appraisals/role-templates',
-    name: 'appraisal-role-templates',
-    component: () => import('@/views/appraisals/RoleTemplatesView.vue'),
-  },
-  {
-    // The person, their managers and HR; the API decides what each sees.
-    path: 'appraisals/goals/:id',
-    name: 'appraisal-goals',
-    component: () => import('@/views/appraisals/GoalsView.vue'),
-  },
-  {
-    // The caller's latest review.
-    path: 'appraisals/review',
-    name: 'appraisal-my-review',
-    component: () => import('@/views/appraisals/ReviewView.vue'),
-  },
-  {
-    path: 'appraisals/reviews/:id',
-    name: 'appraisal-review',
-    component: () => import('@/views/appraisals/ReviewView.vue'),
-  },
+  appraisalRoutes,
   {
     path: 'settings/leave',
     name: 'settings-leave',

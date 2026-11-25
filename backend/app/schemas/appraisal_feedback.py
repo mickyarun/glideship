@@ -44,7 +44,6 @@ class FeedbackGoal(BaseModel):
 
     id: uuid.UUID
     title: str
-    status: GoalCheck | None = None
     note: str = ""
 
 
@@ -66,7 +65,8 @@ class FeedbackRow(BaseModel):
     period_start: date
     period_end: date
     cadence: CheckInCadence
-    due_on: date
+    # Empty until the check-in it answers is sent.
+    due_on: date | None
     status: FeedbackStatus
     overdue: bool
     check_ins: int
@@ -83,7 +83,8 @@ class FeedbackRead(BaseModel):
     period_start: date
     period_end: date
     cadence: CheckInCadence
-    due_on: date
+    # Empty until the check-in it answers is sent.
+    due_on: date | None
     status: FeedbackStatus
     done_at: datetime | None
     overdue: bool
@@ -92,6 +93,23 @@ class FeedbackRead(BaseModel):
     try_next: str
     goals: list[FeedbackGoal]
     check_ins: list[FeedbackCheckIn]
+    sent_at: datetime | None = None
+    edited_after_send_at: datetime | None = None
+    # Not sent yet and not the caller's: what it says is left out.
+    content_hidden: bool = False
+
+
+class MyNote(BaseModel):
+    """A sent note about the caller, for their home page."""
+
+    id: uuid.UUID
+    manager_name: str | None
+    period_start: date
+    period_end: date
+    cadence: CheckInCadence
+    sent_at: datetime
+    keep: str
+    try_next: str
 
 
 class FeedbackShown(BaseModel):

@@ -15,11 +15,11 @@
 /** Evidence chips and the submit checks on the review forms (pure). */
 
 import type { AppraisalSummary } from '@/types/appraisalGoals'
-import type { AppraisalRead, EvidenceOption, SelfBody } from '@/types/appraisalReview'
+import type { AppraisalRead, EvidenceOption, ManagerBody, SelfBody } from '@/types/appraisalReview'
 import type { AppraisalStatus } from '@/types/appraisalSetup'
+import { HIGH_BAND_EVIDENCE, bandLabel, evidenceNeeded, isHighBand } from '@/utils/appraisalBands'
 import { sourceLabel } from '@/utils/appraisalCheckIn'
-
-export const HIGH_BANDS = [1, 2]
+import { longDate } from '@/utils/appraisalSetup'
 
 /** Everything in the period that can be cited, as the viewer may see it. */
 export function evidenceOptions(review: AppraisalRead): EvidenceOption[] {
@@ -37,7 +37,8 @@ export function evidenceOptions(review: AppraisalRead): EvidenceOption[] {
       private: fact.private,
     })
   }
-  for (const link of review.timeline.flatMap(m => m.links)) {
+  // Links only from sent check-ins: an example has to be one the reader can open.
+  for (const link of review.timeline.filter(m => m.sent).flatMap(m => m.links)) {
     out.push({ id: `link:${link.id}`, label: link.title || link.url, detail: 'Added by them', url: link.url, private: false })
   }
   return out
@@ -45,13 +46,41 @@ export function evidenceOptions(review: AppraisalRead): EvidenceOption[] {
 
 /** Why the self-review can't be submitted yet, or ''. Mirrors the server's rules. */
 export function selfProblem(body: SelfBody, goalIds: string[]): string {
-  if (body.band === null) return 'Pick an overall band.'
-  if (HIGH_BANDS.includes(body.band) && body.evidence.length < 2) {
-    return 'Bands 1 and 2 need at least two pieces of evidence.'
-  }
   const scored = new Set(body.goals.filter(g => g.result).map(g => g.goal_id))
-  if (goalIds.some(id => !scored.has(id))) return 'Score each goal: achieved, partly or not yet.'
+  if (goalIds.some(id => !scored.has(id))) return 'Pick how each goal ended: not yet, partly or achieved.'
+  if (body.band === null) return 'Pick an overall rating.'
+  if (isHighBand(body.band) && body.evidence.length < HIGH_BAND_EVIDENCE) {
+    return `"${bandLabel(body.band)}" needs ${HIGH_BAND_EVIDENCE} examples. Pick them under Examples.`
+  }
   return ''
+}
+
+/** How many of the four questions are answered: the goals (all of them), the two open answers, the rating. */
+export function selfProgress(body: SelfBody): { done: number; total: number } {
+  const answered = [
+    body.goals.every(g => g.result),
+    Boolean(body.proud.trim()),
+    Boolean(body.differently.trim()),
+    body.band !== null,
+  ]
+  return { done: answered.filter(Boolean).length, total: answered.length }
+}
+
+/** The first word of a name, for "Priya said"; the fallback when there is none. */
+export function firstName(name: string | null | undefined, fallback: string): string {
+  return name?.trim().split(/\s+/)[0] || fallback
+}
+
+
+/** How the shared rating came about, in one line: same as the person's, or changed. */
+export function overallLine(review: AppraisalRead, isSelf: boolean): string {
+  const manager = firstName(review.manager_name, 'Your manager')
+  const own = review.self_score?.submitted_at ? review.self_score.band : null
+  const final = review.manager_score?.final_band ?? null
+  const picked = isSelf ? 'You picked' : `${firstName(review.person_name, 'They')} picked`
+  if (own === null) return `${manager} rated this; there was no self-review to agree with.`
+  if (own === final) return `${picked} the same. ${manager} agreed.`
+  return `${picked} "${bandLabel(own)}". ${manager} changed it.`
 }
 
 const ACTIVE: AppraisalStatus[] = ['self_review', 'manager_review', 'calibration', 'shared']
@@ -71,4 +100,68 @@ export function pickReview(mine: AppraisalSummary[]): AppraisalSummary | null {
   return (
     mine.find(r => ACTIVE.includes(r.status)) ?? mine.find(r => r.status === 'acknowledged') ?? mine[0] ?? null
   )
+}
+
+/** The line under the review's title: what is due and when. */
+export function reviewSubtitle(r: AppraisalRead): string {
+  if (r.status === 'self_review') return `Due ${longDate(r.self_due)}`
+  if (r.status === 'manager_review') return `Manager review due ${longDate(r.manager_due)}`
+  if (r.status === 'shared') return `Shared on ${longDate((r.shared_at ?? r.ack_due).slice(0, 10))} · Read by ${longDate(r.ack_due)}`
+  return `${longDate(r.period_start)} – ${longDate(r.period_end)}`
+}
+
+/** What the viewer is waiting on when there's nothing for them to do, or ''. */
+export function reviewWaiting(r: AppraisalRead, isSelf: boolean): string {
+  if (r.can.edit_self || r.can.edit_manager || r.can.acknowledge) return ''
+  if (r.status === 'enrolled') return 'This review opens after the period ends. Until then, the work goes in your check-ins and goals.'
+  if (r.status === 'manager_review' && isSelf) return `Waiting for ${r.manager_name || 'your manager'}.`
+  if (r.status === 'calibration' && isSelf) return "With HR for a fairness check. You'll see the result when it's shared."
+  return ''
+}
+
+/** Why the manager's review can't be sent yet, or ''. Mirrors the server's rules. */
+export function managerProblem(body: ManagerBody): string {
+  if (!body.reason.trim()) return "Write your words for them; they'll read them in the result."
+  for (const goal of body.goals) {
+    if (goal.agree) continue
+    if (!goal.result) return 'Pick the result for each goal you change.'
+    if (!goal.reason.trim()) return "Say why for each goal you change; they'll read it."
+  }
+  if (body.agree) return ''
+  if (body.band === null) return 'Pick the overall rating.'
+  const needed = evidenceNeeded(body.band, true)
+  if (body.evidence.length >= needed) return ''
+  return `"${bandLabel(body.band)}" needs ${needed === 1 ? 'an example. Pick one under Examples.' : `${needed} examples. Pick them under Examples.`}`
+}
+
+/** Agree or Change; Agree only when the person gave an answer to agree with. */
+export function agreeOrChange(canAgree: boolean): { label: string; value: string; disabled?: boolean }[] {
+  return [
+    { label: 'Agree', value: 'agree', disabled: !canAgree },
+    { label: 'Change', value: 'change' },
+  ]
+}
+
+/**
+ * The manager's form as last saved. A goal or the overall rating starts as
+ * "agree" when the person answered and the manager hasn't changed it.
+ */
+export function managerDraft(review: AppraisalRead): ManagerBody {
+  const mine = review.manager_score
+  const own = review.self_score?.submitted_at ? review.self_score.band : null
+  return {
+    agree: own !== null && (!mine?.band || mine.band === own),
+    band: mine?.band ?? null,
+    reason: mine?.reason ?? '',
+    evidence: [...(mine?.evidence ?? [])],
+    goals: review.goals.map(g => ({
+      goal_id: g.id,
+      agree: g.self_result !== null && (g.draft_result === null || g.draft_result === g.self_result) && !g.manager_reason,
+      result: g.draft_result,
+      reason: g.manager_reason ?? '',
+    })),
+    ready_next_level: review.manager_only?.ready_next_level ?? null,
+    performance_concern: review.manager_only?.performance_concern ?? null,
+    concern_note: review.manager_only?.concern_note ?? '',
+  }
 }

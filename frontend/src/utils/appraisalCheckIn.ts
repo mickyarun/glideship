@@ -13,14 +13,9 @@
 // limitations under the License.
 
 /** Wording and grouping for check-ins (pure, so the screens stay simple). */
-import type {
-  CheckInGoal,
-  CheckInRead,
-  CheckInStatus,
-  EvidenceHeading,
-  FactTag,
-  FactView,
-} from '@/types/appraisal'
+import type { CheckInRead, EvidenceHeading } from '@/types/appraisal'
+import type { TimelineMonth } from '@/types/appraisalReview'
+import { longDate } from '@/utils/appraisalSetup'
 
 export const HEADINGS: { value: EvidenceHeading; label: string }[] = [
   { value: 'delivery_quality', label: 'Delivery & quality' },
@@ -45,23 +40,15 @@ const SOURCE_LABELS: Record<string, string> = {
 /** Every record source a role template can count, in the order HR sees them. */
 export const FACT_SOURCES = Object.keys(SOURCE_LABELS)
 
-const STATUS_LABELS: Record<CheckInStatus, string> = {
-  open: 'Not started',
-  employee_added: 'Started',
-  missed: 'Missed',
-}
-
-export function headingLabel(heading: EvidenceHeading): string {
-  return HEADINGS.find(h => h.value === heading)?.label ?? heading
-}
-
 export function sourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? source
 }
 
-export function statusLabel(status: CheckInStatus, closed: boolean): string {
-  if (status === 'open' && closed) return 'Closed'
-  return STATUS_LABELS[status]
+/** A month in the review's timeline: sent or not, and how much work it lists. */
+export function monthLine(month: Pick<TimelineMonth, 'status' | 'sent' | 'facts'>): string {
+  const state = month.sent ? 'Sent' : month.status === 'missed' ? 'Missed' : 'Not sent'
+  const n = month.facts.length
+  return `${state} · ${n} item${n === 1 ? '' : 's'}`
 }
 
 /** "October 2026", from the period's first day (an ISO date). */
@@ -74,52 +61,6 @@ export function monthTitle(periodStart: string): string {
   })
 }
 
-/** "17 of 21 working days · 4 on leave", or "21 working days" with no leave. */
-export function availabilityLine(checkIn: Pick<CheckInRead, 'working_days' | 'available_days'>): string {
-  const available = Number(checkIn.available_days)
-  const away = checkIn.working_days - available
-  const days = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
-  if (away <= 0) return `${checkIn.working_days} working days`
-  return `${days(available)} of ${checkIn.working_days} working days · ${days(away)} on leave`
-}
-
-/** Facts grouped by where they came from, in a stable order. */
-export function factsBySource(facts: FactView[]): { source: string; label: string; facts: FactView[] }[] {
-  const groups = new Map<string, FactView[]>()
-  for (const fact of facts) {
-    groups.set(fact.source, [...(groups.get(fact.source) ?? []), fact])
-  }
-  return [...groups.entries()]
-    .map(([source, items]) => ({ source, label: sourceLabel(source), facts: items }))
-    .sort((a, b) => a.label.localeCompare(b.label))
-}
-
-export interface TagOption {
-  title: string
-  value: string
-}
-
-/** The "which goal it helped" picker: goals first, then "No goal · <heading>". */
-export function tagOptions(goals: CheckInGoal[]): TagOption[] {
-  return [
-    ...goals.map(g => ({ title: `Goal ${g.position} · ${g.title}`, value: `goal:${g.id}` })),
-    ...HEADINGS.map(h => ({ title: `No goal · ${h.label}`, value: `heading:${h.value}` })),
-  ]
-}
-
-export function tagValue(tag: FactTag | undefined): string | null {
-  if (!tag) return null
-  if (tag.goal_id) return `goal:${tag.goal_id}`
-  return tag.heading ? `heading:${tag.heading}` : null
-}
-
-export function tagFromValue(value: string | null): FactTag | null {
-  if (!value) return null
-  const [kind, id] = value.split(':')
-  if (kind === 'goal') return { goal_id: id, heading: null }
-  return { goal_id: null, heading: id as EvidenceHeading }
-}
-
 /** The link if it is http(s) or a path in the app; anything else isn't linked. */
 export function safeHref(url: string | null): string | null {
   if (!url) return null
@@ -129,13 +70,17 @@ export function safeHref(url: string | null): string | null {
   return url.startsWith('/') && !['/', '\\'].includes(url.charAt(1)) ? url : null
 }
 
-/** Which headings have nothing in them yet (no lines, links or tagged items). */
-export function emptyHeadings(checkIn: CheckInRead): EvidenceHeading[] {
-  const filled = new Set<EvidenceHeading>()
-  for (const [heading, lines] of Object.entries(checkIn.note.lines)) {
-    if (lines?.length) filled.add(heading as EvidenceHeading)
-  }
-  for (const link of checkIn.links) filled.add(link.heading)
-  for (const tag of Object.values(checkIn.fact_tags)) if (tag.heading) filled.add(tag.heading)
-  return HEADINGS.map(h => h.value).filter(h => !filled.has(h))
+/** The viewer's own calendar day of a timestamp, as an ISO date. */
+export function localDay(at: string): string {
+  const d = new Date(at)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Where a check-in is with sending: "Due Fri 6 Nov 2026 · Not sent", "Sent", "Late". */
+export function sendLine(c: Pick<CheckInRead, 'due_on' | 'sent_at' | 'late' | 'edited_after_send_at'>): string {
+  const due = c.due_on ? `Due ${longDate(c.due_on)}` : ''
+  const state = c.sent_at
+    ? `Sent ${longDate(localDay(c.sent_at))}${c.edited_after_send_at ? ', edited after sending' : ''}`
+    : c.late ? 'Late, not sent yet' : 'Not sent yet'
+  return [due, state].filter(Boolean).join(' · ')
 }

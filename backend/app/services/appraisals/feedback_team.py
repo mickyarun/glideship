@@ -21,7 +21,6 @@ from collections import defaultdict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appraisal_check_in import AppraisalCheckIn
-from app.models.appraisal_enums import CheckInStatus
 from app.repositories.appraisal import AppraisalRepository
 from app.repositories.appraisal_check_in import AppraisalCheckInRepository
 from app.repositories.appraisal_feedback import AppraisalFeedbackRepository
@@ -76,7 +75,7 @@ async def team_feedback(db: AsyncSession, caller: Caller) -> list[FeedbackRow]:
                 status=item.status,
                 overdue=is_overdue(item, today),
                 check_ins=len(covered),
-                check_ins_added=sum(c.status is CheckInStatus.EMPLOYEE_ADDED for c in covered),
+                check_ins_added=sum(c.sent_at is not None for c in covered),
             )
         )
     return rows

@@ -13,13 +13,12 @@
 // limitations under the License.
 
 /**
- * The appraisal intro guide: its facts from the API, and whether it is open.
+ * The appraisal guide: its facts from the API, and whether it is open.
  *
- * Opens by itself the first time someone visits an appraisal screen on
- * this browser; after that it is one click away. It counts as seen only
- * once it loaded. Remembering that is a convenience only, so storage that
- * fails just shows the guide again. The facts are kept per signed-in
- * person, so switching account or org never shows someone else's.
+ * It opens only when someone asks for it ("How appraisals work"); it never
+ * opens by itself. The facts also carry HR's note to everyone, which the
+ * home page shows. They are kept per signed-in person, so switching account
+ * or org never shows someone else's.
  */
 
 import { ref } from 'vue'
@@ -29,58 +28,35 @@ import { useAuthStore } from '@/stores/auth'
 import type { GuideRead } from '@/types/appraisalSetup'
 import { extractApiError } from '@/utils/errors'
 
-const SEEN_KEY = 'appraisal-guide-seen'
-
 const open = ref(false)
 const guide = ref<GuideRead | null>(null)
 const error = ref('')
 // Who the loaded facts belong to.
 let loadedFor = ''
 
-function seen(): boolean {
-  try {
-    return localStorage.getItem(SEEN_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function remember(): void {
-  try {
-    localStorage.setItem(SEEN_KEY, '1')
-  } catch {
-    // Not remembered: the guide opens again next time, which is harmless.
-  }
-}
-
-/** Load the facts for the signed-in person; whether they loaded. */
-async function load(who: string): Promise<boolean> {
-  if (guide.value && loadedFor === who) return true
-  guide.value = null
-  error.value = ''
-  try {
-    guide.value = (await api.get<GuideRead>('/v1/check-ins/guide')).data
-    loadedFor = who
-    return true
-  } catch (err) {
-    error.value = extractApiError(err, "Couldn't load the guide. Close it and try again.")
-    return false
-  }
-}
-
 export function useAppraisalGuide() {
   const auth = useAuthStore()
 
+  /** Load the facts for the signed-in person, once; whether they loaded. */
+  async function load(): Promise<boolean> {
+    const who = `${auth.user?.id ?? ''}:${auth.user?.org_id ?? ''}`
+    if (guide.value && loadedFor === who) return true
+    guide.value = null
+    error.value = ''
+    try {
+      guide.value = (await api.get<GuideRead>('/v1/check-ins/guide')).data
+      loadedFor = who
+      return true
+    } catch (err) {
+      error.value = extractApiError(err, "Couldn't load the guide. Close it and try again.")
+      return false
+    }
+  }
+
   async function show(): Promise<void> {
     open.value = true
-    const who = `${auth.user?.id ?? ''}:${auth.user?.org_id ?? ''}`
-    if (await load(who)) remember()
+    await load()
   }
 
-  /** On an appraisal screen's first visit: show the guide once. */
-  async function showOnFirstVisit(): Promise<void> {
-    if (!seen()) await show()
-  }
-
-  return { open, guide, error, show, showOnFirstVisit }
+  return { open, guide, error, show, load }
 }

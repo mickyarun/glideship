@@ -77,7 +77,7 @@ async def test_a_review_from_self_score_to_acknowledgement(
     }
     assert (await client.put(f"{url}/self", json=self_body, headers=emp)).status_code == 200
     two_needed = await client.post(f"{url}/self/submit", headers=emp)
-    assert two_needed.status_code == 422 and "two pieces" in two_needed.json()["detail"]
+    assert two_needed.status_code == 422 and "two examples" in two_needed.json()["detail"]
     await client.put(f"{url}/self", json={**self_body, "band": 3}, headers=emp)
     submitted = await client.post(f"{url}/self/submit", headers=emp)
     assert submitted.json()["status"] == "manager_review"

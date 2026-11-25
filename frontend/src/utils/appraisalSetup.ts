@@ -22,11 +22,12 @@ export const REVIEW_LABELS: Record<ReviewPeriod, string> = {
   half_yearly: 'Every half year',
   yearly: 'Once a year',
 }
-export const CHECK_IN_LABELS: Record<Cadence, string> = { monthly: 'Monthly', quarterly: 'Quarterly' }
+// Quarterly check-ins run once, when each quarter ends: that is how the scheduler opens them.
+export const CHECK_IN_LABELS: Record<Cadence, string> = { monthly: 'Every month', quarterly: 'Once, at quarter end' }
 export const FEEDBACK_LABELS: Record<FeedbackCadence, string> = {
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  in_review: 'Quarterly, in the review',
+  monthly: 'After each check-in',
+  quarterly: 'Once, at quarter end',
+  in_review: 'Only at review',
 }
 export const CYCLE_STATUS: Record<CycleStatus, string> = {
   draft: 'Draft',
@@ -36,15 +37,21 @@ export const CYCLE_STATUS: Record<CycleStatus, string> = {
 }
 export const STATUS_LABELS: Record<AppraisalStatus, string> = {
   enrolled: 'Goals and check-ins',
-  self_review: 'Self-review',
+  self_review: 'Their review',
   manager_review: 'Manager review',
-  calibration: 'Calibration',
+  calibration: 'Fairness check',
   shared: 'Shared',
-  acknowledged: 'Acknowledged',
+  acknowledged: 'Read',
   withdrawn: 'Withdrawn',
 }
 
 const PERIOD_MONTHS: Record<ReviewPeriod, number> = { quarterly: 3, half_yearly: 6, yearly: 12 }
+const PERIOD_WORDS: Record<ReviewPeriod, string> = { quarterly: 'quarter', half_yearly: 'half-year', yearly: 'year' }
+
+/** "quarter", "half-year" or "year": the word for one review period. */
+export function periodWord(review: ReviewPeriod): string {
+  return PERIOD_WORDS[review]
+}
 
 /**
  * Why a combination can't run, or null. The same rules as the backend's
@@ -57,14 +64,19 @@ export function goalLimitProblem(n: number): string | null {
   return Number.isInteger(n) && n >= 1 && n <= MAX_GOAL_LIMIT ? null : `A whole number from 1 to ${MAX_GOAL_LIMIT}.`
 }
 
+/** What's wrong with the fewest-goals value, or null: a valid count no higher than the most. */
+export function goalFloorProblem(min: number, max: number): string | null {
+  return goalLimitProblem(min) ?? (min > max ? 'No more than the most goals per person.' : null)
+}
+
 export function cadenceProblem(review: ReviewPeriod, checkIns: Cadence, feedback: FeedbackCadence): string | null {
-  if (checkIns === 'quarterly' && review === 'quarterly') return 'Quarterly check-ins need half-yearly or yearly reviews.'
+  if (checkIns === 'quarterly' && review === 'quarterly') return 'Check-ins once at quarter end need half-yearly or yearly reviews.'
   if (feedback === 'in_review') {
-    return review === 'quarterly' ? null : 'Feedback in the review only fits quarterly reviews.'
+    return review === 'quarterly' ? null : 'Notes only at review fit quarterly reviews.'
   }
-  if (feedback === 'monthly' && checkIns !== 'monthly') return 'Monthly feedback needs monthly check-ins.'
+  if (feedback === 'monthly' && checkIns !== 'monthly') return 'Notes after each check-in need monthly check-ins.'
   if (feedback === 'quarterly' && review === 'quarterly') {
-    return 'With quarterly reviews, pick monthly feedback or feedback in the review.'
+    return 'With quarterly reviews, pick notes after each check-in or only at review.'
   }
   return null
 }
