@@ -123,7 +123,14 @@ async def test_the_manager_rejects_a_self_goal_and_the_employee_sees_why(
     assert declined["history"][-1]["kind"] == "declined"
     assert _goal(mine, "Learn Rust")["rejected"] is True
     assert _goal(mine, "Learn Rust")["dismiss_reason"] is None
-    assert mine["accepted"] == 0
+    assert mine["accepted"] == 0 and mine["is_self"] is True
+    # The manager sees it as theirs; HR doesn't see it as a rejection at all.
+    as_mgr = (await client.get(url, headers=mgr)).json()
+    assert as_mgr["is_self"] is False and _goal(as_mgr, "Learn Go")["rejected"] is True
+    as_hr = await client.get(url, headers=as_user(m.people["hr"], m.org))
+    if as_hr.status_code == 200:
+        assert as_hr.json()["is_self"] is False
+        assert _goal(as_hr.json(), "Learn Go")["rejected"] is False
 
 
 async def test_withdrawing_your_own_goal_is_not_a_rejection(

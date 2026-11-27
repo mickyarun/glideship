@@ -33,7 +33,7 @@ from app.services.appraisals import crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.errors import AppraisalConflictError, AppraisalNotFoundError
 from app.services.appraisals.goal_history import GoalText
-from app.services.appraisals.goal_rules import is_rejected
+from app.services.appraisals.goal_rules import is_rejected, sees_rejections
 from app.services.appraisals.goal_writes import audit_goal, flush_or_full
 from app.services.appraisals.growth_rules import (
     can_reject,
@@ -53,12 +53,15 @@ async def next_goals(
     """Next period's live goals, and the person's proposals the manager rejected."""
     repo = AppraisalGoalRepository(db, org_id=ctx.cycle.org_id)
     goals = await repo.for_period(ctx.profile.id, next_start(ctx))
+    live = [g for g in goals if g.status in LIVE]
+    if not sees_rejections(ctx.is_self, ctx.access.is_primary_manager):
+        return live, []
     dropped = [g for g in goals if g.status is GoalStatus.DISMISSED]
     kinds: dict[uuid.UUID, list[GoalRevisionKind]] = {g.id: [] for g in dropped}
     for revision in await repo.revisions(list(kinds)):
         kinds[revision.goal_id].append(revision.kind)
     rejected = [g for g in dropped if is_rejected(g, ctx.profile.user_id, kinds[g.id])]
-    return [g for g in goals if g.status in LIVE], rejected
+    return live, rejected
 
 
 async def live_goals(db: AsyncSession, ctx: AppraisalContext) -> list[AppraisalGoal]:
@@ -98,7 +101,7 @@ async def reject_next_goal(
     await open_next_cycle(db, ctx)
     goal = await _goal(db, ctx, goal_id)
     if not can_reject(ctx, goal):
-        raise AppraisalConflictError("Only the manager rejects a goal they proposed.")
+        raise AppraisalConflictError("This goal can't be rejected now.")
     reason = body.reason.strip() or None
     goal.status = GoalStatus.DISMISSED
     crypto.seal(goal, "dismiss_reason", reason)

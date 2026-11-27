@@ -82,6 +82,8 @@ export interface GoalsRead {
   /** The fewest confirmed goals the org asks for. */
   minimum: number
   accepted: number
+  /** The caller is the person; wording on rejected goals follows it. */
+  is_self: boolean
   can_propose: boolean
   can_add: boolean
   can_suggest: boolean

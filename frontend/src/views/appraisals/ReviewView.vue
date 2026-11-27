@@ -63,7 +63,7 @@
         <AcknowledgeBox v-if="showResult" :review="review" :is-self="isSelf" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
       </div>
       <ReviewEvidence v-if="aside" class="review__aside" :review="review" :is-self="isSelf" />
-      <GoalDialog :mode="adding ? 'next' : rejecting ? 'decline' : null" :busy="busy === 'save'" :error="message" @close="adding = false; rejecting = null" @submit="b => (adding ? addNext(b) : rejectNext(b))" />
+      <GoalDialog :mode="adding ? 'next' : rejecting ? 'decline' : null" :busy="busy === 'save'" :error="message" @close="adding = false; rejecting = null" @submit="submitNext" />
     </div>
     <SendBackDialog :open="sendingBack" :manager-name="review?.manager_name ?? null" :busy="busy === 'back'" @close="sendingBack = false" @send="sendBack" />
   </AppPage>
@@ -137,13 +137,14 @@ async function submitSelf(body: SelfBody): Promise<void> {
   if (id && (await run('save', store.saveSelf(id, body)))) await run('submit', store.submitSelf(id))
 }
 
-async function addNext(body: GoalBody): Promise<void> {
-  if (review.value && (await run('save', store.addNextGoal(review.value.id, body)))) adding.value = false
-}
-
-async function rejectNext(body: GoalBody): Promise<void> {
+// The dialog adds a next-period goal, or rejects the one in `rejecting`.
+async function submitNext(body: GoalBody): Promise<void> {
+  const id = review.value?.id
   const goal = rejecting.value
-  if (review.value && goal && (await run('save', store.rejectNextGoal(review.value.id, goal, body.reason)))) rejecting.value = null
+  if (!id) return
+  if (!(await run('save', goal ? store.rejectNextGoal(id, goal, body.reason) : store.addNextGoal(id, body)))) return
+  adding.value = false
+  rejecting.value = null
 }
 
 async function share(): Promise<void> {

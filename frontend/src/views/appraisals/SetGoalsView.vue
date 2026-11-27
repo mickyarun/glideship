@@ -32,7 +32,7 @@
       <AppPanel :title="goals.can_add ? `${who}'s goals for this period` : 'Your goals for this period'" :note="goalMeter(goals.accepted, goals.minimum, goals.limit)">
         <p class="set-goals__hint">A good goal is something {{ goals.can_add ? who : 'you' }} can move, with a way to tell at the end whether it happened.</p>
         <div class="set-goals__list">
-          <GoalCard v-for="goal in listed" :key="goal.id" :goal="goal" :manager-name="goals.manager_name" :as-employee="goals.can_propose" :full="full" v-on="cardFor(goal)" />
+          <GoalCard v-for="goal in listed" :key="goal.id" :goal="goal" :manager-name="goals.manager_name" :as-employee="goals.can_propose" :is-self="goals.is_self" :full="full" v-on="cardFor(goal)" />
         </div>
         <GoalAddForm v-if="(goals.can_add && !full) || goals.can_propose" ref="form" :heading="goals.can_add ? 'Add your own goal' : 'Suggest a goal'" :who="who" :needs-reason="goals.can_add" :busy="adding" @submit="add" />
         <p class="set-goals__hint">You can still add or change goals until reviews open.</p>
@@ -78,12 +78,13 @@ const full = computed(() => Boolean(goals.value && goals.value.accepted >= goals
 // Goals the person suggested that wait on the manager.
 const waiting = computed(() => (goals.value?.goals ?? []).filter(g => g.status === 'proposed' && !g.from_manager).length)
 // Confirmed goals, then (for the person) their own waiting suggestions and the ones rejected.
+// The manager sees a rejection in the goal's history; the backend sends it to no one else.
 const listed = computed(() =>
   (goals.value?.goals ?? []).filter(
     g =>
       g.status === 'accepted' ||
       (g.status === 'proposed' && (Boolean(goals.value?.can_propose) || g.from_manager)) ||
-      (g.rejected && !goals.value?.can_add),
+      (g.rejected && Boolean(goals.value?.is_self)),
   ),
 )
 

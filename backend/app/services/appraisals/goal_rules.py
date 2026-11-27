@@ -86,13 +86,22 @@ def by_manager(goal: AppraisalGoal) -> bool:
 def is_rejected(
     goal: AppraisalGoal, person_id: uuid.UUID, kinds: Sequence[GoalRevisionKind]
 ) -> bool:
-    """The person's own proposal, which the manager rejected (its last change)."""
+    """The person's own proposal, which the manager rejected (its last change).
+
+    A declined change to a confirmed goal doesn't count: the goal still stands.
+    """
     return (
         goal.status is GoalStatus.DISMISSED
         and goal.proposed_by == person_id
+        and not goal.suggestion_refs.get("replaces")
         and bool(kinds)
         and kinds[-1] is GoalRevisionKind.DECLINED
     )
+
+
+def sees_rejections(is_self: bool, is_primary_manager: bool) -> bool:
+    """Only the person and the manager who decides see rejected goals and why."""
+    return is_self or is_primary_manager
 
 
 def actions(goal: AppraisalGoal, rights: GoalRights, pending_change: bool) -> GoalActions:

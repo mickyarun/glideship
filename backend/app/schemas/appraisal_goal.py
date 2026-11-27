@@ -126,6 +126,8 @@ class GoalsRead(BaseModel):
     # The fewest confirmed goals the org asks for; below it the manager is asked for more.
     minimum: int
     accepted: int
+    # The caller is the person; wording on rejected goals follows it.
+    is_self: bool = False
     can_propose: bool
     can_add: bool
     # AI suggestions: whether the caller may ask, and how the last run went.

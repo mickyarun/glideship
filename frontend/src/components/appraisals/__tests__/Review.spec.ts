@@ -62,10 +62,19 @@ describe('goals', () => {
   it('tells the person their manager rejected the goal, and why', async () => {
     const { plugins } = await appraisalPlugins()
     const rejected = goal({ status: 'dismissed', rejected: true, dismiss_reason: 'Not this period' })
-    const wrapper = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: rejected, managerName: 'Ravi', asEmployee: true } })
+    const wrapper = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: rejected, managerName: 'Ravi', asEmployee: false, isSelf: true } })
     expect(wrapper.text()).toContain('Your manager rejected this goal.')
     expect(wrapper.text()).toContain('Reason: Not this period')
     expect(wrapper.findAll('button')).toHaveLength(0)
+  })
+
+  it('tells the manager they rejected the goal', async () => {
+    const { plugins } = await appraisalPlugins()
+    const rejected = goal({ status: 'dismissed', rejected: true, dismiss_reason: null })
+    const wrapper = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: rejected, managerName: 'Ravi', asEmployee: false, isSelf: false } })
+    expect(wrapper.text()).toContain('You rejected this goal.')
+    expect(wrapper.text()).not.toContain('Your manager rejected')
+    expect(wrapper.text()).not.toContain('Reason:')
   })
 
   it('labels suggestions with their source and why', async () => {

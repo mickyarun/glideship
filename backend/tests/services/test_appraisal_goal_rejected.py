@@ -18,7 +18,7 @@ import uuid
 
 from app.models.appraisal_enums import GoalRevisionKind, GoalStatus
 from app.models.appraisal_goal import AppraisalGoal
-from app.services.appraisals.goal_rules import is_rejected
+from app.services.appraisals.goal_rules import is_rejected, sees_rejections
 
 PERSON = uuid.uuid4()
 CREATED, DECLINED, REMOVED = (
@@ -47,3 +47,15 @@ def test_a_goal_someone_else_proposed_is_not_rejected() -> None:
 def test_a_live_goal_is_not_rejected() -> None:
     assert not is_rejected(_goal(GoalStatus.PROPOSED), PERSON, [CREATED, DECLINED])
     assert not is_rejected(_goal(), PERSON, [])
+
+
+def test_a_declined_change_to_a_confirmed_goal_is_not_rejected() -> None:
+    change = _goal()
+    change.suggestion_refs = {"replaces": str(uuid.uuid4())}
+    assert not is_rejected(change, PERSON, [CREATED, DECLINED])
+
+
+def test_only_the_person_and_their_manager_see_rejections() -> None:
+    assert sees_rejections(is_self=True, is_primary_manager=False)
+    assert sees_rejections(is_self=False, is_primary_manager=True)
+    assert not sees_rejections(is_self=False, is_primary_manager=False)

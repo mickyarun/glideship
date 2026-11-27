@@ -83,8 +83,14 @@ async def test_the_growth_conversation_and_next_periods_goals(
     as_mgr = (await client.get(url, headers=mgr)).json()["growth"]["goals"]
     seen = next(g for g in as_mgr if g["id"] == blog["id"])
     assert seen["can_reject"] and not seen["can_remove"]
-    no = await client.post(f"{url}/next-goals/{blog['id']}/reject", json={}, headers=emp)
+    reject_url = f"{url}/next-goals/{blog['id']}/reject"
+    no = await client.post(reject_url, json={}, headers=emp)
     assert no.status_code == 409
+    # Only the primary manager rejects: not HR, not the manager's own manager.
+    boss = as_user(m.people["boss"], m.org)
+    for other in (hr, boss):
+        refused_other = await client.post(reject_url, json={}, headers=other)
+        assert refused_other.status_code in (404, 409), refused_other.text
     gone = await client.post(
         f"{url}/next-goals/{blog['id']}/reject", json={"reason": "Next year"}, headers=mgr
     )
@@ -94,6 +100,11 @@ async def test_the_growth_conversation_and_next_periods_goals(
         ("Write a blog", "Next year")
     ]
     assert blog["id"] not in {g["id"] for g in after["goals"]}
+    # Only the person and their manager see a rejection.
+    assert (await client.get(url, headers=hr)).json()["growth"]["rejected"] == []
+    boss_view = await client.get(url, headers=boss)
+    if boss_view.status_code == 200:
+        assert boss_view.json()["growth"]["rejected"] == []
     confirmed = (await client.post(f"{url}/next-goals/{mine['id']}/accept", headers=mgr)).json()
     assert {g["status"] for g in confirmed["growth"]["goals"]} == {"accepted"}
     hr_view = (await client.get(url, headers=hr)).json()["growth"]

@@ -152,9 +152,15 @@ async def test_growth_outlives_the_cycle_and_locks_with_the_next_review(
             .values(period_end=date(2026, 11, 5), enrolment_cutoff=date(2026, 11, 1))
         )
         await db.commit()
+    pitch = (
+        await client.post(f"{url}/next-goals", json={"title": "Pitch a talk"}, headers=emp)
+    ).json()["growth"]["goals"]
+    pitch_id = next(g["id"] for g in pitch if g["title"] == "Pitch a talk")
     review = await client.post(f"{BASE}/cycles/{new_cycle}/start-review", headers=hr)
     assert review.status_code == 202, review.text
     locked = await client.post(f"{url}/next-goals", json={"title": "Too late"}, headers=mgr)
     assert locked.status_code == 409
+    late = await client.post(f"{url}/next-goals/{pitch_id}/reject", json={}, headers=mgr)
+    assert late.status_code == 409
     # The strength and focus stay open; only next period's goals lock.
     assert (await client.put(f"{url}/growth", json=talk, headers=emp)).status_code == 200

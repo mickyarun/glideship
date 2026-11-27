@@ -31,7 +31,7 @@
     <AppCallout v-if="goal.status === 'proposed' && goal.reword_note" variant="warning" title="Asked to reword">
       {{ goal.reword_note }}
     </AppCallout>
-    <AppCallout v-if="goal.rejected" variant="warning" :title="asEmployee ? 'Your manager rejected this goal.' : 'You rejected this goal.'">
+    <AppCallout v-if="goal.rejected" variant="warning" :title="isSelf ? 'Your manager rejected this goal.' : 'You rejected this goal.'">
       <template v-if="goal.dismiss_reason">Reason: {{ goal.dismiss_reason }}</template>
     </AppCallout>
     <p v-else-if="goal.status === 'dismissed' && goal.dismiss_reason" class="goal__waiting">Not added: {{ goal.dismiss_reason }}</p>
@@ -62,7 +62,7 @@ import AppCallout from '@/components/common/AppCallout.vue'
 import type { Goal } from '@/types/appraisalGoals'
 import { BASIS_LABELS, historyLine, originLine } from '@/utils/appraisalGoals'
 
-const props = defineProps<{ goal: Goal; managerName: string | null; asEmployee: boolean; full?: boolean }>()
+const props = defineProps<{ goal: Goal; managerName: string | null; asEmployee: boolean; isSelf?: boolean; full?: boolean }>()
 const emit = defineEmits<{
   accept: []
   reword: []
