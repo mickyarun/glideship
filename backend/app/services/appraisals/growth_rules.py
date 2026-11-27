@@ -60,12 +60,20 @@ def require_edit(ctx: AppraisalContext) -> None:
 
 
 def can_remove(ctx: AppraisalContext, goal: AppraisalGoal) -> bool:
-    """The manager any goal; the employee only a proposal of their own."""
+    """The manager a confirmed goal; the employee only a proposal of their own.
+
+    The employee's proposal is the manager's to reject, so they see it.
+    """
     if not can_edit(ctx):
         return False
     if not ctx.is_self:
-        return True
+        return goal.status is GoalStatus.ACCEPTED
     return goal.proposed_by == ctx.caller_id and goal.status is GoalStatus.PROPOSED
+
+
+def can_reject(ctx: AppraisalContext, goal: AppraisalGoal) -> bool:
+    """The manager, on a goal the employee proposed."""
+    return can_edit(ctx) and not ctx.is_self and goal.status is GoalStatus.PROPOSED
 
 
 def next_start(ctx: AppraisalContext) -> date:

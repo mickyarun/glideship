@@ -21,7 +21,7 @@
 <template>
   <AppPage :title="title" :subtitle="subtitle">
     <template #actions>
-      <v-btn v-if="goals?.goals.some(g => g.status === 'proposed' && !g.from_manager) && goals.can_add" variant="text" :to="{ name: 'appraisal-confirm-goals', params: { id: goals.appraisal_id } }">Confirm suggested goals</v-btn>
+      <v-btn v-if="waiting && goals?.can_add" variant="text" color="primary" :to="{ name: 'appraisal-confirm-goals', params: { id: goals.appraisal_id } }">Confirm or reject {{ waiting }} {{ waiting === 1 ? 'goal' : 'goals' }}</v-btn>
       <AppraisalGuide />
     </template>
     <AppCallout v-if="store.error || message" variant="error">{{ message || store.error }}</AppCallout>
@@ -75,10 +75,15 @@ const subtitle = computed(() => {
   return `${due}${confirms} · Goals lock when HR opens reviews`
 })
 const full = computed(() => Boolean(goals.value && goals.value.accepted >= goals.value.limit))
-// Confirmed goals, then (for the person) their own waiting suggestions.
+// Goals the person suggested that wait on the manager.
+const waiting = computed(() => (goals.value?.goals ?? []).filter(g => g.status === 'proposed' && !g.from_manager).length)
+// Confirmed goals, then (for the person) their own waiting suggestions and the ones rejected.
 const listed = computed(() =>
   (goals.value?.goals ?? []).filter(
-    g => g.status === 'accepted' || (g.status === 'proposed' && (Boolean(goals.value?.can_propose) || g.from_manager)),
+    g =>
+      g.status === 'accepted' ||
+      (g.status === 'proposed' && (Boolean(goals.value?.can_propose) || g.from_manager)) ||
+      (g.rejected && !goals.value?.can_add),
   ),
 )
 

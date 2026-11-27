@@ -89,7 +89,7 @@ describe('confirming a suggested goal', () => {
     } as Goal
     const wrapper = mount(ProposalCard, { global: { plugins: plugins as never[] }, props: { goal, who: 'Sofia', full: false } })
     expect(wrapper.text()).toContain("Sofia's reason“Sales keeps raising this”")
-    expect(wrapper.findAll('button').map(b => b.text())).toEqual(['Confirm', 'Suggest a change', 'Not this quarter'])
+    expect(wrapper.findAll('button').map(b => b.text())).toEqual(['Confirm', 'Suggest a change', 'Reject'])
     await wrapper.findAll('button')[2].trigger('click')
     expect(wrapper.emitted('decline')).toHaveLength(1)
   })

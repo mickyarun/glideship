@@ -101,6 +101,8 @@ class GoalRead(BaseModel):
     replaces: uuid.UUID | None
     # A change the manager suggested: the employee takes or declines it.
     from_manager: bool = False
+    # The person's own proposal, which the manager rejected; dismiss_reason says why.
+    rejected: bool = False
     dismiss_reason: str | None
     reword_note: str | None
     # For an AI suggestion: what it builds on, in one line.

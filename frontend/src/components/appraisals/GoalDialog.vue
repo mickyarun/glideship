@@ -15,7 +15,7 @@
  -->
 
 <!-- One dialog for every goal form: adding, editing, suggesting a change,
-     and the reason-only ones (asking for a rewording, declining). -->
+     and the reason-only ones (asking for a rewording, rejecting). -->
 <template>
   <v-dialog :model-value="mode !== null" max-width="560" @update:model-value="v => !v && emit('close')">
     <v-card v-if="mode">
@@ -69,7 +69,7 @@ const TEXT: Record<GoalDialogMode, ModeText> = {
   'offer-change': { title: 'Suggest a change', action: 'Send to them', words: true, reason: 'Why (they see this; optional)' },
   reword: { title: 'Suggest a change', action: 'Send back', words: false, reason: 'Your wording, or what to change (they see this)', needsReason: true },
   'turn-down': { title: 'Not this change', action: 'Keep my goal as it is', words: false, reason: 'Why not (they see this; optional)' },
-  decline: { title: 'Not this quarter', action: 'Not adding it', words: false, reason: 'One line on why (they see this)', needsReason: true },
+  decline: { title: 'Reject this goal', action: 'Reject', words: false, reason: 'Why (optional, they see this)' },
 }
 
 const props = defineProps<{ mode: GoalDialogMode | null; start?: Partial<GoalBody>; busy: boolean; error: string }>()

@@ -60,6 +60,8 @@ export interface Goal {
   replaces: string | null
   /** A change the manager suggested: the employee takes or declines it. */
   from_manager: boolean
+  /** The person's own proposal, which the manager rejected; dismiss_reason says why. */
+  rejected: boolean
   dismiss_reason: string | null
   reword_note: string | null
   why: string | null

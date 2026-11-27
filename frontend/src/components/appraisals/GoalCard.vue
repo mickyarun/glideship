@@ -31,7 +31,10 @@
     <AppCallout v-if="goal.status === 'proposed' && goal.reword_note" variant="warning" title="Asked to reword">
       {{ goal.reword_note }}
     </AppCallout>
-    <p v-if="goal.status === 'dismissed' && goal.dismiss_reason" class="goal__waiting">Not added: {{ goal.dismiss_reason }}</p>
+    <AppCallout v-if="goal.rejected" variant="warning" :title="asEmployee ? 'Your manager rejected this goal.' : 'You rejected this goal.'">
+      <template v-if="goal.dismiss_reason">Reason: {{ goal.dismiss_reason }}</template>
+    </AppCallout>
+    <p v-else-if="goal.status === 'dismissed' && goal.dismiss_reason" class="goal__waiting">Not added: {{ goal.dismiss_reason }}</p>
     <details v-if="goal.history.length" class="goal__history">
       <summary>History</summary>
       <ul>
@@ -75,10 +78,10 @@ const slotsFull = computed(() => Boolean(props.full) && !props.goal.replaces && 
 const hasActions = computed(() => Object.values(props.goal.actions).some(Boolean))
 const dismissLabel = computed(() => {
   if (props.goal.status === 'suggested') return 'Dismiss'
-  // Whoever suggested it takes it back; the other side turns it down.
+  // Whoever suggested it takes it back; the other side turns it down or rejects it.
   const mine = props.asEmployee !== props.goal.from_manager
   if (props.goal.from_manager) return mine ? 'Take it back' : 'Not this one'
-  return mine ? 'Withdraw' : 'Not this period'
+  return mine ? 'Withdraw' : 'Reject'
 })
 const waitingLine = computed(() => {
   const manager = props.managerName || 'Your manager'

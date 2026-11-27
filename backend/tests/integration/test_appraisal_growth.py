@@ -72,8 +72,28 @@ async def test_the_growth_conversation_and_next_periods_goals(
     theirs = next(g for g in proposed if g["title"] == "Refunds UAT at 90%")
     assert (mine["status"], theirs["status"]) == ("proposed", "accepted")
     assert mine["can_remove"] and not theirs["can_remove"]
+    assert not mine["can_reject"] and not theirs["can_reject"]
     refused = await client.delete(f"{url}/next-goals/{theirs['id']}", headers=emp)
     assert refused.status_code == 409
+    # The manager rejects a proposal, saying why if they like; the employee sees it.
+    extra = (
+        await client.post(f"{url}/next-goals", json={"title": "Write a blog"}, headers=emp)
+    ).json()["growth"]["goals"]
+    blog = next(g for g in extra if g["title"] == "Write a blog")
+    as_mgr = (await client.get(url, headers=mgr)).json()["growth"]["goals"]
+    seen = next(g for g in as_mgr if g["id"] == blog["id"])
+    assert seen["can_reject"] and not seen["can_remove"]
+    no = await client.post(f"{url}/next-goals/{blog['id']}/reject", json={}, headers=emp)
+    assert no.status_code == 409
+    gone = await client.post(
+        f"{url}/next-goals/{blog['id']}/reject", json={"reason": "Next year"}, headers=mgr
+    )
+    assert gone.status_code == 200, gone.text
+    after = (await client.get(url, headers=emp)).json()["growth"]
+    assert [(r["title"], r["reason"]) for r in after["rejected"]] == [
+        ("Write a blog", "Next year")
+    ]
+    assert blog["id"] not in {g["id"] for g in after["goals"]}
     confirmed = (await client.post(f"{url}/next-goals/{mine['id']}/accept", headers=mgr)).json()
     assert {g["status"] for g in confirmed["growth"]["goals"]} == {"accepted"}
     hr_view = (await client.get(url, headers=hr)).json()["growth"]

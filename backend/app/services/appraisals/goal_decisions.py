@@ -102,15 +102,13 @@ async def accept_goal(db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGo
 async def dismiss_goal(
     db: AsyncSession, ctx: AppraisalContext, goal: AppraisalGoal, body: ReasonBody
 ) -> None:
-    """Decline a proposal (the manager says why), withdraw one, or drop a suggestion."""
+    """Reject a proposal (saying why is optional), withdraw one, or drop a suggestion."""
     if not actions(goal, goal_rights(ctx), pending_change=False).dismiss:
-        raise AppraisalConflictError("This goal can't be dismissed now.")
+        raise AppraisalConflictError("This goal can't be rejected now.")
     reason = body.reason.strip() or None
     proposed = goal.status is GoalStatus.PROPOSED
-    # Whoever wrote a proposal may take it back; the other side declines it.
+    # Whoever wrote a proposal may take it back; the other side rejects it.
     withdrawing = ctx.is_self != by_manager(goal) if proposed else ctx.is_self
-    if proposed and not withdrawing and not ctx.is_self and reason is None:
-        raise AppraisalInvalidError("Say why you're not adding it; they'll see this.")
     goal.status = GoalStatus.DISMISSED
     crypto.seal(goal, "dismiss_reason", reason)
     kind = GoalRevisionKind.REMOVED if withdrawing else GoalRevisionKind.DECLINED

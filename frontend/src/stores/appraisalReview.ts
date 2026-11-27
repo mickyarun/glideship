@@ -92,6 +92,8 @@ export const useAppraisalReviewStore = defineStore('appraisalReview', () => {
     act(() => api.post<AppraisalRead>(url(id, `/next-goals/${goalId}/accept`)), "Couldn't confirm the goal.")
   const removeNextGoal = (id: string, goalId: string) =>
     act(() => api.delete<AppraisalRead>(url(id, `/next-goals/${goalId}`)), "Couldn't take the goal back.")
+  const rejectNextGoal = (id: string, goalId: string, reason: string) =>
+    act(() => api.post<AppraisalRead>(url(id, `/next-goals/${goalId}/reject`), { reason }), "Couldn't reject the goal.")
 
   /** Each goal's value month by month; empty when it can't be loaded. */
   async function fetchGoalValues(id: string): Promise<GoalValues[]> {
@@ -105,7 +107,7 @@ export const useAppraisalReviewStore = defineStore('appraisalReview', () => {
 
   return {
     fetchGoalValues,
-    saveGrowth, addNextGoal, acceptNextGoal, removeNextGoal,
+    saveGrowth, addNextGoal, acceptNextGoal, removeNextGoal, rejectNextGoal,
     mine, team, current, error, loading, fetchLists, fetchOne,
     saveSelf, submitSelf, saveManager, submitManager, sendBack, share, acknowledge,
   }

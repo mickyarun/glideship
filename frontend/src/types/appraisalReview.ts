@@ -85,6 +85,15 @@ export interface NextGoal {
   proposed_by_name: string
   can_accept: boolean
   can_remove: boolean
+  /** The manager, on a goal the person proposed. */
+  can_reject: boolean
+}
+
+/** A goal the person proposed and the manager rejected; reason may be empty. */
+export interface RejectedGoal {
+  id: string
+  title: string
+  reason: string
 }
 
 /** The growth conversation, open once the result is shared; no band here. */
@@ -97,6 +106,7 @@ export interface GrowthRead {
   next_period_start: string
   limit: number
   goals: NextGoal[]
+  rejected: RejectedGoal[]
 }
 
 export interface AppraisalRead {

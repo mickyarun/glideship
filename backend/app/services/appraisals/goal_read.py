@@ -36,7 +36,7 @@ from app.services.appraisals import audit, crypto, goal_history
 from app.services.appraisals.appraisal_context import AppraisalContext
 from app.services.appraisals.cycle_people import goals_due_for
 from app.services.appraisals.goal_history import GoalText, HistoryEntry
-from app.services.appraisals.goal_rules import actions, by_manager, is_locked
+from app.services.appraisals.goal_rules import actions, by_manager, is_locked, is_rejected
 from app.services.appraisals.goal_writes import goal_rights
 from app.services.appraisals.settings import goal_floor, goal_limit
 
@@ -68,6 +68,7 @@ def _goal(
         created_at=goal.created_at,
         replaces=uuid.UUID(replaces) if replaces else None,
         from_manager=by_manager(goal),
+        rejected=is_rejected(goal, rights_ctx.profile.user_id, [h.kind for h in history]),
         dismiss_reason=crypto.unseal(goal, "dismiss_reason"),
         reword_note=rewords[-1].reason if rewords else None,
         why=(crypto.unseal_json(goal, "original") or {}).get("why")

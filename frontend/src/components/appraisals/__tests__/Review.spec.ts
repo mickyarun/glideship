@@ -33,7 +33,7 @@ function goal(overrides: Partial<Goal> = {}): Goal {
   return {
     id: 'g1', position: null, title: 'Refunds UAT at 80%', measure: 'test report', origin: 'employee_own',
     status: 'proposed', suggestion_basis: null, proposed_by_name: 'Priya', added_mid_period: false,
-    created_at: '2026-10-05T10:00:00Z', replaces: null, from_manager: false, dismiss_reason: null, reword_note: null, why: null,
+    created_at: '2026-10-05T10:00:00Z', replaces: null, from_manager: false, rejected: false, dismiss_reason: null, reword_note: null, why: null,
     history: [], actions: NONE, ...overrides,
   }
 }
@@ -47,6 +47,25 @@ describe('goals', () => {
     })
     expect(wrapper.text()).toContain('Waiting for Ravi to confirm.')
     expect(wrapper.findAll('button').map(b => b.text())).toEqual(['Edit', 'Withdraw'])
+  })
+
+  it('gives the manager a Reject button on the person\'s own goal', async () => {
+    const { plugins } = await appraisalPlugins()
+    const actions = { ...NONE, accept: true, ask_reword: true, edit: true, dismiss: true }
+    const wrapper = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: goal({ actions }), managerName: 'Ravi', asEmployee: false } })
+    const reject = wrapper.findAll('button').find(b => b.text() === 'Reject')
+    expect(reject).toBeDefined()
+    await reject!.trigger('click')
+    expect(wrapper.emitted('dismiss')).toHaveLength(1)
+  })
+
+  it('tells the person their manager rejected the goal, and why', async () => {
+    const { plugins } = await appraisalPlugins()
+    const rejected = goal({ status: 'dismissed', rejected: true, dismiss_reason: 'Not this period' })
+    const wrapper = mount(GoalCard, { global: { plugins: plugins as never[] }, props: { goal: rejected, managerName: 'Ravi', asEmployee: true } })
+    expect(wrapper.text()).toContain('Your manager rejected this goal.')
+    expect(wrapper.text()).toContain('Reason: Not this period')
+    expect(wrapper.findAll('button')).toHaveLength(0)
   })
 
   it('labels suggestions with their source and why', async () => {
@@ -159,8 +178,9 @@ describe('growth conversation', () => {
         growth: {
           open: true, can_edit: true, is_self: false, strength: 'Early regressions', focus: 'Plan UAT', next_period_start: '2027-01-01', limit: 3,
           goals: [
-            { id: 'n1', title: 'UAT at 90%', measure: '', status: 'proposed', origin: 'employee_own', proposed_by_name: 'Priya', can_accept: true, can_remove: true },
+            { id: 'n1', title: 'UAT at 90%', measure: '', status: 'proposed', origin: 'employee_own', proposed_by_name: 'Priya', can_accept: true, can_remove: false, can_reject: true },
           ],
+          rejected: [],
         },
       },
     })
@@ -168,13 +188,33 @@ describe('growth conversation', () => {
     expect(wrapper.text()).toContain('Proposed by Priya')
     await wrapper.findAll('button').find(b => b.text() === 'Confirm')?.trigger('click')
     expect(wrapper.emitted('accept')![0]).toEqual(['n1'])
+    await wrapper.findAll('button').find(b => b.text() === 'Reject')?.trigger('click')
+    expect(wrapper.emitted('reject')![0]).toEqual(['n1'])
+  })
+
+  it('tells the person their manager rejected a goal, and why', async () => {
+    const { plugins } = await appraisalPlugins()
+    const wrapper = mount(GrowthSection, {
+      global: { plugins: plugins as never[] },
+      props: {
+        busy: null,
+        manager: 'Ravi',
+        growth: {
+          open: true, can_edit: true, is_self: true, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3,
+          goals: [], rejected: [{ id: 'n2', title: 'Write a blog', reason: 'Next year' }],
+        },
+      },
+    })
+    expect(wrapper.text()).toContain('Ravi rejected: Write a blog')
+    expect(wrapper.text()).toContain('Reason: Next year')
   })
 })
 
 describe('growth conversation by role', () => {
   const growth = {
     open: true, strength: 'Early regressions', focus: 'Plan UAT', next_period_start: '2027-01-01', limit: 1,
-    goals: [{ id: 'n1', title: 'UAT at 90%', measure: '', status: 'accepted', origin: 'manager_added', proposed_by_name: 'Ravi', can_accept: false, can_remove: false }] as NextGoal[],
+    goals: [{ id: 'n1', title: 'UAT at 90%', measure: '', status: 'accepted', origin: 'manager_added', proposed_by_name: 'Ravi', can_accept: false, can_remove: false, can_reject: false }] as NextGoal[],
+    rejected: [],
   }
 
   it('is read-only for anyone who may not write it', async () => {

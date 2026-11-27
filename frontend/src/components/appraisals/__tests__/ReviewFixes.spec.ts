@@ -78,7 +78,7 @@ describe('a change the manager suggested', () => {
   const change: Goal = {
     id: 'g2', position: null, title: 'Fewer reopened bugs', measure: 'Under 5%', origin: 'manager_added', status: 'proposed',
     suggestion_basis: null, proposed_by_name: 'Daniel', added_mid_period: false, created_at: '2026-11-05T10:00:00Z', replaces: 'g1',
-    from_manager: true, dismiss_reason: null, reword_note: null, why: null, history: [], actions: { ...NONE, accept: true, dismiss: true },
+    from_manager: true, rejected: false, dismiss_reason: null, reword_note: null, why: null, history: [], actions: { ...NONE, accept: true, dismiss: true },
   }
 
   it('is the person to take or turn down', async () => {

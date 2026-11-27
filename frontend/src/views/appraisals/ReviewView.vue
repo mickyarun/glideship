@@ -57,12 +57,13 @@
           @save="(s, f) => run('save', store.saveGrowth(review!.id, s, f))"
           @add="adding = true"
           @accept="g => run('save', store.acceptNextGoal(review!.id, g))"
+          @reject="g => (rejecting = g)"
           @remove="g => run('save', store.removeNextGoal(review!.id, g))"
         />
         <AcknowledgeBox v-if="showResult" :review="review" :is-self="isSelf" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
       </div>
       <ReviewEvidence v-if="aside" class="review__aside" :review="review" :is-self="isSelf" />
-      <GoalDialog :mode="adding ? 'next' : null" :busy="busy === 'save'" :error="message" @close="adding = false" @submit="addNext" />
+      <GoalDialog :mode="adding ? 'next' : rejecting ? 'decline' : null" :busy="busy === 'save'" :error="message" @close="adding = false; rejecting = null" @submit="b => (adding ? addNext(b) : rejectNext(b))" />
     </div>
     <SendBackDialog :open="sendingBack" :manager-name="review?.manager_name ?? null" :busy="busy === 'back'" @close="sendingBack = false" @send="sendBack" />
   </AppPage>
@@ -104,6 +105,8 @@ const formBusy = computed(() => (busy.value === 'save' || busy.value === 'submit
 const message = ref('')
 const sendingBack = ref(false)
 const adding = ref(false)
+// The next-period goal the manager is rejecting, while they write a reason.
+const rejecting = ref<string | null>(null)
 // The caller's own other reviews; someone else's open by link from the team list.
 const others = computed(() => reviewChoices(store.mine).filter(r => r.id !== review.value?.id))
 
@@ -136,6 +139,11 @@ async function submitSelf(body: SelfBody): Promise<void> {
 
 async function addNext(body: GoalBody): Promise<void> {
   if (review.value && (await run('save', store.addNextGoal(review.value.id, body)))) adding.value = false
+}
+
+async function rejectNext(body: GoalBody): Promise<void> {
+  const goal = rejecting.value
+  if (review.value && goal && (await run('save', store.rejectNextGoal(review.value.id, goal, body.reason)))) rejecting.value = null
 }
 
 async function share(): Promise<void> {
