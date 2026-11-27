@@ -115,7 +115,8 @@ describe('shared result', () => {
     const { plugins } = await appraisalPlugins()
     const growth = {
       open: true, can_edit: true, is_self: true, strength: '', focus: '', next_period_start: '2027-01-01', limit: 3,
-      goals: [{ id: 'n1', title: 'Lead the design', measure: '', status: 'proposed' as const, origin: 'employee_own', proposed_by_name: 'Priya', can_accept: false, can_remove: true }],
+      goals: [{ id: 'n1', title: 'Lead the design', measure: '', status: 'proposed' as const, origin: 'employee_own', proposed_by_name: 'Priya', can_accept: false, can_remove: true, can_reject: false }],
+      rejected: [],
     }
     const wrapper = mount(GrowthSection, { global: { plugins: plugins as never[] }, props: { growth, busy: null, manager: 'Ravi' } })
     expect(wrapper.text()).toContain('Plan for next quarter')

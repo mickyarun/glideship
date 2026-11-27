@@ -57,12 +57,13 @@
           @save="(s, f) => run('save', store.saveGrowth(review!.id, s, f))"
           @add="adding = true"
           @accept="g => run('save', store.acceptNextGoal(review!.id, g))"
+          @reject="g => (rejecting = g)"
           @remove="g => run('save', store.removeNextGoal(review!.id, g))"
         />
         <AcknowledgeBox v-if="showResult" :review="review" :is-self="isSelf" :busy="busy === 'ack'" @acknowledge="r => run('ack', store.acknowledge(review!.id, r))" />
       </div>
       <ReviewEvidence v-if="aside" class="review__aside" :review="review" :is-self="isSelf" />
-      <GoalDialog :mode="adding ? 'next' : null" :busy="busy === 'save'" :error="message" @close="adding = false" @submit="addNext" />
+      <GoalDialog :mode="adding ? 'next' : rejecting ? 'decline' : null" :busy="busy === 'save'" :error="message" @close="adding = false; rejecting = null" @submit="submitNext" />
     </div>
     <SendBackDialog :open="sendingBack" :manager-name="review?.manager_name ?? null" :busy="busy === 'back'" @close="sendingBack = false" @send="sendBack" />
   </AppPage>
@@ -104,6 +105,8 @@ const formBusy = computed(() => (busy.value === 'save' || busy.value === 'submit
 const message = ref('')
 const sendingBack = ref(false)
 const adding = ref(false)
+// The next-period goal the manager is rejecting, while they write a reason.
+const rejecting = ref<string | null>(null)
 // The caller's own other reviews; someone else's open by link from the team list.
 const others = computed(() => reviewChoices(store.mine).filter(r => r.id !== review.value?.id))
 
@@ -134,8 +137,14 @@ async function submitSelf(body: SelfBody): Promise<void> {
   if (id && (await run('save', store.saveSelf(id, body)))) await run('submit', store.submitSelf(id))
 }
 
-async function addNext(body: GoalBody): Promise<void> {
-  if (review.value && (await run('save', store.addNextGoal(review.value.id, body)))) adding.value = false
+// The dialog adds a next-period goal, or rejects the one in `rejecting`.
+async function submitNext(body: GoalBody): Promise<void> {
+  const id = review.value?.id
+  const goal = rejecting.value
+  if (!id) return
+  if (!(await run('save', goal ? store.rejectNextGoal(id, goal, body.reason) : store.addNextGoal(id, body)))) return
+  adding.value = false
+  rejecting.value = null
 }
 
 async function share(): Promise<void> {

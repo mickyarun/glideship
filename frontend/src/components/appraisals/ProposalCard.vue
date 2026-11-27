@@ -15,8 +15,8 @@
  -->
 
 <!-- One goal the person suggested, for the manager to decide on: what it
-     is, how we'll know, their reason, and Confirm, Suggest a change or Not
-     this quarter. -->
+     is, how we'll know, their reason, and Confirm, Suggest a change or
+     Reject. -->
 <template>
   <article class="proposal">
     <header class="proposal__head">
@@ -31,7 +31,7 @@
     <div class="proposal__actions">
       <v-btn size="small" color="primary" :disabled="full && !goal.replaces" @click="emit('accept')">Confirm</v-btn>
       <v-btn size="small" variant="outlined" @click="emit('reword')">Suggest a change</v-btn>
-      <v-btn size="small" variant="text" @click="emit('decline')">Not this quarter</v-btn>
+      <v-btn size="small" variant="outlined" color="error" @click="emit('decline')">Reject</v-btn>
     </div>
   </article>
 </template>

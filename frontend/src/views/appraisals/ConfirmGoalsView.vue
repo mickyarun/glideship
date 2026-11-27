@@ -34,7 +34,7 @@
           <li v-for="goal in accepted" :key="goal.id">{{ goal.title }} <span class="confirm__muted">{{ confirmedLine(goal) }}</span></li>
         </ul>
       </AppPanel>
-      <p class="confirm__muted">"Suggest a change" sends it back to {{ who }} with your wording. "Not this quarter" asks you for a one-line reason {{ who }} will see.</p>
+      <p class="confirm__muted">"Suggest a change" sends it back to {{ who }} with your wording. "Reject" lets you add a short reason. {{ who }} sees it.</p>
     </div>
     <GoalDialog :mode="dialog" :start="start" :busy="busy" :error="dialogError" @close="dialog = null" @submit="submitDialog" />
   </AppPage>

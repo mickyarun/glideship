@@ -17,7 +17,8 @@
 Three accepted goals a period at most. The employee proposes their own
 goals, withdraws or rewords a proposal, and suggests a change to a
 confirmed goal; the primary manager confirms, asks for a rewording,
-declines with a reason, edits with a reason, adds and removes their own.
+rejects (saying why if they like), edits with a reason, adds and removes
+their own.
 Either side may suggest a change to a confirmed goal; the other decides:
 a change the manager suggested is the employee's to take or decline.
 Suggested goals can be edited, taken up or dismissed by either; one the
@@ -25,11 +26,19 @@ employee takes up still goes to the manager to confirm. Everything locks
 when the self-review opens, so nobody moves the target while it's scored.
 """
 
+import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.models.appraisal import Appraisal
 from app.models.appraisal_cycle import AppraisalCycle
-from app.models.appraisal_enums import AppraisalStatus, CycleStatus, GoalOrigin, GoalStatus
+from app.models.appraisal_enums import (
+    AppraisalStatus,
+    CycleStatus,
+    GoalOrigin,
+    GoalRevisionKind,
+    GoalStatus,
+)
 from app.models.appraisal_goal import FROM_MANAGER, AppraisalGoal
 
 
@@ -72,6 +81,27 @@ class GoalActions:
 def by_manager(goal: AppraisalGoal) -> bool:
     """A proposal the manager wrote: a change to one of the person's confirmed goals."""
     return goal.status is GoalStatus.PROPOSED and goal.suggestion_refs.get("from") == FROM_MANAGER
+
+
+def is_rejected(
+    goal: AppraisalGoal, person_id: uuid.UUID, kinds: Sequence[GoalRevisionKind]
+) -> bool:
+    """The person's own proposal, which the manager rejected (its last change).
+
+    A declined change to a confirmed goal doesn't count: the goal still stands.
+    """
+    return (
+        goal.status is GoalStatus.DISMISSED
+        and goal.proposed_by == person_id
+        and not goal.suggestion_refs.get("replaces")
+        and bool(kinds)
+        and kinds[-1] is GoalRevisionKind.DECLINED
+    )
+
+
+def sees_rejections(is_self: bool, is_primary_manager: bool) -> bool:
+    """Only the person and the manager who decides see rejected goals and why."""
+    return is_self or is_primary_manager
 
 
 def actions(goal: AppraisalGoal, rights: GoalRights, pending_change: bool) -> GoalActions:

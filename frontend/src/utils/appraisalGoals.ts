@@ -64,7 +64,7 @@ export function historyLine(entry: GoalHistory): string {
     case 'reword_asked':
       return `${who} asked for a rewording${why}`
     case 'declined':
-      return `Not added by ${who}${why}`
+      return `Rejected by ${who}${why}`
     default:
       return `Removed by ${who}${why}`
   }

@@ -39,14 +39,19 @@
           <span class="growth__muted"><template v-if="goal.measure">{{ goal.measure }} · </template>{{ standing(goal) }}</span>
         </div>
         <v-btn v-if="goal.can_accept" size="small" color="primary" :disabled="accepted >= growth.limit" @click="emit('accept', goal.id)">Confirm</v-btn>
-        <v-btn v-if="goal.can_remove" size="small" variant="text" @click="emit('remove', goal.id)">Take back</v-btn>
+        <v-btn v-if="goal.can_reject" size="small" variant="outlined" color="error" @click="emit('reject', goal.id)">Reject</v-btn>
+        <v-btn v-if="goal.can_remove" size="small" variant="text" @click="emit('remove', goal.id)">{{ growth.is_self ? 'Withdraw' : 'Remove' }}</v-btn>
       </li>
     </ul>
+    <AppCallout v-for="goal in growth.rejected" :key="goal.id" variant="warning" :title="`${growth.is_self ? `${upper(manager)} rejected` : 'You rejected'}: ${goal.title}`">
+      <template v-if="goal.reason">Reason: {{ goal.reason }}</template>
+    </AppCallout>
   </AppPanel>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import AppCallout from '@/components/common/AppCallout.vue'
 import AppPanel from '@/components/common/AppPanel.vue'
 import type { GrowthRead, NextGoal } from '@/types/appraisalReview'
 import { longDate } from '@/utils/appraisalSetup'
@@ -55,7 +60,7 @@ const props = withDefaults(
   defineProps<{ growth: GrowthRead; busy: string | null; period?: string; manager?: string; person?: string }>(),
   { period: 'quarter', manager: 'your manager', person: 'them' },
 )
-const emit = defineEmits<{ save: [strength: string, focus: string]; add: []; accept: [goalId: string]; remove: [goalId: string] }>()
+const emit = defineEmits<{ save: [strength: string, focus: string]; add: []; accept: [goalId: string]; reject: [goalId: string]; remove: [goalId: string] }>()
 
 const strength = ref('')
 const focus = ref('')
@@ -66,6 +71,10 @@ const dirty = computed(() => strength.value.trim() !== props.growth.strength || 
 const accepted = computed(() => props.growth.goals.filter(g => g.status === 'accepted').length)
 // The employee can still propose at the limit; only the manager's adds take a slot.
 const atLimit = computed(() => !props.growth.is_self && accepted.value >= props.growth.limit)
+
+function upper(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
 
 function standing(goal: NextGoal): string {
   if (goal.status === 'accepted') return 'Confirmed'

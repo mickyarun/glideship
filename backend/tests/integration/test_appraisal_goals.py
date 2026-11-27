@@ -97,26 +97,56 @@ async def test_an_own_goal_waits_for_the_manager_and_is_audited_when_confirmed(
     assert targets == [goal["id"]]
 
 
-async def test_declining_needs_a_reason_the_employee_sees(
+async def test_the_manager_rejects_a_self_goal_and_the_employee_sees_why(
     client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
 ) -> None:
     m = await october(client, pg_session_factory)
     emp, mgr = as_user(m.people["emp"], m.org), as_user(m.people["mgr"], m.org)
     appraisal = await _priya(client, m)
-    body = (
-        await client.post(f"{BASE}/{appraisal}/goals", json={"title": "Learn Go"}, headers=emp)
-    ).json()
-    goal_id = _goal(body, "Learn Go")["id"]
-    assert (
-        await client.post(f"{BASE}/goals/{goal_id}/dismiss", json={}, headers=mgr)
-    ).status_code == 422
-    await client.post(
-        f"{BASE}/goals/{goal_id}/dismiss", json={"reason": "Not this period"}, headers=mgr
+    url = f"{BASE}/{appraisal}/goals"
+    await client.post(url, json={"title": "Learn Go"}, headers=emp)
+    body = (await client.post(url, json={"title": "Learn Rust"}, headers=emp)).json()
+    go, rust = _goal(body, "Learn Go")["id"], _goal(body, "Learn Rust")["id"]
+    seen = (await client.get(url, headers=mgr)).json()
+    assert _goal(seen, "Learn Go")["actions"]["dismiss"] is True
+    rejected = await client.post(
+        f"{BASE}/goals/{go}/dismiss", json={"reason": "Not this period"}, headers=mgr
     )
-    mine = (await client.get(f"{BASE}/{appraisal}/goals", headers=emp)).json()
+    assert rejected.status_code == 200, rejected.text
+    # The reason is optional.
+    no_reason = await client.post(f"{BASE}/goals/{rust}/dismiss", json={}, headers=mgr)
+    assert no_reason.status_code == 200, no_reason.text
+    mine = (await client.get(url, headers=emp)).json()
     declined = _goal(mine, "Learn Go")
-    assert declined["status"] == "dismissed" and declined["dismiss_reason"] == "Not this period"
-    assert mine["accepted"] == 0
+    assert declined["status"] == "dismissed" and declined["rejected"] is True
+    assert declined["dismiss_reason"] == "Not this period"
+    assert declined["history"][-1]["kind"] == "declined"
+    assert _goal(mine, "Learn Rust")["rejected"] is True
+    assert _goal(mine, "Learn Rust")["dismiss_reason"] is None
+    assert mine["accepted"] == 0 and mine["is_self"] is True
+    # The manager sees it as theirs; HR doesn't see it as a rejection at all.
+    as_mgr = (await client.get(url, headers=mgr)).json()
+    assert as_mgr["is_self"] is False and _goal(as_mgr, "Learn Go")["rejected"] is True
+    as_hr = await client.get(url, headers=as_user(m.people["hr"], m.org))
+    if as_hr.status_code == 200:
+        assert as_hr.json()["is_self"] is False
+        assert _goal(as_hr.json(), "Learn Go")["rejected"] is False
+
+
+async def test_withdrawing_your_own_goal_is_not_a_rejection(
+    client: AsyncClient, pg_session_factory: Factory, hr_key: FileStorage
+) -> None:
+    m = await october(client, pg_session_factory)
+    emp = as_user(m.people["emp"], m.org)
+    appraisal = await _priya(client, m)
+    url = f"{BASE}/{appraisal}/goals"
+    body = (await client.post(url, json={"title": "Learn Go"}, headers=emp)).json()
+    goal_id = _goal(body, "Learn Go")["id"]
+    assert _goal(body, "Learn Go")["actions"]["dismiss"] is True
+    await client.post(f"{BASE}/goals/{goal_id}/dismiss", json={}, headers=emp)
+    gone = _goal((await client.get(url, headers=emp)).json(), "Learn Go")
+    assert gone["status"] == "dismissed" and gone["rejected"] is False
+    assert gone["history"][-1]["kind"] == "removed"
 
 
 async def test_three_confirmed_goals_at_most_and_managers_say_why(

@@ -101,6 +101,8 @@ class GoalRead(BaseModel):
     replaces: uuid.UUID | None
     # A change the manager suggested: the employee takes or declines it.
     from_manager: bool = False
+    # The person's own proposal, which the manager rejected; dismiss_reason says why.
+    rejected: bool = False
     dismiss_reason: str | None
     reword_note: str | None
     # For an AI suggestion: what it builds on, in one line.
@@ -124,6 +126,8 @@ class GoalsRead(BaseModel):
     # The fewest confirmed goals the org asks for; below it the manager is asked for more.
     minimum: int
     accepted: int
+    # The caller is the person; wording on rejected goals follows it.
+    is_self: bool = False
     can_propose: bool
     can_add: bool
     # AI suggestions: whether the caller may ask, and how the last run went.

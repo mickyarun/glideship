@@ -25,10 +25,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._appraisal_deps import get_caller
 from app.core.deps import get_db
-from app.schemas.appraisal_goal import GoalBody
+from app.schemas.appraisal_goal import GoalBody, ReasonBody
 from app.schemas.appraisal_growth import GrowthBody
 from app.schemas.appraisal_review import AppraisalRead
-from app.services.appraisals import growth
+from app.services.appraisals import growth, growth_goals
 from app.services.appraisals.appraisal_context import appraisal_context
 from app.services.appraisals.context import Caller
 from app.services.appraisals.review_read import read_review
@@ -73,7 +73,7 @@ async def accept_next_goal(
 ) -> AppraisalRead:
     """The manager confirms a proposed next-period goal."""
     ctx = await appraisal_context(db, caller, appraisal_id)
-    await growth.accept_next_goal(db, ctx, goal_id)
+    await growth_goals.accept_next_goal(db, ctx, goal_id)
     return await read_review(db, caller, ctx, log_view=False)
 
 
@@ -86,5 +86,19 @@ async def remove_next_goal(
 ) -> AppraisalRead:
     """Take a next-period goal back before it locks."""
     ctx = await appraisal_context(db, caller, appraisal_id)
-    await growth.remove_next_goal(db, ctx, goal_id)
+    await growth_goals.remove_next_goal(db, ctx, goal_id)
+    return await read_review(db, caller, ctx, log_view=False)
+
+
+@router.post("/{appraisal_id}/next-goals/{goal_id}/reject", response_model=AppraisalRead)
+async def reject_next_goal(
+    appraisal_id: uuid.UUID,
+    goal_id: uuid.UUID,
+    body: ReasonBody,
+    caller: Caller = Depends(get_caller),
+    db: AsyncSession = Depends(get_db),
+) -> AppraisalRead:
+    """The manager rejects a next-period goal the employee proposed."""
+    ctx = await appraisal_context(db, caller, appraisal_id)
+    await growth_goals.reject_next_goal(db, ctx, goal_id, body)
     return await read_review(db, caller, ctx, log_view=False)

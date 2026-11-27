@@ -40,6 +40,16 @@ class NextGoal(BaseModel):
     proposed_by_name: str
     can_accept: bool
     can_remove: bool
+    # The manager, on a goal the employee proposed.
+    can_reject: bool = False
+
+
+class RejectedGoal(BaseModel):
+    """A goal the employee proposed and the manager rejected, with the reason if given."""
+
+    id: uuid.UUID
+    title: str
+    reason: str
 
 
 class GrowthRead(BaseModel):
@@ -54,3 +64,4 @@ class GrowthRead(BaseModel):
     next_period_start: date
     limit: int
     goals: list[NextGoal]
+    rejected: list[RejectedGoal] = []

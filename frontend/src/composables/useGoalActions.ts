@@ -53,8 +53,8 @@ export function useGoalActions() {
     accept: (goal: Goal) => run(store.accept(goal.id)),
     remove: (goal: Goal) => run(store.remove(goal.id)),
     reword: (goal: Goal) => open('reword', goal),
-    // A manager declining someone's proposal says why; the person turning down
-    // their manager's change may say why; taking back your own needs nothing.
+    // A manager rejecting someone's proposal may say why, as may the person
+    // turning down their manager's change; taking back your own needs nothing.
     dismiss: (goal: Goal) => {
       if (goal.status === 'proposed' && manager() && !goal.from_manager) open('decline', goal)
       else if (goal.from_manager && !manager()) open('turn-down', goal)
